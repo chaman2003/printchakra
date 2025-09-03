@@ -1,11 +1,11 @@
-# PrintChakra - Offline Document OCR System
+# PrintChakra – AI-Powered Smart Print and Capture Solution
 
 ![PrintChakra Logo](https://img.shields.io/badge/PrintChakra-v1.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
 ![React Native](https://img.shields.io/badge/React%20Native-0.72.6-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-PrintChakra is an **offline-first document OCR (Optical Character Recognition) system** designed for local network operation. This MVP focuses on document scanning, processing, and management capabilities without requiring internet connectivity.
+PrintChakra is an **AI-powered smart print and capture solution** that combines advanced OCR technology with intelligent document processing. This offline-first system focuses on document scanning, processing, and management capabilities without requiring internet connectivity.
 
 ## 🌟 Key Features
 
