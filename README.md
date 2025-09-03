@@ -299,22 +299,6 @@ REACT_APP_API_URL=https://localhost:5000/api
 - 🔍 Search existing [Issues](https://github.com/chaman2003/printchakra/issues)
 - 💬 Create a new issue for bugs or feature requests
 
-## 🗺️ Roadmap
-
-### Version 1.1 (Planned)
-- [ ] Cloud sync capabilities
-- [ ] Advanced OCR language support
-- [ ] Batch document processing
-- [ ] Document templates
-- [ ] iOS app support
-
-### Version 1.2 (Future)
-- [ ] Machine learning-based document classification
-- [ ] Advanced search filters
-- [ ] Collaboration features
-- [ ] API webhooks
-- [ ] Docker containerization
-
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
