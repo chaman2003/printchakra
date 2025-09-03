@@ -1,11 +1,11 @@
-# PrintChakra: AI-Powered Smart Print and Capture Solution
+# PrintChakra - Offline Document OCR System
 
 ![PrintChakra Logo](https://img.shields.io/badge/PrintChakra-v1.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
 ![React Native](https://img.shields.io/badge/React%20Native-0.72.6-blue.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-PrintChakra is an **AI-powered smart print and capture solution** that combines advanced OCR technology with intelligent document processing. This offline-first system focuses on document scanning, processing, and management capabilities without requiring internet connectivity.
+PrintChakra is an **offline-first document OCR (Optical Character Recognition) system** designed for local network operation. This MVP focuses on document scanning, processing, and management capabilities without requiring internet connectivity.
 
 ## 🌟 Key Features
 
@@ -299,6 +299,22 @@ REACT_APP_API_URL=https://localhost:5000/api
 - 🔍 Search existing [Issues](https://github.com/chaman2003/printchakra/issues)
 - 💬 Create a new issue for bugs or feature requests
 
+## 🗺️ Roadmap
+
+### Version 1.1 (Planned)
+- [ ] Cloud sync capabilities
+- [ ] Advanced OCR language support
+- [ ] Batch document processing
+- [ ] Document templates
+- [ ] iOS app support
+
+### Version 1.2 (Future)
+- [ ] Machine learning-based document classification
+- [ ] Advanced search filters
+- [ ] Collaboration features
+- [ ] API webhooks
+- [ ] Docker containerization
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -322,7 +338,7 @@ We welcome contributions! Please follow these steps:
 
 ## 👥 Team
 
-- **Chaman S** - [@chaman2003](https://github.com/chaman2003) - Lead Developer
+- **Chaman Kumar** - [@chaman2003](https://github.com/chaman2003) - Lead Developer
 
 ## 🙏 Acknowledgments
 
@@ -336,10 +352,10 @@ We welcome contributions! Please follow these steps:
 
 For support and questions:
 
-- 📧 Email: [chamans7952@gmail.com](mailto:chamans7952@gmail.com)
+- 📧 Email: [your-email@example.com](mailto:your-email@example.com)
 - 🐙 GitHub: [PrintChakra Repository](https://github.com/chaman2003/printchakra)
 - 📱 Issues: [Report a Bug](https://github.com/chaman2003/printchakra/issues/new)
 
 ---
 
-**PrintChakra** - *Transforming documents through AI based intelligent processing* 🚀
+**PrintChakra** - *Transforming documents through intelligent OCR processing* 🚀
