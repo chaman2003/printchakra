@@ -352,7 +352,7 @@ We welcome contributions! Please follow these steps:
 
 For support and questions:
 
-- 📧 Email: [your-email@example.com](mailto:your-email@example.com)
+- 📧 Email: [your-email@example.com](mailto:chamans7952@gmail.com)
 - 🐙 GitHub: [PrintChakra Repository](https://github.com/chaman2003/printchakra)
 - 📱 Issues: [Report a Bug](https://github.com/chaman2003/printchakra/issues/new)
 
