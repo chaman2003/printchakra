@@ -1,0 +1,379 @@
+
+Phone (Mobile Application)	PC/Laptop (Backend + Dashboard)	Dashboard (React Web App)
+Role:
+•	Capture documents via camera
+•	Preprocess & compress images
+•	Store offline if no Wi-Fi
+•	Sync with PC backend when connected
+•	Allow local viewing & searching
+
+
+
+Technology Stack:
+•	Framework: React Native, React, React Navigation
+•	Camera & Media: RN Vision Camera, RN Image Picker, RN Crop Picker
+•	Storage & State: AsyncStorage, RN-FS, RN-Permissions
+•	Networking: Axios, JWT handling
+
+Key Features:
+•	JWT-based user authentication
+•	Camera integration (optimized capture)
+•	Image compression (JPEG)
+•	Offline queue for uploads
+•	Background sync with backend
+•	Local document search & view	A. Backend (Flask API)
+Role:
+•	Receive documents from phone
+•	Preprocess & OCR (text extraction)
+•	Store images & text in database
+•	Provide APIs for dashboard & phone
+•	Handle search, export, and sync
+
+Technology Stack:
+•	Framework: Flask, Flask-CORS, Gunicorn, dotenv
+•	Database: MongoDB, GridFS
+•	Image/OCR: OpenCV, Pillow, PyTesseract, NumPy
+•	Security: JWT, Cryptography, Werkzeug
+
+
+Modules:
+•	Authentication: Register/login, JWT token, SHA-256 password hashing
+•	Document Processing: Preprocessing (grayscale, blur, threshold), OCR with Tesseract
+•	Storage: MongoDB + GridFS with metadata indexing
+•	Search: Full-text search with pagination & ranking
+	•	Web-based management of documents
+•	Search, view, and organize files
+•	Export to multiple formats
+•	Analytics & statistics display
+•	Printer integration for outputs
+
+
+
+
+Technology Stack:
+•	Framework: React, React-DOM, React Router DOM
+•	Networking: Axios, JWT handling
+•	UI Framework: Bootstrap
+•	Export Tools: jsPDF, html2canvas, ReportLab
+•	Utilities: Moment, React Datepicker, React-Toastify
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Printchakra
+PrintChakra is an offline-first document OCR (Optical Character Recognition) system designed for local network operation. It focuses on document scanning, processing, and management capabilities without requiring internet connectivity.
+
+PROJECT GOALS
+1.	Offline-first document scanning with local OCR
+2.	Local storage using MongoDB + GridFS
+3.	Mobile app for document capture
+4.	Web dashboard for document management
+5.	Local Wi-Fi sync between devices (no internet required)
+6.	All processing and synchronization handled locally
+
+USE CASES
+1.	Document Digitization: Convert physical documents to searchable digital format
+2.	Text Extraction: Extract text content from images and documents
+3.	Document Management: Organize, search, and export processed documents
+4.	Offline Archive: Maintain local document repository without cloud dependency
+
+DATA FLOW
+1.	Document Capture (Mobile) -> Image Processing (Backend) -> OCR Processing (Backend)
+2.	Text Extraction (Backend) -> Storage (MongoDB/GridFS) -> Sync (All Clients)
+3.	Search Query (Any Client) -> Text Search (Backend) -> Results (Client)
+4.	Export Request (Dashboard) -> Document Compilation (Backend/Frontend) -> File Download
+
+
+
+
+
+
+
+
+
+
+
+
+
+Backend dev (python flask api)
+1.	Flask
+2.	Flask cors
+3.	Gunicorn
+4.	Python dotenv
+
+Database & Storage:
+1.	Pymongo
+2.	Gridfs
+
+Authentication & Security:
+1.   Cryptography
+2.	Wekzeug
+
+Image processing and ocr
+1.	OpenCV python
+2.	Pillow
+3.	Pytesseract 
+4.	Numpy 
+
+BACKEND ARCHITECTURE
+Core Modules:
+
+Authentication Module:
+- /api/auth/login (POST)
+- /api/auth/register (POST)
+- JWT token generation and validation
+- Password hashing with SHA-256
+- User session management
+- Device ID tracking
+
+Document Processing Module:
+- /api/documents/upload (POST)
+- Image preprocessing with OpenCV:
+  - Grayscale conversion
+  - Gaussian blur for noise reduction
+  - Adaptive thresholding
+  - Morphological operations
+- OCR processing with Tesseract:
+  - Custom configuration for document scanning
+  - English language optimization
+  - Text confidence scoring
+
+Storage Module:
+- GridFS Integration: Large file storage in MongoDB
+- Metadata Management: Document properties and processing statistics
+- File Organization: Efficient retrieval and cleanup
+
+Search Module:
+- /api/search (GET)
+- Full-text search using MongoDB text indexes
+- Query optimization and ranking
+- Result pagination and sorting
+
+Image Processing Pipeline:
+
+1. Image Validation: File type, size, and format checks
+2. Preprocessing:
+   - Convert to grayscale
+   - Apply Gaussian blur (5x5 kernel)
+   - Adaptive thresholding for binarization
+   - Morphological operations for noise reduction
+3. OCR Processing:
+   - Tesseract configuration: --oem 3 --psm 6 -l eng
+   - Text extraction with confidence scoring
+4. Post-processing: Text cleaning and validation
+5. Storage: GridFS file storage and metadata indexing
+
+
+BACKEND API ENDPOINTS
+====================
+
+Authentication Endpoints:
+- POST /api/auth/register - Register new user
+- POST /api/auth/login - User authentication
+
+Document Endpoints:
+- POST /api/documents/upload - Upload and process document
+- GET /api/documents - Get user's documents (paginated)
+- GET /api/documents/{id} - Get specific document
+- GET /api/documents/{id}/image - Get document image
+- DELETE /api/documents/{id} - Delete document
+
+Search Endpoints:
+- GET /api/search?q=query - Search documents by text
+
+System Endpoints:
+- GET /api/health - Health check
+
+
+MOBILE TECHNOLOGY STACK 
+
+CORE FRAMEWORK
+1.	React native
+2.	React 
+3.	React navigation 
+
+Camera & media 
+1.	React native vision camera
+2.	React native image picker 
+3.	React native image crop picker
+
+Storage and state
+1.	React native async storage/async storage
+2.	React native fs
+3.	React native permissions 
+
+Networking 
+1.	Axios
+2.	Jwt handling 
+Navigation Structure:
+Stack Navigator (Authentication Flow)
+├── LoginScreen          # User authentication
+├── HomeScreen          # Main dashboard with quick actions
+├── CameraScreen        # Document capture interface
+├── DocumentsScreen     # Document list and management
+└── DocumentDetailScreen # Individual document view
+
+Key Features:
+- Offline Queue: Documents captured offline are queued for upload
+- Image Compression: JPEG compression to optimize storage and transfer
+- Permission Management: Camera and storage permissions
+- Background Sync: Sync when app returns to foreground
+
+MOBILE APPLICATION FEATURES
+===========================
+
+- User Authentication: Login/Register with JWT token storage
+- Document Capture: Camera integration with image optimization
+- Document Management: View, search, and organize documents
+- Offline Support: Queue documents for upload when offline
+- Real-time Sync: Automatic synchronization when connected
+- Error Handling: Comprehensive error handling and user feedback
+
+
+DASHBOARD TECHNOLOGY STACK
+Core framwork
+1.	React 
+2.	React dom
+3.	React router dom
+
+Networking  : 
+1.	Axios
+2.	Jwt handling
+
+Storage & state :
+1.	React native async storage/ async storage
+2.	React native fs
+3.	React native permissions
+
+Ui framwork : bootstrap
+Export and pdf generation 
+1.	Jspdf
+2.	Html2canvas
+3.	Reportlab
+Utilities
+1.	Moment
+2.	React datepicker
+3.	React toastify 
+
+
+DASHBOARD ARCHITECTURE
+======================
+
+Component Hierarchy:
+App.js
+├── Navigation.js        # Top navigation bar
+├── Sidebar.js          # Side navigation menu
+└── Pages/
+    ├── Dashboard.js    # Statistics and overview
+    ├── Documents.js    # Document management
+    ├── Search.js       # Advanced search interface
+    └── Settings.js     # Configuration options
+
+Key Features:
+- Document Management: Grid and list view options, bulk operations
+- Export System: PDF, Text, JSON, and CSV export formats
+- Analytics Dashboard: Document statistics and processing metrics
+- Real-time Search: Full-text search with filtering
+
+
+PROJECT STRUCTURE
+
+printchakra/
+├── README.md                 # Main project documentation
+├── INSTRUCTIONS.md          # Complete technical guide
+├── PROJECT_DOCUMENTATION.txt # This plain text file
+├── .github/
+│   └── copilot-instructions.md
+│
+├── mobile/                  # React Native Android App
+│   ├── package.json         # Dependencies and scripts
+│   ├── App.js              # Main application component
+│   ├── src/
+│   │   ├── components/     # Reusable UI components
+│   │   ├── screens/        # Application screens
+│   │   │   ├── LoginScreen.js
+│   │   │   ├── HomeScreen.js
+│   │   │   ├── CameraScreen.js
+│   │   │   ├── DocumentsScreen.js
+│   │   │   └── DocumentDetailScreen.js
+│   │   └── services/       # API and utility services
+│   │       └── ApiService.js
+│   └── android/            # Android-specific files
+│
+├── backend/                # Python Flask API Server
+│   ├── app.py             # Main Flask application
+│   ├── requirements.txt   # Python dependencies
+│   ├── README.md         # Backend-specific documentation
+│   └── uploads/          # Temporary file storage
+│
+├── dashboard/             # React.js Web Dashboard
+│   ├── package.json      # Dependencies and scripts
+│   ├── public/
+│   │   └── index.html    # HTML template
+│   └── src/
+│       ├── App.js        # Main application component
+│       ├── index.js      # Application entry point
+│       ├── index.css     # Global styles
+│       ├── components/   # Reusable UI components
+│       │   ├── Navigation.js
+│       │   └── Sidebar.js
+│       ├── pages/        # Application pages
+│       │   ├── Login.js
+│       │   ├── Dashboard.js
+│       │   ├── Documents.js
+│       │   ├── DocumentDetail.js
+│       │   ├── Search.js
+│       │   └── Settings.js
+│       └── services/     # API and utility services
+│           ├── apiService.js
+│           ├── authService.js
+│           └── exportService.js
+│
+└── docs/                 # Project Documentation
+    ├── development-log.md    # Daily development tracking
+    └── setup-guide.md       # Detailed setup instructions
+
+
+Image Processing:
+- Input: JPEG from mobile camera
+- Preprocessing: OpenCV (deskew, noise reduction)
+- OCR: Tesseract 4.x (English only)
+- Output: Searchable text + original image
+
+
+- Android only (no iOS)
+- English OCR only
+- No handwriting recognition
+- No AI categorization
+- Basic UI/UX
+- Local network only (no cloud)
+- Single user (no role-based access)
+
+

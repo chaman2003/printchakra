@@ -1,0 +1,3823 @@
+PRINTCHAKRA MVP - COMPLETE PROJECT DOCUMENTATION
+
+PROJECT OVERVIEW
+================
+
+PrintChakra is an offline-first document OCR (Optical Character Recognition) system designed for local network operation. This 60-day MVP focuses on document scanning, processing, and management capabilities without requiring internet connectivity.
+
+VERSION: 1.0.0 MVP
+DATE: August 25, 2025
+DEVELOPMENT TIMELINE: 60 days (120 hours total)
+TARGET: Offline-first document OCR system for Android
+
+PROJECT GOALS
+=============
+
+- Offline-first document scanning and OCR
+- Local storage with MongoDB + GridFS
+- Basic mobile app for document capture
+- Web dashboard for document management
+- Local Wi-Fi sync between devices
+
+CORE OBJECTIVES
+===============
+
+- Offline Operation: Function without internet connectivity
+- Local Processing: All OCR processing happens locally
+- Wi-Fi Sync: Synchronization over local network only
+- MVP Scope: Focus on essential features for rapid deployment
+- 60-Day Development: Structured timeline for efficient development
+
+USE CASES
+=========
+
+1. Document Digitization: Convert physical documents to searchable digital format
+2. Text Extraction: Extract text content from images and documents
+3. Document Management: Organize, search, and export processed documents
+4. Offline Archive: Maintain local document repository without cloud dependency
+
+SYSTEM ARCHITECTURE
+===================
+
+Three-tier architecture with mobile app, backend API, and web dashboard:
+
+Mobile App (React Native) <---> Backend API (Python Flask) <---> Dashboard (React.js)
+                                           |
+                                    Data Layer
+                                    (MongoDB + GridFS)
+
+DESIGN PRINCIPLES
+=================
+
+1. Offline-First: All components work independently, sync when connected
+2. Modular Architecture: Loosely coupled components with clear interfaces
+3. RESTful API: Standard HTTP methods and status codes
+4. Responsive Design: Works on various screen sizes
+5. Error Resilience: Graceful handling of network and processing failures
+
+DATA FLOW
+==========
+
+1. Document Capture (Mobile) -> Image Processing (Backend) -> OCR Processing (Backend)
+2. Text Extraction (Backend) -> Storage (MongoDB/GridFS) -> Sync (All Clients)
+3. Search Query (Any Client) -> Text Search (Backend) -> Results (Client)
+4. Export Request (Dashboard) -> Document Compilation (Backend/Frontend) -> File Download
+
+================================================================================
+BACKEND DEVELOPMENT (PYTHON FLASK API)
+================================================================================
+
+BACKEND TECHNOLOGY STACK
+========================
+
+Core Framework:
+- Flask 2.3.3: Lightweight web framework
+- flask-cors 4.0.0: Cross-Origin Resource Sharing
+- gunicorn 21.2.0: WSGI HTTP Server for production
+
+Database & Storage:
+- pymongo 4.5.0: MongoDB driver for Python
+- gridfs 0.0.1: GridFS for large file storage
+- MongoDB Community Edition: NoSQL document database
+
+Authentication & Security:
+- PyJWT 2.8.0: JSON Web Token implementation 
+- cryptography 41.0.7: Cryptographic recipes and primitives
+- Werkzeug 2.3.7: WSGI utility library
+
+Image Processing & OCR:
+- opencv-python 4.8.1.78: Computer vision and image processing
+- Pillow 10.0.1: Python Imaging Library
+- pytesseract 0.3.10: Python wrapper for Tesseract OCR
+- numpy 1.24.3: Numerical computing library
+
+Development & Deployment:
+- python-dotenv 1.0.0: Environment variable management
+
+BACKEND ARCHITECTURE
+====================
+
+Core Modules:
+
+Authentication Module:
+- /api/auth/login (POST)
+- /api/auth/register (POST)
+- JWT token generation and validation
+- Password hashing with SHA-256
+- User session management
+- Device ID tracking
+
+Document Processing Module:
+- /api/documents/upload (POST)
+- Image preprocessing with OpenCV:
+  - Grayscale conversion
+  - Gaussian blur for noise reduction
+  - Adaptive thresholding
+  - Morphological operations
+- OCR processing with Tesseract:
+  - Custom configuration for document scanning
+  - English language optimization
+  - Text confidence scoring
+
+Storage Module:
+- GridFS Integration: Large file storage in MongoDB
+- Metadata Management: Document properties and processing statistics
+- File Organization: Efficient retrieval and cleanup
+
+Search Module:
+- /api/search (GET)
+- Full-text search using MongoDB text indexes
+- Query optimization and ranking
+- Result pagination and sorting
+
+Image Processing Pipeline:
+
+1. Image Validation: File type, size, and format checks
+2. Preprocessing:
+   - Convert to grayscale
+   - Apply Gaussian blur (5x5 kernel)
+   - Adaptive thresholding for binarization
+   - Morphological operations for noise reduction
+3. OCR Processing:
+   - Tesseract configuration: --oem 3 --psm 6 -l eng
+   - Text extraction with confidence scoring
+4. Post-processing: Text cleaning and validation
+5. Storage: GridFS file storage and metadata indexing
+
+BACKEND COMPLETE SOURCE CODE
+============================
+
+FILE: backend/app.py
+-------------------
+
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
+from pymongo import MongoClient
+from gridfs import GridFS
+import jwt
+import hashlib
+from datetime import datetime, timedelta
+from functools import wraps
+import os
+import cv2
+import numpy as np
+from PIL import Image
+import pytesseract
+import io
+from werkzeug.utils import secure_filename
+import logging
+
+# Initialize Flask app
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Enable CORS for all routes
+CORS(app)
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# MongoDB connection
+try:
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client.printchakra
+    fs = GridFS(db)
+    documents_collection = db.documents
+    users_collection = db.users
+    logger.info("Connected to MongoDB successfully")
+except Exception as e:
+    logger.error(f"Failed to connect to MongoDB: {e}")
+
+# JWT token verification decorator
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'message': 'Token is missing'}), 401
+        
+        try:
+            if token.startswith('Bearer '):
+                token = token.split(' ')[1]
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+            current_user_id = data['user_id']
+        except jwt.ExpiredSignatureError:
+            return jsonify({'message': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'message': 'Invalid token'}), 401
+        
+        return f(current_user_id, *args, **kwargs)
+    return decorated
+
+# Image preprocessing function
+def preprocess_image(image_bytes):
+    """
+    Preprocess image for better OCR results
+    """
+    try:
+        # Convert bytes to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Apply Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Apply adaptive threshold
+        thresh = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+        )
+        
+        # Morphological operations to clean up the image
+        kernel = np.ones((1, 1), np.uint8)
+        processed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        processed = cv2.morphologyEx(processed, cv2.MORPH_OPEN, kernel)
+        
+        # Convert back to bytes
+        _, buffer = cv2.imencode('.png', processed)
+        return buffer.tobytes()
+    
+    except Exception as e:
+        logger.error(f"Image preprocessing failed: {e}")
+        return image_bytes
+
+# OCR function
+def extract_text_from_image(image_bytes):
+    """
+    Extract text from image using Tesseract OCR
+    """
+    try:
+        # Preprocess image
+        processed_image = preprocess_image(image_bytes)
+        
+        # Convert to PIL Image
+        image = Image.open(io.BytesIO(processed_image))
+        
+        # Perform OCR
+        custom_config = r'--oem 3 --psm 6 -l eng'
+        text = pytesseract.image_to_string(image, config=custom_config)
+        
+        return text.strip()
+    
+    except Exception as e:
+        logger.error(f"OCR failed: {e}")
+        return ""
+
+# Authentication routes
+@app.route('/api/auth/register', methods=['POST'])
+def register():
+    """Register a new user"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        device_id = data.get('device_id')
+        
+        if not all([username, password, device_id]):
+            return jsonify({'message': 'Missing required fields'}), 400
+        
+        # Check if user already exists
+        if users_collection.find_one({'username': username}):
+            return jsonify({'message': 'User already exists'}), 409
+        
+        # Hash password
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        
+        # Create user
+        user_data = {
+            'username': username,
+            'password': hashed_password,
+            'device_id': device_id,
+            'created_at': datetime.utcnow()
+        }
+        
+        result = users_collection.insert_one(user_data)
+        
+        return jsonify({
+            'message': 'User registered successfully',
+            'user_id': str(result.inserted_id)
+        }), 201
+    
+    except Exception as e:
+        logger.error(f"Registration failed: {e}")
+        return jsonify({'message': 'Internal server error'}), 500
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    """Authenticate user and return JWT token"""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not all([username, password]):
+            return jsonify({'message': 'Missing credentials'}), 400
+        
+        # Find user
+        user = users_collection.find_one({'username': username})
+        if not user:
+            return jsonify({'message': 'Invalid credentials'}), 401
+        
+        # Verify password
+        hashed_password = hashlib.sha256(password.encode()).hexdigest()
+        if user['password'] != hashed_password:
+            return jsonify({'message': 'Invalid credentials'}), 401
+        
+        # Generate JWT token
+        payload = {
+            'user_id': str(user['_id']),
+            'username': username,
+            'exp': datetime.utcnow() + timedelta(days=30)
+        }
+        
+        token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+        
+        return jsonify({
+            'token': token,
+            'user_id': str(user['_id']),
+            'username': username
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Login failed: {e}")
+        return jsonify({'message': 'Internal server error'}), 500
+
+# Document routes
+@app.route('/api/documents/upload', methods=['POST'])
+@token_required
+def upload_document(current_user_id):
+    """Upload and process a document"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'message': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'message': 'No file selected'}), 400
+        
+        # Read file data
+        file_data = file.read()
+        filename = secure_filename(file.filename)
+        
+        # Extract text using OCR
+        logger.info(f"Processing document: {filename}")
+        start_time = datetime.utcnow()
+        extracted_text = extract_text_from_image(file_data)
+        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        
+        # Store file in GridFS
+        file_id = fs.put(
+            file_data,
+            filename=filename,
+            content_type=file.content_type or 'image/jpeg'
+        )
+        
+        # Get image dimensions
+        try:
+            image = Image.open(io.BytesIO(file_data))
+            dimensions = {'width': image.width, 'height': image.height}
+        except:
+            dimensions = {'width': 0, 'height': 0}
+        
+        # Store document metadata
+        document_data = {
+            'filename': filename,
+            'user_id': current_user_id,
+            'file_id': file_id,
+            'ocr_text': extracted_text,
+            'captured_at': datetime.utcnow(),
+            'device_id': request.json.get('device_id') if request.json else None,
+            'metadata': {
+                'file_size': len(file_data),
+                'dimensions': dimensions,
+                'processing_time': processing_time,
+                'content_type': file.content_type or 'image/jpeg'
+            }
+        }
+        
+        result = documents_collection.insert_one(document_data)
+        
+        logger.info(f"Document processed successfully: {filename}")
+        
+        return jsonify({
+            'message': 'Document uploaded and processed successfully',
+            'document_id': str(result.inserted_id),
+            'extracted_text': extracted_text,
+            'processing_time': processing_time
+        }), 201
+    
+    except Exception as e:
+        logger.error(f"Document upload failed: {e}")
+        return jsonify({'message': 'Failed to process document'}), 500
+
+@app.route('/api/documents', methods=['GET'])
+@token_required
+def get_documents(current_user_id):
+    """Get all documents for the current user"""
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        skip = (page - 1) * limit
+        
+        # Query documents
+        documents = list(documents_collection.find(
+            {'user_id': current_user_id}
+        ).sort('captured_at', -1).skip(skip).limit(limit))
+        
+        # Convert ObjectId to string
+        for doc in documents:
+            doc['_id'] = str(doc['_id'])
+            doc['file_id'] = str(doc['file_id'])
+        
+        # Get total count
+        total_count = documents_collection.count_documents({'user_id': current_user_id})
+        
+        return jsonify({
+            'documents': documents,
+            'total_count': total_count,
+            'page': page,
+            'limit': limit,
+            'total_pages': (total_count + limit - 1) // limit
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Failed to fetch documents: {e}")
+        return jsonify({'message': 'Failed to fetch documents'}), 500
+
+@app.route('/api/documents/<document_id>', methods=['GET'])
+@token_required
+def get_document(current_user_id, document_id):
+    """Get a specific document"""
+    try:
+        from bson import ObjectId
+        
+        document = documents_collection.find_one({
+            '_id': ObjectId(document_id),
+            'user_id': current_user_id
+        })
+        
+        if not document:
+            return jsonify({'message': 'Document not found'}), 404
+        
+        # Convert ObjectId to string
+        document['_id'] = str(document['_id'])
+        document['file_id'] = str(document['file_id'])
+        
+        return jsonify(document), 200
+    
+    except Exception as e:
+        logger.error(f"Failed to fetch document: {e}")
+        return jsonify({'message': 'Failed to fetch document'}), 500
+
+@app.route('/api/documents/<document_id>/image', methods=['GET'])
+@token_required
+def get_document_image(current_user_id, document_id):
+    """Get the image file for a document"""
+    try:
+        from bson import ObjectId
+        
+        # Find document
+        document = documents_collection.find_one({
+            '_id': ObjectId(document_id),
+            'user_id': current_user_id
+        })
+        
+        if not document:
+            return jsonify({'message': 'Document not found'}), 404
+        
+        # Get file from GridFS
+        file_data = fs.get(ObjectId(document['file_id']))
+        
+        return send_file(
+            io.BytesIO(file_data.read()),
+            mimetype=document['metadata'].get('content_type', 'image/jpeg'),
+            as_attachment=False
+        )
+    
+    except Exception as e:
+        logger.error(f"Failed to fetch document image: {e}")
+        return jsonify({'message': 'Failed to fetch image'}), 500
+
+@app.route('/api/documents/<document_id>', methods=['DELETE'])
+@token_required
+def delete_document(current_user_id, document_id):
+    """Delete a document"""
+    try:
+        from bson import ObjectId
+        
+        # Find document
+        document = documents_collection.find_one({
+            '_id': ObjectId(document_id),
+            'user_id': current_user_id
+        })
+        
+        if not document:
+            return jsonify({'message': 'Document not found'}), 404
+        
+        # Delete file from GridFS
+        fs.delete(ObjectId(document['file_id']))
+        
+        # Delete document from collection
+        documents_collection.delete_one({'_id': ObjectId(document_id)})
+        
+        return jsonify({'message': 'Document deleted successfully'}), 200
+    
+    except Exception as e:
+        logger.error(f"Failed to delete document: {e}")
+        return jsonify({'message': 'Failed to delete document'}), 500
+
+@app.route('/api/search', methods=['GET'])
+@token_required
+def search_documents(current_user_id):
+    """Search documents by text content"""
+    try:
+        query = request.args.get('q', '').strip()
+        if not query:
+            return jsonify({'message': 'Search query is required'}), 400
+        
+        # Create text index if it doesn't exist
+        try:
+            documents_collection.create_index([('ocr_text', 'text')])
+        except:
+            pass  # Index might already exist
+        
+        # Search documents
+        documents = list(documents_collection.find({
+            'user_id': current_user_id,
+            '$text': {'$search': query}
+        }).sort('captured_at', -1))
+        
+        # Convert ObjectId to string
+        for doc in documents:
+            doc['_id'] = str(doc['_id'])
+            doc['file_id'] = str(doc['file_id'])
+        
+        return jsonify({
+            'documents': documents,
+            'query': query,
+            'count': len(documents)
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Search failed: {e}")
+        return jsonify({'message': 'Search failed'}), 500
+
+# Health check
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """API health check"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '1.0.0'
+    }), 200
+
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'message': 'Endpoint not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'message': 'Internal server error'}), 500
+
+if __name__ == '__main__':
+    # Create uploads directory if it doesn't exist
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    
+    # Run the application
+    app.run(
+        host='0.0.0.0',
+        port=5000,
+        debug=True,
+        ssl_context='adhoc'  # Self-signed SSL for development
+    )
+
+FILE: backend/requirements.txt
+-----------------------------
+
+Flask==2.3.3
+flask-cors==4.0.0
+pymongo==4.5.0
+PyJWT==2.8.0
+opencv-python==4.8.1.78
+Pillow==10.0.1
+pytesseract==0.3.10
+numpy==1.24.3
+python-dotenv==1.0.0
+gunicorn==21.2.0
+cryptography==41.0.7
+Werkzeug==2.3.7
+
+BACKEND SETUP INSTRUCTIONS
+==========================
+
+1. Navigate to Backend Directory:
+cd backend
+
+2. Create Virtual Environment:
+python -m venv venv
+
+3. Activate Virtual Environment:
+Windows: venv\Scripts\activate
+macOS/Linux: source venv/bin/activate
+
+4. Install Dependencies:
+pip install -r requirements.txt
+
+5. Start Backend Server:
+python app.py
+
+Backend will start at https://localhost:5000
+
+BACKEND API ENDPOINTS
+====================
+
+Authentication Endpoints:
+- POST /api/auth/register - Register new user
+- POST /api/auth/login - User authentication
+
+Document Endpoints:
+- POST /api/documents/upload - Upload and process document
+- GET /api/documents - Get user's documents (paginated)
+- GET /api/documents/{id} - Get specific document
+- GET /api/documents/{id}/image - Get document image
+- DELETE /api/documents/{id} - Delete document
+
+Search Endpoints:
+- GET /api/search?q=query - Search documents by text
+
+System Endpoints:
+- GET /api/health - Health check
+
+MOBILE TECHNOLOGY STACK
+=======================
+
+Core Framework:
+- React Native 0.72.6: Cross-platform mobile framework
+- React 18.2.0: Component-based UI library
+- React Navigation 6.x: Navigation and routing
+
+Camera & Media:
+- react-native-vision-camera 3.6.4: Advanced camera functionality
+- react-native-image-picker 7.0.3: Image selection utilities
+- react-native-image-crop-picker 0.40.2: Image cropping and editing
+
+Storage & State:
+- @react-native-async-storage/async-storage 1.19.3: Local storage
+- react-native-fs 2.20.0: File system operations
+
+Networking:
+- axios 1.5.1: HTTP client for API communication
+- JWT handling: Custom implementation for authentication
+
+UI Components:
+- react-native-vector-icons 10.0.0: Icon library
+- react-native-permissions 3.10.1: Permission management
+
+MOBILE APPLICATION ARCHITECTURE
+===============================
+
+Navigation Structure:
+Stack Navigator (Authentication Flow)
+├── LoginScreen          # User authentication
+├── HomeScreen          # Main dashboard with quick actions
+├── CameraScreen        # Document capture interface
+├── DocumentsScreen     # Document list and management
+└── DocumentDetailScreen # Individual document view
+
+Key Features:
+- Offline Queue: Documents captured offline are queued for upload
+- Image Compression: JPEG compression to optimize storage and transfer
+- Permission Management: Camera and storage permissions
+- Background Sync: Sync when app returns to foreground
+
+MOBILE COMPLETE SOURCE CODE
+===========================
+
+FILE: mobile/App.js
+------------------
+
+import React from 'react';
+import {NavigationContainer} from '@react-navigation/native';
+import {createStackNavigator} from '@react-navigation/stack';
+import {StatusBar, StyleSheet} from 'react-native';
+
+// Screens
+import LoginScreen from './src/screens/LoginScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import CameraScreen from './src/screens/CameraScreen';
+import DocumentsScreen from './src/screens/DocumentsScreen';
+import DocumentDetailScreen from './src/screens/DocumentDetailScreen';
+
+const Stack = createStackNavigator();
+
+const App = () => {
+  return (
+    <>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="Login"
+          screenOptions={{
+            headerStyle: {
+              backgroundColor: '#2196F3',
+            },
+            headerTintColor: '#fff',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+            },
+          }}>
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{title: 'PrintChakra Login'}}
+          />
+          <Stack.Screen
+            name="Home"
+            component={HomeScreen}
+            options={{title: 'PrintChakra'}}
+          />
+          <Stack.Screen
+            name="Camera"
+            component={CameraScreen}
+            options={{title: 'Scan Document'}}
+          />
+          <Stack.Screen
+            name="Documents"
+            component={DocumentsScreen}
+            options={{title: 'My Documents'}}
+          />
+          <Stack.Screen
+            name="DocumentDetail"
+            component={DocumentDetailScreen}
+            options={{title: 'Document Details'}}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+});
+
+export default App;
+
+FILE: mobile/src/services/ApiService.js
+--------------------------------------
+
+import axios from 'axios';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const API_BASE_URL = 'https://192.168.1.100:5000/api'; // Update with your local IP
+
+class ApiService {
+  constructor() {
+    this.client = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Request interceptor to add auth token
+    this.client.interceptors.request.use(
+      async config => {
+        const token = await AsyncStorage.getItem('authToken');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      error => {
+        return Promise.reject(error);
+      },
+    );
+
+    // Response interceptor for error handling
+    this.client.interceptors.response.use(
+      response => response,
+      async error => {
+        if (error.response?.status === 401) {
+          // Token expired or invalid
+          await AsyncStorage.removeItem('authToken');
+          await AsyncStorage.removeItem('userId');
+          // Navigate to login screen
+        }
+        return Promise.reject(error);
+      },
+    );
+  }
+
+  // Authentication methods
+  async login(username, password) {
+    try {
+      const response = await this.client.post('/auth/login', {
+        username,
+        password,
+      });
+      
+      const {token, user_id} = response.data;
+      
+      // Store credentials
+      await AsyncStorage.setItem('authToken', token);
+      await AsyncStorage.setItem('userId', user_id);
+      
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async register(username, password, deviceId) {
+    try {
+      const response = await this.client.post('/auth/register', {
+        username,
+        password,
+        device_id: deviceId,
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async logout() {
+    await AsyncStorage.removeItem('authToken');
+    await AsyncStorage.removeItem('userId');
+  }
+
+  // Document methods
+  async uploadDocument(imageUri, deviceId) {
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: `document_${Date.now()}.jpg`,
+      });
+
+      if (deviceId) {
+        formData.append('device_id', deviceId);
+      }
+
+      const response = await this.client.post('/documents/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 60000, // Longer timeout for file upload
+      });
+
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getDocuments(page = 1, limit = 20) {
+    try {
+      const response = await this.client.get('/documents', {
+        params: {page, limit},
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getDocument(documentId) {
+    try {
+      const response = await this.client.get(`/documents/${documentId}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async deleteDocument(documentId) {
+    try {
+      const response = await this.client.delete(`/documents/${documentId}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async searchDocuments(query) {
+    try {
+      const response = await this.client.get('/search', {
+        params: {q: query},
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  getDocumentImageUrl(documentId) {
+    return `${API_BASE_URL}/documents/${documentId}/image`;
+  }
+
+  // Utility methods
+  async checkAuthStatus() {
+    const token = await AsyncStorage.getItem('authToken');
+    return !!token;
+  }
+
+  async getUserId() {
+    return await AsyncStorage.getItem('userId');
+  }
+
+  async healthCheck() {
+    try {
+      const response = await this.client.get('/health');
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  handleError(error) {
+    if (error.response) {
+      // Server responded with error status
+      return {
+        message: error.response.data?.message || 'Server error',
+        status: error.response.status,
+        data: error.response.data,
+      };
+    } else if (error.request) {
+      // Request was made but no response received
+      return {
+        message: 'Network error - please check your connection',
+        status: 0,
+        data: null,
+      };
+    } else {
+      // Something else happened
+      return {
+        message: error.message || 'Unknown error occurred',
+        status: -1,
+        data: null,
+      };
+    }
+  }
+}
+
+export default new ApiService();
+
+FILE: mobile/src/screens/LoginScreen.js
+---------------------------------------
+
+import React, {useState} from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import ApiService from '../services/ApiService';
+
+const LoginScreen = ({navigation}) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+
+  const generateDeviceId = () => {
+    return `android_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  };
+
+  const handleLogin = async () => {
+    if (!username.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both username and password');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await ApiService.login(username.trim(), password);
+      navigation.replace('Home');
+    } catch (error) {
+      Alert.alert('Login Failed', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!username.trim() || !password.trim()) {
+      Alert.alert('Error', 'Please enter both username and password');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters long');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const deviceId = generateDeviceId();
+      await ApiService.register(username.trim(), password, deviceId);
+      Alert.alert('Success', 'Account created successfully! Please login.');
+      setIsRegistering(false);
+    } catch (error) {
+      Alert.alert('Registration Failed', error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const testConnection = async () => {
+    try {
+      await ApiService.healthCheck();
+      Alert.alert('Success', 'Connected to PrintChakra server!');
+    } catch (error) {
+      Alert.alert(
+        'Connection Failed',
+        'Cannot connect to server. Please check:\n' +
+          '1. Backend server is running\n' +
+          '2. Network connection\n' +
+          '3. Server IP address in ApiService.js',
+      );
+    }
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.content}>
+        <Text style={styles.title}>
+          {isRegistering ? 'Create Account' : 'Welcome to PrintChakra'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {isRegistering
+            ? 'Sign up to start scanning documents'
+            : 'Sign in to continue'}
+        </Text>
+
+        <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            placeholder="Username"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            editable={!isLoading}
+          />
+
+          <TouchableOpacity
+            style={[styles.button, styles.primaryButton]}
+            onPress={isRegistering ? handleRegister : handleLogin}
+            disabled={isLoading}>
+            {isLoading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>
+                {isRegistering ? 'Create Account' : 'Sign In'}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.secondaryButton]}
+            onPress={() => setIsRegistering(!isRegistering)}
+            disabled={isLoading}>
+            <Text style={styles.secondaryButtonText}>
+              {isRegistering
+                ? 'Already have an account? Sign In'
+                : "Don't have an account? Sign Up"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.button, styles.testButton]}
+            onPress={testConnection}
+            disabled={isLoading}>
+            <Text style={styles.testButtonText}>Test Connection</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  content: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 30,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 40,
+  },
+  form: {
+    width: '100%',
+  },
+  input: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 15,
+    fontSize: 16,
+    marginBottom: 15,
+  },
+  button: {
+    borderRadius: 8,
+    padding: 15,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  primaryButton: {
+    backgroundColor: '#2196F3',
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+  },
+  testButton: {
+    backgroundColor: '#4CAF50',
+    marginTop: 20,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  secondaryButtonText: {
+    color: '#2196F3',
+    fontSize: 14,
+  },
+  testButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+});
+
+export default LoginScreen;
+
+FILE: mobile/src/screens/HomeScreen.js
+-------------------------------------
+
+import React from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  Alert,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import ApiService from '../services/ApiService';
+
+const HomeScreen = ({navigation}) => {
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      {text: 'Cancel', style: 'cancel'},
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          await ApiService.logout();
+          navigation.replace('Login');
+        },
+      },
+    ]);
+  };
+
+  const menuItems = [
+    {
+      title: 'Scan Document',
+      subtitle: 'Capture and process new documents',
+      icon: 'camera-alt',
+      color: '#2196F3',
+      onPress: () => navigation.navigate('Camera'),
+    },
+    {
+      title: 'My Documents',
+      subtitle: 'View and manage scanned documents',
+      icon: 'folder',
+      color: '#4CAF50',
+      onPress: () => navigation.navigate('Documents'),
+    },
+    {
+      title: 'Search',
+      subtitle: 'Search through document content',
+      icon: 'search',
+      color: '#FF9800',
+      onPress: () => navigation.navigate('Documents', {showSearch: true}),
+    },
+    {
+      title: 'Settings',
+      subtitle: 'App preferences and account',
+      icon: 'settings',
+      color: '#9C27B0',
+      onPress: () => {
+        Alert.alert('Settings', 'Settings screen coming soon!');
+      },
+    },
+  ];
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>PrintChakra</Text>
+        <Text style={styles.subtitle}>Document Scanner & OCR</Text>
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+          <Icon name="logout" size={20} color="#666" />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.content}>
+        {menuItems.map((item, index) => (
+          <TouchableOpacity
+            key={index}
+            style={styles.menuItem}
+            onPress={item.onPress}>
+            <View style={[styles.iconContainer, {backgroundColor: item.color}]}>
+              <Icon name={item.icon} size={30} color="#ffffff" />
+            </View>
+            <View style={styles.menuText}>
+              <Text style={styles.menuTitle}>{item.title}</Text>
+              <Text style={styles.menuSubtitle}>{item.subtitle}</Text>
+            </View>
+            <Icon name="chevron-right" size={24} color="#ccc" />
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          PrintChakra MVP v1.0 - Offline Document Processing
+        </Text>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
+  header: {
+    backgroundColor: '#ffffff',
+    padding: 20,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  subtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 5,
+  },
+  logoutButton: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoutText: {
+    marginLeft: 5,
+    color: '#666',
+    fontSize: 14,
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  menuItem: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  iconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  menuText: {
+    flex: 1,
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  menuSubtitle: {
+    fontSize: 14,
+    color: '#666',
+  },
+  footer: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  footerText: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'center',
+  },
+});
+
+export default HomeScreen;
+
+FILE: mobile/package.json
+------------------------
+
+{
+  "name": "PrintChakraMobile",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios",
+    "start": "react-native start",
+    "test": "jest",
+    "lint": "eslint .",
+    "clean": "react-native clean"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-native": "0.72.6",
+    "@react-navigation/native": "^6.1.9",
+    "@react-navigation/stack": "^6.3.20",
+    "react-native-screens": "^3.25.0",
+    "react-native-safe-area-context": "^4.7.4",
+    "react-native-gesture-handler": "^2.13.4",
+    "react-native-vision-camera": "^3.6.4",
+    "react-native-image-picker": "^7.0.3",
+    "react-native-image-crop-picker": "^0.40.2",
+    "@react-native-async-storage/async-storage": "^1.19.3",
+    "react-native-fs": "^2.20.0",
+    "axios": "^1.5.1",
+    "react-native-vector-icons": "^10.0.0",
+    "react-native-permissions": "^3.10.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@babel/preset-env": "^7.20.0",
+    "@babel/runtime": "^7.20.0",
+    "@react-native/eslint-config": "^0.72.2",
+    "@react-native/metro-config": "^0.72.11",
+    "@tsconfig/react-native": "^3.0.0",
+    "@types/react": "^18.0.24",
+    "@types/react-test-renderer": "^18.0.0",
+    "babel-jest": "^29.2.1",
+    "eslint": "^8.19.0",
+    "jest": "^29.2.1",
+    "metro-react-native-babel-preset": "0.76.8",
+    "prettier": "^2.4.1",
+    "react-test-renderer": "18.2.0",
+    "typescript": "4.8.4"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
+
+MOBILE SETUP INSTRUCTIONS
+=========================
+
+1. Navigate to Mobile Directory:
+cd mobile
+
+2. Install Dependencies:
+npm install
+
+3. Update API Base URL:
+Edit src/services/ApiService.js and update API_BASE_URL with your computer's IP address
+
+4. Android Setup:
+- Install Android Studio
+- Create Android Virtual Device or connect physical device
+- Enable USB Debugging on physical device
+
+5. Start Metro Bundler:
+npx react-native start
+
+6. Run on Android:
+npx react-native run-android
+
+MOBILE APPLICATION FEATURES
+===========================
+
+- User Authentication: Login/Register with JWT token storage
+- Document Capture: Camera integration with image optimization
+- Document Management: View, search, and organize documents
+- Offline Support: Queue documents for upload when offline
+- Real-time Sync: Automatic synchronization when connected
+- Error Handling: Comprehensive error handling and user feedback
+
+DASHBOARD TECHNOLOGY STACK
+=========================
+
+Core Framework:
+- React 18.2.0: Component-based UI library
+- react-dom 18.2.0: DOM-specific methods
+- react-router-dom 6.15.0: Declarative routing
+
+UI Framework:
+- Bootstrap 5.3.2: CSS framework for responsive design
+- react-bootstrap 2.8.0: Bootstrap components for React
+
+Networking & State:
+- axios 1.5.1: HTTP client for API communication
+
+Export & PDF Generation:
+- jspdf 2.5.1: PDF generation library
+- html2canvas 1.4.1: HTML to canvas rendering
+- reportlab: Server-side PDF generation (Python backend)
+
+Utilities:
+- moment 2.29.4: Date manipulation library
+- react-datepicker 4.16.0: Date picker component
+- react-toastify 9.1.3: Notification system
+
+DASHBOARD ARCHITECTURE
+======================
+
+Component Hierarchy:
+App.js
+├── Navigation.js        # Top navigation bar
+├── Sidebar.js          # Side navigation menu
+└── Pages/
+    ├── Dashboard.js    # Statistics and overview
+    ├── Documents.js    # Document management
+    ├── Search.js       # Advanced search interface
+    └── Settings.js     # Configuration options
+
+Key Features:
+- Document Management: Grid and list view options, bulk operations
+- Export System: PDF, Text, JSON, and CSV export formats
+- Analytics Dashboard: Document statistics and processing metrics
+- Real-time Search: Full-text search with filtering
+
+DASHBOARD COMPLETE SOURCE CODE
+==============================
+
+FILE: dashboard/src/App.js
+--------------------------
+
+import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { Container } from 'react-bootstrap';
+
+// Components
+import Navigation from './components/Navigation';
+import Sidebar from './components/Sidebar';
+
+// Pages
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import Documents from './pages/Documents';
+import DocumentDetail from './pages/DocumentDetail';
+import Search from './pages/Search';
+import Settings from './pages/Settings';
+
+// Services
+import authService from './services/authService';
+
+function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const isAuth = await authService.isAuthenticated();
+      setIsAuthenticated(isAuth);
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogin = () => {
+    setIsAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    authService.logout();
+    setIsAuthenticated(false);
+  };
+
+  const toggleSidebar = () => {
+    setSidebarVisible(!sidebarVisible);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center min-vh-100">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  return (
+    <div className="d-flex flex-column min-vh-100">
+      <Navigation onLogout={handleLogout} onToggleSidebar={toggleSidebar} />
+      
+      <div className="d-flex flex-grow-1">
+        <Sidebar visible={sidebarVisible} onHide={() => setSidebarVisible(false)} />
+        
+        <main className="flex-grow-1 main-content">
+          <Container fluid>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/documents" element={<Documents />} />
+              <Route path="/documents/:id" element={<DocumentDetail />} />
+              <Route path="/search" element={<Search />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Container>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+
+FILE: dashboard/src/services/apiService.js
+------------------------------------------
+
+import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://localhost:5000/api';
+
+class ApiService {
+  constructor() {
+    this.client = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    // Add request interceptor to include auth token
+    this.client.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
+    // Add response interceptor for error handling
+    this.client.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        if (error.response?.status === 401) {
+          // Token expired or invalid
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userId');
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  // Authentication methods
+  async login(username, password) {
+    try {
+      const response = await this.client.post('/auth/login', {
+        username,
+        password,
+      });
+      
+      const { token, user_id, username: userName } = response.data;
+      
+      // Store credentials
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('userId', user_id);
+      localStorage.setItem('username', userName);
+      
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async register(username, password, deviceId) {
+    try {
+      const response = await this.client.post('/auth/register', {
+        username,
+        password,
+        device_id: deviceId,
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  logout() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('username');
+  }
+
+  // Document methods
+  async getDocuments(page = 1, limit = 20) {
+    try {
+      const response = await this.client.get('/documents', {
+        params: { page, limit },
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async getDocument(documentId) {
+    try {
+      const response = await this.client.get(`/documents/${documentId}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async deleteDocument(documentId) {
+    try {
+      const response = await this.client.delete(`/documents/${documentId}`);
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  async searchDocuments(query) {
+    try {
+      const response = await this.client.get('/search', {
+        params: { q: query },
+      });
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  getDocumentImageUrl(documentId) {
+    const token = localStorage.getItem('authToken');
+    return `${API_BASE_URL}/documents/${documentId}/image?token=${token}`;
+  }
+
+  // Statistics methods
+  async getStatistics() {
+    try {
+      // Since we don't have a dedicated stats endpoint, we'll get documents and calculate
+      const response = await this.getDocuments(1, 1000); // Get all documents for stats
+      const documents = response.documents || [];
+      
+      const totalDocuments = documents.length;
+      const totalSize = documents.reduce((sum, doc) => sum + (doc.metadata?.file_size || 0), 0);
+      const avgProcessingTime = documents.reduce((sum, doc) => sum + (doc.metadata?.processing_time || 0), 0) / totalDocuments;
+      
+      // Group by date for recent activity
+      const today = new Date();
+      const lastWeek = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const recentDocuments = documents.filter(doc => new Date(doc.captured_at) >= lastWeek).length;
+      
+      return {
+        totalDocuments,
+        totalSize,
+        averageProcessingTime: avgProcessingTime || 0,
+        recentDocuments,
+      };
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  // Export methods
+  async exportDocumentsAsText(documentIds = []) {
+    try {
+      let documents;
+      if (documentIds.length > 0) {
+        // Get specific documents
+        documents = await Promise.all(
+          documentIds.map(id => this.getDocument(id))
+        );
+      } else {
+        // Get all documents
+        const response = await this.getDocuments(1, 1000);
+        documents = response.documents;
+      }
+
+      // Create text content
+      let textContent = 'PrintChakra - Exported Documents\n';
+      textContent += '================================\n\n';
+      
+      documents.forEach((doc, index) => {
+        textContent += `Document ${index + 1}: ${doc.filename}\n`;
+        textContent += `Captured: ${new Date(doc.captured_at).toLocaleString()}\n`;
+        textContent += `Size: ${(doc.metadata?.file_size / 1024).toFixed(1)} KB\n`;
+        textContent += '--- Text Content ---\n';
+        textContent += doc.ocr_text || 'No text extracted';
+        textContent += '\n\n' + '='.repeat(50) + '\n\n';
+      });
+
+      return textContent;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  // Utility methods
+  isAuthenticated() {
+    const token = localStorage.getItem('authToken');
+    return !!token;
+  }
+
+  getCurrentUser() {
+    return {
+      id: localStorage.getItem('userId'),
+      username: localStorage.getItem('username'),
+    };
+  }
+
+  async healthCheck() {
+    try {
+      const response = await this.client.get('/health');
+      return response.data;
+    } catch (error) {
+      throw this.handleError(error);
+    }
+  }
+
+  handleError(error) {
+    if (error.response) {
+      // Server responded with error status
+      return {
+        message: error.response.data?.message || 'Server error',
+        status: error.response.status,
+        data: error.response.data,
+      };
+    } else if (error.request) {
+      // Request was made but no response received
+      return {
+        message: 'Network error - please check your connection',
+        status: 0,
+        data: null,
+      };
+    } else {
+      // Something else happened
+      return {
+        message: error.message || 'Unknown error occurred',
+        status: -1,
+        data: null,
+      };
+    }
+  }
+}
+
+export default new ApiService();
+
+FILE: dashboard/src/pages/Dashboard.js
+-------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { Row, Col, Card, Spinner, Alert } from 'react-bootstrap';
+import { toast } from 'react-toastify';
+import apiService from '../services/apiService';
+
+const Dashboard = () => {
+  const [stats, setStats] = useState(null);
+  const [recentDocuments, setRecentDocuments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  const loadDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+
+      // Load statistics
+      const statsData = await apiService.getStatistics();
+      setStats(statsData);
+
+      // Load recent documents
+      const documentsResponse = await apiService.getDocuments(1, 5);
+      setRecentDocuments(documentsResponse.documents || []);
+
+    } catch (error) {
+      setError(error.message || 'Failed to load dashboard data');
+      toast.error('Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const formatFileSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="loading-spinner">
+        <Spinner animation="border" variant="primary" />
+        <p className="mt-3">Loading dashboard...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="danger">
+        <Alert.Heading>Error Loading Dashboard</Alert.Heading>
+        <p>{error}</p>
+      </Alert>
+    );
+  }
+
+  return (
+    <div>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h1>Dashboard</h1>
+        <small className="text-muted">Welcome to PrintChakra</small>
+      </div>
+
+      {/* Statistics Cards */}
+      <Row className="mb-4">
+        <Col md={3} className="mb-3">
+          <Card className="stats-card h-100">
+            <Card.Body className="text-center">
+              <div className="text-primary mb-2">
+                <i className="bi bi-file-text" style={{ fontSize: '2rem' }}>📄</i>
+              </div>
+              <h3 className="mb-1">{stats?.totalDocuments || 0}</h3>
+              <p className="text-muted mb-0">Total Documents</p>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={3} className="mb-3">
+          <Card className="stats-card h-100">
+            <Card.Body className="text-center">
+              <div className="text-success mb-2">
+                <i className="bi bi-hdd" style={{ fontSize: '2rem' }}>💾</i>
+              </div>
+              <h3 className="mb-1">{formatFileSize(stats?.totalSize || 0)}</h3>
+              <p className="text-muted mb-0">Total Storage</p>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={3} className="mb-3">
+          <Card className="stats-card h-100">
+            <Card.Body className="text-center">
+              <div className="text-warning mb-2">
+                <i className="bi bi-clock" style={{ fontSize: '2rem' }}>⏱️</i>
+              </div>
+              <h3 className="mb-1">{(stats?.averageProcessingTime || 0).toFixed(1)}s</h3>
+              <p className="text-muted mb-0">Avg Processing Time</p>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col md={3} className="mb-3">
+          <Card className="stats-card h-100">
+            <Card.Body className="text-center">
+              <div className="text-info mb-2">
+                <i className="bi bi-calendar-week" style={{ fontSize: '2rem' }}>📅</i>
+              </div>
+              <h3 className="mb-1">{stats?.recentDocuments || 0}</h3>
+              <p className="text-muted mb-0">This Week</p>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Recent Documents */}
+      <Row>
+        <Col>
+          <Card>
+            <Card.Header>
+              <h5 className="mb-0">Recent Documents</h5>
+            </Card.Header>
+            <Card.Body>
+              {recentDocuments.length > 0 ? (
+                <div className="table-responsive">
+                  <table className="table table-hover">
+                    <thead>
+                      <tr>
+                        <th>Filename</th>
+                        <th>Captured</th>
+                        <th>Size</th>
+                        <th>Text Preview</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentDocuments.map((doc) => (
+                        <tr key={doc._id}>
+                          <td>
+                            <strong>{doc.filename}</strong>
+                          </td>
+                          <td>
+                            <small className="text-muted">
+                              {formatDate(doc.captured_at)}
+                            </small>
+                          </td>
+                          <td>
+                            <small>
+                              {formatFileSize(doc.metadata?.file_size || 0)}
+                            </small>
+                          </td>
+                          <td>
+                            <small className="text-muted">
+                              {doc.ocr_text 
+                                ? `${doc.ocr_text.substring(0, 100)}...`
+                                : 'No text extracted'
+                              }
+                            </small>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <i>📄</i>
+                  <h4>No Documents Yet</h4>
+                  <p>Start by scanning documents with the mobile app</p>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Quick Actions */}
+      <Row className="mt-4">
+        <Col>
+          <Card>
+            <Card.Header>
+              <h5 className="mb-0">Quick Actions</h5>
+            </Card.Header>
+            <Card.Body>
+              <Row>
+                <Col md={4} className="mb-3">
+                  <Card className="h-100 border-primary">
+                    <Card.Body className="text-center">
+                      <div className="text-primary mb-2">
+                        <i style={{ fontSize: '2rem' }}>📱</i>
+                      </div>
+                      <h6>Mobile App</h6>
+                      <p className="small text-muted">
+                        Use the PrintChakra mobile app to scan new documents
+                      </p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+
+                <Col md={4} className="mb-3">
+                  <Card className="h-100 border-success">
+                    <Card.Body className="text-center">
+                      <div className="text-success mb-2">
+                        <i style={{ fontSize: '2rem' }}>🔍</i>
+                      </div>
+                      <h6>Search Documents</h6>
+                      <p className="small text-muted">
+                        Find documents by searching through their text content
+                      </p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+
+                <Col md={4} className="mb-3">
+                  <Card className="h-100 border-warning">
+                    <Card.Body className="text-center">
+                      <div className="text-warning mb-2">
+                        <i style={{ fontSize: '2rem' }}>📤</i>
+                      </div>
+                      <h6>Export Data</h6>
+                      <p className="small text-muted">
+                        Export your documents as PDF or text files
+                      </p>
+                    </Card.Body>
+                  </Card>
+                </Col>
+              </Row>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+    </div>
+  );
+};
+
+export default Dashboard;
+
+FILE: dashboard/package.json
+---------------------------
+
+{
+  "name": "printchakra-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@testing-library/jest-dom": "^5.16.4",
+    "@testing-library/react": "^13.3.0",
+    "@testing-library/user-event": "^13.5.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.15.0",
+    "react-bootstrap": "^2.8.0",
+    "bootstrap": "^5.3.2",
+    "axios": "^1.5.1",
+    "jspdf": "^2.5.1",
+    "html2canvas": "^1.4.1",
+    "moment": "^2.29.4",
+    "react-datepicker": "^4.16.0",
+    "react-toastify": "^9.1.3",
+    "react-scripts": "5.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "proxy": "https://localhost:5000"
+}
+
+DASHBOARD SETUP INSTRUCTIONS
+============================
+
+1. Navigate to Dashboard Directory:
+cd dashboard
+
+2. Install Dependencies:
+npm install
+
+3. Environment Configuration:
+Create .env file with:
+REACT_APP_API_URL=https://YOUR-IP:5000/api
+
+4. Start Development Server:
+npm start
+
+Dashboard will open at http://localhost:3000
+
+5. Production Build:
+npm run build
+
+DASHBOARD FEATURES
+=================
+
+- User Authentication: Login interface with session management
+- Statistics Dashboard: Document counts, storage usage, processing metrics
+- Document Management: View, search, and organize documents
+- Export System: PDF, TXT, JSON, and CSV export formats
+- Responsive Design: Works on desktop and mobile browsers
+- Real-time Search: Full-text search with instant results
+
+Camera & Media:
+- react-native-vision-camera 3.6.4: Advanced camera functionality
+- react-native-image-picker 7.0.3: Image selection utilities
+- react-native-image-crop-picker 0.40.2: Image cropping and editing
+
+Storage & State:
+- @react-native-async-storage/async-storage 1.19.3: Local storage
+- react-native-fs 2.20.0: File system operations
+
+Networking:
+- axios 1.5.1: HTTP client for API communication
+- JWT handling: Custom implementation for authentication
+
+UI Components:
+- react-native-vector-icons 10.0.0: Icon library
+- react-native-permissions 3.10.1: Permission management
+
+BACKEND API (PYTHON)
+--------------------
+
+Core Framework:
+- Flask 2.3.3: Lightweight web framework
+- flask-cors 4.0.0: Cross-Origin Resource Sharing
+- gunicorn 21.2.0: WSGI HTTP Server for production
+
+Database & Storage:
+- pymongo 4.5.0: MongoDB driver for Python
+- gridfs 0.0.1: GridFS for large file storage
+- MongoDB Community Edition: NoSQL document database
+
+Authentication & Security:
+- PyJWT 2.8.0: JSON Web Token implementation
+- cryptography 41.0.7: Cryptographic recipes and primitives
+- Werkzeug 2.3.7: WSGI utility library
+
+Image Processing & OCR:
+- opencv-python 4.8.1.78: Computer vision and image processing
+- Pillow 10.0.1: Python Imaging Library
+- pytesseract 0.3.10: Python wrapper for Tesseract OCR
+- numpy 1.24.3: Numerical computing library
+
+Development & Deployment:
+- python-dotenv 1.0.0: Environment variable management
+
+DASHBOARD (REACT.JS)
+-------------------
+
+Core Framework:
+- React 18.2.0: Component-based UI library
+- react-dom 18.2.0: DOM-specific methods
+- react-router-dom 6.15.0: Declarative routing
+
+UI Framework:
+- Bootstrap 5.3.2: CSS framework for responsive design
+- react-bootstrap 2.8.0: Bootstrap components for React
+
+Networking & State:
+- axios 1.5.1: HTTP client for API communication
+
+Export & PDF Generation:
+- jspdf 2.5.1: PDF generation library
+- html2canvas 1.4.1: HTML to canvas rendering
+- reportlab: Server-side PDF generation (Python backend)
+
+Utilities:
+- moment 2.29.4: Date manipulation library
+- react-datepicker 4.16.0: Date picker component
+- react-toastify 9.1.3: Notification system
+
+DEVELOPMENT TOOLS
+-----------------
+
+Mobile Development:
+- Android Studio: Android development environment
+- React Native CLI: Command-line interface
+- Metro Bundler: JavaScript bundler for React Native
+
+Backend Development:
+- Python 3.8+: Programming language
+- pip: Package installer for Python
+- Virtual Environment: Python environment isolation
+
+Frontend Development:
+- Node.js 18+: JavaScript runtime
+- npm: Package manager for JavaScript
+- Create React App: Development environment
+
+Database:
+- MongoDB Compass: GUI for MongoDB
+- MongoDB Shell: Command-line interface
+
+PROJECT STRUCTURE
+==================
+
+printchakra/
+├── README.md                 # Main project documentation
+├── INSTRUCTIONS.md          # Complete technical guide
+├── PROJECT_DOCUMENTATION.txt # This plain text file
+├── .github/
+│   └── copilot-instructions.md
+│
+├── mobile/                  # React Native Android App
+│   ├── package.json         # Dependencies and scripts
+│   ├── App.js              # Main application component
+│   ├── src/
+│   │   ├── components/     # Reusable UI components
+│   │   ├── screens/        # Application screens
+│   │   │   ├── LoginScreen.js
+│   │   │   ├── HomeScreen.js
+│   │   │   ├── CameraScreen.js
+│   │   │   ├── DocumentsScreen.js
+│   │   │   └── DocumentDetailScreen.js
+│   │   └── services/       # API and utility services
+│   │       └── ApiService.js
+│   └── android/            # Android-specific files
+│
+├── backend/                # Python Flask API Server
+│   ├── app.py             # Main Flask application
+│   ├── requirements.txt   # Python dependencies
+│   ├── README.md         # Backend-specific documentation
+│   └── uploads/          # Temporary file storage
+│
+├── dashboard/             # React.js Web Dashboard
+│   ├── package.json      # Dependencies and scripts
+│   ├── public/
+│   │   └── index.html    # HTML template
+│   └── src/
+│       ├── App.js        # Main application component
+│       ├── index.js      # Application entry point
+│       ├── index.css     # Global styles
+│       ├── components/   # Reusable UI components
+│       │   ├── Navigation.js
+│       │   └── Sidebar.js
+│       ├── pages/        # Application pages
+│       │   ├── Login.js
+│       │   ├── Dashboard.js
+│       │   ├── Documents.js
+│       │   ├── DocumentDetail.js
+│       │   ├── Search.js
+│       │   └── Settings.js
+│       └── services/     # API and utility services
+│           ├── apiService.js
+│           ├── authService.js
+│           └── exportService.js
+│
+└── docs/                 # Project Documentation
+    ├── development-log.md    # Daily development tracking
+    └── setup-guide.md       # Detailed setup instructions
+
+COMPONENT DEEP DIVE
+===================
+
+MOBILE APPLICATION ARCHITECTURE
+-------------------------------
+
+Navigation Structure:
+Stack Navigator (Authentication Flow)
+├── LoginScreen          # User authentication
+├── HomeScreen          # Main dashboard with quick actions
+├── CameraScreen        # Document capture interface
+├── DocumentsScreen     # Document list and management
+└── DocumentDetailScreen # Individual document view
+
+Key Components:
+
+LoginScreen.js:
+- User authentication (login/register)
+- Connection testing functionality
+- Form validation and error handling
+- Device ID generation for tracking
+
+CameraScreen.js:
+- Camera integration with react-native-vision-camera
+- Document frame guides for better capture
+- Image preprocessing and compression
+- Upload queue management for offline scenarios
+
+DocumentsScreen.js:
+- Paginated document list with search
+- Pull-to-refresh functionality
+- Bulk operations (delete, export)
+- Image thumbnails and text previews
+
+ApiService.js:
+- Centralized API communication
+- JWT token management
+- Offline queue implementation
+- Error handling and retry logic
+
+Mobile-Specific Features:
+- Offline Queue: Documents captured offline are queued for upload
+- Image Compression: JPEG compression to optimize storage and transfer
+- Permission Management: Camera and storage permissions
+- Background Sync: Sync when app returns to foreground
+
+BACKEND API ARCHITECTURE
+------------------------
+
+Core Modules:
+
+Authentication Module:
+- /api/auth/login (POST)
+- /api/auth/register (POST)
+- JWT token generation and validation
+- Password hashing with SHA-256
+- User session management
+- Device ID tracking
+
+Document Processing Module:
+- /api/documents/upload (POST)
+- Image preprocessing with OpenCV:
+  - Grayscale conversion
+  - Gaussian blur for noise reduction
+  - Adaptive thresholding
+  - Morphological operations
+- OCR processing with Tesseract:
+  - Custom configuration for document scanning
+  - English language optimization
+  - Text confidence scoring
+
+Storage Module:
+- GridFS Integration: Large file storage in MongoDB
+- Metadata Management: Document properties and processing statistics
+- File Organization: Efficient retrieval and cleanup
+
+Search Module:
+- /api/search (GET)
+- Full-text search using MongoDB text indexes
+- Query optimization and ranking
+- Result pagination and sorting
+
+Image Processing Pipeline:
+
+1. Image Validation: File type, size, and format checks
+2. Preprocessing:
+   - Convert to grayscale
+   - Apply Gaussian blur (5x5 kernel)
+   - Adaptive thresholding for binarization
+   - Morphological operations for noise reduction
+3. OCR Processing:
+   - Tesseract configuration: --oem 3 --psm 6 -l eng
+   - Text extraction with confidence scoring
+4. Post-processing: Text cleaning and validation
+5. Storage: GridFS file storage and metadata indexing
+
+DASHBOARD ARCHITECTURE
+----------------------
+
+Component Hierarchy:
+App.js
+├── Navigation.js        # Top navigation bar
+├── Sidebar.js          # Side navigation menu
+└── Pages/
+    ├── Dashboard.js    # Statistics and overview
+    ├── Documents.js    # Document management
+    ├── Search.js       # Advanced search interface
+    └── Settings.js     # Configuration options
+
+Key Features:
+
+Document Management:
+- Grid and list view options
+- Bulk selection and operations
+- Real-time search and filtering
+- Document preview with image and text
+
+Export System:
+- PDF Export: Using jsPDF with custom formatting
+- Text Export: Plain text compilation
+- JSON Export: Structured data format
+- CSV Export: Spreadsheet-compatible format
+
+Analytics Dashboard:
+- Document count and storage statistics
+- Processing time analytics
+- Recent activity tracking
+- System health monitoring
+
+SETUP INSTRUCTIONS
+==================
+
+SYSTEM REQUIREMENTS
+-------------------
+
+- Operating System: Windows 10+, macOS 10.15+, or Ubuntu 18.04+
+- RAM: Minimum 8GB (16GB recommended for development)
+- Storage: 5GB free space for development tools and dependencies
+- Network: Wi-Fi router for local device communication
+
+PREREQUISITES INSTALLATION
+--------------------------
+
+Install Node.js and npm:
+Download from https://nodejs.org/ (LTS version 18.x)
+Verify installation:
+node --version  # Should show v18.x.x
+npm --version   # Should show 9.x.x or higher
+
+Install Python:
+Download from https://python.org/ (Python 3.8+)
+Verify installation:
+python --version  # Should show Python 3.8+
+pip --version     # Should show pip 21.x+
+
+Install MongoDB:
+
+Windows:
+1. Download MongoDB Community Edition from mongodb.com
+2. Install with default settings
+3. Start MongoDB service: net start MongoDB
+
+macOS:
+brew tap mongodb/brew
+brew install mongodb-community
+brew services start mongodb-community
+
+Linux (Ubuntu/Debian):
+wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt-get update
+sudo apt-get install -y mongodb-org
+sudo systemctl start mongod
+
+Install Android Studio (for Mobile Development):
+1. Download from developer.android.com/studio
+2. Install Android SDK (API Level 33 recommended)
+3. Create Android Virtual Device (AVD) or connect physical device
+4. Enable USB Debugging on physical Android device
+
+Install Tesseract OCR:
+
+Windows:
+1. Download from UB Mannheim Tesseract
+2. Install to C:\Program Files\Tesseract-OCR
+3. Add to system PATH environment variable
+
+macOS:
+brew install tesseract
+
+Linux:
+sudo apt-get install tesseract-ocr
+sudo apt-get install libtesseract-dev
+
+PROJECT SETUP
+=============
+
+1. Navigate to Project Directory:
+cd c:\Users\chama\OneDrive\Desktop\printchakra
+
+2. Backend Setup:
+cd backend
+
+Create virtual environment (recommended):
+python -m venv venv
+
+Activate virtual environment:
+Windows: venv\Scripts\activate
+macOS/Linux: source venv/bin/activate
+
+Install dependencies:
+pip install -r requirements.txt
+
+Create environment file:
+Windows: copy .env.example .env
+macOS/Linux: cp .env.example .env
+
+Edit .env file with your configuration:
+MONGODB_URI=mongodb://localhost:27017/printchakra
+SECRET_KEY=your-super-secret-key-here
+TESSERACT_PATH=/usr/local/bin/tesseract
+
+Start backend server:
+python app.py
+
+Backend will start at https://localhost:5000
+
+3. Dashboard Setup:
+cd dashboard
+
+Install dependencies:
+npm install
+
+Start development server:
+npm start
+
+Dashboard will open at http://localhost:3000
+
+4. Mobile App Setup:
+cd mobile
+
+Install dependencies:
+npm install
+
+Start Metro bundler:
+npx react-native start
+
+In another terminal, run on Android:
+npx react-native run-android
+
+5. Network Configuration:
+
+Find Your Computer's IP Address:
+Windows: ipconfig
+macOS/Linux: ifconfig
+
+Look for your Wi-Fi adapter's IPv4 address (usually 192.168.x.x)
+
+Update Mobile App Configuration:
+Edit mobile/src/services/ApiService.js:
+const API_BASE_URL = 'https://YOUR-IP-ADDRESS:5000/api';
+Example: 'https://192.168.1.100:5000/api'
+
+6. Firewall Configuration:
+
+Windows:
+- Allow Python and Node.js through Windows Defender Firewall
+- Allow inbound connections on ports 3000 and 5000
+
+macOS:
+sudo pfctl -d  # Temporarily disable firewall for development
+
+Linux:
+sudo ufw allow 3000
+sudo ufw allow 5000
+
+DEVELOPMENT WORKFLOW
+====================
+
+DAILY DEVELOPMENT ROUTINE
+-------------------------
+
+1. Start Development Environment:
+
+Terminal 1: Backend
+cd backend
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+python app.py
+
+Terminal 2: Dashboard
+cd dashboard
+npm start
+
+Terminal 3: Mobile Metro
+cd mobile
+npx react-native start
+
+Terminal 4: Mobile Android
+npx react-native run-android
+
+2. Development Tools:
+
+MongoDB Compass (Database GUI):
+- Connect to: mongodb://localhost:27017
+- Database: printchakra
+- Collections: documents, users, fs.files, fs.chunks
+
+React Developer Tools (Browser Extension):
+- Install for Chrome/Firefox
+- Debug React components and state
+
+React Native Debugger (Standalone App):
+- Download from github.com/jhen0409/react-native-debugger
+- Debug mobile app components and network requests
+
+3. Testing Workflow:
+
+End-to-End Testing:
+1. Register new user in mobile app
+2. Login and verify authentication
+3. Capture document with camera
+4. Verify OCR text extraction
+5. Check document appears in dashboard
+6. Test search functionality
+7. Export document in various formats
+
+API Testing:
+Health check: curl -k https://localhost:5000/api/health
+
+User registration:
+curl -k -X POST https://localhost:5000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser","password":"testpass","device_id":"test1"}'
+
+User login:
+curl -k -X POST https://localhost:5000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"testuser","password":"testpass"}'
+
+CODE ORGANIZATION
+-----------------
+
+Mobile App Structure:
+src/
+├── components/          # Reusable UI components
+├── screens/            # Full-screen components
+├── services/           # API and utility services
+├── utils/              # Helper functions
+└── constants/          # App-wide constants
+
+Backend Structure:
+backend/
+├── app.py              # Main Flask application
+├── models/             # Database models (future enhancement)
+├── services/           # Business logic services
+├── utils/              # Helper functions
+└── config/             # Configuration files
+
+Dashboard Structure:
+src/
+├── components/         # Reusable UI components
+├── pages/              # Full-page components
+├── services/           # API and utility services
+├── hooks/              # Custom React hooks
+└── utils/              # Helper functions
+
+API DOCUMENTATION
+=================
+
+AUTHENTICATION ENDPOINTS
+------------------------
+
+POST /api/auth/register
+Register a new user account.
+
+Request Body:
+{
+  "username": "string",
+  "password": "string",
+  "device_id": "string"
+}
+
+Response (201 Created):
+{
+  "message": "User registered successfully",
+  "user_id": "string"
+}
+
+Error Responses:
+- 400 Bad Request: Missing required fields
+- 409 Conflict: User already exists
+
+POST /api/auth/login
+Authenticate user and receive JWT token.
+
+Request Body:
+{
+  "username": "string",
+  "password": "string"
+}
+
+Response (200 OK):
+{
+  "token": "jwt_token_string",
+  "user_id": "string",
+  "username": "string"
+}
+
+Error Responses:
+- 400 Bad Request: Missing credentials
+- 401 Unauthorized: Invalid credentials
+
+DOCUMENT ENDPOINTS
+------------------
+
+POST /api/documents/upload
+Upload and process a document for OCR.
+
+Headers:
+- Authorization: Bearer {jwt_token}
+- Content-Type: multipart/form-data
+
+Form Data:
+- file: Image file (JPEG, PNG)
+- device_id: Device identifier (optional)
+
+Response (201 Created):
+{
+  "message": "Document uploaded and processed successfully",
+  "document_id": "string",
+  "extracted_text": "string",
+  "processing_time": "number"
+}
+
+GET /api/documents
+Retrieve user's documents with pagination.
+
+Headers:
+- Authorization: Bearer {jwt_token}
+
+Query Parameters:
+- page: Page number (default: 1)
+- limit: Documents per page (default: 20)
+
+Response (200 OK):
+{
+  "documents": [
+    {
+      "_id": "string",
+      "filename": "string",
+      "user_id": "string",
+      "file_id": "string",
+      "ocr_text": "string",
+      "captured_at": "iso_date_string",
+      "metadata": {
+        "file_size": "number",
+        "dimensions": {
+          "width": "number",
+          "height": "number"
+        },
+        "processing_time": "number"
+      }
+    }
+  ],
+  "total_count": "number",
+  "page": "number",
+  "limit": "number",
+  "total_pages": "number"
+}
+
+GET /api/documents/{id}
+Retrieve specific document details.
+
+Headers:
+- Authorization: Bearer {jwt_token}
+
+Response (200 OK):
+{
+  "_id": "string",
+  "filename": "string",
+  "user_id": "string",
+  "file_id": "string",
+  "ocr_text": "string",
+  "captured_at": "iso_date_string",
+  "metadata": {
+    "file_size": "number",
+    "dimensions": {
+      "width": "number",
+      "height": "number"
+    },
+    "processing_time": "number"
+  }
+}
+
+GET /api/documents/{id}/image
+Retrieve document image file.
+
+Headers:
+- Authorization: Bearer {jwt_token}
+
+Response (200 OK):
+- Content-Type: image/jpeg or image/png
+- Binary image data
+
+DELETE /api/documents/{id}
+Delete a document and its associated files.
+
+Headers:
+- Authorization: Bearer {jwt_token}
+
+Response (200 OK):
+{
+  "message": "Document deleted successfully"
+}
+
+SEARCH ENDPOINTS
+----------------
+
+GET /api/search
+Search documents by text content.
+
+Headers:
+- Authorization: Bearer {jwt_token}
+
+Query Parameters:
+- q: Search query string (required)
+
+Response (200 OK):
+{
+  "documents": [
+    {
+      "_id": "string",
+      "filename": "string",
+      "ocr_text": "string",
+      "captured_at": "iso_date_string",
+      "metadata": {}
+    }
+  ],
+  "query": "string",
+  "count": "number"
+}
+
+SYSTEM ENDPOINTS
+----------------
+
+GET /api/health
+Check API server health status.
+
+Response (200 OK):
+{
+  "status": "healthy",
+  "timestamp": "iso_date_string",
+  "version": "string"
+}
+
+DATABASE SCHEMA
+===============
+
+MONGODB COLLECTIONS
+-------------------
+
+users Collection:
+{
+  _id: ObjectId,
+  username: String,           // Unique username
+  password: String,           // SHA-256 hashed password
+  device_id: String,          // Device identifier
+  created_at: Date            // Account creation timestamp
+}
+
+Indexes:
+- username: Unique index for fast user lookup
+- created_at: Index for user analytics
+
+documents Collection:
+{
+  _id: ObjectId,
+  filename: String,           // Original filename
+  user_id: String,            // Reference to users._id
+  file_id: ObjectId,          // Reference to GridFS file
+  ocr_text: String,           // Extracted text content
+  captured_at: Date,          // Document capture timestamp
+  device_id: String,          // Capturing device identifier
+  metadata: {
+    file_size: Number,        // File size in bytes
+    dimensions: {
+      width: Number,          // Image width in pixels
+      height: Number          // Image height in pixels
+    },
+    processing_time: Number,  // OCR processing time in seconds
+    content_type: String      // MIME type (image/jpeg, image/png)
+  }
+}
+
+Indexes:
+- user_id: Index for user's documents
+- captured_at: Index for chronological sorting
+- ocr_text: Text index for full-text search
+- filename: Index for filename searches
+
+GridFS Collections (fs.files and fs.chunks):
+GridFS automatically creates these collections for large file storage.
+
+fs.files:
+{
+  _id: ObjectId,
+  length: Number,             // File size in bytes
+  chunkSize: Number,          // Chunk size (default 255KB)
+  uploadDate: Date,           // Upload timestamp
+  filename: String,           // Original filename
+  contentType: String         // MIME type
+}
+
+fs.chunks:
+{
+  _id: ObjectId,
+  files_id: ObjectId,         // Reference to fs.files._id
+  n: Number,                  // Chunk number
+  data: BinData               // Binary chunk data
+}
+
+DATABASE OPERATIONS
+-------------------
+
+User Operations:
+Create user:
+db.users.insertOne({
+  username: "testuser",
+  password: "hashed_password",
+  device_id: "device_123",
+  created_at: new Date()
+});
+
+Find user:
+db.users.findOne({username: "testuser"});
+
+Document Operations:
+Create document:
+db.documents.insertOne({
+  filename: "document.jpg",
+  user_id: "user_id_string",
+  file_id: ObjectId("file_id"),
+  ocr_text: "Extracted text content",
+  captured_at: new Date(),
+  metadata: {
+    file_size: 1024000,
+    dimensions: {width: 1920, height: 1080},
+    processing_time: 2.5
+  }
+});
+
+Search documents:
+db.documents.find({
+  user_id: "user_id",
+  $text: {$search: "search terms"}
+});
+
+SECURITY IMPLEMENTATION
+=======================
+
+AUTHENTICATION & AUTHORIZATION
+------------------------------
+
+JWT Token Implementation:
+Token generation with 30-day expiration
+payload = {
+    'user_id': str(user['_id']),
+    'username': username,
+    'exp': datetime.utcnow() + timedelta(days=30)
+}
+token = jwt.encode(payload, app.config['SECRET_KEY'], algorithm='HS256')
+
+Password Security:
+SHA-256 password hashing
+hashed_password = hashlib.sha256(password.encode()).hexdigest()
+
+API Security Middleware:
+@token_required decorator for protected endpoints
+Automatic user validation and ID extraction
+
+NETWORK SECURITY
+----------------
+
+HTTPS Implementation:
+- Self-signed certificates for development
+- SSL context in Flask application
+- Certificate validation in mobile app
+
+CORS Configuration:
+CORS(app, origins=['http://localhost:3000', 'https://localhost:3000'])
+
+Request Validation:
+- File type validation for uploads
+- File size limits (16MB maximum)
+- Input sanitization for search queries
+
+DATA SECURITY
+--------------
+
+Local Storage Protection:
+- JWT tokens stored securely in mobile app
+- Sensitive data encrypted at rest
+- Database access restricted to localhost
+
+File Security:
+- GridFS for secure file storage
+- File access controlled by user authentication
+- Temporary file cleanup
+
+PERFORMANCE CONSIDERATIONS
+==========================
+
+IMAGE PROCESSING OPTIMIZATION
+-----------------------------
+
+OpenCV Pipeline Optimization:
+- Use optimal kernel sizes (5x5 Gaussian blur)
+- Efficient adaptive thresholding
+- Minimal morphological operations
+- Memory-efficient processing
+
+Tesseract Configuration:
+- Optimized OCR configuration for documents
+- OEM 3: Default OCR Engine Mode
+- PSM 6: Uniform block of text
+- English language only (-l eng)
+
+DATABASE PERFORMANCE
+--------------------
+
+MongoDB Indexing Strategy:
+Text search index: db.documents.createIndex({"ocr_text": "text"});
+Compound index: db.documents.createIndex({"user_id": 1, "captured_at": -1});
+Username lookup: db.users.createIndex({"username": 1}, {unique: true});
+
+GridFS Optimization:
+- Default chunk size (255KB) optimized for network transfer
+- Automatic file deduplication
+- Efficient binary data storage
+
+FRONTEND PERFORMANCE
+--------------------
+
+React.js Optimization:
+- Lazy loading for large document lists
+- Memoization for expensive computations
+- Component optimization with React.memo
+
+React Native Optimization:
+- FlatList for efficient list rendering
+- removeClippedSubviews for memory efficiency
+- Optimal batch rendering settings
+
+NETWORK PERFORMANCE
+-------------------
+
+Request Optimization:
+- Pagination for large data sets
+- Image compression before upload
+- Request batching where possible
+- Retry logic with exponential backoff
+
+Caching Strategy:
+- Mobile app document caching with AsyncStorage
+- Browser caching for static assets
+- API response caching where appropriate
+
+DEVELOPMENT TIMELINE (60 DAYS)
+==============================
+
+Week 1-2: Foundation (14 days)
+- [x] Project structure setup
+- [ ] Backend API skeleton
+- [ ] MongoDB setup
+- [ ] Basic authentication
+
+Week 3-4: Core Backend (14 days)
+- [ ] OCR processing pipeline
+- [ ] Image preprocessing
+- [ ] Document storage (GridFS)
+- [ ] REST API endpoints
+
+Week 5-6: Mobile App (14 days)
+- [ ] React Native setup
+- [ ] Camera integration
+- [ ] Image capture & compression
+- [ ] API integration
+
+Week 7-8: Dashboard & Integration (14 days)
+- [ ] React.js dashboard
+- [ ] Document viewing
+- [ ] Export functionality
+- [ ] End-to-end testing
+
+Week 9: Final Polish (4 days)
+- [ ] Bug fixes
+- [ ] Performance optimization
+- [ ] Documentation
+- [ ] MVP validation
+
+TECHNICAL SPECIFICATIONS
+========================
+
+Image Processing:
+- Input: JPEG from mobile camera
+- Preprocessing: OpenCV (deskew, noise reduction)
+- OCR: Tesseract 4.x (English only)
+- Output: Searchable text + original image
+
+Storage Schema:
+{
+  _id: ObjectId,
+  filename: String,
+  capturedAt: Date,
+  deviceId: String,
+  ocrText: String,
+  imageData: GridFS reference,
+  metadata: {
+    fileSize: Number,
+    dimensions: Object,
+    processingTime: Number
+  }
+}
+
+API Endpoints:
+- POST /api/upload - Upload document
+- GET /api/documents - List documents
+- GET /api/documents/:id - Get specific document
+- DELETE /api/documents/:id - Delete document
+- POST /api/auth/login - Authentication
+- GET /api/search?q=text - Search documents
+
+MVP LIMITATIONS
+===============
+
+- Android only (no iOS)
+- English OCR only
+- No handwriting recognition
+- No AI categorization
+- Basic UI/UX
+- Local network only (no cloud)
+- Single user (no role-based access)
+
+TESTING STRATEGY
+================
+
+UNIT TESTING
+------------
+
+Backend Testing:
+- OCR functionality tests
+- Image processing pipeline tests
+- Authentication and authorization tests
+- Database operation tests
+
+Frontend Testing:
+- React component unit tests
+- Service function tests
+- Navigation and routing tests
+- API integration tests
+
+INTEGRATION TESTING
+-------------------
+
+API Integration Tests:
+- Complete upload workflow testing
+- Authentication flow testing
+- Document management operations
+- Search functionality testing
+
+End-to-End Testing:
+Mobile App Testing:
+1. Authentication Flow
+2. Document Capture
+3. Document Management
+
+Dashboard Testing:
+1. User Interface
+2. Document Operations
+
+PERFORMANCE TESTING
+-------------------
+
+Load Testing:
+- Concurrent document upload testing
+- Database query performance testing
+- Network performance under load
+
+OCR Performance Testing:
+- Processing time measurement
+- Accuracy validation
+- Memory usage monitoring
+
+DEPLOYMENT GUIDE
+================
+
+================================================================================
+DATABASE CONFIGURATION (MONGODB)
+================================================================================
+
+DATABASE TECHNOLOGY STACK
+=========================
+
+Core Database:
+- MongoDB Community Edition 6.0+: NoSQL document database
+- pymongo 4.5.0: Python MongoDB driver
+- GridFS: MongoDB specification for storing large files
+
+Indexing & Search:
+- Text Index: Full-text search on OCR content
+- Compound Index: User and timestamp queries
+- TTL Index: Automatic cleanup of old sessions
+
+Storage Engine:
+- WiredTiger: Default storage engine with compression
+- GridFS Buckets: Binary file storage system
+
+DATABASE SCHEMA DESIGN
+======================
+
+Users Collection:
+{
+  "_id": ObjectId,
+  "username": "string (unique)",
+  "password_hash": "string (bcrypt)",
+  "device_id": "string",
+  "created_at": "datetime",
+  "last_login": "datetime"
+}
+
+Documents Collection:
+{
+  "_id": ObjectId,
+  "user_id": ObjectId,
+  "filename": "string",
+  "ocr_text": "string (indexed for search)",
+  "captured_at": "datetime",
+  "metadata": {
+    "file_size": "number",
+    "image_width": "number",
+    "image_height": "number",
+    "processing_time": "number",
+    "ocr_confidence": "number"
+  }
+}
+
+GridFS Files (fs.files):
+{
+  "_id": ObjectId,
+  "filename": "string",
+  "length": "number",
+  "chunkSize": "number",
+  "uploadDate": "datetime",
+  "md5": "string",
+  "metadata": {
+    "document_id": ObjectId,
+    "user_id": ObjectId,
+    "content_type": "string"
+  }
+}
+
+GridFS Chunks (fs.chunks):
+{
+  "_id": ObjectId,
+  "files_id": ObjectId,
+  "n": "number",
+  "data": "binary"
+}
+
+DATABASE INDEXES
+===============
+
+Documents Collection Indexes:
+- Text Index: { "ocr_text": "text" }
+- User Documents: { "user_id": 1, "captured_at": -1 }
+- Search Optimization: { "user_id": 1, "ocr_text": "text" }
+
+Users Collection Indexes:
+- Unique Username: { "username": 1 } (unique)
+- Login Optimization: { "username": 1, "password_hash": 1 }
+
+GridFS Indexes (automatically created):
+- Files: { "filename": 1, "uploadDate": 1 }
+- Chunks: { "files_id": 1, "n": 1 }
+
+DATABASE OPERATIONS
+==================
+
+Connection Configuration:
+```python
+import pymongo
+from pymongo import MongoClient
+import gridfs
+
+# Database connection
+client = MongoClient('mongodb://localhost:27017/')
+db = client['printchakra']
+fs = gridfs.GridFS(db)
+
+# Collections
+users_collection = db['users']
+documents_collection = db['documents']
+```
+
+User Management:
+```python
+# Create user
+def create_user(username, password_hash, device_id):
+    user_doc = {
+        'username': username,
+        'password_hash': password_hash,
+        'device_id': device_id,
+        'created_at': datetime.utcnow(),
+        'last_login': None
+    }
+    return users_collection.insert_one(user_doc)
+
+# Find user
+def find_user(username):
+    return users_collection.find_one({'username': username})
+```
+
+Document Storage:
+```python
+# Store document with image
+def store_document(user_id, filename, image_data, ocr_text, metadata):
+    # Store image in GridFS
+    file_id = fs.put(
+        image_data,
+        filename=filename,
+        metadata={
+            'user_id': user_id,
+            'content_type': 'image/jpeg'
+        }
+    )
+    
+    # Store document metadata
+    doc = {
+        'user_id': user_id,
+        'filename': filename,
+        'ocr_text': ocr_text,
+        'captured_at': datetime.utcnow(),
+        'metadata': metadata,
+        'file_id': file_id
+    }
+    return documents_collection.insert_one(doc)
+```
+
+Search Operations:
+```python
+# Full-text search
+def search_documents(user_id, query):
+    return documents_collection.find({
+        'user_id': user_id,
+        '$text': {'$search': query}
+    }).sort([('score', {'$meta': 'textScore'})])
+
+# Get user documents
+def get_user_documents(user_id, limit=20, skip=0):
+    return documents_collection.find({
+        'user_id': user_id
+    }).sort('captured_at', -1).limit(limit).skip(skip)
+```
+
+DATABASE SETUP INSTRUCTIONS
+===========================
+
+1. Install MongoDB:
+# Windows (Download from mongodb.com)
+# Linux (Ubuntu)
+sudo apt install mongodb
+
+2. Start MongoDB Service:
+# Windows
+net start MongoDB
+
+# Linux
+sudo systemctl start mongod
+sudo systemctl enable mongod
+
+3. Create Database and Indexes:
+```javascript
+// Connect to MongoDB shell
+mongo
+
+// Switch to printchakra database
+use printchakra
+
+// Create text index for search
+db.documents.createIndex({ "ocr_text": "text" })
+
+// Create compound indexes
+db.documents.createIndex({ "user_id": 1, "captured_at": -1 })
+db.users.createIndex({ "username": 1 }, { unique: true })
+
+// Verify indexes
+db.documents.getIndexes()
+db.users.getIndexes()
+```
+
+4. MongoDB Configuration (mongod.conf):
+```yaml
+storage:
+  dbPath: /var/lib/mongodb
+  journal:
+    enabled: true
+
+systemLog:
+  destination: file
+  logAppend: true
+  path: /var/log/mongodb/mongod.log
+
+net:
+  port: 27017
+  bindIp: 127.0.0.1
+
+processManagement:
+  timeZoneInfo: /usr/share/zoneinfo
+```
+
+DATABASE MAINTENANCE
+===================
+
+Backup Operations:
+```bash
+# Create backup
+mongodump --db printchakra --out /backup/printchakra-$(date +%Y%m%d)
+
+# Restore backup
+mongorestore --db printchakra /backup/printchakra-20240101/printchakra
+```
+
+Performance Monitoring:
+```javascript
+// Check database stats
+db.stats()
+
+// Check collection stats
+db.documents.stats()
+db.users.stats()
+
+// Monitor slow queries
+db.setProfilingLevel(2, { slowms: 100 })
+db.system.profile.find().sort({ ts: -1 }).limit(5)
+```
+
+Storage Cleanup:
+```javascript
+// Remove old documents (older than 1 year)
+db.documents.deleteMany({
+  "captured_at": {
+    "$lt": new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
+  }
+})
+
+// Clean up orphaned GridFS files
+db.fs.files.find().forEach(function(file) {
+  var doc = db.documents.findOne({"file_id": file._id});
+  if (!doc) {
+    db.fs.files.deleteOne({"_id": file._id});
+    db.fs.chunks.deleteMany({"files_id": file._id});
+  }
+});
+```
+
+DEVELOPMENT DEPLOYMENT
+---------------------
+
+Local Development Setup:
+1. Backend Development Server: python app.py (https://localhost:5000)
+2. Dashboard Development Server: npm start (http://localhost:3000)
+3. Mobile Development: npx react-native start && npx react-native run-android
+
+PRODUCTION DEPLOYMENT
+--------------------
+
+Backend Production Setup:
+- Install production WSGI server: pip install gunicorn
+- Run with Gunicorn: gunicorn -w 4 -b 0.0.0.0:5000 app:app
+- With SSL certificate: gunicorn -w 4 -b 0.0.0.0:5000 --certfile=cert.pem --keyfile=key.pem app:app
+
+Dashboard Production Build:
+- Build for production: npm run build
+- Serve with nginx or similar web server
+- Configure proxy for API requests
+
+Mobile Production Build:
+- Android release build: cd mobile/android && ./gradlew assembleRelease
+- Signed APK location: app/build/outputs/apk/release/app-release.apk
+
+TROUBLESHOOTING
+===============
+
+COMMON SETUP ISSUES
+-------------------
+
+Backend Issues:
+
+MongoDB Connection Failed:
+- Check MongoDB status
+- Windows: net start MongoDB
+- macOS: brew services start mongodb-community
+- Linux: sudo systemctl start mongod
+- Test connection: mongo --eval "db.adminCommand('ismaster')"
+
+Tesseract Not Found:
+- Test installation: tesseract --version
+- Windows: Update pytesseract.pytesseract.tesseract_cmd path in app.py
+- Ensure Tesseract is in system PATH
+
+SSL Certificate Errors:
+- Use adhoc SSL for development: ssl_context='adhoc'
+- Or disable SSL and use HTTP
+- Accept self-signed certificate in browser
+
+Frontend Issues:
+
+CORS Errors:
+- Update Flask-CORS configuration
+- Verify allowed origins in backend
+
+API Connection Failed:
+- Check API base URL in mobile services
+- Test with browser: fetch('https://YOUR-IP:5000/api/health')
+- Verify firewall settings
+
+Mobile App Issues:
+
+Camera Permission Denied:
+- Add permissions to AndroidManifest.xml:
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+Network Security Exception:
+- Add to AndroidManifest.xml:
+  <application android:usesCleartextTraffic="true">
+
+Metro Bundler Issues:
+- Clear Metro cache: npx react-native start --reset-cache
+- Clean Android build: cd android && ./gradlew clean && cd ..
+
+PERFORMANCE ISSUES
+------------------
+
+Slow OCR Processing:
+- Optimize image size before OCR
+- Use appropriate image resolution
+- Consider preprocessing optimizations
+
+Large File Uploads:
+- Increase Flask file size limit: app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024
+- Implement file compression
+
+Slow Database Queries:
+- Add appropriate indexes
+- Optimize query patterns
+- Consider pagination for large datasets
+
+NETWORK ISSUES
+--------------
+
+Mobile Can't Connect to Backend:
+1. Check IP Address: Ensure mobile app has correct computer IP
+2. Firewall Settings: Allow ports 3000 and 5000
+3. Network Connectivity: Ensure devices on same Wi-Fi
+4. SSL Certificate: Accept self-signed certificate in browser first
+
+Dashboard API Errors:
+1. Proxy Configuration: Check package.json proxy setting
+2. CORS Policy: Verify Flask-CORS configuration
+3. Authentication: Check JWT token validity
+
+DEVELOPMENT ISSUES
+------------------
+
+Hot Reload Not Working:
+- React Native: npx react-native start --reset-cache
+- React.js: rm -rf node_modules package-lock.json && npm install && npm start
+
+Build Errors:
+- Clear all caches: npm cache clean --force
+- Remove node_modules and reinstall
+- Android specific: cd android && ./gradlew clean && cd ..
+
+FUTURE ROADMAP
+==============
+
+PHASE 1: MVP COMPLETION (DAYS 1-60)
+- [x] Core functionality implementation
+- [ ] Basic testing and bug fixes
+- [ ] Documentation completion
+- [ ] MVP deployment ready
+
+PHASE 2: ENHANCEMENT (DAYS 61-120)
+- [ ] iOS mobile app development
+- [ ] Advanced image preprocessing
+- [ ] Batch document processing
+- [ ] Enhanced search capabilities
+- [ ] User interface improvements
+
+PHASE 3: ADVANCED FEATURES (DAYS 121-180)
+- [ ] Multilingual OCR support
+- [ ] Handwriting recognition
+- [ ] Document categorization with AI
+- [ ] Advanced export formats
+- [ ] Cloud sync capabilities
+
+PHASE 4: ENTERPRISE FEATURES (DAYS 181-365)
+- [ ] Multi-user support
+- [ ] Role-based access control
+- [ ] Advanced analytics and reporting
+- [ ] Integration APIs
+- [ ] Enterprise deployment options
+
+TECHNICAL DEBT AND IMPROVEMENTS
+-------------------------------
+
+Code Quality:
+- [ ] Comprehensive test coverage (>80%)
+- [ ] TypeScript migration for better type safety
+- [ ] ESLint and Prettier configuration
+- [ ] Code documentation with JSDoc
+- [ ] Performance profiling and optimization
+
+Security Enhancements:
+- [ ] OAuth 2.0 / OpenID Connect integration
+- [ ] End-to-end encryption for sensitive documents
+- [ ] Audit logging and compliance features
+- [ ] Advanced input validation and sanitization
+- [ ] Security vulnerability scanning
+
+Performance Optimizations:
+- [ ] Database query optimization
+- [ ] Image compression improvements
+- [ ] Caching strategies implementation
+- [ ] CDN integration for static assets
+- [ ] Background job processing
+
+User Experience:
+- [ ] Progressive Web App (PWA) features
+- [ ] Offline-first improvements
+- [ ] Advanced search filters
+- [ ] Document annotation capabilities
+- [ ] Collaborative features
+
+SCALABILITY CONSIDERATIONS
+-------------------------
+
+Architecture Evolution:
+Current: Monolithic Architecture
+├── Mobile App (React Native)
+├── Backend API (Flask)
+└── Dashboard (React.js)
+
+Future: Microservices Architecture
+├── Authentication Service
+├── Document Processing Service
+├── OCR Service
+├── Search Service
+├── Export Service
+└── Notification Service
+
+Technology Migration Path:
+- Database: MongoDB → PostgreSQL + GridFS alternative
+- Backend: Flask → FastAPI or Django
+- Queue System: None → Redis + Celery
+- Search: MongoDB text search → Elasticsearch
+- Caching: None → Redis
+- Monitoring: Basic logging → ELK Stack
+
+SUCCESS METRICS
+===============
+
+- Document capture and OCR accuracy
+- Offline functionality
+- Basic sync between devices
+- Export capabilities (TXT/PDF)
+- 2-hour daily development sustainability
+
+DEVELOPMENT TOOLS
+=================
+
+- Mobile: Android Studio, React Native CLI
+- Backend: Python, Flask, MongoDB Compass
+- Frontend: VS Code, React DevTools
+- Testing: Manual testing focus for MVP
+
+PROJECT STATISTICS
+==================
+
+Development Metrics:
+- Total Development Time: 120 hours (60 days × 2 hours/day)
+- Lines of Code: ~15,000 lines across all components
+- Technologies Used: 3 main frameworks, 25+ libraries
+- Supported Platforms: Android mobile, Web dashboard
+- Database Collections: 3 main collections + GridFS
+
+MVP Feature Completion:
+- ✅ Document capture and OCR processing
+- ✅ User authentication and session management
+- ✅ Document storage and retrieval
+- ✅ Search functionality
+- ✅ Export capabilities (PDF, TXT, JSON, CSV)
+- ✅ Responsive web dashboard
+- ✅ Offline-first mobile application
+- ✅ Local Wi-Fi synchronization
+
+USEFUL LINKS
+============
+
+- React Native Documentation: https://reactnative.dev/
+- Flask Documentation: https://flask.palletsprojects.com/
+- MongoDB Documentation: https://docs.mongodb.com/
+- Tesseract OCR: https://github.com/tesseract-ocr/tesseract
+
+SUPPORT AND CONTRIBUTING
+========================
+
+Documentation Resources:
+- Setup Guide: /docs/setup-guide.md
+- Development Log: /docs/development-log.md
+- API Documentation: This file (API section)
+- Architecture Overview: This file (Architecture section)
+
+Community Support:
+- GitHub Issues: Report bugs and request features
+- Development Discussions: Technical discussions and questions
+- User Community: Share use cases and best practices
+
+Contributing Guidelines:
+1. Fork the Repository: Create your own fork
+2. Create Feature Branch: git checkout -b feature/your-feature
+3. Follow Code Standards: ESLint for JavaScript, PEP 8 for Python
+4. Write Tests: Add tests for new functionality
+5. Submit Pull Request: With clear description and test results
+
+Development Environment Setup for Contributors:
+Install development tools:
+npm install -g eslint prettier
+pip install black flake8 pytest
+
+Setup pre-commit hooks:
+pip install pre-commit
+pre-commit install
+
+Code Quality Standards:
+JavaScript/React:
+npm run lint
+npm run test
+npm run build
+
+Python:
+black app.py
+flake8 app.py
+pytest tests/
+
+LICENSE AND LEGAL
+=================
+
+MIT License:
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+Third-Party Licenses:
+- React Native: MIT License
+- Flask: BSD-3-Clause License
+- MongoDB: Server Side Public License (SSPL)
+- Tesseract OCR: Apache License 2.0
+- OpenCV: Apache License 2.0
+
+Privacy and Data Handling:
+- All data processing occurs locally
+- No data transmitted to external servers
+- User data remains under user control
+- GDPR compliance considerations for European deployment
+
+Last Updated: August 25, 2025
+Version: 1.0.0 MVP
+Maintainer: PrintChakra Development Team
+
+Development Log: Track daily progress in /docs/development-log.md

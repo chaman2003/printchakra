@@ -1,0 +1,130 @@
+apply plugin: "com.android.application"
+apply plugin: "org.jetbrains.kotlin.android"
+apply plugin: "com.facebook.react"
+
+import com.android.build.OutputFile
+
+/**
+ * This is the configuration block to customize your React Native Android app build process.
+ * By default you don't need to apply any configuration, just uncomment the lines you need.
+ */
+react {
+    /* Folders */
+    //   The root of your project, i.e. where "package.json" lives. Default is '../..'
+    // root = file("../../")
+    //   The folder where the react-native NPM package is. Default is '../../node_modules/react-native'
+    // reactNativeDir = file("../../node_modules/react-native")
+    //   The folder where Metro (the bundler) is built. Default is '../../node_modules/metro-bundler/build'
+    // bundleDir = file("../../node_modules/metro-bundler/build")
+    //   The location of "assets" folder which contains static files copied into the APK.
+    //   See http://facebook.github.io/react-native/docs/assets.html
+    // assetsDir = file("../../android/app/assets")
+
+    /* Project */
+    //   The path to the root of your project, i.e. where node_modules and package.json are
+    // root = file("../../")
+    //   The path to React Native source code
+    // reactNativeDir = file("../../node_modules/react-native")
+    //   The path to the react-native-gradle-plugin
+    // reactNativeGradlePluginDir = file("../../node_modules/@react-native/gradle-plugin")
+
+    /* Bundling */
+    //   A list containing the node command and its flags. Default is empty.
+    //   Example: nodeExecutableAndArgs = ["node", "--max-old-space-size=4096"]
+    //   See https://facebook.github.io/react-native/docs/troubleshooting.html#bundling-failures
+    // bundleCommand = "ram-bundle"
+
+    /* Hermes Commands */
+    //   The hermes compiler command to run. By default it is 'hermesc'
+    // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
+
+    /* Autolinking */
+    autolinkLibrariesWithApp()
+}
+
+/**
+ * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ */
+def enableProguardInReleaseBuilds = false
+
+/**
+ * The preferred build variant (debug or release).
+ */
+def enableHermes = project.ext.react.getOrDefault("enableHermes", true);
+
+/**
+ * Architectures to build for in debug.
+ */
+def nativeArchitectures = project.ext.react.getOrDefault("nativeArchitectures", "armeabi-v7a,arm64-v8a,x86,x86_64")
+
+android {
+    ndkVersion rootProject.ext.ndkVersion
+    buildToolsVersion rootProject.ext.buildToolsVersion
+    compileSdk rootProject.ext.compileSdkVersion
+
+    namespace "com.printchakramobile"
+    defaultConfig {
+        applicationId "com.printchakramobile"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+
+        /**
+         * The architectures to build for in debug.
+         */
+        ndk {
+            abiFilters nativeArchitectures.split(',')
+        }
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug
+            minifyEnabled enableProguardInReleaseBuilds
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
+        }
+    }
+
+    // applicationVariants are e.g. debug, release
+    applicationVariants.all { variant ->
+        variant.outputs.each { output ->
+            // For each separate APK per architecture, set a unique version code as described here:
+            // https://developer.android.com/studio/build/configure-apk-splits.html
+            def versionCodes = ["armeabi-v7a": 1, "x86": 2, "arm64-v8a": 3, "x86_64": 4]
+            def abi = output.getFilter(OutputFile.ABI)
+            if (abi != null) {  // null for the universal APK (if present)
+                output.versionCodeOverride =
+                        defaultConfig.versionCode * 1000 + versionCodes.get(abi, 0)
+            }
+
+        }
+    }
+}
+
+dependencies {
+    // The version of react-native is set by the React Native Gradle Plugin
+    implementation("com.facebook.react:react-android")
+
+    if (enableHermes) {
+        def hermesPath = "../../node_modules/hermes-engine/android/";
+        debugImplementation files(hermesPath + "hermes-debug.aar")
+        releaseImplementation files(hermesPath + "hermes-release.aar")
+    } else {
+        implementation jscFlavor
+    }
+}
