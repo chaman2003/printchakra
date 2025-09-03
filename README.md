@@ -1,4 +1,4 @@
-# PrintChakra: an AI-Powered Smart Print and Capture Solution
+# PrintChakra: AI-Powered Smart Print and Capture Solution
 
 ![PrintChakra Logo](https://img.shields.io/badge/PrintChakra-v1.0.0-blue.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-green.svg)
