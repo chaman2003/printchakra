@@ -342,4 +342,4 @@ For support and questions:
 
 ---
 
-**PrintChakra** - *Transforming documents through intelligent OCR processing* 🚀
+**PrintChakra** - *Transforming documents through AI based intelligent processing* 🚀
