@@ -322,7 +322,7 @@ We welcome contributions! Please follow these steps:
 
 ## 👥 Team
 
-- **Chaman Kumar** - [@chaman2003](https://github.com/chaman2003) - Lead Developer
+- **Chaman S** - [@chaman2003](https://github.com/chaman2003) - Lead Developer
 
 ## 🙏 Acknowledgments
 
