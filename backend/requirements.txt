@@ -1,0 +1,10 @@
+Flask==3.0.0
+flask-cors==4.0.0
+flask-socketio==5.3.5
+python-socketio==5.10.0
+opencv-python==4.10.0.84
+numpy==2.1.1
+Pillow>=11.0.0
+pytesseract==0.3.10
+python-engineio==4.8.0
+werkzeug==3.0.1
