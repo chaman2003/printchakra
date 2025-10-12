@@ -158,12 +158,14 @@ def health():
 def upload_file():
     """
     Handle image upload and processing
-    Expects: multipart/form-data with 'photo' file
+    Expects: multipart/form-data with 'file' or 'photo' field
     """
-    if 'photo' not in request.files:
-        return jsonify({'error': 'No photo provided'}), 400
+    # Accept both 'file' and 'photo' field names
+    file = request.files.get('file') or request.files.get('photo')
     
-    file = request.files['photo']
+    if not file:
+        return jsonify({'error': 'No file provided'}), 400
+    
     if file.filename == '':
         return jsonify({'error': 'Empty filename'}), 400
     
@@ -172,6 +174,8 @@ def upload_file():
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
         original_ext = os.path.splitext(file.filename)[1]
+        if not original_ext:
+            original_ext = '.jpg'
         filename = f"doc_{timestamp}_{unique_id}{original_ext}"
         
         # Save uploaded file
@@ -196,10 +200,11 @@ def upload_file():
                 'filename': processed_filename,
                 'timestamp': timestamp,
                 'has_text': len(text_or_error) > 0
-            })
+            }, broadcast=True)
             
             return jsonify({
                 'status': 'success',
+                'message': 'File uploaded and processed successfully',
                 'filename': processed_filename,
                 'original': filename,
                 'text_extracted': len(text_or_error) > 0,
@@ -212,6 +217,7 @@ def upload_file():
             }), 500
             
     except Exception as e:
+        print(f"Upload error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/files')
@@ -239,7 +245,7 @@ def list_files():
         # Sort by creation time (newest first)
         files.sort(key=lambda x: x['created'], reverse=True)
         
-        return jsonify(files)
+        return jsonify({'files': files, 'count': len(files)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -309,40 +315,67 @@ def get_ocr_text(filename):
 @app.route('/print', methods=['POST'])
 def trigger_print():
     """
-    Trigger print command
-    Expects: JSON with { "type": "blank" } or { "type": "file", "path": "..." }
+    Trigger print command and notify phone to capture
+    Expects: JSON with { "type": "blank" } or { "type": "test" }
     """
     try:
-        data = request.get_json()
+        data = request.get_json() if request.is_json else {}
         print_type = data.get('type', 'blank')
         
-        if print_type == 'blank':
-            # Print blank page using blank.pdf
+        if print_type == 'test':
+            # Test printer connection
+            test_script = os.path.join(PRINT_DIR, 'create_blank_pdf.py')
             blank_pdf = os.path.join(PRINT_DIR, 'blank.pdf')
-            if os.path.exists(blank_pdf):
-                # Use subprocess to print (Windows example)
-                # subprocess.run(['print', blank_pdf], shell=True)
-                print(f"Print triggered: {blank_pdf}")
-                
-                # Notify phone to capture
-                socketio.emit('capture_now', {'message': 'Capture the printed document'})
-                
-                return jsonify({
-                    'status': 'success',
-                    'message': 'Print command sent'
-                })
-            else:
+            
+            # Create blank PDF if it doesn't exist
+            if not os.path.exists(blank_pdf):
+                if os.path.exists(test_script):
+                    subprocess.run(['python', test_script], cwd=PRINT_DIR, check=True)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Printer test: blank.pdf is ready',
+                'pdf_exists': os.path.exists(blank_pdf)
+            })
+        
+        elif print_type == 'blank':
+            # Print blank page and trigger phone capture
+            blank_pdf = os.path.join(PRINT_DIR, 'blank.pdf')
+            
+            if not os.path.exists(blank_pdf):
                 return jsonify({
                     'status': 'error',
-                    'message': 'blank.pdf not found'
+                    'message': 'blank.pdf not found. Run test printer first.'
                 }), 404
+            
+            # Execute print using print-file.py
+            print_script = os.path.join(PRINT_DIR, 'print-file.py')
+            if os.path.exists(print_script):
+                try:
+                    # Run print script in background
+                    subprocess.Popen(['python', print_script], cwd=PRINT_DIR)
+                    print(f"Print triggered: {blank_pdf}")
+                except Exception as print_error:
+                    print(f"Print error: {str(print_error)}")
+            
+            # Notify phone to capture
+            socketio.emit('capture_now', {
+                'message': 'Capture the printed document',
+                'timestamp': datetime.now().isoformat()
+            }, broadcast=True)
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Print command sent and capture triggered'
+            })
         else:
             return jsonify({
                 'status': 'error',
-                'message': 'Invalid print type'
+                'message': 'Invalid print type. Use "blank" or "test"'
             }), 400
             
     except Exception as e:
+        print(f"Print error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================

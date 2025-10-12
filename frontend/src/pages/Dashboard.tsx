@@ -60,9 +60,12 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`);
-      setFiles(response.data.files || []);
+      // Handle both array response and object with files property
+      const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
+      setFiles(filesData);
       setError(null);
     } catch (err: any) {
+      console.error('Failed to load files:', err);
       setError(err.message || 'Failed to load files');
     } finally {
       setLoading(false);
@@ -98,10 +101,23 @@ const Dashboard: React.FC = () => {
 
   const triggerPrint = async () => {
     try {
-      await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`);
-      alert('Print command sent successfully!');
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
+        type: 'blank'
+      });
+      alert('✅ ' + response.data.message);
     } catch (err: any) {
-      alert(`Failed to trigger print: ${err.message}`);
+      alert(`❌ Failed to trigger print: ${err.message}`);
+    }
+  };
+
+  const testPrinter = async () => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
+        type: 'test'
+      });
+      alert('✅ ' + response.data.message);
+    } catch (err: any) {
+      alert(`❌ Printer test failed: ${err.message}`);
     }
   };
 
@@ -130,8 +146,11 @@ const Dashboard: React.FC = () => {
         <button onClick={loadFiles} className="btn btn-primary">
           🔄 Refresh Files
         </button>
+        <button onClick={testPrinter} className="btn btn-info">
+          🖨️ Test Printer
+        </button>
         <button onClick={triggerPrint} className="btn btn-success">
-          🖨️ Trigger Print
+          � Print & Capture
         </button>
       </div>
 

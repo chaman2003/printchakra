@@ -8,3 +8,5 @@ Pillow>=11.0.0
 pytesseract==0.3.10
 python-engineio==4.8.0
 werkzeug==3.0.1
+pywin32==306
+fpdf2==2.7.9

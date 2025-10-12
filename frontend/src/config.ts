@@ -1,6 +1,20 @@
 // Backend API Configuration
-// Uses environment variable if available, falls back to ngrok domain
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://freezingly-nonsignificative-edison.ngrok-free.dev';
+// Priority: Environment variable > Local development > ngrok domain
+const getApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // Check if running locally
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:5000';
+  }
+  
+  // Production fallback to ngrok
+  return 'https://freezingly-nonsignificative-edison.ngrok-free.dev';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const API_ENDPOINTS = {
   health: '/health',
@@ -11,3 +25,5 @@ export const API_ENDPOINTS = {
   ocr: '/ocr',
   print: '/print',
 };
+
+console.log('API Configuration:', { API_BASE_URL, hostname: window.location.hostname });

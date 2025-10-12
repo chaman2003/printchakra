@@ -20,6 +20,9 @@ const Phone: React.FC = () => {
     // Initialize Socket.IO connection
     const newSocket = io(API_BASE_URL, {
       transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
 
     newSocket.on('connect', () => {
@@ -32,12 +35,21 @@ const Phone: React.FC = () => {
       setConnected(false);
     });
 
-    newSocket.on('capture_now', () => {
-      console.log('Received capture command');
+    newSocket.on('capture_now', (data) => {
+      console.log('Received capture command:', data);
       showMessage('📸 Capture triggered from Dashboard!');
-      if (captureMode === 'camera' && stream) {
-        captureFromCamera();
-      }
+      // Trigger capture after a short delay
+      setTimeout(() => {
+        if (captureMode === 'camera' && stream) {
+          captureFromCamera();
+        } else {
+          showMessage('💡 Switch to Camera mode to auto-capture');
+        }
+      }, 500);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Connection error:', error);
     });
 
     setSocket(newSocket);
@@ -46,7 +58,7 @@ const Phone: React.FC = () => {
       newSocket.close();
       stopCamera();
     };
-  }, []);
+  }, [captureMode, stream]);
 
   const showMessage = (msg: string) => {
     setMessage(msg);
@@ -134,9 +146,12 @@ const Phone: React.FC = () => {
         }
       );
 
-      showMessage(`✅ ${response.data.message}`);
+      showMessage(`✅ ${response.data.message || 'Upload successful'}`);
+      console.log('Upload response:', response.data);
     } catch (err: any) {
-      showMessage(`❌ Upload failed: ${err.message}`);
+      console.error('Upload error:', err);
+      const errorMsg = err.response?.data?.error || err.message || 'Upload failed';
+      showMessage(`❌ ${errorMsg}`);
     } finally {
       setUploading(false);
     }
