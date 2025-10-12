@@ -16,7 +16,7 @@ app = Flask(__name__)
 # Configure CORS for frontend
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://printchakra.vercel.app", "http://localhost:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev"],  # Allow Vercel deployment and local development
+        "origins": ["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev"],
         "methods": ["GET", "POST", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
         "expose_headers": ["Content-Type"],
@@ -24,8 +24,16 @@ CORS(app, resources={
     }
 })
 
-# Initialize Socket.IO with same CORS settings
-socketio = SocketIO(app, cors_allowed_origins=["https://printchakra.vercel.app", "http://localhost:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev"])
+# Initialize Socket.IO with same CORS settings and better configuration
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins=["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev"],
+    async_mode='threading',
+    logger=False,
+    engineio_logger=False,
+    ping_timeout=60,
+    ping_interval=25
+)
 
 # Base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -160,16 +168,18 @@ def upload_file():
     Handle image upload and processing
     Expects: multipart/form-data with 'file' or 'photo' field
     """
-    # Accept both 'file' and 'photo' field names
-    file = request.files.get('file') or request.files.get('photo')
-    
-    if not file:
-        return jsonify({'error': 'No file provided'}), 400
-    
-    if file.filename == '':
-        return jsonify({'error': 'Empty filename'}), 400
-    
     try:
+        # Accept both 'file' and 'photo' field names
+        file = request.files.get('file') or request.files.get('photo')
+        
+        if not file:
+            print("Upload error: No file in request")
+            return jsonify({'error': 'No file provided'}), 400
+        
+        if file.filename == '':
+            print("Upload error: Empty filename")
+            return jsonify({'error': 'Empty filename'}), 400
+        
         # Generate unique filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
@@ -178,29 +188,41 @@ def upload_file():
             original_ext = '.jpg'
         filename = f"doc_{timestamp}_{unique_id}{original_ext}"
         
+        print(f"Processing upload: {filename}")
+        
         # Save uploaded file
         upload_path = os.path.join(UPLOAD_DIR, filename)
         file.save(upload_path)
+        print(f"File saved to: {upload_path}")
         
         # Process image
         processed_filename = f"processed_{filename}"
         processed_path = os.path.join(PROCESSED_DIR, processed_filename)
         
+        print(f"Starting image processing...")
         success, text_or_error = process_document_image(upload_path, processed_path)
         
         if success:
+            print(f"Image processed successfully. Text length: {len(text_or_error)}")
+            
             # Save extracted text
             text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
             text_path = os.path.join(TEXT_DIR, text_filename)
             with open(text_path, 'w', encoding='utf-8') as f:
                 f.write(text_or_error)
             
+            print(f"Text saved to: {text_path}")
+            
             # Notify via Socket.IO
-            socketio.emit('new_file', {
-                'filename': processed_filename,
-                'timestamp': timestamp,
-                'has_text': len(text_or_error) > 0
-            }, broadcast=True)
+            try:
+                socketio.emit('new_file', {
+                    'filename': processed_filename,
+                    'timestamp': timestamp,
+                    'has_text': len(text_or_error) > 0
+                })
+                print("Socket.IO notification sent")
+            except Exception as socket_error:
+                print(f"Socket.IO error (non-critical): {str(socket_error)}")
             
             return jsonify({
                 'status': 'success',
@@ -211,6 +233,7 @@ def upload_file():
                 'text_length': len(text_or_error)
             })
         else:
+            print(f"Image processing failed: {text_or_error}")
             return jsonify({
                 'status': 'error',
                 'message': text_or_error
@@ -218,6 +241,8 @@ def upload_file():
             
     except Exception as e:
         print(f"Upload error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/files')
@@ -359,10 +384,14 @@ def trigger_print():
                     print(f"Print error: {str(print_error)}")
             
             # Notify phone to capture
-            socketio.emit('capture_now', {
-                'message': 'Capture the printed document',
-                'timestamp': datetime.now().isoformat()
-            }, broadcast=True)
+            try:
+                socketio.emit('capture_now', {
+                    'message': 'Capture the printed document',
+                    'timestamp': datetime.now().isoformat()
+                })
+                print("Capture notification sent to phone")
+            except Exception as socket_error:
+                print(f"Socket.IO error (non-critical): {str(socket_error)}")
             
             return jsonify({
                 'status': 'success',
