@@ -9,6 +9,15 @@ import pytesseract
 from datetime import datetime
 import uuid
 import subprocess
+import traceback
+
+# Import new modular pipeline
+try:
+    from modules import DocumentPipeline, create_default_pipeline, validate_image_file
+    MODULES_AVAILABLE = True
+except ImportError:
+    MODULES_AVAILABLE = False
+    print("Warning: New modules not available, using legacy processing")
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -43,10 +52,31 @@ UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 PROCESSED_DIR = os.path.join(BASE_DIR, 'processed')
 TEXT_DIR = os.path.join(BASE_DIR, 'processed_text')
 PRINT_DIR = os.path.join(BASE_DIR, 'print_scripts')
+PDF_DIR = os.path.join(BASE_DIR, 'pdfs')
 
 # Create directories if they don't exist
-for directory in [UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR]:
+for directory in [UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR]:
     os.makedirs(directory, exist_ok=True)
+
+# Initialize new document pipeline
+if MODULES_AVAILABLE:
+    try:
+        pipeline_config = {
+            'blur_threshold': 100.0,
+            'focus_threshold': 50.0,
+            'ocr_language': 'eng',
+            'ocr_psm': 3,
+            'ocr_oem': 3,
+            'storage_dir': PROCESSED_DIR
+        }
+        doc_pipeline = create_default_pipeline(storage_dir=PROCESSED_DIR)
+        print("✅ New modular pipeline initialized successfully")
+    except Exception as e:
+        print(f"⚠️ Pipeline initialization error: {e}")
+        doc_pipeline = None
+        MODULES_AVAILABLE = False
+else:
+    doc_pipeline = None
 
 # Tesseract configuration (update path if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -126,6 +156,16 @@ def index():
         'status': 'ok',
         'service': 'PrintChakra Backend',
         'version': '2.0.0',
+        'features': {
+            'basic_processing': True,
+            'advanced_pipeline': MODULES_AVAILABLE,
+            'ocr': True,
+            'socket_io': True,
+            'pdf_export': MODULES_AVAILABLE,
+            'document_classification': MODULES_AVAILABLE,
+            'quality_validation': MODULES_AVAILABLE,
+            'batch_processing': MODULES_AVAILABLE
+        },
         'endpoints': {
             'health': '/health',
             'upload': '/upload',
@@ -133,7 +173,15 @@ def index():
             'processed': '/processed/<filename>',
             'delete': '/delete/<filename>',
             'print': '/print',
-            'ocr': '/ocr/<filename>'
+            'ocr': '/ocr/<filename>',
+            'advanced': {
+                'process': '/process/advanced',
+                'validate_quality': '/validate/quality',
+                'export_pdf': '/export/pdf',
+                'classify': '/classify/document',
+                'batch': '/batch/process',
+                'pipeline_info': '/pipeline/info'
+            }
         }
     })
 
@@ -150,15 +198,29 @@ def health():
         'status': 'healthy',
         'service': 'PrintChakra Backend',
         'version': '2.0.0',
+        'modules': {
+            'advanced_pipeline': MODULES_AVAILABLE,
+            'document_pipeline': doc_pipeline is not None
+        },
         'directories': {
             'uploads': os.path.exists(UPLOAD_DIR),
             'processed': os.path.exists(PROCESSED_DIR),
-            'text': os.path.exists(TEXT_DIR)
+            'text': os.path.exists(TEXT_DIR),
+            'pdfs': os.path.exists(PDF_DIR)
         },
         'features': {
             'tesseract_ocr': tesseract_available,
             'image_processing': True,
-            'socket_io': True
+            'socket_io': True,
+            'blur_detection': MODULES_AVAILABLE,
+            'edge_detection': MODULES_AVAILABLE,
+            'perspective_correction': MODULES_AVAILABLE,
+            'clahe_enhancement': MODULES_AVAILABLE,
+            'document_classification': MODULES_AVAILABLE and doc_pipeline and doc_pipeline.classifier.is_trained if doc_pipeline else False,
+            'pdf_export': MODULES_AVAILABLE,
+            'cloud_storage': False,  # Not yet configured
+            'auto_naming': MODULES_AVAILABLE,
+            'compression': MODULES_AVAILABLE
         }
     })
 
@@ -405,6 +467,271 @@ def trigger_print():
             
     except Exception as e:
         print(f"Print error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# ADVANCED PROCESSING ENDPOINTS (New Modular System)
+# ============================================================================
+
+@app.route('/process/advanced', methods=['POST'])
+def advanced_process():
+    """
+    Advanced document processing with all new features
+    Expects: multipart/form-data with 'file' and optional processing options
+    """
+    if not MODULES_AVAILABLE or doc_pipeline is None:
+        return jsonify({
+            'error': 'Advanced processing not available',
+            'message': 'Install required dependencies: pip install -r requirements.txt'
+        }), 503
+    
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        # Get processing options from form data
+        options = {
+            'auto_crop': request.form.get('auto_crop', 'true').lower() == 'true',
+            'ai_enhance': request.form.get('ai_enhance', 'false').lower() == 'true',
+            'export_pdf': request.form.get('export_pdf', 'false').lower() == 'true',
+            'compress': request.form.get('compress', 'true').lower() == 'true',
+            'compression_quality': int(request.form.get('compression_quality', '85')),
+            'page_size': request.form.get('page_size', 'A4'),
+            'strict_quality': request.form.get('strict_quality', 'false').lower() == 'true'
+        }
+        
+        # Save uploaded file
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_id = str(uuid.uuid4())[:8]
+        filename = f"doc_{timestamp}_{unique_id}.jpg"
+        upload_path = os.path.join(UPLOAD_DIR, filename)
+        file.save(upload_path)
+        
+        print(f"Processing with advanced pipeline: {filename}")
+        
+        # Process using new pipeline
+        result = doc_pipeline.process_document(
+            upload_path,
+            PROCESSED_DIR,
+            options
+        )
+        
+        # Emit Socket.IO event
+        if result['success']:
+            try:
+                socketio.emit('processing_complete', {
+                    'filename': os.path.basename(result.get('processed_image', '')),
+                    'text': result.get('text', ''),
+                    'document_type': result.get('document_type', 'UNKNOWN'),
+                    'confidence': result.get('ocr_confidence', 0),
+                    'quality': result.get('quality', {})
+                })
+            except Exception as e:
+                print(f"Socket.IO emit error: {e}")
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Advanced processing error: {traceback.format_exc()}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/validate/quality', methods=['POST'])
+def validate_quality():
+    """
+    Validate image quality before processing
+    Returns blur and focus scores
+    """
+    if not MODULES_AVAILABLE:
+        return jsonify({'error': 'Quality validation not available'}), 503
+    
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        # Save temporarily
+        temp_path = os.path.join(UPLOAD_DIR, f'temp_{uuid.uuid4()}.jpg')
+        file.save(temp_path)
+        
+        # Validate quality
+        quality_result = validate_image_file(temp_path)
+        
+        # Clean up
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        return jsonify(quality_result)
+        
+    except Exception as e:
+        print(f"Quality validation error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/export/pdf', methods=['POST'])
+def export_pdf():
+    """
+    Export processed images to PDF
+    Expects: JSON with 'filenames' array and optional 'page_size'
+    """
+    if not MODULES_AVAILABLE or doc_pipeline is None:
+        return jsonify({'error': 'PDF export not available'}), 503
+    
+    try:
+        data = request.get_json()
+        filenames = data.get('filenames', [])
+        page_size = data.get('page_size', 'A4')
+        
+        if not filenames:
+            return jsonify({'error': 'No filenames provided'}), 400
+        
+        # Build full paths
+        image_paths = [os.path.join(PROCESSED_DIR, f) for f in filenames]
+        
+        # Validate all files exist
+        for path in image_paths:
+            if not os.path.exists(path):
+                return jsonify({'error': f'File not found: {os.path.basename(path)}'}), 404
+        
+        # Generate PDF filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        pdf_filename = f"document_{timestamp}.pdf"
+        pdf_path = os.path.join(PDF_DIR, pdf_filename)
+        
+        # Export to PDF
+        success = doc_pipeline.exporter.export_to_pdf(
+            image_paths,
+            pdf_path,
+            page_size=page_size
+        )
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'pdf_filename': pdf_filename,
+                'pdf_url': f'/pdf/{pdf_filename}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'PDF generation failed'
+            }), 500
+            
+    except Exception as e:
+        print(f"PDF export error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/pdf/<filename>')
+def serve_pdf(filename):
+    """Serve generated PDF files"""
+    return send_from_directory(PDF_DIR, filename)
+
+@app.route('/pipeline/info')
+def pipeline_info():
+    """Get information about the processing pipeline"""
+    if not MODULES_AVAILABLE or doc_pipeline is None:
+        return jsonify({
+            'available': False,
+            'message': 'Advanced pipeline not initialized'
+        })
+    
+    try:
+        info = doc_pipeline.get_pipeline_info()
+        info['available'] = True
+        return jsonify(info)
+    except Exception as e:
+        return jsonify({
+            'available': False,
+            'error': str(e)
+        })
+
+@app.route('/classify/document', methods=['POST'])
+def classify_document():
+    """
+    Classify document type
+    Expects: multipart/form-data with 'file'
+    """
+    if not MODULES_AVAILABLE or doc_pipeline is None:
+        return jsonify({'error': 'Document classification not available'}), 503
+    
+    if not doc_pipeline.classifier.is_trained:
+        return jsonify({
+            'error': 'Classifier not trained',
+            'message': 'Please train the classifier first'
+        }), 503
+    
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        # Save temporarily
+        temp_path = os.path.join(UPLOAD_DIR, f'temp_{uuid.uuid4()}.jpg')
+        file.save(temp_path)
+        
+        # Read and classify
+        image = cv2.imread(temp_path)
+        doc_type, confidence = doc_pipeline.classifier.predict(image)
+        
+        # Clean up
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        return jsonify({
+            'document_type': doc_type,
+            'confidence': float(confidence),
+            'all_types': doc_pipeline.classifier.DOCUMENT_TYPES
+        })
+        
+    except Exception as e:
+        print(f"Classification error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/batch/process', methods=['POST'])
+def batch_process():
+    """
+    Process multiple files at once
+    Expects: multipart/form-data with multiple 'files[]'
+    """
+    if not MODULES_AVAILABLE or doc_pipeline is None:
+        return jsonify({'error': 'Batch processing not available'}), 503
+    
+    try:
+        files = request.files.getlist('files[]')
+        if not files:
+            return jsonify({'error': 'No files provided'}), 400
+        
+        # Get options
+        options = {
+            'auto_crop': request.form.get('auto_crop', 'true').lower() == 'true',
+            'export_pdf': request.form.get('export_pdf', 'false').lower() == 'true',
+            'compress': request.form.get('compress', 'true').lower() == 'true'
+        }
+        
+        # Save all files
+        upload_paths = []
+        for file in files:
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            unique_id = str(uuid.uuid4())[:8]
+            filename = f"batch_{timestamp}_{unique_id}.jpg"
+            upload_path = os.path.join(UPLOAD_DIR, filename)
+            file.save(upload_path)
+            upload_paths.append(upload_path)
+        
+        # Batch process
+        results = doc_pipeline.batch_process(upload_paths, PROCESSED_DIR, options)
+        
+        return jsonify({
+            'success': True,
+            'total_files': len(files),
+            'results': results
+        })
+        
+    except Exception as e:
+        print(f"Batch processing error: {e}")
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================

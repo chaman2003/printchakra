@@ -39,6 +39,8 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 - 📥 Download enhanced images
 - 🗑️ Delete files with one click
 - ⚡ Real-time auto-refresh
+- 🎛️ Advanced processing options
+- 🔧 Pipeline configuration display
 
 </td>
 <td width="50%">
@@ -49,6 +51,8 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 - 🔄 Instant processing feedback
 - 🌐 Socket.IO synchronization
 - ✨ Seamless user experience
+- ✅ **Real-time quality validation**
+- 📊 Blur & focus score metrics
 
 </td>
 </tr>
@@ -61,6 +65,8 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 - ✂️ Edge detection & cropping
 - 📐 Skew correction
 - 💾 Automatic text extraction
+- 📋 Document classification
+- 🔄 Batch processing support
 
 </td>
 <td width="50%">
@@ -71,6 +77,8 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 - 🌍 ngrok public tunneling
 - 📦 Pre-configured deployment
 - 🛠️ Comprehensive logging
+- 📚 Complete API documentation
+- 🧪 Advanced testing tools
 
 </td>
 </tr>
@@ -263,7 +271,7 @@ printchakra/
 
 ---
 
-## 📡 API Reference
+### 📡 API Reference
 
 ### REST Endpoints
 
@@ -276,6 +284,13 @@ printchakra/
 | `GET` | `/ocr/<file>` | Get extracted text | `{ text: "..." }` |
 | `DELETE` | `/delete/<file>` | Delete file | `{ success: true }` |
 | `POST` | `/print` | Trigger phone capture | `{ success: true }` |
+| `POST` | `/validate/quality` | Validate image quality before processing | `{ blur_score, focus_score, overall_acceptable, issues, recommendations }` |
+| `POST` | `/process/advanced` | Advanced processing with custom options | `{ success, filename, metadata }` |
+| `POST` | `/export/pdf` | Export text as PDF | `{ filename, filepath }` |
+| `GET` | `/pdf/<filename>` | Download generated PDF | PDF file |
+| `GET` | `/pipeline/info` | Get pipeline configuration & module status | `{ modules: {...}, features: [...] }` |
+| `POST` | `/classify/document` | Classify document type | `{ document_type, confidence }` |
+| `POST` | `/batch/process` | Process multiple files in batch | `{ batch_id, results: [...] }` |
 
 ### Socket.IO Events
 
@@ -342,6 +357,9 @@ printchakra/
 |----------|-------------|
 | **[README.md](README.md)** | This file - Quick start guide |
 | **[FIXES.md](FIXES.md)** | WebSocket troubleshooting guide |
+| **[QUICKSTART.md](QUICKSTART.md)** | Detailed setup & testing guide with quality validation |
+| **[INTEGRATION_REPORT.md](INTEGRATION_REPORT.md)** | Technical architecture & new features documentation |
+| **[COMPLETE.md](COMPLETE.md)** | Session summary & implementation details |
 | **[doc/printchakra.txt](doc/printchakra.txt)** | Future work & long-term scope |
 | **[doc/flow.txt](doc/flow.txt)** | Processing pipeline (15 stages) |
 
@@ -361,6 +379,12 @@ printchakra/
 - [x] ngrok public tunneling
 - [x] Comprehensive error handling
 - [x] Dashboard file management
+- [x] **Quality validation system** ✨ NEW
+- [x] **Advanced processing options** ✨ NEW
+- [x] **Document classification API** ✨ NEW
+- [x] **Batch processing support** ✨ NEW
+- [x] **PDF export functionality** ✨ NEW
+- [x] **Pipeline info endpoint** ✨ NEW
 
 ### 🎯 Future Work
 

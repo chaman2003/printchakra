@@ -17,6 +17,7 @@ const getApiBaseUrl = () => {
 export const API_BASE_URL = getApiBaseUrl();
 
 export const API_ENDPOINTS = {
+  // Basic endpoints
   health: '/health',
   upload: '/upload',
   files: '/files',
@@ -24,6 +25,15 @@ export const API_ENDPOINTS = {
   delete: '/delete',
   ocr: '/ocr',
   print: '/print',
+  
+  // Advanced processing endpoints
+  processAdvanced: '/process/advanced',
+  validateQuality: '/validate/quality',
+  exportPdf: '/export/pdf',
+  pdf: '/pdf',
+  pipelineInfo: '/pipeline/info',
+  classifyDocument: '/classify/document',
+  batchProcess: '/batch/process',
 };
 
 console.log('API Configuration:', { API_BASE_URL, hostname: window.location.hostname });
