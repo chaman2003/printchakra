@@ -36,6 +36,9 @@ const Phone: React.FC = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const cameraContainerRef = useRef<HTMLDivElement>(null);
+  const [autoCapture, setAutoCapture] = useState(false);
+  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState(0);
+  const autoCaptureIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Initialize Socket.IO connection
@@ -77,6 +80,7 @@ const Phone: React.FC = () => {
     return () => {
       newSocket.close();
       stopCamera();
+      stopAutoCapture();
     };
   }, [captureMode, stream]);
 
@@ -114,6 +118,38 @@ const Phone: React.FC = () => {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  const startAutoCapture = () => {
+    setAutoCapture(true);
+    setAutoCaptureCountdown(3);
+    
+    autoCaptureIntervalRef.current = setInterval(() => {
+      setAutoCaptureCountdown((prev) => {
+        if (prev <= 1) {
+          if (autoCaptureIntervalRef.current) {
+            clearInterval(autoCaptureIntervalRef.current);
+            autoCaptureIntervalRef.current = null;
+          }
+          // Trigger capture when countdown reaches 0
+          setTimeout(() => {
+            captureFromCamera();
+            setAutoCapture(false);
+          }, 300);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const stopAutoCapture = () => {
+    if (autoCaptureIntervalRef.current) {
+      clearInterval(autoCaptureIntervalRef.current);
+      autoCaptureIntervalRef.current = null;
+    }
+    setAutoCapture(false);
+    setAutoCaptureCountdown(0);
+  };
 
   const startCamera = async () => {
     try {
@@ -395,9 +431,16 @@ const Phone: React.FC = () => {
               <button
                 onClick={captureFromCamera}
                 className="btn btn-large btn-success capture-btn"
-                disabled={!stream || uploading}
+                disabled={!stream || uploading || autoCapture}
               >
                 {uploading ? '⏳ Uploading...' : '📸 Capture'}
+              </button>
+              <button
+                onClick={autoCapture ? stopAutoCapture : startAutoCapture}
+                className={`btn btn-large auto-capture-btn ${autoCapture ? 'active' : ''}`}
+                disabled={!stream || uploading}
+              >
+                {autoCapture ? `⏱️ ${autoCaptureCountdown}s` : '⏱️ Auto Capture'}
               </button>
               <button
                 onClick={toggleFullScreen}
