@@ -3,6 +3,93 @@
   margin: 0 auto;
 }
 
+.phone-options {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.option-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.option-label:last-child {
+  margin-bottom: 0;
+}
+
+.option-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.quality-indicator {
+  background-color: white;
+  padding: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid;
+}
+
+.quality-indicator.good {
+  border-left-color: #28a745;
+  background-color: #d4edda;
+}
+
+.quality-indicator.warning {
+  border-left-color: #ffc107;
+  background-color: #fff3cd;
+}
+
+.quality-indicator h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.quality-metrics {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.metric {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.metric.good {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.metric.bad {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.quality-issues ul {
+  margin: 0.5rem 0 0 1.5rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+.quality-issues li {
+  margin-bottom: 0.25rem;
+}
+
 .message-banner {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
