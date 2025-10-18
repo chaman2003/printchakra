@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { io, Socket } from 'socket.io-client';
+import io from 'socket.io-client';
 import axios from 'axios';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import './Dashboard.css';
@@ -11,50 +11,13 @@ interface FileInfo {
   has_text: boolean;
 }
 
-interface ProcessingOptions {
-  autoCrop: boolean;
-  aiEnhance: boolean;
-  strictQuality: boolean;
-  exportPdf: boolean;
-  pageSize: 'A4' | 'Letter' | 'Legal' | 'A3';
-  compress: boolean;
-  quality: number;
-}
-
-interface PipelineInfo {
-  available: boolean;
-  modules: {
-    scanning: boolean;
-    processing: boolean;
-    ocr: boolean;
-    classification: boolean;
-    enhancement: boolean;
-    storage: boolean;
-    export: boolean;
-  };
-  features: Record<string, boolean>;
-  config: Record<string, any>;
-}
-
 const Dashboard: React.FC = () => {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
-  const [pipelineInfo, setPipelineInfo] = useState<PipelineInfo | null>(null);
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
-  const [processingOptions, setProcessingOptions] = useState<ProcessingOptions>({
-    autoCrop: true,
-    aiEnhance: false,
-    strictQuality: false,
-    exportPdf: false,
-    pageSize: 'A4',
-    compress: true,
-    quality: 85,
-  });
 
   useEffect(() => {
     const newSocket = io(API_BASE_URL, {
@@ -81,9 +44,7 @@ const Dashboard: React.FC = () => {
       loadFiles();
     });
 
-    setSocket(newSocket);
     loadFiles();
-    loadPipelineInfo();
 
     return () => {
       newSocket.close();
@@ -93,7 +54,7 @@ const Dashboard: React.FC = () => {
   const loadFiles = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(${API_BASE_URL});
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`);
       const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
       setFiles(filesData);
       setError(null);
@@ -105,62 +66,52 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const loadPipelineInfo = async () => {
-    try {
-      const response = await axios.get(${API_BASE_URL});
-      setPipelineInfo(response.data);
-      console.log('Pipeline info:', response.data);
-    } catch (err) {
-      console.error('Failed to load pipeline info:', err);
-    }
-  };
-
   const deleteFile = async (filename: string) => {
-    if (!window.confirm(Are you sure you want to delete ?)) {
+    if (!window.confirm('Are you sure you want to delete this file?')) {
       return;
     }
 
     try {
-      await axios.delete(${API_BASE_URL}/);
+      await axios.delete(`${API_BASE_URL}${API_ENDPOINTS.delete}/${filename}`);
       setFiles(files.filter(f => f.filename !== filename));
       if (selectedFile === filename) {
         setSelectedFile(null);
         setOcrText('');
       }
     } catch (err: any) {
-      alert(Failed to delete file: );
+      alert('Failed to delete file: ' + err.message);
     }
   };
 
   const viewOCR = async (filename: string) => {
     try {
-      const response = await axios.get(${API_BASE_URL}/);
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.ocr}/${filename}`);
       setOcrText(response.data.text || 'No text found');
       setSelectedFile(filename);
     } catch (err: any) {
-      alert(Failed to load OCR text: );
+      alert('Failed to load OCR text: ' + err.message);
     }
   };
 
   const triggerPrint = async () => {
     try {
-      const response = await axios.post(${API_BASE_URL}, {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
         type: 'blank'
       });
-      alert(' ' + response.data.message);
+      alert('Print triggered: ' + response.data.message);
     } catch (err: any) {
-      alert( Failed to trigger print: );
+      alert('Failed to trigger print: ' + err.message);
     }
   };
 
   const testPrinter = async () => {
     try {
-      const response = await axios.post(${API_BASE_URL}, {
+      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
         type: 'test'
       });
-      alert(' ' + response.data.message);
+      alert('Printer test successful: ' + response.data.message);
     } catch (err: any) {
-      alert( Printer test failed: );
+      alert('Printer test failed: ' + err.message);
     }
   };
 
@@ -179,7 +130,7 @@ const Dashboard: React.FC = () => {
       <div className="page-header">
         <h2 className="page-title"> Dashboard</h2>
         <p className="page-description">Manage your processed documents</p>
-        <div className={status-indicator }>
+        <div className="status-indicator">
           <span className="status-dot"></span>
           {connected ? 'Connected to server' : 'Disconnected'}
         </div>
@@ -219,7 +170,7 @@ const Dashboard: React.FC = () => {
                   <div key={file.filename} className="file-card">
                     <div className="file-preview">
                       <img
-                        src={${API_BASE_URL}/}
+                        src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`}
                         alt={file.filename}
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBOb3QgRm91bmQ8L3RleHQ+PC9zdmc+';
@@ -235,7 +186,7 @@ const Dashboard: React.FC = () => {
                     </div>
                     <div className="file-actions">
                       <button
-                        onClick={() => window.open(${API_BASE_URL}/, '_blank')}
+                        onClick={() => window.open(`${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`, '_blank')}
                         className="btn btn-sm btn-secondary"
                       >
                         View
