@@ -34,6 +34,8 @@ const Phone: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const cameraContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Initialize Socket.IO connection
@@ -82,6 +84,36 @@ const Phone: React.FC = () => {
     setMessage(msg);
     setTimeout(() => setMessage(''), 5000);
   };
+
+  const toggleFullScreen = async () => {
+    if (!isFullScreen) {
+      try {
+        if (cameraContainerRef.current?.requestFullscreen) {
+          await cameraContainerRef.current.requestFullscreen();
+          setIsFullScreen(true);
+        }
+      } catch (err) {
+        console.error('Failed to enter fullscreen:', err);
+      }
+    } else {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+      setIsFullScreen(false);
+    }
+  };
+
+  // Listen for fullscreen change events
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFullScreen(false);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   const startCamera = async () => {
     try {
@@ -348,7 +380,7 @@ const Phone: React.FC = () => {
           </div>
         ) : (
           <div className="camera-section">
-            <div className="camera-view">
+            <div className="camera-view" ref={cameraContainerRef}>
               <video
                 ref={videoRef}
                 autoPlay
@@ -356,14 +388,25 @@ const Phone: React.FC = () => {
                 className="video-preview"
               />
               <canvas ref={canvasRef} style={{ display: 'none' }} />
+              {/* Reference line for layout detection */}
+              <div className="layout-reference-line"></div>
             </div>
-            <button
-              onClick={captureFromCamera}
-              className="btn btn-large btn-success capture-btn"
-              disabled={!stream || uploading}
-            >
-              {uploading ? '⏳ Uploading...' : '📸 Capture'}
-            </button>
+            <div className="camera-controls">
+              <button
+                onClick={captureFromCamera}
+                className="btn btn-large btn-success capture-btn"
+                disabled={!stream || uploading}
+              >
+                {uploading ? '⏳ Uploading...' : '📸 Capture'}
+              </button>
+              <button
+                onClick={toggleFullScreen}
+                className="btn btn-large btn-info fullscreen-btn"
+                disabled={!stream}
+              >
+                {isFullScreen ? '🗗 Exit Fullscreen' : '⛶ Fullscreen'}
+              </button>
+            </div>
           </div>
         )}
 
