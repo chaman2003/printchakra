@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, getImageUrl } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getImageUrl } from '../config';
 import './Dashboard.css';
 
 interface FileInfo {
@@ -20,6 +20,14 @@ const Dashboard: React.FC = () => {
   const [ocrText, setOcrText] = useState<string>('');
 
   useEffect(() => {
+    // Only connect Socket.IO if enabled (local development only)
+    if (!SOCKET_IO_ENABLED) {
+      console.log('⚠️ Socket.IO disabled on production - using HTTP polling');
+      setConnected(true); // Assume connected for UI purposes
+      loadFiles();
+      return;
+    }
+
     console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
     const newSocket = io(API_BASE_URL, {
       ...SOCKET_CONFIG,

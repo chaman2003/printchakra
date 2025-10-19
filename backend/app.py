@@ -46,15 +46,13 @@ socketio = SocketIO(
         "*"  # Allow all origins as fallback
     ],
     async_mode='threading',
-    logger=True,  # Enable logging for debugging
-    engineio_logger=True,
+    logger=False,  # Disable socket.io logger to reduce noise
+    engineio_logger=False,
     ping_timeout=120,
     ping_interval=30,
-    max_http_buffer_size=1e6,
-    upgrade=True,
-    always_connect=True,
-    # Add authentication bypass for connection
-    connect_timeout=30
+    max_http_buffer_size=1e7,
+    upgrade=False,  # Disable upgrade to avoid WebSocket issues
+    transports=['polling', 'websocket'],
 )
 
 # Base directory
@@ -1028,30 +1026,25 @@ def batch_process():
 # SOCKET.IO EVENTS
 # ============================================================================
 
+# ============================================================================
+# SOCKET.IO HANDLERS
+# ============================================================================
+
 @socketio.on('connect')
 def handle_connect():
-    """Handle client connection"""
-    try:
-        print(f'✅ Client connected: {request.sid}')
-        print(f'   Origin: {request.headers.get("Origin", "Unknown")}')
-        print(f'   User-Agent: {request.headers.get("User-Agent", "Unknown")[:50]}')
-        # Don't emit on connect - just acknowledge the connection
-        return True
-    except Exception as e:
-        print(f'❌ Connection error: {e}')
-        return False
+    """Handle client connection - keep it absolutely simple"""
+    print(f'✅ Socket connected: {request.sid}')
+    return True
 
-@socketio.on_error_default
-def default_error_handler(e):
-    """Handle Socket.IO errors"""
-    print(f'❌ Socket.IO Error: {str(e)}')
-    print(f'   Type: {type(e).__name__}')
-    traceback.print_exc()
+@socketio.on('error')  
+def error_handler(e):
+    """Handle errors"""
+    print(f'Socket error: {e}')
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
-    print(f'⚠️  Client disconnected: {request.sid}')
+    print(f'Socket disconnected: {request.sid}')
 
 @socketio.on('ping')
 def handle_ping():

@@ -19,6 +19,15 @@ const getApiBaseUrl = () => {
 
 export const API_BASE_URL = getApiBaseUrl();
 
+// Check if Socket.IO is available
+const isSocketIOEnabled = () => {
+  // Disable Socket.IO on deployed Vercel app due to ngrok limitations
+  // Use HTTP polling instead
+  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+};
+
+export const SOCKET_IO_ENABLED = isSocketIOEnabled();
+
 // Separate image base URL for better reliability
 export const getImageUrl = (endpoint: string, filename: string) => {
   // Use direct HTTP for images to bypass WebSocket issues
@@ -34,7 +43,7 @@ export const SOCKET_CONFIG = {
   reconnectionDelayMax: 5000,
   reconnectionAttempts: 10,
   transports: ['polling', 'websocket'], // Try polling first
-  upgrade: true,
+  upgrade: false, // Don't upgrade from polling to websocket
   rememberUpgrade: true,
   path: '/socket.io/',
 };
@@ -59,4 +68,8 @@ export const API_ENDPOINTS = {
   batchProcess: '/batch/process',
 };
 
-console.log('🔧 API Configuration:', { API_BASE_URL, hostname: window.location.hostname });
+console.log('🔧 API Configuration:', { 
+  API_BASE_URL, 
+  hostname: window.location.hostname,
+  SOCKET_IO_ENABLED 
+});
