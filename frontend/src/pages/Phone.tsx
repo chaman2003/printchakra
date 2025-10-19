@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG } from '../config';
 import './Phone.css';
 
 interface QualityCheck {
@@ -45,22 +45,22 @@ const Phone: React.FC = () => {
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
-    // Initialize Socket.IO connection
-    const newSocket = io(API_BASE_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-    });
+    // Initialize Socket.IO connection with better error handling
+    const newSocket = io(API_BASE_URL, SOCKET_CONFIG);
 
     newSocket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('✅ Connected to server');
       setConnected(true);
     });
 
     newSocket.on('disconnect', () => {
-      console.log('Disconnected from server');
+      console.log('❌ Disconnected from server');
       setConnected(false);
+    });
+
+    newSocket.on('connect_error', (error: any) => {
+      console.error('⚠️ Connection error:', error);
+      setMessage(`Connection issue: ${error.message || 'Retrying...'}`);
     });
 
     newSocket.on('capture_now', (data) => {
