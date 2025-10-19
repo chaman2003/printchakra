@@ -39,6 +39,10 @@ const Phone: React.FC = () => {
   const [autoCapture, setAutoCapture] = useState(false);
   const [autoCaptureCountdown, setAutoCaptureCountdown] = useState(0);
   const autoCaptureIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [documentDetection, setDocumentDetection] = useState<any>(null);
+  const [detectionActive, setDetectionActive] = useState(false);
+  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     // Initialize Socket.IO connection
@@ -81,6 +85,7 @@ const Phone: React.FC = () => {
       newSocket.close();
       stopCamera();
       stopAutoCapture();
+      stopRealTimeDetection();
     };
   }, [captureMode, stream]);
 
@@ -151,6 +156,136 @@ const Phone: React.FC = () => {
     setAutoCaptureCountdown(0);
   };
 
+  const startRealTimeDetection = () => {
+    if (!videoRef.current || !canvasOverlayRef.current) return;
+    
+    setDetectionActive(true);
+    
+    detectionIntervalRef.current = setInterval(async () => {
+      if (!videoRef.current || !canvasOverlayRef.current) return;
+      
+      const video = videoRef.current;
+      const canvas = canvasOverlayRef.current;
+      const context = canvas.getContext('2d');
+      
+      if (!context || !video.videoWidth) return;
+      
+      // Resize canvas to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      // Draw current frame
+      context.drawImage(video, 0, 0);
+      
+      // Get frame as blob
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        
+        try {
+          // Send for detection
+          const formData = new FormData();
+          formData.append('file', blob, 'frame.jpg');
+          
+          const response = await axios.post(
+            `${API_BASE_URL}/detect/document`,
+            formData,
+            { headers: { 'Content-Type': 'multipart/form-data' } }
+          );
+          
+          if (response.data.success && response.data.corners.length > 0) {
+            setDocumentDetection(response.data);
+            // Draw detection overlay
+            drawDetectionOverlay(response.data);
+          }
+        } catch (err) {
+          // Silently fail for real-time detection
+          console.error('Detection error:', err);
+        }
+      }, 'image/jpeg', 0.7);
+    }, 500); // Run detection every 500ms
+  };
+
+  const stopRealTimeDetection = () => {
+    if (detectionIntervalRef.current) {
+      clearInterval(detectionIntervalRef.current);
+      detectionIntervalRef.current = null;
+    }
+    setDetectionActive(false);
+    setDocumentDetection(null);
+  };
+
+  const drawDetectionOverlay = (detection: any) => {
+    if (!canvasOverlayRef.current) return;
+    
+    const canvas = canvasOverlayRef.current;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    // Clear and redraw frame
+    context.clearRect(0, 0, width, height);
+    
+    if (videoRef.current && videoRef.current.videoWidth) {
+      context.drawImage(videoRef.current, 0, 0);
+    }
+    
+    // Draw border (green)
+    if (detection.corners && detection.corners.length === 4) {
+      context.strokeStyle = '#00FF00';
+      context.lineWidth = 3;
+      context.beginPath();
+      
+      for (let i = 0; i < detection.corners.length; i++) {
+        const corner = detection.corners[i];
+        const x = (corner.x / 100) * width;
+        const y = (corner.y / 100) * height;
+        
+        if (i === 0) {
+          context.moveTo(x, y);
+        } else {
+          context.lineTo(x, y);
+        }
+      }
+      
+      // Close the path
+      const firstCorner = detection.corners[0];
+      const firstX = (firstCorner.x / 100) * width;
+      const firstY = (firstCorner.y / 100) * height;
+      context.lineTo(firstX, firstY);
+      context.stroke();
+      
+      // Draw corner points
+      context.fillStyle = '#00FF00';
+      context.strokeStyle = '#FFFFFF';
+      context.lineWidth = 2;
+      
+      for (const corner of detection.corners) {
+        const x = (corner.x / 100) * width;
+        const y = (corner.y / 100) * height;
+        
+        // Draw circle
+        context.beginPath();
+        context.arc(x, y, 8, 0, 2 * Math.PI);
+        context.fill();
+        context.stroke();
+        
+        // Draw label
+        context.fillStyle = '#00FF00';
+        context.font = 'bold 12px Arial';
+        context.fillText(corner.name, x + 15, y - 15);
+      }
+      
+      // Draw coverage info
+      if (detection.coverage !== undefined) {
+        context.fillStyle = '#00FF00';
+        context.font = 'bold 16px Arial';
+        context.fillText(`Coverage: ${detection.coverage.toFixed(1)}%`, 20, 30);
+      }
+    }
+  };
+
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -174,6 +309,7 @@ const Phone: React.FC = () => {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
+    stopRealTimeDetection();
   };
 
   const handleCaptureMode = (mode: 'file' | 'camera') => {
@@ -182,8 +318,11 @@ const Phone: React.FC = () => {
     setQualityCheck(null);
     if (mode === 'camera') {
       startCamera();
+      // Start detection after camera starts
+      setTimeout(() => startRealTimeDetection(), 500);
     } else {
       stopCamera();
+      stopRealTimeDetection();
     }
   };
 
@@ -430,6 +569,11 @@ const Phone: React.FC = () => {
                 playsInline
                 className="video-preview"
               />
+              <canvas 
+                ref={canvasOverlayRef} 
+                className="detection-overlay"
+                style={{ display: detectionActive ? 'block' : 'none' }}
+              />
               <canvas ref={canvasRef} style={{ display: 'none' }} />
               {/* Reference line for layout detection */}
               <div className="layout-reference-line"></div>
@@ -448,6 +592,19 @@ const Phone: React.FC = () => {
                 disabled={!stream || uploading}
               >
                 {autoCapture ? `⏱️ ${autoCaptureCountdown}s` : '⏱️ Auto Capture'}
+              </button>
+              <button
+                onClick={() => {
+                  if (detectionActive) {
+                    stopRealTimeDetection();
+                  } else {
+                    startRealTimeDetection();
+                  }
+                }}
+                className={`btn btn-large detection-toggle-btn ${detectionActive ? 'active' : ''}`}
+                disabled={!stream}
+              >
+                {detectionActive ? '🔍 Detection ON' : '🔍 Detection OFF'}
               </button>
               <button
                 onClick={toggleFullScreen}

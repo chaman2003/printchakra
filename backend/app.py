@@ -14,6 +14,7 @@ import traceback
 # Import new modular pipeline
 try:
     from modules import DocumentPipeline, create_default_pipeline, validate_image_file
+    from modules.document_detection import DocumentDetector, detect_and_serialize
     MODULES_AVAILABLE = True
 except ImportError:
     MODULES_AVAILABLE = False
@@ -22,14 +23,15 @@ except ImportError:
 # Initialize Flask app
 app = Flask(__name__)
 
-# Configure CORS for frontend
+# Configure CORS for frontend - Allow all origins for image serving
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev"],
+        "origins": ["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev", "https://*.vercel.app"],
         "methods": ["GET", "POST", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"],
-        "expose_headers": ["Content-Type"],
-        "supports_credentials": False
+        "expose_headers": ["Content-Type", "Content-Disposition"],
+        "supports_credentials": False,
+        "max_age": 3600
     }
 })
 
@@ -383,10 +385,19 @@ def list_files():
 
 @app.route('/processed/<filename>')
 def get_processed_file(filename):
-    """Serve processed image file"""
+    """Serve processed image file with CORS headers"""
     try:
-        return send_from_directory(PROCESSED_DIR, filename)
+        response = send_from_directory(PROCESSED_DIR, filename)
+        # Add CORS headers
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
     except Exception as e:
+        print(f"File serving error: {str(e)}")
         return jsonify({'error': 'File not found'}), 404
 
 @app.route('/delete/<filename>', methods=['DELETE'])
@@ -755,7 +766,81 @@ def classify_document():
         print(f"Classification error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@app.route('/batch/process', methods=['POST'])
+@app.route('/detect/document', methods=['POST'])
+def detect_document_borders():
+    """
+    Real-time document border detection
+    Expects: multipart/form-data with 'file'
+    Returns: Document corners in normalized coordinates [0-100]
+    """
+    if not MODULES_AVAILABLE:
+        return jsonify({'error': 'Document detection not available', 'success': False}), 503
+    
+    try:
+        file = request.files.get('file')
+        if not file:
+            return jsonify({'error': 'No file provided', 'success': False}), 400
+        
+        # Read file into memory
+        file_bytes = file.read()
+        
+        # Detect document
+        result = detect_and_serialize(file_bytes)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        print(f"Document detection error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'corners': []
+        }), 500
+
+@socketio.on('detect_frame')
+def handle_frame_detection(data):
+    """
+    Real-time frame detection via WebSocket
+    Expects: base64 encoded image data
+    Emits: detection result with corners
+    """
+    try:
+        if not MODULES_AVAILABLE:
+            emit('detection_result', {
+                'success': False,
+                'message': 'Detection service unavailable'
+            })
+            return
+        
+        # Decode base64 image
+        import base64
+        import io
+        from PIL import Image as PILImage
+        
+        image_data = data.get('image')
+        if not image_data:
+            emit('detection_result', {'success': False, 'message': 'No image data'})
+            return
+        
+        # Remove data URL prefix if present
+        if ',' in image_data:
+            image_data = image_data.split(',')[1]
+        
+        # Decode base64
+        image_bytes = base64.b64decode(image_data)
+        
+        # Detect
+        result = detect_and_serialize(image_bytes)
+        
+        # Emit result
+        emit('detection_result', result)
+        
+    except Exception as e:
+        print(f"Frame detection error: {str(e)}")
+        emit('detection_result', {
+            'success': False,
+            'message': f'Detection error: {str(e)}'
+        })
 def batch_process():
     """
     Process multiple files sequentially with comprehensive tracking and logging

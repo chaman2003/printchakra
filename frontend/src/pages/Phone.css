@@ -189,6 +189,15 @@
   object-fit: cover;
 }
 
+.detection-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+}
+
 /* Reference line for layout detection */
 .layout-reference-line {
   position: absolute;
@@ -256,6 +265,27 @@
   50% {
     box-shadow: 0 0 0 10px rgba(255, 87, 34, 0);
   }
+}
+
+.detection-toggle-btn {
+  width: 100%;
+  font-size: 1rem;
+  padding: 0.75rem;
+  background-color: #2196F3;
+  color: white;
+  border: 2px solid #2196F3;
+}
+
+.detection-toggle-btn:hover:not(:disabled) {
+  background-color: #1976D2;
+  border-color: #1976D2;
+  transform: translateY(-2px);
+}
+
+.detection-toggle-btn.active {
+  background-color: #00BCD4;
+  border-color: #00BCD4;
+  box-shadow: 0 0 10px rgba(0, 188, 212, 0.5);
 }
 
 .fullscreen-btn {
