@@ -174,7 +174,10 @@
   background-color: #000;
   margin-bottom: 1rem;
   position: relative;
-  padding-top: 75%; /* 4:3 aspect ratio */
+  padding-top: 141.4%; /* A4 aspect ratio (297/210 = 1.414) */
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .video-preview {
