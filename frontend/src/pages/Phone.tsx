@@ -27,8 +27,8 @@ const Phone: React.FC = () => {
   const [validateQuality, setValidateQuality] = useState(true);
   const [processingOptions, setProcessingOptions] = useState({
     autoCrop: true,
-    aiEnhance: false,
-    strictQuality: false,
+    aiEnhance: true,
+    strictQuality: true,
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -219,8 +219,15 @@ const Phone: React.FC = () => {
       }
 
       return quality;
-    } catch (err) {
+    } catch (err: any) {
       console.error('Quality check failed:', err);
+      // Handle service unavailable error gracefully
+      if (err.response?.status === 503) {
+        showMessage('⚠️ Quality check service unavailable - uploading without validation');
+        console.warn('Quality validation service is unavailable (503)');
+      } else {
+        showMessage('⚠️ Quality check failed - uploading without validation');
+      }
       return null; // Continue without quality check on error
     }
   };

@@ -227,7 +227,7 @@ def health():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     """
-    Handle image upload and processing
+    Handle image upload and processing with sequential steps and comprehensive logging
     Expects: multipart/form-data with 'file' or 'photo' field
     """
     try:
@@ -235,12 +235,12 @@ def upload_file():
         file = request.files.get('file') or request.files.get('photo')
         
         if not file:
-            print("Upload error: No file in request")
-            return jsonify({'error': 'No file provided'}), 400
+            print("❌ Upload error: No file in request")
+            return jsonify({'error': 'No file provided', 'success': False}), 400
         
         if file.filename == '':
-            print("Upload error: Empty filename")
-            return jsonify({'error': 'Empty filename'}), 400
+            print("❌ Upload error: Empty filename")
+            return jsonify({'error': 'Empty filename', 'success': False}), 400
         
         # Generate unique filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -250,62 +250,107 @@ def upload_file():
             original_ext = '.jpg'
         filename = f"doc_{timestamp}_{unique_id}{original_ext}"
         
-        print(f"Processing upload: {filename}")
+        print(f"\n{'='*70}")
+        print(f"📤 UPLOAD INITIATED")
+        print(f"  Filename: {filename}")
+        print(f"  Size: {len(file.read())} bytes")
+        file.seek(0)  # Reset file pointer
+        print(f"{'='*70}")
         
-        # Save uploaded file
+        # Step 1: Save uploaded file
+        print("\n[STEP 1] Saving uploaded file...")
         upload_path = os.path.join(UPLOAD_DIR, filename)
         file.save(upload_path)
-        print(f"File saved to: {upload_path}")
+        print(f"  ✓ File saved: {upload_path}")
         
-        # Process image
+        # Validate file exists and is readable
+        if not os.path.exists(upload_path):
+            error_msg = "File upload failed - file not found on disk"
+            print(f"  ❌ {error_msg}")
+            return jsonify({'error': error_msg, 'success': False}), 500
+        
+        file_size = os.path.getsize(upload_path)
+        print(f"  ✓ Verified on disk: {file_size} bytes")
+        
+        # Step 2: Process image
+        print("\n[STEP 2] Processing image...")
         processed_filename = f"processed_{filename}"
         processed_path = os.path.join(PROCESSED_DIR, processed_filename)
         
-        print(f"Starting image processing...")
-        success, text_or_error = process_document_image(upload_path, processed_path)
-        
-        if success:
-            print(f"Image processed successfully. Text length: {len(text_or_error)}")
-            
-            # Save extracted text
-            text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
-            text_path = os.path.join(TEXT_DIR, text_filename)
-            with open(text_path, 'w', encoding='utf-8') as f:
-                f.write(text_or_error)
-            
-            print(f"Text saved to: {text_path}")
-            
-            # Notify via Socket.IO
-            try:
-                socketio.emit('new_file', {
-                    'filename': processed_filename,
-                    'timestamp': timestamp,
-                    'has_text': len(text_or_error) > 0
-                })
-                print("Socket.IO notification sent")
-            except Exception as socket_error:
-                print(f"Socket.IO error (non-critical): {str(socket_error)}")
-            
-            return jsonify({
-                'status': 'success',
-                'message': 'File uploaded and processed successfully',
-                'filename': processed_filename,
-                'original': filename,
-                'text_extracted': len(text_or_error) > 0,
-                'text_length': len(text_or_error)
-            })
-        else:
-            print(f"Image processing failed: {text_or_error}")
+        try:
+            success, text_or_error = process_document_image(upload_path, processed_path)
+        except Exception as process_error:
+            error_msg = f"Image processing failed: {str(process_error)}"
+            print(f"  ❌ {error_msg}")
             return jsonify({
                 'status': 'error',
-                'message': text_or_error
+                'message': error_msg,
+                'success': False
             }), 500
+        
+        if not success:
+            error_msg = f"Processing failed: {text_or_error}"
+            print(f"  ❌ {error_msg}")
+            return jsonify({
+                'status': 'error',
+                'message': text_or_error,
+                'success': False
+            }), 500
+        
+        print(f"  ✓ Image processed successfully")
+        print(f"  ✓ Text extracted: {len(text_or_error)} characters")
+        
+        # Step 3: Save extracted text
+        print("\n[STEP 3] Saving extracted text...")
+        text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
+        text_path = os.path.join(TEXT_DIR, text_filename)
+        
+        try:
+            with open(text_path, 'w', encoding='utf-8') as f:
+                f.write(text_or_error)
+            print(f"  ✓ Text saved: {text_path}")
+        except Exception as text_error:
+            print(f"  ⚠ Warning: Failed to save text file: {str(text_error)}")
+        
+        # Step 4: Notify via Socket.IO
+        print("\n[STEP 4] Notifying clients...")
+        try:
+            socketio.emit('new_file', {
+                'filename': processed_filename,
+                'timestamp': timestamp,
+                'has_text': len(text_or_error) > 0,
+                'text_length': len(text_or_error)
+            })
+            print(f"  ✓ Socket.IO notification sent")
+        except Exception as socket_error:
+            print(f"  ⚠ Warning: Socket.IO notification failed: {str(socket_error)}")
+        
+        # Step 5: Return success response
+        print("\n[STEP 5] Building response...")
+        response = {
+            'status': 'success',
+            'success': True,
+            'message': 'File uploaded and processed successfully',
+            'filename': processed_filename,
+            'original': filename,
+            'text_extracted': len(text_or_error) > 0,
+            'text_length': len(text_or_error),
+            'text_preview': text_or_error[:200] if len(text_or_error) > 200 else text_or_error
+        }
+        print(f"  ✓ Response built")
+        
+        print(f"\n{'='*70}")
+        print(f"✅ UPLOAD COMPLETED SUCCESSFULLY")
+        print(f"{'='*70}\n")
+        
+        return jsonify(response)
             
     except Exception as e:
-        print(f"Upload error: {str(e)}")
+        error_msg = f"Unexpected error: {str(e)}"
+        print(f"\n❌ {error_msg}")
         import traceback
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        print(traceback.format_exc())
+        return jsonify({'error': error_msg, 'success': False}), 500
 
 @app.route('/files')
 def list_files():
@@ -476,19 +521,22 @@ def trigger_print():
 @app.route('/process/advanced', methods=['POST'])
 def advanced_process():
     """
-    Advanced document processing with all new features
+    Advanced document processing with sequential execution and comprehensive logging
     Expects: multipart/form-data with 'file' and optional processing options
     """
     if not MODULES_AVAILABLE or doc_pipeline is None:
+        print("❌ Advanced processing not available")
         return jsonify({
             'error': 'Advanced processing not available',
-            'message': 'Install required dependencies: pip install -r requirements.txt'
+            'message': 'Install required dependencies: pip install -r requirements.txt',
+            'success': False
         }), 503
     
     try:
         file = request.files.get('file')
         if not file:
-            return jsonify({'error': 'No file provided'}), 400
+            print("❌ No file provided")
+            return jsonify({'error': 'No file provided', 'success': False}), 400
         
         # Get processing options from form data
         options = {
@@ -501,16 +549,23 @@ def advanced_process():
             'strict_quality': request.form.get('strict_quality', 'false').lower() == 'true'
         }
         
+        print(f"\n{'='*70}")
+        print(f"🚀 ADVANCED PROCESSING INITIATED")
+        print(f"  Options: {options}")
+        print(f"{'='*70}")
+        
         # Save uploaded file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
         filename = f"doc_{timestamp}_{unique_id}.jpg"
         upload_path = os.path.join(UPLOAD_DIR, filename)
-        file.save(upload_path)
         
-        print(f"Processing with advanced pipeline: {filename}")
+        print(f"\n[STEP 1] Saving upload...")
+        file.save(upload_path)
+        print(f"  ✓ Saved: {upload_path}")
         
         # Process using new pipeline
+        print(f"\n[STEP 2] Processing with advanced pipeline...")
         result = doc_pipeline.process_document(
             upload_path,
             PROCESSED_DIR,
@@ -518,25 +573,35 @@ def advanced_process():
         )
         
         # Emit Socket.IO event
-        if result['success']:
+        if result.get('success'):
             try:
+                print(f"\n[STEP 3] Notifying clients...")
                 socketio.emit('processing_complete', {
                     'filename': os.path.basename(result.get('processed_image', '')),
-                    'text': result.get('text', ''),
+                    'text': result.get('text', '')[:500],  # Preview only
                     'document_type': result.get('document_type', 'UNKNOWN'),
                     'confidence': result.get('ocr_confidence', 0),
                     'quality': result.get('quality', {})
                 })
+                print(f"  ✓ Notification sent")
             except Exception as e:
-                print(f"Socket.IO emit error: {e}")
+                print(f"  ⚠ Socket.IO notification failed: {e}")
+        else:
+            print(f"\n❌ Processing failed: {result.get('error')}")
+        
+        print(f"\n{'='*70}")
+        print(f"✅ ADVANCED PROCESSING COMPLETED")
+        print(f"{'='*70}\n")
         
         return jsonify(result)
         
     except Exception as e:
-        print(f"Advanced processing error: {traceback.format_exc()}")
+        error_msg = f"Advanced processing error: {str(e)}"
+        print(f"\n❌ {error_msg}")
+        print(traceback.format_exc())
         return jsonify({
             'success': False,
-            'error': str(e),
+            'error': error_msg,
             'traceback': traceback.format_exc()
         }), 500
 
@@ -693,16 +758,21 @@ def classify_document():
 @app.route('/batch/process', methods=['POST'])
 def batch_process():
     """
-    Process multiple files at once
+    Process multiple files sequentially with comprehensive tracking and logging
     Expects: multipart/form-data with multiple 'files[]'
     """
     if not MODULES_AVAILABLE or doc_pipeline is None:
-        return jsonify({'error': 'Batch processing not available'}), 503
+        return jsonify({'error': 'Batch processing not available', 'success': False}), 503
     
     try:
         files = request.files.getlist('files[]')
         if not files:
-            return jsonify({'error': 'No files provided'}), 400
+            return jsonify({'error': 'No files provided', 'success': False}), 400
+        
+        print(f"\n{'='*70}")
+        print(f"📦 BATCH PROCESSING INITIATED")
+        print(f"  Files: {len(files)}")
+        print(f"{'='*70}")
         
         # Get options
         options = {
@@ -711,28 +781,62 @@ def batch_process():
             'compress': request.form.get('compress', 'true').lower() == 'true'
         }
         
-        # Save all files
+        # Save all files sequentially
+        print(f"\n[PHASE 1] Saving files...")
         upload_paths = []
-        for file in files:
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            unique_id = str(uuid.uuid4())[:8]
-            filename = f"batch_{timestamp}_{unique_id}.jpg"
-            upload_path = os.path.join(UPLOAD_DIR, filename)
-            file.save(upload_path)
-            upload_paths.append(upload_path)
+        for i, file in enumerate(files, 1):
+            try:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                unique_id = str(uuid.uuid4())[:8]
+                filename = f"batch_{timestamp}_{unique_id}.jpg"
+                upload_path = os.path.join(UPLOAD_DIR, filename)
+                file.save(upload_path)
+                upload_paths.append(upload_path)
+                print(f"  [{i}/{len(files)}] ✓ Saved: {filename}")
+            except Exception as save_error:
+                print(f"  [{i}/{len(files)}] ❌ Failed to save: {str(save_error)}")
         
-        # Batch process
+        if not upload_paths:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save any files',
+                'total_files': len(files)
+            }), 500
+        
+        print(f"\n[PHASE 2] Processing files...")
+        # Batch process sequentially
         results = doc_pipeline.batch_process(upload_paths, PROCESSED_DIR, options)
         
-        return jsonify({
+        # Calculate statistics
+        successful = sum(1 for r in results if r.get('success'))
+        failed = len(results) - successful
+        
+        print(f"\n[PHASE 3] Building response...")
+        response = {
             'success': True,
             'total_files': len(files),
+            'successful': successful,
+            'failed': failed,
+            'success_rate': (successful / len(files) * 100) if len(files) > 0 else 0,
             'results': results
-        })
+        }
+        
+        print(f"  ✓ Summary: {successful} successful, {failed} failed")
+        print(f"\n{'='*70}")
+        print(f"✅ BATCH PROCESSING COMPLETED")
+        print(f"{'='*70}\n")
+        
+        return jsonify(response)
         
     except Exception as e:
-        print(f"Batch processing error: {e}")
-        return jsonify({'error': str(e)}), 500
+        error_msg = f"Batch processing error: {str(e)}"
+        print(f"\n❌ {error_msg}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': error_msg,
+            'traceback': traceback.format_exc()
+        }), 500
 
 # ============================================================================
 # SOCKET.IO EVENTS
