@@ -12,6 +12,7 @@ from .ocr_ai import OCRModule, DocumentClassifier, AIEnhancer
 from .storage import StorageModule
 from .export import ExportModule
 from .pipeline import DocumentPipeline, create_default_pipeline
+from .document_detection import DocumentDetector, detect_and_serialize
 
 __all__ = [
     'ScanningModule',
@@ -23,5 +24,7 @@ __all__ = [
     'ExportModule',
     'DocumentPipeline',
     'create_default_pipeline',
-    'validate_image_file'
+    'validate_image_file',
+    'DocumentDetector',
+    'detect_and_serialize'
 ]
