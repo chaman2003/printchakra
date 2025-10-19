@@ -444,22 +444,36 @@ def list_files():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/processed/<filename>')
+@app.route('/processed/<filename>', methods=['GET', 'OPTIONS'])
 def get_processed_file(filename):
-    """Serve processed image file with CORS headers"""
-    try:
-        response = send_from_directory(PROCESSED_DIR, filename)
-        # Add CORS headers
+    """Serve processed image file with CORS headers and caching support"""
+    # Handle OPTIONS request
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response, 200
+    
+    try:
+        # Security: prevent directory traversal
+        if '..' in filename or '/' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+        
+        response = send_from_directory(PROCESSED_DIR, filename)
+        # Add comprehensive CORS and cache headers
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Type'
+        response.headers['Cache-Control'] = 'public, max-age=3600'
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Content-Type'] = 'image/jpeg'
         return response
     except Exception as e:
         print(f"File serving error: {str(e)}")
-        return jsonify({'error': 'File not found'}), 404
+        return jsonify({'error': f'File not found: {str(e)}'}), 404
 
 @app.route('/delete/<filename>', methods=['DELETE'])
 def delete_file(filename):

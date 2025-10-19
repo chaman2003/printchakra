@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, getImageUrl } from '../config';
 import './Dashboard.css';
 
 interface FileInfo {
@@ -20,17 +20,15 @@ const Dashboard: React.FC = () => {
   const [ocrText, setOcrText] = useState<string>('');
 
   useEffect(() => {
-    const newSocket = io(API_BASE_URL, {
-      transports: ['websocket', 'polling'],
-    });
+    const newSocket = io(API_BASE_URL, SOCKET_CONFIG);
 
     newSocket.on('connect', () => {
-      console.log('Connected to server');
+      console.log('✅ Connected to server');
       setConnected(true);
     });
 
     newSocket.on('disconnect', () => {
-      console.log('Disconnected from server');
+      console.log('❌ Disconnected from server');
       setConnected(false);
     });
 
@@ -170,10 +168,23 @@ const Dashboard: React.FC = () => {
                   <div key={file.filename} className="file-card">
                     <div className="file-preview">
                       <img
-                        src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`}
+                        src={getImageUrl(API_ENDPOINTS.processed, file.filename)}
                         alt={file.filename}
+                        crossOrigin="anonymous"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBOb3QgRm91bmQ8L3RleHQ+PC9zdmc+';
+                          const img = e.target as HTMLImageElement;
+                          const retryCount = parseInt(img.getAttribute('data-retry') || '0');
+                          
+                          if (retryCount < 3) {
+                            // Retry loading the image
+                            setTimeout(() => {
+                              img.setAttribute('data-retry', (retryCount + 1).toString());
+                              img.src = getImageUrl(API_ENDPOINTS.processed, file.filename) + '?retry=' + Date.now();
+                            }, 1000 * (retryCount + 1));
+                          } else {
+                            // Show placeholder if all retries fail
+                            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBMb2FkIEZhaWxlZDwvdGV4dD48L3N2Zz4=';
+                          }
                         }}
                       />
                     </div>
@@ -186,7 +197,7 @@ const Dashboard: React.FC = () => {
                     </div>
                     <div className="file-actions">
                       <button
-                        onClick={() => window.open(`${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`, '_blank')}
+                        onClick={() => window.open(getImageUrl(API_ENDPOINTS.processed, file.filename), '_blank')}
                         className="btn btn-sm btn-secondary"
                       >
                         View
