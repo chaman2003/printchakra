@@ -35,17 +35,26 @@ CORS(app, resources={
     }
 })
 
-# Initialize Socket.IO with same CORS settings and better configuration
+# Initialize Socket.IO with comprehensive CORS configuration
 socketio = SocketIO(
     app, 
-    cors_allowed_origins=["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev"],
+    cors_allowed_origins=[
+        "https://printchakra.vercel.app",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://freezingly-nonsignificative-edison.ngrok-free.dev",
+        "*"  # Allow all origins as fallback
+    ],
     async_mode='threading',
-    logger=False,
-    engineio_logger=False,
-    ping_timeout=60,
-    ping_interval=25,
+    logger=True,  # Enable logging for debugging
+    engineio_logger=True,
+    ping_timeout=120,
+    ping_interval=30,
     max_http_buffer_size=1e6,
-    upgrade=True
+    upgrade=True,
+    always_connect=True,
+    # Add authentication bypass for connection
+    connect_timeout=30
 )
 
 # Base directory
@@ -1022,13 +1031,27 @@ def batch_process():
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection"""
-    print(f'Client connected: {request.sid}')
-    emit('connected', {'message': 'Connected to PrintChakra backend'})
+    try:
+        print(f'✅ Client connected: {request.sid}')
+        print(f'   Origin: {request.headers.get("Origin", "Unknown")}')
+        print(f'   User-Agent: {request.headers.get("User-Agent", "Unknown")[:50]}')
+        # Don't emit on connect - just acknowledge the connection
+        return True
+    except Exception as e:
+        print(f'❌ Connection error: {e}')
+        return False
+
+@socketio.on_error_default
+def default_error_handler(e):
+    """Handle Socket.IO errors"""
+    print(f'❌ Socket.IO Error: {str(e)}')
+    print(f'   Type: {type(e).__name__}')
+    traceback.print_exc()
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
-    print(f'Client disconnected: {request.sid}')
+    print(f'⚠️  Client disconnected: {request.sid}')
 
 @socketio.on('ping')
 def handle_ping():
