@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED } from '../config';
 import './Phone.css';
 
 interface QualityCheck {
@@ -45,6 +45,13 @@ const Phone: React.FC = () => {
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
+    // Only connect Socket.IO if enabled (local development only)
+    if (!SOCKET_IO_ENABLED) {
+      console.log('⚠️ Socket.IO disabled on production - using HTTP polling only');
+      setConnected(true); // UI will show connected but won't use real-time features
+      return;
+    }
+
     // Initialize Socket.IO connection with better error handling
     console.log('🔌 Initializing Socket.IO connection to:', API_BASE_URL);
     const newSocket = io(API_BASE_URL, {
