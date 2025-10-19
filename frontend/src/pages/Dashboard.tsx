@@ -11,6 +11,13 @@ interface FileInfo {
   has_text: boolean;
 }
 
+interface ProcessingProgress {
+  step: number;
+  total_steps: number;
+  stage_name: string;
+  message: string;
+}
+
 const Dashboard: React.FC = () => {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +25,7 @@ const Dashboard: React.FC = () => {
   const [connected, setConnected] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
+  const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
 
   useEffect(() => {
     // Only connect Socket.IO if enabled (local development only)
@@ -60,6 +68,22 @@ const Dashboard: React.FC = () => {
     newSocket.on('file_deleted', (data) => {
       console.log('File deleted:', data);
       loadFiles();
+    });
+
+    newSocket.on('processing_progress', (data: ProcessingProgress) => {
+      console.log(`📊 Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
+      setProcessingProgress(data);
+    });
+
+    newSocket.on('processing_complete', (data) => {
+      console.log('✅ Processing complete:', data);
+      setProcessingProgress(null);
+      setTimeout(() => loadFiles(), 500);
+    });
+
+    newSocket.on('processing_error', (data) => {
+      console.error('❌ Processing error:', data);
+      setProcessingProgress(null);
     });
 
     loadFiles();
@@ -169,6 +193,21 @@ const Dashboard: React.FC = () => {
       {error && (
         <div className="error">
           <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {processingProgress && (
+        <div className="processing-progress">
+          <div className="progress-header">
+            <h4>📊 Processing: Step {processingProgress.step}/{processingProgress.total_steps} – {processingProgress.stage_name}</h4>
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${(processingProgress.step / processingProgress.total_steps) * 100}%` }}
+              ></div>
+            </div>
+            <p className="progress-message">{processingProgress.message}</p>
+          </div>
         </div>
       )}
 

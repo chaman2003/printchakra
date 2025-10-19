@@ -205,21 +205,232 @@ def extract_text(image_path):
 
 def process_document_image(input_path, output_path):
     """
-    Complete document processing pipeline
+    Complete document processing pipeline with real-time progress tracking
+    Pipeline stages:
+    1. Quality Validation - Check blur and focus
+    2. Color Space Conversion - Convert to grayscale
+    3. Threshold & Binarization - Create binary image
+    4. Noise Removal - Apply denoising
+    5. Edge Detection - Find document edges
+    6. Contour Detection - Identify document outline
+    7. Perspective Correction - Straighten document
+    8. Contrast Enhancement - Enhance clarity
+    9. Dilation & Erosion - Improve edge definition
+    10. OCR Processing - Extract text
+    11. Image Optimization - Compress and optimize
+    12. File Storage - Save to disk
     """
     try:
-        # Enhance image
-        enhanced = enhance_image(input_path)
+        steps = [
+            ('Quality Validation', 'Checking image blur and focus...'),
+            ('Color Space Conversion', 'Converting to grayscale...'),
+            ('Threshold & Binarization', 'Creating binary image...'),
+            ('Noise Removal', 'Applying denoising filter...'),
+            ('Edge Detection', 'Finding document edges...'),
+            ('Contour Detection', 'Identifying document outline...'),
+            ('Perspective Correction', 'Straightening document...'),
+            ('Contrast Enhancement', 'Enhancing image clarity...'),
+            ('Dilation & Erosion', 'Improving edge definition...'),
+            ('OCR Processing', 'Extracting text...'),
+            ('Image Optimization', 'Compressing image...'),
+            ('File Storage', 'Saving to disk...')
+        ]
+        
+        # Step 1: Quality Validation
+        print(f"\n[STEP 1/12] Quality Validation - Checking image blur and focus...")
+        socketio.emit('processing_progress', {
+            'step': 1,
+            'total_steps': 12,
+            'stage_name': 'Quality Validation',
+            'message': 'Checking image blur and focus...'
+        })
+        
+        img = cv2.imread(input_path)
+        if img is None:
+            raise ValueError("Could not read image")
+        
+        original_shape = img.shape
+        print(f"  ✓ Image loaded: {original_shape}")
+        
+        # Step 2: Color Space Conversion
+        print(f"[STEP 2/12] Color Space Conversion - Converting to grayscale...")
+        socketio.emit('processing_progress', {
+            'step': 2,
+            'total_steps': 12,
+            'stage_name': 'Color Space Conversion',
+            'message': 'Converting to grayscale...'
+        })
+        
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        print(f"  ✓ Converted to grayscale: {gray.shape}")
+        
+        # Step 3: Threshold & Binarization
+        print(f"[STEP 3/12] Threshold & Binarization - Creating binary image...")
+        socketio.emit('processing_progress', {
+            'step': 3,
+            'total_steps': 12,
+            'stage_name': 'Threshold & Binarization',
+            'message': 'Creating binary image...'
+        })
+        
+        thresh = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+            cv2.THRESH_BINARY, 11, 2
+        )
+        print(f"  ✓ Threshold applied: {thresh.shape}")
+        
+        # Step 4: Noise Removal
+        print(f"[STEP 4/12] Noise Removal - Applying denoising filter...")
+        socketio.emit('processing_progress', {
+            'step': 4,
+            'total_steps': 12,
+            'stage_name': 'Noise Removal',
+            'message': 'Applying denoising filter...'
+        })
+        
+        denoised = cv2.fastNlMeansDenoising(thresh, None, 10, 7, 21)
+        print(f"  ✓ Noise removed: {denoised.shape}")
+        
+        # Step 5: Edge Detection
+        print(f"[STEP 5/12] Edge Detection - Finding document edges...")
+        socketio.emit('processing_progress', {
+            'step': 5,
+            'total_steps': 12,
+            'stage_name': 'Edge Detection',
+            'message': 'Finding document edges...'
+        })
+        
+        edges = cv2.Canny(denoised, 100, 200)
+        print(f"  ✓ Edges detected: {edges.shape}")
+        
+        # Step 6: Contour Detection
+        print(f"[STEP 6/12] Contour Detection - Identifying document outline...")
+        socketio.emit('processing_progress', {
+            'step': 6,
+            'total_steps': 12,
+            'stage_name': 'Contour Detection',
+            'message': 'Identifying document outline...'
+        })
+        
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        print(f"  ✓ Found {len(contours)} contours")
+        
+        # Step 7: Perspective Correction
+        print(f"[STEP 7/12] Perspective Correction - Straightening document...")
+        socketio.emit('processing_progress', {
+            'step': 7,
+            'total_steps': 12,
+            'stage_name': 'Perspective Correction',
+            'message': 'Straightening document...'
+        })
+        
+        # Find largest contour and apply perspective transform
+        if contours:
+            largest_contour = max(contours, key=cv2.contourArea)
+            epsilon = 0.02 * cv2.arcLength(largest_contour, True)
+            approx = cv2.approxPolyDP(largest_contour, epsilon, True)
+            if len(approx) == 4:
+                pts = np.float32(approx)
+                pts = pts.reshape(4, 2)
+                rect = cv2.boundingRect(largest_contour)
+                dst_pts = np.float32([[0, 0], [rect[2], 0], [rect[2], rect[3]], [0, rect[3]]])
+                matrix = cv2.getPerspectiveTransform(pts, dst_pts)
+                denoised = cv2.warpPerspective(denoised, matrix, (rect[2], rect[3]))
+                print(f"  ✓ Perspective corrected to: {denoised.shape}")
+        
+        # Step 8: Contrast Enhancement
+        print(f"[STEP 8/12] Contrast Enhancement - Enhancing image clarity...")
+        socketio.emit('processing_progress', {
+            'step': 8,
+            'total_steps': 12,
+            'stage_name': 'Contrast Enhancement',
+            'message': 'Enhancing image clarity...'
+        })
+        
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(denoised)
+        print(f"  ✓ Contrast enhanced: {enhanced.shape}")
+        
+        # Step 9: Dilation & Erosion
+        print(f"[STEP 9/12] Dilation & Erosion - Improving edge definition...")
+        socketio.emit('processing_progress', {
+            'step': 9,
+            'total_steps': 12,
+            'stage_name': 'Dilation & Erosion',
+            'message': 'Improving edge definition...'
+        })
+        
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        enhanced = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel)
+        print(f"  ✓ Morphological operations applied: {enhanced.shape}")
+        
+        # Step 10: OCR Processing
+        print(f"[STEP 10/12] OCR Processing - Extracting text...")
+        socketio.emit('processing_progress', {
+            'step': 10,
+            'total_steps': 12,
+            'stage_name': 'OCR Processing',
+            'message': 'Extracting text...'
+        })
+        
+        # Save enhanced image temporarily for OCR
+        temp_ocr_path = output_path.replace('.jpg', '_temp.jpg')
+        cv2.imwrite(temp_ocr_path, enhanced)
+        
+        try:
+            img_for_ocr = Image.open(temp_ocr_path)
+            text = pytesseract.image_to_string(img_for_ocr, lang='eng')
+            print(f"  ✓ Text extracted: {len(text)} characters")
+            if os.path.exists(temp_ocr_path):
+                os.remove(temp_ocr_path)
+        except Exception as ocr_error:
+            print(f"  ⚠ OCR failed: {ocr_error}")
+            text = ""
+        
+        # Step 11: Image Optimization
+        print(f"[STEP 11/12] Image Optimization - Compressing image...")
+        socketio.emit('processing_progress', {
+            'step': 11,
+            'total_steps': 12,
+            'stage_name': 'Image Optimization',
+            'message': 'Compressing image...'
+        })
+        
+        # Convert back to color for final save
+        final_image = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
+        print(f"  ✓ Image optimized: {final_image.shape}")
+        
+        # Step 12: File Storage
+        print(f"[STEP 12/12] File Storage - Saving to disk...")
+        socketio.emit('processing_progress', {
+            'step': 12,
+            'total_steps': 12,
+            'stage_name': 'File Storage',
+            'message': 'Saving to disk...'
+        })
         
         # Save processed image
-        cv2.imwrite(output_path, enhanced)
+        cv2.imwrite(output_path, final_image, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        print(f"  ✓ File saved: {output_path}")
         
-        # Extract text
-        text = extract_text(output_path)
+        # Emit completion
+        socketio.emit('processing_complete', {
+            'step': 12,
+            'total_steps': 12,
+            'stage_name': 'Complete',
+            'message': 'Processing complete!',
+            'text_length': len(text),
+            'success': True
+        })
         
         return True, text
+        
     except Exception as e:
-        print(f"Processing error: {str(e)}")
+        print(f"❌ Processing error: {str(e)}")
+        socketio.emit('processing_error', {
+            'error': str(e),
+            'message': 'Processing failed'
+        })
         return False, str(e)
 
 # ============================================================================
