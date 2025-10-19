@@ -20,16 +20,28 @@ const Dashboard: React.FC = () => {
   const [ocrText, setOcrText] = useState<string>('');
 
   useEffect(() => {
-    const newSocket = io(API_BASE_URL, SOCKET_CONFIG);
+    console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
+    const newSocket = io(API_BASE_URL, {
+      ...SOCKET_CONFIG,
+      forceNew: true,
+    });
 
     newSocket.on('connect', () => {
-      console.log('✅ Connected to server');
+      console.log('✅ Dashboard: Connected to server');
       setConnected(true);
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Disconnected from server');
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Dashboard: Disconnected from server:', reason);
       setConnected(false);
+    });
+
+    newSocket.on('connect_error', (error: any) => {
+      console.error('⚠️ Dashboard: Connection error:', error);
+    });
+
+    newSocket.on('error', (error: any) => {
+      console.error('⚠️ Dashboard: Socket error:', error);
     });
 
     newSocket.on('new_file', (data) => {

@@ -46,21 +46,33 @@ const Phone: React.FC = () => {
 
   useEffect(() => {
     // Initialize Socket.IO connection with better error handling
-    const newSocket = io(API_BASE_URL, SOCKET_CONFIG);
+    console.log('🔌 Initializing Socket.IO connection to:', API_BASE_URL);
+    const newSocket = io(API_BASE_URL, {
+      ...SOCKET_CONFIG,
+      forceNew: true,
+    });
 
     newSocket.on('connect', () => {
       console.log('✅ Connected to server');
       setConnected(true);
+      setMessage('✅ Connected to backend');
     });
 
-    newSocket.on('disconnect', () => {
-      console.log('❌ Disconnected from server');
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from server:', reason);
       setConnected(false);
+      setMessage(`⚠️ Disconnected: ${reason}`);
     });
 
     newSocket.on('connect_error', (error: any) => {
       console.error('⚠️ Connection error:', error);
-      setMessage(`Connection issue: ${error.message || 'Retrying...'}`);
+      const errorMsg = error?.message || error?.data?.content?.message || String(error);
+      setMessage(`Connection issue: ${errorMsg}. Retrying...`);
+    });
+
+    newSocket.on('error', (error: any) => {
+      console.error('⚠️ Socket error:', error);
+      setMessage(`Socket error: ${error}. Retrying...`);
     });
 
     newSocket.on('capture_now', (data) => {
@@ -73,10 +85,6 @@ const Phone: React.FC = () => {
           showMessage('💡 Switch to Camera mode to auto-capture');
         }
       }, 500);
-    });
-
-    newSocket.on('connect_error', (error) => {
-      console.error('Connection error:', error);
     });
 
     setSocket(newSocket);
