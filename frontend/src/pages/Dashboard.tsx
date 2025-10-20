@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getImageUrl } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getImageUrl, getDefaultHeaders } from '../config';
 import './Dashboard.css';
 
 interface FileInfo {
@@ -122,7 +122,9 @@ const Dashboard: React.FC = () => {
   const loadFiles = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`);
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`, {
+        headers: getDefaultHeaders()
+      });
       const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
       setFiles(filesData);
       setError(null);
@@ -140,7 +142,9 @@ const Dashboard: React.FC = () => {
     }
 
     try {
-      await axios.delete(`${API_BASE_URL}${API_ENDPOINTS.delete}/${filename}`);
+      await axios.delete(`${API_BASE_URL}${API_ENDPOINTS.delete}/${filename}`, {
+        headers: getDefaultHeaders()
+      });
       setFiles(files.filter(f => f.filename !== filename));
       if (selectedFile === filename) {
         setSelectedFile(null);
@@ -153,7 +157,9 @@ const Dashboard: React.FC = () => {
 
   const viewOCR = async (filename: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.ocr}/${filename}`);
+      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.ocr}/${filename}`, {
+        headers: getDefaultHeaders()
+      });
       setOcrText(response.data.text || 'No text found');
       setSelectedFile(filename);
     } catch (err: any) {
@@ -165,6 +171,8 @@ const Dashboard: React.FC = () => {
     try {
       const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
         type: 'blank'
+      }, {
+        headers: getDefaultHeaders()
       });
       alert('Print triggered: ' + response.data.message);
     } catch (err: any) {
@@ -176,6 +184,8 @@ const Dashboard: React.FC = () => {
     try {
       const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
         type: 'test'
+      }, {
+        headers: getDefaultHeaders()
       });
       alert('Printer test successful: ' + response.data.message);
     } catch (err: any) {

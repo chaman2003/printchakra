@@ -28,6 +28,23 @@ const isSocketIOEnabled = () => {
 
 export const SOCKET_IO_ENABLED = isSocketIOEnabled();
 
+// Check if using ngrok (needs bypass header)
+const isUsingNgrok = () => {
+  return API_BASE_URL.includes('ngrok');
+};
+
+// Get default headers for axios requests
+export const getDefaultHeaders = () => {
+  const headers: Record<string, string> = {};
+  
+  // Add ngrok bypass header if using ngrok
+  if (isUsingNgrok()) {
+    headers['ngrok-skip-browser-warning'] = 'true';
+  }
+  
+  return headers;
+};
+
 // Separate image base URL for better reliability
 export const getImageUrl = (endpoint: string, filename: string) => {
   // Use direct HTTP for images to bypass WebSocket issues

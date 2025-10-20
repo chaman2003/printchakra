@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
 import './Phone.css';
 
 interface QualityCheck {
@@ -204,7 +204,7 @@ const Phone: React.FC = () => {
           const response = await axios.post(
             `${API_BASE_URL}/detect/document`,
             formData,
-            { headers: { 'Content-Type': 'multipart/form-data' } }
+            { headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' } }
           );
           
           if (response.data.success && response.data.corners.length > 0) {
@@ -352,7 +352,7 @@ const Phone: React.FC = () => {
         `${API_BASE_URL}${API_ENDPOINTS.validateQuality}`,
         formData,
         {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' },
         }
       );
 
@@ -453,7 +453,7 @@ const Phone: React.FC = () => {
         `${API_BASE_URL}${API_ENDPOINTS.upload}`,
         formData,
         {
-          headers: { 'Content-Type': 'multipart/form-data' },
+          headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' },
         }
       );
 
