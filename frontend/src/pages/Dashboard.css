@@ -59,6 +59,31 @@
   flex-wrap: wrap;
 }
 
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: #4CAF50;
+  margin-right: 8px;
+  animation: pulse-green 2s infinite;
+}
+
+.status-dot.error {
+  background-color: #ff9800;
+  animation: pulse-orange 1.5s infinite;
+}
+
+@keyframes pulse-green {
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px rgba(76, 175, 80, 0.8); }
+  50% { opacity: 0.7; box-shadow: 0 0 10px rgba(76, 175, 80, 0.5); }
+}
+
+@keyframes pulse-orange {
+  0%, 100% { opacity: 1; box-shadow: 0 0 5px rgba(255, 152, 0, 0.8); }
+  50% { opacity: 0.7; box-shadow: 0 0 10px rgba(255, 152, 0, 0.5); }
+}
+
 .pipeline-status {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
