@@ -334,7 +334,6 @@ const Dashboard: React.FC = () => {
                           : getImageUrl(API_ENDPOINTS.processed, file.filename)
                         }
                         alt={file.filename}
-                        crossOrigin="anonymous"
                         className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
                         onClick={() => !file.processing && openImageModal(file.filename)}
                         style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
@@ -424,7 +423,6 @@ const Dashboard: React.FC = () => {
               <img
                 src={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)}
                 alt={selectedImageFile}
-                crossOrigin="anonymous"
                 className="modal-image"
               />
             </div>

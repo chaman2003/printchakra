@@ -128,6 +128,22 @@ else:
 # Tesseract configuration (update path if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
+# Middleware to add CORS headers to all responses
+@app.after_request
+def after_request(response):
+    """Add CORS and security headers to all responses"""
+    # CORS headers
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Type, Content-Disposition'
+    
+    # Security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    
+    return response
+
 # ============================================================================
 # FALLBACK QUALITY CHECK FUNCTION (for when modules unavailable)
 # ============================================================================
@@ -781,7 +797,7 @@ def get_processed_file(filename):
         response = jsonify({'status': 'ok'})
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
         response.headers['Access-Control-Max-Age'] = '3600'
         return response, 200
     
@@ -790,19 +806,36 @@ def get_processed_file(filename):
         if '..' in filename or '/' in filename:
             return jsonify({'error': 'Invalid filename'}), 400
         
+        # Check if file exists
+        file_path = os.path.join(PROCESSED_DIR, filename)
+        if not os.path.exists(file_path):
+            print(f"❌ File not found: {file_path}")
+            return jsonify({'error': 'File not found'}), 404
+        
+        print(f"✅ Serving processed file: {filename}")
         response = send_from_directory(PROCESSED_DIR, filename)
+        
         # Add comprehensive CORS and cache headers
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
         response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Type'
         response.headers['Cache-Control'] = 'public, max-age=3600'
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Content-Type'] = 'image/jpeg'
+        
+        # Detect image type from extension
+        if filename.lower().endswith('.png'):
+            response.headers['Content-Type'] = 'image/png'
+        elif filename.lower().endswith('.jpg') or filename.lower().endswith('.jpeg'):
+            response.headers['Content-Type'] = 'image/jpeg'
+        else:
+            response.headers['Content-Type'] = 'image/jpeg'  # Default to JPEG
+        
         return response
     except Exception as e:
-        print(f"File serving error: {str(e)}")
-        return jsonify({'error': f'File not found: {str(e)}'}), 404
+        print(f"❌ File serving error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'File serving error: {str(e)}'}), 500
 
 @app.route('/uploads/<filename>', methods=['GET', 'OPTIONS'])
 def get_upload_file(filename):
@@ -812,7 +845,7 @@ def get_upload_file(filename):
         response = jsonify({'status': 'ok'})
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
         response.headers['Access-Control-Max-Age'] = '3600'
         return response, 200
     
@@ -824,19 +857,36 @@ def get_upload_file(filename):
         # Remove "processed_" prefix if present to get upload filename
         upload_filename = filename.replace('processed_', '')
         
+        # Check if file exists
+        file_path = os.path.join(UPLOAD_DIR, upload_filename)
+        if not os.path.exists(file_path):
+            print(f"❌ Upload file not found: {file_path}")
+            return jsonify({'error': 'File not found'}), 404
+        
+        print(f"✅ Serving upload file: {upload_filename}")
         response = send_from_directory(UPLOAD_DIR, upload_filename)
+        
         # Add comprehensive CORS headers
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
         response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Type'
         response.headers['Cache-Control'] = 'public, max-age=300'  # 5 min cache for previews
         response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['Content-Type'] = 'image/jpeg'
+        
+        # Detect image type from extension
+        if upload_filename.lower().endswith('.png'):
+            response.headers['Content-Type'] = 'image/png'
+        elif upload_filename.lower().endswith('.jpg') or upload_filename.lower().endswith('.jpeg'):
+            response.headers['Content-Type'] = 'image/jpeg'
+        else:
+            response.headers['Content-Type'] = 'image/jpeg'  # Default to JPEG
+        
         return response
     except Exception as e:
-        print(f"Upload file serving error: {str(e)}")
-        return jsonify({'error': f'File not found: {str(e)}'}), 404
+        print(f"❌ Upload file serving error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'File serving error: {str(e)}'}), 500
 
 @app.route('/delete/<filename>', methods=['DELETE'])
 def delete_file(filename):

@@ -32,11 +32,14 @@ Start-Process powershell.exe -ArgumentList "-NoExit", "cd '$backendPath'; & '.\v
 # Wait a moment for backend to start
 Start-Sleep -Seconds 2
 
-# Start ngrok with browser warning disabled
+# Start ngrok with browser warning disabled and response header added
 Write-Host "🌐 Starting ngrok tunnel..." -ForegroundColor Green
-Start-Process powershell.exe -ArgumentList "-NoExit", "ngrok http --domain=freezingly-nonsignificative-edison.ngrok-free.dev --request-header-add='ngrok-skip-browser-warning:true' 5000"
+Write-Host "   - Adding bypass headers for browser compatibility" -ForegroundColor Yellow
+Start-Process powershell.exe -ArgumentList "-NoExit", "ngrok http --domain=freezingly-nonsignificative-edison.ngrok-free.dev --response-header-add='Access-Control-Allow-Origin:*' --response-header-add='Access-Control-Allow-Methods:GET,POST,DELETE,OPTIONS' --response-header-add='Access-Control-Allow-Headers:Content-Type,Authorization,ngrok-skip-browser-warning' 5000"
 
 Write-Host ""
 Write-Host "✅ Backend and ngrok started in separate windows" -ForegroundColor Green
 Write-Host "Backend: http://localhost:5000" -ForegroundColor Cyan
 Write-Host "Ngrok: https://freezingly-nonsignificative-edison.ngrok-free.dev" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "📝 Note: ngrok is configured with CORS headers for cross-origin image loading" -ForegroundColor Yellow
