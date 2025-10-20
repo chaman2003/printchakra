@@ -36,7 +36,7 @@ CORS(app, resources={
     r"/*": {
         "origins": ["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev", "https://*.vercel.app"],
         "methods": ["GET", "POST", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
+        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
         "expose_headers": ["Content-Type", "Content-Disposition"],
         "supports_credentials": False,
         "max_age": 3600
