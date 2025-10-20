@@ -9,6 +9,10 @@ interface FileInfo {
   size: number;
   created: string;
   has_text: boolean;
+  processing?: boolean;
+  processing_step?: number;
+  processing_total?: number;
+  processing_stage?: string;
 }
 
 interface ProcessingProgress {
@@ -246,12 +250,26 @@ const Dashboard: React.FC = () => {
             ) : (
               <div className="files-grid">
                 {files.map((file) => (
-                  <div key={file.filename} className="file-card">
+                  <div key={file.filename} className={`file-card ${file.processing ? 'processing' : ''}`}>
                     <div className="file-preview">
+                      {file.processing && (
+                        <div className="processing-overlay">
+                          <div className="spinner"></div>
+                          <div className="processing-text">
+                            Processing: Step {file.processing_step}/{file.processing_total}
+                            <br />
+                            <span className="stage-name">{file.processing_stage}</span>
+                          </div>
+                        </div>
+                      )}
                       <img
-                        src={getImageUrl(API_ENDPOINTS.processed, file.filename)}
+                        src={file.processing 
+                          ? getImageUrl('/uploads', file.filename) 
+                          : getImageUrl(API_ENDPOINTS.processed, file.filename)
+                        }
                         alt={file.filename}
                         crossOrigin="anonymous"
+                        className={file.processing ? 'preview-image' : ''}
                         onError={(e) => {
                           const img = e.target as HTMLImageElement;
                           const retryCount = parseInt(img.getAttribute('data-retry') || '0');
@@ -260,7 +278,8 @@ const Dashboard: React.FC = () => {
                             // Retry loading the image
                             setTimeout(() => {
                               img.setAttribute('data-retry', (retryCount + 1).toString());
-                              img.src = getImageUrl(API_ENDPOINTS.processed, file.filename) + '?retry=' + Date.now();
+                              const endpoint = file.processing ? '/uploads' : API_ENDPOINTS.processed;
+                              img.src = getImageUrl(endpoint, file.filename) + '?retry=' + Date.now();
                             }, 1000 * (retryCount + 1));
                           } else {
                             // Show placeholder if all retries fail
@@ -272,18 +291,24 @@ const Dashboard: React.FC = () => {
                     <div className="file-info">
                       <h4 className="file-name">{file.filename}</h4>
                       <p className="file-meta">
-                        {formatFileSize(file.size)}  {formatDate(file.created)}
+                        {formatFileSize(file.size)} • {formatDate(file.created)}
                       </p>
-                      {file.has_text && <span className="ocr-badge"> Has OCR</span>}
+                      {file.processing && (
+                        <p className="processing-status">
+                          ⏳ Processing: Step {file.processing_step}/{file.processing_total} – {file.processing_stage}
+                        </p>
+                      )}
+                      {!file.processing && file.has_text && <span className="ocr-badge">✓ Has OCR</span>}
                     </div>
                     <div className="file-actions">
                       <button
                         onClick={() => window.open(getImageUrl(API_ENDPOINTS.processed, file.filename), '_blank')}
                         className="btn btn-sm btn-secondary"
+                        disabled={file.processing}
                       >
                         View
                       </button>
-                      {file.has_text && (
+                      {file.has_text && !file.processing && (
                         <button
                           onClick={() => viewOCR(file.filename)}
                           className="btn btn-sm btn-info"
@@ -294,6 +319,7 @@ const Dashboard: React.FC = () => {
                       <button
                         onClick={() => deleteFile(file.filename)}
                         className="btn btn-sm btn-danger"
+                        disabled={file.processing}
                       >
                         Delete
                       </button>
