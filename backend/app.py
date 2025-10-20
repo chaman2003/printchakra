@@ -10,6 +10,7 @@ from datetime import datetime
 import uuid
 import subprocess
 import traceback
+import threading
 
 # Import new modular pipeline
 try:
@@ -75,6 +76,34 @@ PDF_DIR = os.path.join(BASE_DIR, 'pdfs')
 # Create directories if they don't exist
 for directory in [UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR]:
     os.makedirs(directory, exist_ok=True)
+
+# Processing status tracking (in-memory)
+# Format: { 'filename': { 'step': 1, 'total_steps': 12, 'stage_name': '...', 'is_complete': False, 'error': None } }
+processing_status = {}
+processing_lock = threading.Lock()
+
+def update_processing_status(filename, step, total_steps, stage_name, is_complete=False, error=None):
+    """Update processing status for a file"""
+    with processing_lock:
+        processing_status[filename] = {
+            'step': step,
+            'total_steps': total_steps,
+            'stage_name': stage_name,
+            'is_complete': is_complete,
+            'error': error,
+            'timestamp': datetime.now().isoformat()
+        }
+
+def get_processing_status(filename):
+    """Get processing status for a file"""
+    with processing_lock:
+        return processing_status.get(filename)
+
+def clear_processing_status(filename):
+    """Clear processing status for a file after completion"""
+    with processing_lock:
+        if filename in processing_status:
+            del processing_status[filename]
 
 # Initialize new document pipeline
 if MODULES_AVAILABLE:
@@ -203,7 +232,7 @@ def extract_text(image_path):
         print(f"OCR Error: {str(e)}")
         return ""
 
-def process_document_image(input_path, output_path):
+def process_document_image(input_path, output_path, filename=None):
     """
     Complete document processing pipeline with real-time progress tracking
     Pipeline stages:
@@ -236,14 +265,21 @@ def process_document_image(input_path, output_path):
             ('File Storage', 'Saving to disk...')
         ]
         
+        # Helper function to emit progress
+        def emit_progress(step, stage_name, message):
+            progress_data = {
+                'step': step,
+                'total_steps': 12,
+                'stage_name': stage_name,
+                'message': message
+            }
+            socketio.emit('processing_progress', progress_data)
+            if filename:
+                update_processing_status(filename, step, 12, stage_name)
+        
         # Step 1: Quality Validation
         print(f"\n[STEP 1/12] Quality Validation - Checking image blur and focus...")
-        socketio.emit('processing_progress', {
-            'step': 1,
-            'total_steps': 12,
-            'stage_name': 'Quality Validation',
-            'message': 'Checking image blur and focus...'
-        })
+        emit_progress(1, 'Quality Validation', 'Checking image blur and focus...')
         
         img = cv2.imread(input_path)
         if img is None:
@@ -254,24 +290,14 @@ def process_document_image(input_path, output_path):
         
         # Step 2: Color Space Conversion
         print(f"[STEP 2/12] Color Space Conversion - Converting to grayscale...")
-        socketio.emit('processing_progress', {
-            'step': 2,
-            'total_steps': 12,
-            'stage_name': 'Color Space Conversion',
-            'message': 'Converting to grayscale...'
-        })
+        emit_progress(2, 'Color Space Conversion', 'Converting to grayscale...')
         
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         print(f"  ✓ Converted to grayscale: {gray.shape}")
         
         # Step 3: Threshold & Binarization
         print(f"[STEP 3/12] Threshold & Binarization - Creating binary image...")
-        socketio.emit('processing_progress', {
-            'step': 3,
-            'total_steps': 12,
-            'stage_name': 'Threshold & Binarization',
-            'message': 'Creating binary image...'
-        })
+        emit_progress(3, 'Threshold & Binarization', 'Creating binary image...')
         
         thresh = cv2.adaptiveThreshold(
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
@@ -281,48 +307,28 @@ def process_document_image(input_path, output_path):
         
         # Step 4: Noise Removal
         print(f"[STEP 4/12] Noise Removal - Applying denoising filter...")
-        socketio.emit('processing_progress', {
-            'step': 4,
-            'total_steps': 12,
-            'stage_name': 'Noise Removal',
-            'message': 'Applying denoising filter...'
-        })
+        emit_progress(4, 'Noise Removal', 'Applying denoising filter...')
         
         denoised = cv2.fastNlMeansDenoising(thresh, None, 10, 7, 21)
         print(f"  ✓ Noise removed: {denoised.shape}")
         
         # Step 5: Edge Detection
         print(f"[STEP 5/12] Edge Detection - Finding document edges...")
-        socketio.emit('processing_progress', {
-            'step': 5,
-            'total_steps': 12,
-            'stage_name': 'Edge Detection',
-            'message': 'Finding document edges...'
-        })
+        emit_progress(5, 'Edge Detection', 'Finding document edges...')
         
         edges = cv2.Canny(denoised, 100, 200)
         print(f"  ✓ Edges detected: {edges.shape}")
         
         # Step 6: Contour Detection
         print(f"[STEP 6/12] Contour Detection - Identifying document outline...")
-        socketio.emit('processing_progress', {
-            'step': 6,
-            'total_steps': 12,
-            'stage_name': 'Contour Detection',
-            'message': 'Identifying document outline...'
-        })
+        emit_progress(6, 'Contour Detection', 'Identifying document outline...')
         
         contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         print(f"  ✓ Found {len(contours)} contours")
         
         # Step 7: Perspective Correction
         print(f"[STEP 7/12] Perspective Correction - Straightening document...")
-        socketio.emit('processing_progress', {
-            'step': 7,
-            'total_steps': 12,
-            'stage_name': 'Perspective Correction',
-            'message': 'Straightening document...'
-        })
+        emit_progress(7, 'Perspective Correction', 'Straightening document...')
         
         # Find largest contour and apply perspective transform
         if contours:
@@ -340,12 +346,7 @@ def process_document_image(input_path, output_path):
         
         # Step 8: Contrast Enhancement
         print(f"[STEP 8/12] Contrast Enhancement - Enhancing image clarity...")
-        socketio.emit('processing_progress', {
-            'step': 8,
-            'total_steps': 12,
-            'stage_name': 'Contrast Enhancement',
-            'message': 'Enhancing image clarity...'
-        })
+        emit_progress(8, 'Contrast Enhancement', 'Enhancing image clarity...')
         
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         enhanced = clahe.apply(denoised)
@@ -353,12 +354,7 @@ def process_document_image(input_path, output_path):
         
         # Step 9: Dilation & Erosion
         print(f"[STEP 9/12] Dilation & Erosion - Improving edge definition...")
-        socketio.emit('processing_progress', {
-            'step': 9,
-            'total_steps': 12,
-            'stage_name': 'Dilation & Erosion',
-            'message': 'Improving edge definition...'
-        })
+        emit_progress(9, 'Dilation & Erosion', 'Improving edge definition...')
         
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
         enhanced = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel)
@@ -366,12 +362,7 @@ def process_document_image(input_path, output_path):
         
         # Step 10: OCR Processing
         print(f"[STEP 10/12] OCR Processing - Extracting text...")
-        socketio.emit('processing_progress', {
-            'step': 10,
-            'total_steps': 12,
-            'stage_name': 'OCR Processing',
-            'message': 'Extracting text...'
-        })
+        emit_progress(10, 'OCR Processing', 'Extracting text...')
         
         # Save enhanced image temporarily for OCR
         temp_ocr_path = output_path.replace('.jpg', '_temp.jpg')
@@ -389,12 +380,7 @@ def process_document_image(input_path, output_path):
         
         # Step 11: Image Optimization
         print(f"[STEP 11/12] Image Optimization - Compressing image...")
-        socketio.emit('processing_progress', {
-            'step': 11,
-            'total_steps': 12,
-            'stage_name': 'Image Optimization',
-            'message': 'Compressing image...'
-        })
+        emit_progress(11, 'Image Optimization', 'Compressing image...')
         
         # Convert back to color for final save
         final_image = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
@@ -402,12 +388,7 @@ def process_document_image(input_path, output_path):
         
         # Step 12: File Storage
         print(f"[STEP 12/12] File Storage - Saving to disk...")
-        socketio.emit('processing_progress', {
-            'step': 12,
-            'total_steps': 12,
-            'stage_name': 'File Storage',
-            'message': 'Saving to disk...'
-        })
+        emit_progress(12, 'File Storage', 'Saving to disk...')
         
         # Save processed image
         cv2.imwrite(output_path, final_image, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -427,10 +408,13 @@ def process_document_image(input_path, output_path):
         
     except Exception as e:
         print(f"❌ Processing error: {str(e)}")
-        socketio.emit('processing_error', {
+        error_data = {
             'error': str(e),
             'message': 'Processing failed'
-        })
+        }
+        socketio.emit('processing_error', error_data)
+        if filename:
+            update_processing_status(filename, 12, 12, 'Error', is_complete=True, error=str(e))
         return False, str(e)
 
 # ============================================================================
@@ -525,7 +509,7 @@ def health():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     """
-    Handle image upload and processing with sequential steps and comprehensive logging
+    Handle image upload - returns immediately with upload info, processes in background
     Expects: multipart/form-data with 'file' or 'photo' field
     """
     try:
@@ -547,6 +531,7 @@ def upload_file():
         if not original_ext:
             original_ext = '.jpg'
         filename = f"doc_{timestamp}_{unique_id}{original_ext}"
+        processed_filename = f"processed_{filename}"
         
         print(f"\n{'='*70}")
         print(f"📤 UPLOAD INITIATED")
@@ -555,8 +540,8 @@ def upload_file():
         file.seek(0)  # Reset file pointer
         print(f"{'='*70}")
         
-        # Step 1: Save uploaded file
-        print("\n[STEP 1] Saving uploaded file...")
+        # Step 1: Save uploaded file immediately
+        print("\n[UPLOAD] Saving uploaded file...")
         upload_path = os.path.join(UPLOAD_DIR, filename)
         file.save(upload_path)
         print(f"  ✓ File saved: {upload_path}")
@@ -570,58 +555,103 @@ def upload_file():
         file_size = os.path.getsize(upload_path)
         print(f"  ✓ Verified on disk: {file_size} bytes")
         
-        # Step 2: Process image
-        print("\n[STEP 2] Processing image...")
-        processed_filename = f"processed_{filename}"
-        processed_path = os.path.join(PROCESSED_DIR, processed_filename)
+        # Initialize processing status
+        update_processing_status(processed_filename, 0, 12, 'Initializing', is_complete=False)
         
-        try:
-            success, text_or_error = process_document_image(upload_path, processed_path)
-        except Exception as process_error:
-            error_msg = f"Image processing failed: {str(process_error)}"
-            print(f"  ❌ {error_msg}")
-            return jsonify({
-                'status': 'error',
-                'message': error_msg,
-                'success': False
-            }), 500
+        # Return immediately with upload info
+        response = {
+            'status': 'uploaded',
+            'success': True,
+            'message': 'File uploaded successfully, processing started',
+            'filename': processed_filename,
+            'upload_filename': filename,
+            'original': file.filename,
+            'timestamp': timestamp,
+            'processing': True
+        }
         
-        if not success:
-            error_msg = f"Processing failed: {text_or_error}"
-            print(f"  ❌ {error_msg}")
-            return jsonify({
-                'status': 'error',
-                'message': text_or_error,
-                'success': False
-            }), 500
-        
-        print(f"  ✓ Image processed successfully")
-        print(f"  ✓ Text extracted: {len(text_or_error)} characters")
-        
-        # Step 3: Save extracted text
-        print("\n[STEP 3] Saving extracted text...")
-        text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
-        text_path = os.path.join(TEXT_DIR, text_filename)
-        
-        try:
-            with open(text_path, 'w', encoding='utf-8') as f:
-                f.write(text_or_error)
-            print(f"  ✓ Text saved: {text_path}")
-        except Exception as text_error:
-            print(f"  ⚠ Warning: Failed to save text file: {str(text_error)}")
-        
-        # Step 4: Notify via Socket.IO
-        print("\n[STEP 4] Notifying clients...")
+        # Emit Socket.IO event for instant display
         try:
             socketio.emit('new_file', {
                 'filename': processed_filename,
+                'upload_filename': filename,
                 'timestamp': timestamp,
-                'has_text': len(text_or_error) > 0,
-                'text_length': len(text_or_error)
+                'processing': True,
+                'has_text': False
             })
-            print(f"  ✓ Socket.IO notification sent")
+            print(f"  ✓ Socket.IO notification sent for instant display")
         except Exception as socket_error:
             print(f"  ⚠ Warning: Socket.IO notification failed: {str(socket_error)}")
+        
+        # Start background processing
+        def background_process():
+            try:
+                processed_path = os.path.join(PROCESSED_DIR, processed_filename)
+                
+                # Process image with progress tracking
+                success, text_or_error = process_document_image(
+                    upload_path, 
+                    processed_path,
+                    processed_filename  # Pass filename for status tracking
+                )
+                
+                if not success:
+                    update_processing_status(processed_filename, 12, 12, 'Error', is_complete=True, error=text_or_error)
+                    socketio.emit('processing_error', {
+                        'filename': processed_filename,
+                        'error': text_or_error
+                    })
+                    return
+                
+                # Save extracted text
+                text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
+                text_path = os.path.join(TEXT_DIR, text_filename)
+                
+                try:
+                    with open(text_path, 'w', encoding='utf-8') as f:
+                        f.write(text_or_error)
+                    print(f"  ✓ Text saved: {text_path}")
+                except Exception as text_error:
+                    print(f"  ⚠ Warning: Failed to save text file: {str(text_error)}")
+                
+                # Mark as complete
+                update_processing_status(processed_filename, 12, 12, 'Complete', is_complete=True)
+                
+                # Notify completion
+                socketio.emit('processing_complete', {
+                    'filename': processed_filename,
+                    'has_text': len(text_or_error) > 0,
+                    'text_length': len(text_or_error)
+                })
+                
+                print(f"\n✅ Background processing completed for {processed_filename}")
+                
+                # Clear status after 60 seconds
+                threading.Timer(60.0, lambda: clear_processing_status(processed_filename)).start()
+                
+            except Exception as e:
+                error_msg = f"Background processing error: {str(e)}"
+                print(f"❌ {error_msg}")
+                update_processing_status(processed_filename, 12, 12, 'Error', is_complete=True, error=error_msg)
+                socketio.emit('processing_error', {
+                    'filename': processed_filename,
+                    'error': error_msg
+                })
+        
+        # Start processing in background thread
+        thread = threading.Thread(target=background_process)
+        thread.daemon = True
+        thread.start()
+        
+        print(f"\n✅ Upload response sent, processing started in background")
+        return jsonify(response)
+            
+    except Exception as e:
+        error_msg = f"Unexpected error: {str(e)}"
+        print(f"\n❌ {error_msg}")
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': error_msg, 'success': False}), 500
         
         # Step 5: Return success response
         print("\n[STEP 5] Building response...")
@@ -652,9 +682,32 @@ def upload_file():
 
 @app.route('/files')
 def list_files():
-    """List all processed files"""
+    """List all processed files with processing status"""
     try:
         files = []
+        
+        # First, add files that are currently being processed (uploaded but not yet in processed dir)
+        for filename in list(processing_status.keys()):
+            status = get_processing_status(filename)
+            if status and not status['is_complete']:
+                # Get the upload filename (without "processed_" prefix)
+                upload_filename = filename.replace('processed_', '')
+                upload_path = os.path.join(UPLOAD_DIR, upload_filename)
+                
+                if os.path.exists(upload_path):
+                    file_stat = os.stat(upload_path)
+                    files.append({
+                        'filename': filename,
+                        'size': file_stat.st_size,
+                        'created': datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
+                        'has_text': False,
+                        'processing': True,
+                        'processing_step': status['step'],
+                        'processing_total': status['total_steps'],
+                        'processing_stage': status['stage_name']
+                    })
+        
+        # Then add all processed files
         for filename in os.listdir(PROCESSED_DIR):
             if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                 file_path = os.path.join(PROCESSED_DIR, filename)
@@ -665,17 +718,53 @@ def list_files():
                 text_path = os.path.join(TEXT_DIR, text_filename)
                 has_text = os.path.exists(text_path)
                 
-                files.append({
+                # Check if still processing (edge case where file exists but processing not complete)
+                status = get_processing_status(filename)
+                is_processing = status and not status['is_complete']
+                
+                file_info = {
                     'filename': filename,
                     'size': file_stat.st_size,
                     'created': datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-                    'has_text': has_text
-                })
+                    'has_text': has_text,
+                    'processing': is_processing
+                }
+                
+                if is_processing:
+                    file_info['processing_step'] = status['step']
+                    file_info['processing_total'] = status['total_steps']
+                    file_info['processing_stage'] = status['stage_name']
+                
+                files.append(file_info)
         
         # Sort by creation time (newest first)
         files.sort(key=lambda x: x['created'], reverse=True)
         
         return jsonify({'files': files, 'count': len(files)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/processing-status/<filename>')
+def get_file_processing_status(filename):
+    """Get processing status for a specific file"""
+    try:
+        status = get_processing_status(filename)
+        if status:
+            return jsonify({
+                'processing': not status['is_complete'],
+                'step': status['step'],
+                'total_steps': status['total_steps'],
+                'stage_name': status['stage_name'],
+                'is_complete': status['is_complete'],
+                'error': status.get('error'),
+                'timestamp': status['timestamp']
+            })
+        else:
+            # No processing status - file either complete or doesn't exist
+            return jsonify({
+                'processing': False,
+                'is_complete': True
+            })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -708,6 +797,40 @@ def get_processed_file(filename):
         return response
     except Exception as e:
         print(f"File serving error: {str(e)}")
+        return jsonify({'error': f'File not found: {str(e)}'}), 404
+
+@app.route('/uploads/<filename>', methods=['GET', 'OPTIONS'])
+def get_upload_file(filename):
+    """Serve uploaded (preview) image file with CORS headers"""
+    # Handle OPTIONS request
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response, 200
+    
+    try:
+        # Security: prevent directory traversal
+        if '..' in filename or '/' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+        
+        # Remove "processed_" prefix if present to get upload filename
+        upload_filename = filename.replace('processed_', '')
+        
+        response = send_from_directory(UPLOAD_DIR, upload_filename)
+        # Add comprehensive CORS headers
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Type'
+        response.headers['Cache-Control'] = 'public, max-age=300'  # 5 min cache for previews
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['Content-Type'] = 'image/jpeg'
+        return response
+    except Exception as e:
+        print(f"Upload file serving error: {str(e)}")
         return jsonify({'error': f'File not found: {str(e)}'}), 404
 
 @app.route('/delete/<filename>', methods=['DELETE'])
