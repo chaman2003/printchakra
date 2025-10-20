@@ -307,9 +307,14 @@
   transition: transform 0.2s, filter 0.2s;
 }
 
-.file-preview img.thumbnail-image:hover {
+.file-preview img.thumbnail-image:not(.processing-image):hover {
   transform: scale(1.05);
   filter: brightness(0.9);
+}
+
+.file-preview img.processing-image {
+  opacity: 0.6;
+  filter: grayscale(0.3);
 }
 
 .file-preview img.preview-image {
