@@ -43,14 +43,14 @@ const Dashboard: React.FC = () => {
       // Set up polling to refresh file list every 3 seconds (faster refresh)
       const pollInterval = setInterval(() => {
         console.log('📋 Polling for new files...');
-        loadFiles();
+        loadFiles(false); // Don't show loading spinner on background polls
       }, 3000);
       
       // Also refresh when the page becomes visible (user switches tabs/apps)
       const handleVisibilityChange = () => {
         if (!document.hidden) {
           console.log('📋 Page became visible - refreshing files');
-          loadFiles();
+          loadFiles(false); // Don't show loading spinner
         }
       };
       
@@ -88,12 +88,12 @@ const Dashboard: React.FC = () => {
 
     newSocket.on('new_file', (data) => {
       console.log('New file uploaded:', data);
-      loadFiles();
+      loadFiles(false); // Background refresh, no loading spinner
     });
 
     newSocket.on('file_deleted', (data) => {
       console.log('File deleted:', data);
-      loadFiles();
+      loadFiles(false);
     });
 
     newSocket.on('processing_progress', (data: ProcessingProgress) => {
@@ -104,7 +104,7 @@ const Dashboard: React.FC = () => {
     newSocket.on('processing_complete', (data) => {
       console.log('✅ Processing complete:', data);
       setProcessingProgress(null);
-      setTimeout(() => loadFiles(), 500);
+      setTimeout(() => loadFiles(false), 500); // Refresh after processing
     });
 
     newSocket.on('processing_error', (data) => {
@@ -119,9 +119,11 @@ const Dashboard: React.FC = () => {
     };
   }, []);
 
-  const loadFiles = async () => {
+  const loadFiles = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`, {
         headers: getDefaultHeaders()
       });
@@ -132,7 +134,9 @@ const Dashboard: React.FC = () => {
       console.error('Failed to load files:', err);
       setError(err.message || 'Failed to load files');
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 

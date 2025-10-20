@@ -457,6 +457,11 @@ def index():
         }
     })
 
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon to prevent 404 errors"""
+    return '', 204  # No Content response
+
 @app.route('/health')
 def health():
     """Detailed health check"""
