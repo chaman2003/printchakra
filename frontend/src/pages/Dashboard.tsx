@@ -335,7 +335,7 @@ const Dashboard: React.FC = () => {
                         }
                         alt={file.filename}
                         crossOrigin="anonymous"
-                        className="thumbnail-image"
+                        className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
                         onClick={() => !file.processing && openImageModal(file.filename)}
                         style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
                         onError={(e) => {

@@ -148,16 +148,15 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 git clone https://github.com/chaman2003/printchakra.git
 cd printchakra
 
-# 2. Setup backend (auto-creates venv)
-cd backend
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+# 2. Setup backend (automated - creates venv + installs dependencies)
+.\setup-backend.ps1
 
 # 3. Setup frontend
-cd ..\frontend
+cd frontend
 npm install
 ```
+
+> 💡 **New!** The `setup-backend.ps1` script automatically creates a virtual environment and installs all Python dependencies. No manual setup needed!
 
 ### 🎯 Launch Application
 
@@ -200,6 +199,7 @@ npm install
 printchakra/
 │
 ├── 🎛️ PowerShell Scripts
+│   ├── setup-backend.ps1        # Setup backend venv + dependencies
 │   ├── backend.ps1              # Start backend + ngrok
 │   ├── fullstart.ps1            # Start all services
 │   └── .gitignore               # Git ignore rules
@@ -309,9 +309,11 @@ printchakra/
 <summary><b>Backend won't start</b></summary>
 
 **Solutions:**
+- Run setup script first: `.\setup-backend.ps1`
 - Check Python version: `python --version` (need 3.8+)
-- Activate venv: `.\backend\venv\Scripts\Activate.ps1`
-- Install dependencies: `pip install -r requirements.txt`
+- Check if venv exists: `Test-Path .\backend\venv`
+- Manually activate venv: `.\backend\venv\Scripts\Activate.ps1`
+- Reinstall dependencies: `pip install -r requirements.txt`
 - Check port 5000: `netstat -ano | findstr :5000`
 - Install Tesseract OCR and add to PATH
 
