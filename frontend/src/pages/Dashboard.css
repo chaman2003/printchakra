@@ -303,6 +303,15 @@
   object-fit: cover;
 }
 
+.file-preview img.thumbnail-image {
+  transition: transform 0.2s, filter 0.2s;
+}
+
+.file-preview img.thumbnail-image:hover {
+  transform: scale(1.05);
+  filter: brightness(0.9);
+}
+
 .file-preview img.preview-image {
   opacity: 0.6;
   filter: grayscale(0.3);
@@ -440,6 +449,107 @@
   margin: 0;
 }
 
+/* Image Modal Styles */
+.image-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.image-modal-content {
+  background-color: white;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.image-modal-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.image-modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: #333;
+  word-break: break-word;
+  flex: 1;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 1rem;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.close-btn:hover {
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+.image-modal-body {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background-color: #f9f9f9;
+}
+
+.modal-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.image-modal-footer {
+  padding: 1.5rem;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  background-color: #f9f9f9;
+}
+
 @media (max-width: 768px) {
   .dashboard-actions {
     flex-direction: column;
@@ -451,5 +561,23 @@
 
   .file-actions {
     justify-content: space-between;
+  }
+
+  .image-modal-content {
+    max-width: 95vw;
+    max-height: 95vh;
+  }
+
+  .image-modal-header {
+    padding: 1rem;
+  }
+
+  .image-modal-footer {
+    flex-direction: column;
+  }
+
+  .image-modal-footer button,
+  .image-modal-footer a {
+    width: 100%;
   }
 }

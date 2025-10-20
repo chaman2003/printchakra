@@ -31,6 +31,8 @@ const Dashboard: React.FC = () => {
   const [ocrText, setOcrText] = useState<string>('');
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
 
   useEffect(() => {
     // Only connect Socket.IO if enabled (local development only)
@@ -239,6 +241,21 @@ const Dashboard: React.FC = () => {
     return new Date(dateString).toLocaleString();
   };
 
+  const handleRefreshClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    loadFiles(true);
+  };
+
+  const openImageModal = (filename: string) => {
+    setSelectedImageFile(filename);
+    setImageModalOpen(true);
+  };
+
+  const closeImageModal = () => {
+    setImageModalOpen(false);
+    setSelectedImageFile(null);
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -254,7 +271,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="dashboard-actions">
-        <button onClick={loadFiles} className="btn btn-primary">
+        <button onClick={handleRefreshClick} className="btn btn-primary">
            Refresh Files
         </button>
         <button onClick={testPrinter} className="btn btn-info">
@@ -318,7 +335,9 @@ const Dashboard: React.FC = () => {
                         }
                         alt={file.filename}
                         crossOrigin="anonymous"
-                        className={file.processing ? 'preview-image' : ''}
+                        className="thumbnail-image"
+                        onClick={() => !file.processing && openImageModal(file.filename)}
+                        style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
                         onError={(e) => {
                           const img = e.target as HTMLImageElement;
                           const retryCount = parseInt(img.getAttribute('data-retry') || '0');
@@ -350,13 +369,14 @@ const Dashboard: React.FC = () => {
                       {!file.processing && file.has_text && <span className="ocr-badge">✓ Has OCR</span>}
                     </div>
                     <div className="file-actions">
-                      <button
-                        onClick={() => window.open(getImageUrl(API_ENDPOINTS.processed, file.filename), '_blank')}
-                        className="btn btn-sm btn-secondary"
-                        disabled={file.processing}
-                      >
-                        View
-                      </button>
+                      {!file.processing && (
+                        <button
+                          onClick={() => openImageModal(file.filename)}
+                          className="btn btn-sm btn-secondary"
+                        >
+                          View
+                        </button>
+                      )}
                       {file.has_text && !file.processing && (
                         <button
                           onClick={() => viewOCR(file.filename)}
@@ -390,6 +410,35 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {imageModalOpen && selectedImageFile && (
+        <div className="image-modal-overlay" onClick={closeImageModal}>
+          <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="image-modal-header">
+              <h3>{selectedImageFile}</h3>
+              <button className="close-btn" onClick={closeImageModal}>✕</button>
+            </div>
+            <div className="image-modal-body">
+              <img
+                src={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)}
+                alt={selectedImageFile}
+                crossOrigin="anonymous"
+                className="modal-image"
+              />
+            </div>
+            <div className="image-modal-footer">
+              <button onClick={closeImageModal} className="btn btn-secondary">Close</button>
+              <a 
+                href={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)} 
+                download 
+                className="btn btn-primary"
+              >
+                Download
+              </a>
+            </div>
+          </div>
         </div>
       )}
     </div>
