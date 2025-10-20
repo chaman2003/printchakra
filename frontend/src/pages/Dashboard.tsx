@@ -30,6 +30,7 @@ const Dashboard: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
+  const [connectionRetries, setConnectionRetries] = useState(0);
 
   useEffect(() => {
     // Only connect Socket.IO if enabled (local development only)
@@ -40,11 +41,33 @@ const Dashboard: React.FC = () => {
       // Load files immediately
       loadFiles();
       
-      // Set up polling to refresh file list every 3 seconds (faster refresh)
-      const pollInterval = setInterval(() => {
-        console.log('📋 Polling for new files...');
-        loadFiles(false); // Don't show loading spinner on background polls
-      }, 3000);
+      let pollInterval = 3000; // Start with 3 seconds
+      const maxInterval = 30000; // Max 30 seconds between polls
+      let timeoutId: NodeJS.Timeout;
+      
+      // Recursive polling with dynamic interval
+      const startPolling = () => {
+        timeoutId = setTimeout(async () => {
+          console.log('📋 Polling for new files...');
+          try {
+            await loadFiles(false);
+            // On success, reset to normal interval
+            if (pollInterval > 3000) {
+              console.log('✅ Connection restored, resetting poll interval');
+              pollInterval = 3000;
+              setConnectionRetries(0);
+            }
+          } catch (err) {
+            // On error, increase poll interval (exponential backoff)
+            pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+            setConnectionRetries(prev => prev + 1);
+            console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
+          }
+          startPolling(); // Schedule next poll
+        }, pollInterval);
+      };
+      
+      startPolling();
       
       // Also refresh when the page becomes visible (user switches tabs/apps)
       const handleVisibilityChange = () => {
@@ -57,7 +80,7 @@ const Dashboard: React.FC = () => {
       document.addEventListener('visibilitychange', handleVisibilityChange);
       
       return () => {
-        clearInterval(pollInterval);
+        clearTimeout(timeoutId);
         document.removeEventListener('visibilitychange', handleVisibilityChange);
       };
     }
@@ -125,14 +148,23 @@ const Dashboard: React.FC = () => {
         setLoading(true);
       }
       const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`, {
-        headers: getDefaultHeaders()
+        headers: getDefaultHeaders(),
+        timeout: 10000 // 10 second timeout
       });
       const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
       setFiles(filesData);
       setError(null);
     } catch (err: any) {
       console.error('Failed to load files:', err);
-      setError(err.message || 'Failed to load files');
+      const errorMsg = err.code === 'ERR_NETWORK' || err.code === 'ERR_CONNECTION_CLOSED'
+        ? '⚠️ Backend connection lost. Retrying...'
+        : (err.message || 'Failed to load files');
+      setError(errorMsg);
+      
+      // Don't show persistent error on background polls
+      if (!showLoading) {
+        setTimeout(() => setError(null), 5000); // Clear error after 5s
+      }
     } finally {
       if (showLoading) {
         setLoading(false);
@@ -210,11 +242,14 @@ const Dashboard: React.FC = () => {
   return (
     <div className="page-container">
       <div className="page-header">
-        <h2 className="page-title"> Dashboard</h2>
+        <h2 className="page-title">📊 Dashboard</h2>
         <p className="page-description">Manage your processed documents</p>
         <div className="status-indicator">
-          <span className="status-dot"></span>
-          {connected ? 'Connected to server' : 'Disconnected'}
+          <span className={`status-dot ${error ? 'error' : ''}`}></span>
+          {error ? 
+            `⚠️ Connection issues (retry ${connectionRetries})` : 
+            (connected ? 'Connected to server' : 'Disconnected')
+          }
         </div>
       </div>
 
