@@ -32,8 +32,30 @@ const Dashboard: React.FC = () => {
     if (!SOCKET_IO_ENABLED) {
       console.log('⚠️ Socket.IO disabled on production - using HTTP polling');
       setConnected(true); // Assume connected for UI purposes
+      
+      // Load files immediately
       loadFiles();
-      return;
+      
+      // Set up polling to refresh file list every 3 seconds (faster refresh)
+      const pollInterval = setInterval(() => {
+        console.log('📋 Polling for new files...');
+        loadFiles();
+      }, 3000);
+      
+      // Also refresh when the page becomes visible (user switches tabs/apps)
+      const handleVisibilityChange = () => {
+        if (!document.hidden) {
+          console.log('📋 Page became visible - refreshing files');
+          loadFiles();
+        }
+      };
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      
+      return () => {
+        clearInterval(pollInterval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     }
 
     console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);

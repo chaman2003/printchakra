@@ -460,6 +460,11 @@ const Phone: React.FC = () => {
       showMessage(`✅ ${response.data.message || 'Upload successful'}`);
       console.log('Upload response:', response.data);
       
+      // Show additional message about checking dashboard
+      setTimeout(() => {
+        showMessage('📊 Image is processing... Check the Dashboard in ~5-10 seconds to see the result!');
+      }, 1500);
+      
       // Clear quality check after successful upload
       setQualityCheck(null);
     } catch (err: any) {
