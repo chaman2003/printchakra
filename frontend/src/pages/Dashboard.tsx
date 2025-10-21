@@ -1,8 +1,48 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getImageUrl, getDefaultHeaders } from '../config';
-import './Dashboard.css';
+import {
+  Badge,
+  Box,
+  Button,
+  ButtonGroup,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  Checkbox,
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerOverlay,
+  Flex,
+  Heading,
+  IconButton,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalFooter,
+  ModalHeader,
+  ModalOverlay,
+  Progress,
+  Select,
+  SimpleGrid,
+  Spinner,
+  Stack,
+  Tag,
+  Text,
+  Tooltip,
+  useColorModeValue,
+  useDisclosure,
+  useToast,
+  VStack,
+} from '@chakra-ui/react';
+import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } from 'react-icons/fi';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
+import Iconify from '../components/Iconify';
 
 interface FileInfo {
   filename: string;
@@ -30,6 +70,7 @@ const useImageWithHeaders = (imageUrl: string) => {
 
   useEffect(() => {
     let isMounted = true;
+    let revokeUrl: string | null = null;
 
     const loadImage = async () => {
       try {
@@ -45,6 +86,7 @@ const useImageWithHeaders = (imageUrl: string) => {
         if (isMounted) {
           const blob = response.data;
           const url = URL.createObjectURL(blob);
+          revokeUrl = url;
           setBlobUrl(url);
           setLoading(false);
         }
@@ -63,8 +105,8 @@ const useImageWithHeaders = (imageUrl: string) => {
 
     return () => {
       isMounted = false;
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
+      if (revokeUrl) {
+        URL.revokeObjectURL(revokeUrl);
       }
     };
   }, [imageUrl]);
@@ -85,32 +127,57 @@ const SecureImage: React.FC<{
 
   if (loading) {
     return (
-      <div className={`${className} loading-placeholder`} style={style}>
-        <div className="spinner-small"></div>
-        <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: '#999' }}>Loading...</div>
-      </div>
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        className={className}
+        style={style}
+        minH="160px"
+        bg="surface.blur"
+        borderRadius="lg"
+      >
+        <Spinner size="lg" color="brand.400" />
+        <Text mt={3} fontSize="sm" color="text.muted">
+          Loading preview…
+        </Text>
+      </Flex>
     );
   }
 
   if (error || !blobUrl) {
     return (
-      <img
-        src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNjQiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEZvdW5kPC90ZXh0Pjx0ZXh0IHg9IjUwJSIgeT0iNjglIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNiYmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlByb2Nlc3NpbmcuLi48L3RleHQ+PC9zdmc+"
-        alt={alt}
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
         className={className}
-        onClick={onClick}
         style={style}
-      />
+        minH="160px"
+        bg="surface.blur"
+        borderRadius="lg"
+      >
+        <Iconify icon={FiFileText} boxSize={8} color="brand.300" />
+        <Text mt={3} fontSize="sm" color="text.muted">
+          Preview unavailable
+        </Text>
+      </Flex>
     );
   }
 
   return (
-    <img
+    <Box
+      as="img"
       src={blobUrl}
       alt={alt}
       className={className}
       onClick={onClick}
       style={style}
+      cursor={onClick ? 'pointer' : 'default'}
+      objectFit="cover"
+      w="100%"
+      h="100%"
+      borderRadius="lg"
     />
   );
 };
@@ -124,21 +191,37 @@ const Dashboard: React.FC = () => {
   const [ocrText, setOcrText] = useState<string>('');
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
-  const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
-  
+
   // File conversion state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
-  const [conversionModalOpen, setConversionModalOpen] = useState(false);
   const [targetFormat, setTargetFormat] = useState<string>('pdf');
   const [converting, setConverting] = useState(false);
   const [conversionProgress, setConversionProgress] = useState<string>('');
   const [mergePdf, setMergePdf] = useState<boolean>(true); // New: merge PDF option
   
   // Converted files state
-  const [showConvertedFiles, setShowConvertedFiles] = useState(false);
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
+  const toast = useToast();
+  const imageModal = useDisclosure();
+  const conversionModal = useDisclosure();
+  const convertedDrawer = useDisclosure();
+  
+  // Theme values with insane visual enhancements
+  const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
+  const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
+  const borderColor = useColorModeValue('brand.200', 'nebula.700');
+  const borderSubtle = useColorModeValue('brand.100', 'whiteAlpha.200');
+  const accentPrimary = useColorModeValue('brand.500', 'nebula.400');
+  const accentSecondary = useColorModeValue('nebula.500', 'cyber.400');
+  const textMuted = useColorModeValue('gray.600', 'whiteAlpha.700');
+  const textInverse = useColorModeValue('gray.800', 'whiteAlpha.900');
+  const hoverBg = useColorModeValue('brand.50', 'whiteAlpha.100');
+  const glowColor = useColorModeValue('brand.500', 'nebula.400');
+  
+  const statusDotColor = connected ? 'green.400' : 'red.400';
+  const statusTextColor = useColorModeValue('gray.600', 'gray.300');
 
   useEffect(() => {
     // Only connect Socket.IO if enabled (local development only)
@@ -295,7 +378,11 @@ const Dashboard: React.FC = () => {
         setOcrText('');
       }
     } catch (err: any) {
-      alert('Failed to delete file: ' + err.message);
+      toast({
+        title: 'Delete failed',
+        description: err.message,
+        status: 'error',
+      });
     }
   };
 
@@ -307,7 +394,11 @@ const Dashboard: React.FC = () => {
       setOcrText(response.data.text || 'No text found');
       setSelectedFile(filename);
     } catch (err: any) {
-      alert('Failed to load OCR text: ' + err.message);
+      toast({
+        title: 'Unable to load OCR',
+        description: err.message,
+        status: 'error',
+      });
     }
   };
 
@@ -318,9 +409,17 @@ const Dashboard: React.FC = () => {
       }, {
         headers: getDefaultHeaders()
       });
-      alert('Print triggered: ' + response.data.message);
+      toast({
+        title: 'Print initiated',
+        description: response.data.message,
+        status: 'success',
+      });
     } catch (err: any) {
-      alert('Failed to trigger print: ' + err.message);
+      toast({
+        title: 'Print failed',
+        description: err.message,
+        status: 'error',
+      });
     }
   };
 
@@ -331,9 +430,17 @@ const Dashboard: React.FC = () => {
       }, {
         headers: getDefaultHeaders()
       });
-      alert('Printer test successful: ' + response.data.message);
+      toast({
+        title: 'Test successful',
+        description: response.data.message,
+        status: 'success',
+      });
     } catch (err: any) {
-      alert('Printer test failed: ' + err.message);
+      toast({
+        title: 'Test failed',
+        description: err.message,
+        status: 'error',
+      });
     }
   };
 
@@ -354,12 +461,12 @@ const Dashboard: React.FC = () => {
 
   const openImageModal = (filename: string) => {
     setSelectedImageFile(filename);
-    setImageModalOpen(true);
+    imageModal.onOpen();
   };
 
   const closeImageModal = () => {
-    setImageModalOpen(false);
     setSelectedImageFile(null);
+    imageModal.onClose();
   };
 
   // Conversion handlers
@@ -378,16 +485,20 @@ const Dashboard: React.FC = () => {
 
   const openConversionModal = () => {
     if (selectedFiles.length === 0) {
-      alert('Please select at least one file to convert');
+      toast({
+        title: 'Select files first',
+        description: 'Pick at least one document before starting a conversion.',
+        status: 'info',
+      });
       return;
     }
-    setConversionModalOpen(true);
+    conversionModal.onOpen();
   };
 
   const closeConversionModal = () => {
-    setConversionModalOpen(false);
     setTargetFormat('pdf');
     setConversionProgress('');
+    conversionModal.onClose();
   };
 
   const handleConvert = async () => {
@@ -424,10 +535,12 @@ const Dashboard: React.FC = () => {
         const successFiles = results.filter((r: any) => r.success).map((r: any) => r.output);
         if (successFiles.length > 0) {
           setTimeout(() => {
-            const message = merged 
-              ? `Merged PDF created:\n${successFiles[0]}\n\nFile saved in backend/converted/ folder`
-              : `Converted files:\n${successFiles.join('\n')}\n\nFiles saved in backend/converted/ folder`;
-            alert(message);
+            toast({
+              title: merged ? 'Merged PDF ready' : 'Conversion complete',
+              description: merged ? `${selectedFiles.length} files combined successfully.` : `${successFiles.length} files available in converted folder.`,
+              status: 'success',
+              duration: 6000,
+            });
             closeConversionModal();
             setSelectionMode(false);
             setSelectedFiles([]);
@@ -460,381 +573,469 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h2 className="page-title">📊 Dashboard</h2>
-        <p className="page-description">Manage your processed documents</p>
-        <div className="status-indicator">
-          <span className={`status-dot ${error ? 'error' : ''}`}></span>
-          {error ? 
-            `⚠️ Connection issues (retry ${connectionRetries})` : 
-            (connected ? 'Connected to server' : 'Disconnected')
-          }
-        </div>
-      </div>
+    <VStack align="stretch" spacing={10} pb={12}>
+      <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
+        <Stack spacing={2}>
+          <Heading size="lg" display="flex" alignItems="center" gap={3}>
+            📊 Dashboard
+          </Heading>
+          <Text color="text.muted" maxW="lg">
+            Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in real time.
+          </Text>
+        </Stack>
 
-      <div className="dashboard-actions">
-        <button onClick={handleRefreshClick} className="btn btn-primary">
-           Refresh Files
-        </button>
-        <button onClick={testPrinter} className="btn btn-info">
-           Test Printer
-        </button>
-        <button onClick={triggerPrint} className="btn btn-success">
-           Print & Capture
-        </button>
-        <button 
-          onClick={toggleSelectionMode} 
-          className={`btn ${selectionMode ? 'btn-warning' : 'btn-secondary'}`}
-        >
-          {selectionMode ? '✖ Cancel Selection' : '☑ Select Files'}
-        </button>
+        <Stack direction="row" spacing={3} align="center">
+          <Flex align="center" gap={2} px={4} py={2} borderRadius="full" bg="surface.blur" border="1px solid" borderColor="rgba(121,95,238,0.2)">
+            <Box w={3} h={3} borderRadius="full" bg={error ? 'orange.400' : statusDotColor} boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`} />
+            <Text fontWeight="600" color={statusTextColor}>
+              {error ? `Connection issues (retry ${connectionRetries})` : connected ? 'Live link established' : 'Disconnected'}
+            </Text>
+          </Flex>
+          <IconButton
+            aria-label="Refresh files"
+            icon={<Iconify icon={FiRefreshCw} boxSize={5} />}
+            onClick={handleRefreshClick}
+            variant="ghost"
+            colorScheme="brand"
+            size="lg"
+          />
+        </Stack>
+      </Flex>
+
+      <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
+        <Button size="lg" colorScheme="brand" variant="solid" onClick={triggerPrint} leftIcon={<Iconify icon={FiLayers} boxSize={5} />}>
+          Orchestrate Print Capture
+        </Button>
+        <Button size="lg" variant="outline" onClick={testPrinter} leftIcon={<Iconify icon={FiFileText} boxSize={5} />}>
+          Run Printer Diagnostics
+        </Button>
+        <Button size="lg" variant={selectionMode ? 'solid' : 'ghost'} colorScheme={selectionMode ? 'orange' : 'brand'} onClick={toggleSelectionMode}>
+          {selectionMode ? 'Cancel Selection' : 'Select Files'}
+        </Button>
         {selectionMode && selectedFiles.length > 0 && (
-          <button 
-            onClick={openConversionModal} 
-            className="btn btn-primary"
-          >
-            🔄 Convert ({selectedFiles.length})
-          </button>
+          <Button size="lg" colorScheme="brand" variant="outline" onClick={openConversionModal}>
+            Convert {selectedFiles.length} Selected
+          </Button>
         )}
-        <button 
+        <Button
+          size="lg"
+          variant="ghost"
           onClick={() => {
-            setShowConvertedFiles(!showConvertedFiles);
-            if (!showConvertedFiles) loadConvertedFiles();
-          }} 
-          className="btn btn-info"
+            if (!convertedDrawer.isOpen) {
+              loadConvertedFiles();
+            }
+            convertedDrawer.onToggle();
+          }}
         >
-          📁 {showConvertedFiles ? 'Hide' : 'Show'} Converted Files
-        </button>
-      </div>
+          {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
+        </Button>
+      </Stack>
 
       {error && (
-        <div className="error">
-          <strong>Error:</strong> {error}
-        </div>
+        <Box borderRadius="xl" bg="rgba(255, 170, 0, 0.08)" border="1px solid rgba(255,170,0,0.2)" p={4}>
+          <Text color="orange.300" fontWeight="600">{error}</Text>
+        </Box>
       )}
 
       {processingProgress && (
-        <div className="processing-progress">
-          <div className="progress-header">
-            <h4>📊 Processing: Step {processingProgress.step}/{processingProgress.total_steps} – {processingProgress.stage_name}</h4>
-            <div className="progress-bar">
-              <div 
-                className="progress-fill" 
-                style={{ width: `${(processingProgress.step / processingProgress.total_steps) * 100}%` }}
-              ></div>
-            </div>
-            <p className="progress-message">{processingProgress.message}</p>
-          </div>
-        </div>
+        <Card bg={surfaceCard} border="1px solid rgba(121,95,238,0.15)" boxShadow="subtle">
+          <CardHeader>
+            <Heading size="sm">
+              Processing · Step {processingProgress.step}/{processingProgress.total_steps} · {processingProgress.stage_name}
+            </Heading>
+          </CardHeader>
+          <CardBody>
+            <Stack spacing={3}>
+              <Progress value={(processingProgress.step / processingProgress.total_steps) * 100} colorScheme="brand" borderRadius="full" height="10px" />
+              <Text color="text.muted">{processingProgress.message}</Text>
+            </Stack>
+          </CardBody>
+        </Card>
       )}
 
       {loading ? (
-        <div className="loading">Loading files...</div>
+        <Flex align="center" justify="center" py={12}>
+          <Spinner size="xl" thickness="5px" color="brand.400" />
+        </Flex>
       ) : (
-        <div className="dashboard-content">
-          <div className="files-section">
-            <h3> Files ({files.length})</h3>
+        <Stack spacing={10}>
+          <Box>
+            <Flex justify="space-between" align="baseline" mb={4}>
+              <Heading size="md">Files · {files.length}</Heading>
+              {selectionMode && (
+                <Tag size="lg" colorScheme="purple" borderRadius="full">
+                  {selectedFiles.length} selected
+                </Tag>
+              )}
+            </Flex>
+
             {files.length === 0 ? (
-              <div className="no-files">
-                <p>No files yet. Use the Phone interface to capture documents.</p>
-              </div>
+              <Card border="1px solid rgba(121,95,238,0.2)" bg={surfaceCard} backdropFilter="blur(10px)" textAlign="center" py={10}>
+                <CardBody>
+                  <Stack spacing={3} align="center">
+                    <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
+                      <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
+                    <Heading size="sm">No files yet</Heading>
+                    <Text color="text.muted" maxW="md">
+                      Initiate a capture from the Phone interface or trigger a print job to start populating this space.
+                    </Text>
+                  </Stack>
+                </CardBody>
+              </Card>
             ) : (
-              <div className="files-grid">
-                {files.map((file) => (
-                  <div key={file.filename} className={`file-card ${file.processing ? 'processing' : ''} ${selectedFiles.includes(file.filename) ? 'selected' : ''}`}>
-                    {selectionMode && !file.processing && (
-                      <div className="file-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={selectedFiles.includes(file.filename)}
-                          onChange={() => toggleFileSelection(file.filename)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </div>
-                    )}
-                    <div 
-                      className="file-preview" 
-                      onClick={() => !file.processing && openImageModal(file.filename)}
-                      style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
+              <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={6}>
+                {files.map((file) => {
+                  const isSelected = selectedFiles.includes(file.filename);
+                  return (
+                    <Card
+                      key={file.filename}
+                      borderRadius="2xl"
+                      border={`1px solid ${isSelected ? 'rgba(69,202,255,0.45)' : 'rgba(121,95,238,0.18)'}`}
+                      boxShadow={isSelected ? 'halo' : 'subtle'}
+                      bg={surfaceCard}
+                      position="relative"
+                      overflow="hidden"
                     >
-                      <SecureImage
-                        filename={file.filename}
-                        alt={file.filename}
-                        className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
-                        onClick={() => !file.processing && openImageModal(file.filename)}
-                      />
-                      {file.processing && (
-                        <div className="processing-overlay">
-                          <div className="spinner"></div>
-                          <div className="processing-text">
-                            Processing: Step {file.processing_step}/{file.processing_total}
-                            <br />
-                            <span className="stage-name">{file.processing_stage}</span>
-                          </div>
-                        </div>
+                      {selectionMode && !file.processing && (
+                        <Checkbox
+                          position="absolute"
+                          top={4}
+                          left={4}
+                          colorScheme="brand"
+                          size="lg"
+                          borderRadius="md"
+                          isChecked={isSelected}
+                          onChange={() => toggleFileSelection(file.filename)}
+                        />
                       )}
-                      {!file.processing && (
-                        <div className="image-hover-overlay">
-                          <div className="hover-icon">🔍</div>
-                          <div className="hover-text">Click to view full size</div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="file-info">
-                      <h4 className="file-name">{file.filename}</h4>
-                      <p className="file-meta">
-                        {formatFileSize(file.size)} • {formatDate(file.created)}
-                      </p>
-                      {file.processing && (
-                        <p className="processing-status">
-                          ⏳ Processing: Step {file.processing_step}/{file.processing_total} – {file.processing_stage}
-                        </p>
-                      )}
-                      {!file.processing && file.has_text && <span className="ocr-badge">✓ Has OCR</span>}
-                    </div>
-                    <div className="file-actions">
-                      {!file.processing && (
-                        <button
-                          onClick={() => openImageModal(file.filename)}
-                          className="btn btn-sm btn-secondary"
+
+                      <CardHeader>
+                        <Stack spacing={2}>
+                          <Heading size="sm" noOfLines={1} title={file.filename}>
+                            {file.filename}
+                          </Heading>
+                          <Text fontSize="xs" color="text.muted">
+                            {formatFileSize(file.size)} · {formatDate(file.created)}
+                          </Text>
+                        </Stack>
+                      </CardHeader>
+
+                      <CardBody>
+                        <Box
+                          position="relative"
+                          borderRadius="xl"
+                          overflow="hidden"
+                          border="1px solid rgba(121,95,238,0.18)"
+                          _hover={{ borderColor: 'brand.300', transform: file.processing ? undefined : 'translateY(-4px)', transition: 'all 0.3s ease' }}
                         >
-                          View
-                        </button>
-                      )}
-                      {file.has_text && !file.processing && (
-                        <button
-                          onClick={() => viewOCR(file.filename)}
-                          className="btn btn-sm btn-info"
-                        >
-                          OCR
-                        </button>
-                      )}
-                      <button
-                        onClick={() => deleteFile(file.filename)}
-                        className="btn btn-sm btn-danger"
-                        disabled={file.processing}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                          <Box h="220px" bg="surface.blur">
+                            <SecureImage
+                              filename={file.filename}
+                              alt={file.filename}
+                              onClick={() => !file.processing && openImageModal(file.filename)}
+                            />
+                          </Box>
+                          {!file.processing && (
+                            <Flex
+                              position="absolute"
+                              inset={0}
+                              align="center"
+                              justify="center"
+                              opacity={0}
+                              _hover={{ opacity: 1, backdropFilter: 'blur(8px)', bg: 'rgba(9,12,28,0.55)' }}
+                              color="white"
+                              transition="all 0.3s ease"
+                            >
+                              <Stack align="center" spacing={1}>
+                                <Iconify icon={FiZoomIn} boxSize={6} />
+                                <Text fontSize="sm">Amplify preview</Text>
+                              </Stack>
+                            </Flex>
+                          )}
+
+                          {file.processing && (
+                            <Flex
+                              position="absolute"
+                              inset={0}
+                              align="center"
+                              justify="center"
+                              direction="column"
+                              bg="rgba(4,7,19,0.76)"
+                              color="white"
+                              gap={3}
+                            >
+                              <Spinner size="lg" thickness="4px" color="brand.200" />
+                              <Text fontWeight="600">
+                                Processing {file.processing_step}/{file.processing_total}
+                              </Text>
+                              <Text fontSize="sm" color="rgba(255,255,255,0.75)">
+                                {file.processing_stage}
+                              </Text>
+                            </Flex>
+                          )}
+                        </Box>
+                      </CardBody>
+
+                      <CardFooter>
+                        <Flex w="100%" justify="space-between" align="center">
+                          <Stack spacing={1}>
+                            {file.processing && (
+                              <Tag size="md" colorScheme="purple" borderRadius="full">
+                                Active pipeline
+                              </Tag>
+                            )}
+                            {!file.processing && file.has_text && (
+                              <Badge colorScheme="green" borderRadius="full" px={2}>
+                                OCR ready
+                              </Badge>
+                            )}
+                          </Stack>
+
+                          <ButtonGroup size="sm" variant="ghost" spacing={1}>
+                            {!file.processing && (
+                              <Tooltip label="View" hasArrow>
+                                <IconButton aria-label="View" icon={<Iconify icon={FiZoomIn} boxSize={5} />} onClick={() => openImageModal(file.filename)} />
+                              </Tooltip>
+                            )}
+                            {file.has_text && !file.processing && (
+                              <Tooltip label="View OCR" hasArrow>
+                                <IconButton aria-label="OCR" icon={<Iconify icon={FiFileText} boxSize={5} />} onClick={() => viewOCR(file.filename)} />
+                              </Tooltip>
+                            )}
+                            <Tooltip label="Delete" hasArrow>
+                              <IconButton
+                                aria-label="Delete"
+                                icon={<Iconify icon={FiTrash2} boxSize={5} />}
+                                onClick={() => deleteFile(file.filename)}
+                                isDisabled={file.processing}
+                              />
+                            </Tooltip>
+                          </ButtonGroup>
+                        </Flex>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </SimpleGrid>
             )}
-          </div>
+          </Box>
 
           {selectedFile && ocrText && (
-            <div className="ocr-section">
-              <h3> OCR Text: {selectedFile}</h3>
-              <div className="ocr-text">
-                <pre>{ocrText}</pre>
-              </div>
-              <button onClick={() => { setSelectedFile(null); setOcrText(''); }} className="btn btn-secondary">
-                Close
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {imageModalOpen && selectedImageFile && (
-        <div className="image-modal-overlay" onClick={closeImageModal}>
-          <div className="image-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="image-modal-header">
-              <h3>{selectedImageFile}</h3>
-              <button className="close-btn" onClick={closeImageModal}>✕</button>
-            </div>
-            <div className="image-modal-body">
-              <SecureImage
-                filename={selectedImageFile}
-                alt={selectedImageFile}
-                className="modal-image"
-              />
-            </div>
-            <div className="image-modal-footer">
-              <button onClick={closeImageModal} className="btn btn-secondary">Close</button>
-              <button 
-                onClick={async () => {
-                  try {
-                    const response = await axios.get(
-                      `${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`,
-                      {
-                        headers: getDefaultHeaders(),
-                        responseType: 'blob'
-                      }
-                    );
-                    const blob = response.data;
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = selectedImageFile;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                  } catch (err) {
-                    console.error('Download failed:', err);
-                    alert('Failed to download image');
-                  }
-                }}
-                className="btn btn-primary"
-              >
-                📥 Download
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {conversionModalOpen && (
-        <div className="image-modal-overlay" onClick={closeConversionModal}>
-          <div className="conversion-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="image-modal-header">
-              <h3>🔄 Convert Files</h3>
-              <button className="close-btn" onClick={closeConversionModal}>✕</button>
-            </div>
-            <div className="conversion-modal-body">
-              <div className="conversion-info">
-                <p><strong>Selected Files:</strong> {selectedFiles.length}</p>
-                <ul className="selected-files-list">
-                  {selectedFiles.map(filename => (
-                    <li key={filename}>{filename}</li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div className="conversion-format">
-                <label htmlFor="target-format"><strong>Convert to:</strong></label>
-                <select 
-                  id="target-format"
-                  value={targetFormat} 
-                  onChange={(e) => setTargetFormat(e.target.value)}
-                  disabled={converting}
-                  className="format-select"
+            <Card border="1px solid rgba(69,202,255,0.25)" bg={surfaceCard} boxShadow="subtle">
+              <CardHeader display="flex" alignItems="center" justifyContent="space-between">
+                <Heading size="sm">OCR · {selectedFile}</Heading>
+                <Button variant="ghost" size="sm" onClick={() => { setSelectedFile(null); setOcrText(''); }}>
+                  Close
+                </Button>
+              </CardHeader>
+              <CardBody>
+                <Box
+                  bg="rgba(15,20,42,0.88)"
+                  color="white"
+                  borderRadius="2xl"
+                  p={5}
+                  fontFamily="mono"
+                  fontSize="sm"
+                  maxH="320px"
+                  overflowY="auto"
+                  boxShadow="inset 0 0 0 1px rgba(69,202,255,0.18)"
                 >
+                  {ocrText}
+                </Box>
+              </CardBody>
+            </Card>
+          )}
+        </Stack>
+      )}
+
+      <Modal isOpen={imageModal.isOpen && Boolean(selectedImageFile)} onClose={closeImageModal} size="4xl">
+        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalContent bg={surfaceCard} borderRadius="2xl" border="1px solid rgba(121,95,238,0.25)" boxShadow="halo">
+          <ModalHeader>{selectedImageFile}</ModalHeader>
+          <ModalCloseButton borderRadius="full" />
+          <ModalBody>
+            {selectedImageFile && (
+              <Box borderRadius="2xl" overflow="hidden" border="1px solid rgba(121,95,238,0.2)">
+                <SecureImage filename={selectedImageFile} alt={selectedImageFile} />
+              </Box>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={closeImageModal}>
+              Close
+            </Button>
+        <Button
+              colorScheme="brand"
+          leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
+              onClick={async () => {
+                if (!selectedImageFile) return;
+                try {
+                  const response = await axios.get(
+                    `${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`,
+                    {
+                      headers: getDefaultHeaders(),
+                      responseType: 'blob',
+                    }
+                  );
+                  const blob = response.data;
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = selectedImageFile;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                } catch (err: any) {
+                  console.error('Download failed:', err);
+                  toast({
+                    title: 'Download failed',
+                    description: err.message,
+                    status: 'error',
+                  });
+                }
+              }}
+            >
+              Download
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      <Modal isOpen={conversionModal.isOpen} onClose={closeConversionModal} size="lg">
+        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalContent bg={surfaceCard} borderRadius="2xl" border="1px solid rgba(121,95,238,0.25)">
+          <ModalHeader>Convert Files</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Stack spacing={5}>
+              <Box>
+                <Text fontWeight="600">Selected Files: {selectedFiles.length}</Text>
+                <Box mt={2} maxH="160px" overflowY="auto" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(121,95,238,0.2)">
+                  <Stack spacing={2} fontSize="sm">
+                    {selectedFiles.map((filename) => (
+                      <Text key={filename}>{filename}</Text>
+                    ))}
+                  </Stack>
+                </Box>
+              </Box>
+
+              <Box>
+                <Text fontWeight="600" mb={2}>
+                  Convert to
+                </Text>
+                <Select value={targetFormat} onChange={(e) => setTargetFormat(e.target.value)} isDisabled={converting}>
                   <option value="pdf">PDF</option>
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
                   <option value="docx">Word Document (DOCX)</option>
-                </select>
-              </div>
+                </Select>
+              </Box>
 
               {targetFormat === 'pdf' && selectedFiles.length > 1 && (
-                <div className="conversion-option">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={mergePdf}
-                      onChange={(e) => setMergePdf(e.target.checked)}
-                      disabled={converting}
-                    />
-                    <span>Merge all images into single PDF</span>
-                  </label>
-                  <p className="option-description">
-                    {mergePdf 
-                      ? `All ${selectedFiles.length} files will be combined into one PDF document`
-                      : `Each file will be converted to a separate PDF`
-                    }
-                  </p>
-                </div>
+                <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.25)">
+                  <Stack spacing={1}>
+                    <Text fontWeight="600">Merge into single PDF</Text>
+                    <Text fontSize="sm" color="text.muted">
+                      {mergePdf ? 'All files will merge into one premium PDF output.' : 'Each file becomes an individual PDF.'}
+                    </Text>
+                  </Stack>
+                  <Checkbox isChecked={mergePdf} onChange={(e) => setMergePdf(e.target.checked)} isDisabled={converting} colorScheme="brand" />
+                </Flex>
               )}
 
               {conversionProgress && (
-                <div className="conversion-progress">
-                  <pre>{conversionProgress}</pre>
-                </div>
+                <Box bg="rgba(69,202,255,0.1)" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.2)">
+                  <Text fontFamily="mono" whiteSpace="pre-wrap" color="brand.200">
+                    {conversionProgress}
+                  </Text>
+                </Box>
               )}
-            </div>
-            <div className="image-modal-footer">
-              <button 
-                onClick={closeConversionModal} 
-                className="btn btn-secondary"
-                disabled={converting}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleConvert}
-                className="btn btn-primary"
-                disabled={converting}
-              >
-                {converting ? '🔄 Converting...' : '✓ Convert'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </Stack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={closeConversionModal} isDisabled={converting}>
+              Cancel
+            </Button>
+            <Button colorScheme="brand" onClick={handleConvert} isLoading={converting} loadingText="Converting">
+              Convert
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
-      {/* Converted files drawer (right-side slide-in) */}
-      <div className={`drawer-overlay ${showConvertedFiles ? 'open' : ''}`} onClick={() => setShowConvertedFiles(false)} />
-
-      <aside className={`converted-drawer ${showConvertedFiles ? 'open' : ''}`} aria-hidden={!showConvertedFiles}>
-        <div className="drawer-header">
-          <h3>📁 Converted Files</h3>
-          <div>
-            <button className="btn btn-sm btn-secondary" onClick={() => setShowConvertedFiles(false)}>Hide</button>
-          </div>
-        </div>
-
-        <div className="drawer-body">
-          {convertedFiles.length === 0 ? (
-            <div className="no-files">
-              <p>No converted files yet. Use the conversion feature to create some!</p>
-            </div>
-          ) : (
-            <div className="converted-files-grid">
-              {convertedFiles.map((file) => (
-                <div key={file.filename} className="converted-file-card">
-                  <div className="file-icon">
-                    {file.filename.endsWith('.pdf') ? '📄' : 
-                     file.filename.endsWith('.docx') ? '📝' : '🖼️'}
-                  </div>
-                  <div className="file-info">
-                    <h4 className="file-name">{file.filename}</h4>
-                    <p className="file-meta">
-                      {(file.size / 1024).toFixed(2)} KB • {new Date(file.created).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="file-actions">
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Download with headers
-                        axios.get(`${API_BASE_URL}/converted/${file.filename}`, {
-                          headers: getDefaultHeaders(),
-                          responseType: 'blob'
-                        }).then(response => {
-                          const blob = response.data;
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = file.filename;
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                          URL.revokeObjectURL(url);
-                        }).catch(err => {
-                          console.error('Download failed:', err);
-                          alert('Failed to download file');
-                        });
-                      }}
-                    >
-                      📥 Download
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="drawer-footer">
-          <button className="btn btn-secondary" onClick={() => setShowConvertedFiles(false)}>Close</button>
-        </div>
-      </aside>
-    </div>
+      <Drawer isOpen={convertedDrawer.isOpen} placement="right" onClose={convertedDrawer.onClose} size="md">
+        <DrawerOverlay backdropFilter="blur(8px)" />
+        <DrawerContent bg={surfaceCard} borderColor="rgba(121,95,238,0.25)" borderLeftWidth="1px">
+          <DrawerHeader display="flex" alignItems="center" justifyContent="space-between">
+            <Heading size="sm">Converted Files</Heading>
+            <Button size="sm" variant="ghost" onClick={convertedDrawer.onClose}>
+              Close
+            </Button>
+          </DrawerHeader>
+          <DrawerBody>
+            {convertedFiles.length === 0 ? (
+              <Flex direction="column" align="center" justify="center" h="full" color="text.muted">
+                <Iconify icon={FiFileText} boxSize={12} mb={4} />
+                <Text>No converted artifacts yet.</Text>
+              </Flex>
+            ) : (
+              <Stack spacing={4}>
+                {convertedFiles.map((file) => (
+                  <Card key={file.filename} borderRadius="xl" border="1px solid rgba(69,202,255,0.18)">
+                    <CardBody>
+                      <Flex justify="space-between" align="center">
+                        <Stack spacing={1}>
+                          <Heading size="sm">{file.filename}</Heading>
+                          <Text fontSize="xs" color="text.muted">
+                            {(file.size / 1024).toFixed(2)} KB · {new Date(file.created).toLocaleString()}
+                          </Text>
+                        </Stack>
+                        <Button
+                          variant="ghost"
+                          leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
+                          onClick={async () => {
+                            try {
+                              const response = await axios.get(`${API_BASE_URL}/converted/${file.filename}`, {
+                                headers: getDefaultHeaders(),
+                                responseType: 'blob',
+                              });
+                              const blob = response.data;
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = file.filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                            } catch (err: any) {
+                              console.error('Download failed:', err);
+                              toast({
+                                title: 'Download failed',
+                                description: err.message,
+                                status: 'error',
+                              });
+                            }
+                          }}
+                        >
+                          Download
+                        </Button>
+                      </Flex>
+                    </CardBody>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </DrawerBody>
+          <DrawerFooter>
+            <Button variant="outline" width="full" onClick={convertedDrawer.onClose}>
+              Close Drawer
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </VStack>
   );
 };
 
