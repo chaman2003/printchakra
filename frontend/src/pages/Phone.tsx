@@ -566,7 +566,8 @@ const Phone: React.FC = () => {
               type="file"
               ref={fileInputRef}
               onChange={handleFileSelect}
-              accept="image/*"
+              accept="image/*,image/jpeg,image/jpg,image/png"
+              capture="environment"
               style={{ display: 'none' }}
             />
             <button
@@ -577,7 +578,7 @@ const Phone: React.FC = () => {
               {uploading ? '⏳ Uploading...' : '📂 Select Image'}
             </button>
             <p className="helper-text">
-              Choose an image from your device
+              Choose an image from your device or take a photo
             </p>
           </div>
         ) : (
@@ -597,6 +598,18 @@ const Phone: React.FC = () => {
               <canvas ref={canvasRef} style={{ display: 'none' }} />
               {/* Reference line for layout detection */}
               <div className="layout-reference-line"></div>
+              
+              {/* Fullscreen capture button */}
+              {isFullScreen && (
+                <button
+                  onClick={captureFromCamera}
+                  className="fullscreen-capture-btn"
+                  disabled={!stream || uploading || autoCapture}
+                >
+                  <span className="capture-icon">📸</span>
+                  {uploading ? 'Uploading...' : 'Capture'}
+                </button>
+              )}
             </div>
             <div className="camera-controls">
               <button
