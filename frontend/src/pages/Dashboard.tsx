@@ -126,6 +126,14 @@ const Dashboard: React.FC = () => {
   const [connectionRetries, setConnectionRetries] = useState(0);
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
+  
+  // File conversion state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [conversionModalOpen, setConversionModalOpen] = useState(false);
+  const [targetFormat, setTargetFormat] = useState<string>('pdf');
+  const [converting, setConverting] = useState(false);
+  const [conversionProgress, setConversionProgress] = useState<string>('');
 
   useEffect(() => {
     // Only connect Socket.IO if enabled (local development only)
@@ -349,6 +357,78 @@ const Dashboard: React.FC = () => {
     setSelectedImageFile(null);
   };
 
+  // Conversion handlers
+  const toggleSelectionMode = () => {
+    setSelectionMode(!selectionMode);
+    setSelectedFiles([]);
+  };
+
+  const toggleFileSelection = (filename: string) => {
+    setSelectedFiles(prev => 
+      prev.includes(filename) 
+        ? prev.filter(f => f !== filename)
+        : [...prev, filename]
+    );
+  };
+
+  const openConversionModal = () => {
+    if (selectedFiles.length === 0) {
+      alert('Please select at least one file to convert');
+      return;
+    }
+    setConversionModalOpen(true);
+  };
+
+  const closeConversionModal = () => {
+    setConversionModalOpen(false);
+    setTargetFormat('pdf');
+    setConversionProgress('');
+  };
+
+  const handleConvert = async () => {
+    try {
+      setConverting(true);
+      setConversionProgress('Starting conversion...');
+
+      const response = await axios.post(
+        `${API_BASE_URL}/convert`,
+        {
+          files: selectedFiles,
+          format: targetFormat
+        },
+        {
+          headers: getDefaultHeaders()
+        }
+      );
+
+      if (response.data.success) {
+        const { success_count, fail_count, results } = response.data;
+        
+        setConversionProgress(
+          `✅ Conversion complete!\nSuccess: ${success_count}\nFailed: ${fail_count}`
+        );
+
+        // Show detailed results
+        const successFiles = results.filter((r: any) => r.success).map((r: any) => r.output);
+        if (successFiles.length > 0) {
+          setTimeout(() => {
+            alert(`Converted files:\n${successFiles.join('\n')}\n\nFiles saved in backend/converted/ folder`);
+            closeConversionModal();
+            setSelectionMode(false);
+            setSelectedFiles([]);
+          }, 1500);
+        }
+      } else {
+        setConversionProgress(`❌ Conversion failed: ${response.data.error}`);
+      }
+    } catch (err: any) {
+      console.error('Conversion error:', err);
+      setConversionProgress(`❌ Conversion error: ${err.message}`);
+    } finally {
+      setConverting(false);
+    }
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -373,6 +453,20 @@ const Dashboard: React.FC = () => {
         <button onClick={triggerPrint} className="btn btn-success">
            Print & Capture
         </button>
+        <button 
+          onClick={toggleSelectionMode} 
+          className={`btn ${selectionMode ? 'btn-warning' : 'btn-secondary'}`}
+        >
+          {selectionMode ? '✖ Cancel Selection' : '☑ Select Files'}
+        </button>
+        {selectionMode && selectedFiles.length > 0 && (
+          <button 
+            onClick={openConversionModal} 
+            className="btn btn-primary"
+          >
+            🔄 Convert ({selectedFiles.length})
+          </button>
+        )}
       </div>
 
       {error && (
@@ -409,7 +503,17 @@ const Dashboard: React.FC = () => {
             ) : (
               <div className="files-grid">
                 {files.map((file) => (
-                  <div key={file.filename} className={`file-card ${file.processing ? 'processing' : ''}`}>
+                  <div key={file.filename} className={`file-card ${file.processing ? 'processing' : ''} ${selectedFiles.includes(file.filename) ? 'selected' : ''}`}>
+                    {selectionMode && !file.processing && (
+                      <div className="file-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={selectedFiles.includes(file.filename)}
+                          onChange={() => toggleFileSelection(file.filename)}
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    )}
                     <div 
                       className="file-preview" 
                       onClick={() => !file.processing && openImageModal(file.filename)}
@@ -538,6 +642,65 @@ const Dashboard: React.FC = () => {
                 className="btn btn-primary"
               >
                 📥 Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {conversionModalOpen && (
+        <div className="image-modal-overlay" onClick={closeConversionModal}>
+          <div className="conversion-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="image-modal-header">
+              <h3>🔄 Convert Files</h3>
+              <button className="close-btn" onClick={closeConversionModal}>✕</button>
+            </div>
+            <div className="conversion-modal-body">
+              <div className="conversion-info">
+                <p><strong>Selected Files:</strong> {selectedFiles.length}</p>
+                <ul className="selected-files-list">
+                  {selectedFiles.map(filename => (
+                    <li key={filename}>{filename}</li>
+                  ))}
+                </ul>
+              </div>
+              
+              <div className="conversion-format">
+                <label htmlFor="target-format"><strong>Convert to:</strong></label>
+                <select 
+                  id="target-format"
+                  value={targetFormat} 
+                  onChange={(e) => setTargetFormat(e.target.value)}
+                  disabled={converting}
+                  className="format-select"
+                >
+                  <option value="pdf">PDF</option>
+                  <option value="png">PNG</option>
+                  <option value="jpg">JPG</option>
+                  <option value="docx">Word Document (DOCX)</option>
+                </select>
+              </div>
+
+              {conversionProgress && (
+                <div className="conversion-progress">
+                  <pre>{conversionProgress}</pre>
+                </div>
+              )}
+            </div>
+            <div className="image-modal-footer">
+              <button 
+                onClick={closeConversionModal} 
+                className="btn btn-secondary"
+                disabled={converting}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleConvert}
+                className="btn btn-primary"
+                disabled={converting}
+              >
+                {converting ? '🔄 Converting...' : '✓ Convert'}
               </button>
             </div>
           </div>

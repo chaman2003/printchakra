@@ -1835,6 +1835,135 @@ def batch_process():
         }), 500
 
 # ============================================================================
+# FILE CONVERSION ENDPOINTS
+# ============================================================================
+
+@app.route('/convert', methods=['POST'])
+def convert_files():
+    """
+    Convert files between formats (JPG, PNG, PDF, DOCX)
+    Supports batch conversion
+    """
+    try:
+        from modules.file_converter import FileConverter
+        
+        data = request.get_json()
+        files = data.get('files', [])
+        target_format = data.get('format', 'pdf').lower()
+        
+        if not files:
+            return jsonify({
+                'success': False,
+                'error': 'No files provided'
+            }), 400
+        
+        if not FileConverter.is_supported_format(target_format):
+            return jsonify({
+                'success': False,
+                'error': f'Unsupported target format: {target_format}'
+            }), 400
+        
+        # Create converted directory if it doesn't exist
+        converted_dir = os.path.join(os.path.dirname(__file__), 'converted')
+        os.makedirs(converted_dir, exist_ok=True)
+        
+        # Resolve full paths
+        processed_dir = os.path.join(os.path.dirname(__file__), 'processed')
+        input_paths = [os.path.join(processed_dir, f) for f in files]
+        
+        # Validate files exist
+        missing_files = [f for f, p in zip(files, input_paths) if not os.path.exists(p)]
+        if missing_files:
+            return jsonify({
+                'success': False,
+                'error': f'Files not found: {", ".join(missing_files)}'
+            }), 404
+        
+        print(f"\n{'='*70}")
+        print(f"🔄 FILE CONVERSION STARTED")
+        print(f"{'='*70}")
+        print(f"  Files: {len(files)}")
+        print(f"  Target format: {target_format.upper()}")
+        
+        # Batch convert
+        success_count, fail_count, results = FileConverter.batch_convert(
+            input_paths, converted_dir, target_format
+        )
+        
+        print(f"\n{'='*70}")
+        print(f"✅ CONVERSION COMPLETED")
+        print(f"  Success: {success_count}")
+        print(f"  Failed: {fail_count}")
+        print(f"{'='*70}\n")
+        
+        # Emit Socket.IO event for real-time update
+        try:
+            socketio.emit('conversion_complete', {
+                'success_count': success_count,
+                'fail_count': fail_count,
+                'total': len(files)
+            })
+        except Exception as socket_error:
+            print(f"⚠️ Socket.IO emit failed: {socket_error}")
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'success_count': success_count,
+            'fail_count': fail_count,
+            'total': len(files)
+        })
+        
+    except Exception as e:
+        error_msg = f"Conversion error: {str(e)}"
+        print(f"\n❌ {error_msg}")
+        print(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': error_msg,
+            'traceback': traceback.format_exc()
+        }), 500
+
+@app.route('/converted/<path:filename>')
+def serve_converted_file(filename):
+    """Serve converted files"""
+    try:
+        converted_dir = os.path.join(os.path.dirname(__file__), 'converted')
+        return send_from_directory(converted_dir, filename)
+    except Exception as e:
+        print(f"Error serving converted file: {e}")
+        return jsonify({'error': str(e)}), 404
+
+@app.route('/get-converted-files', methods=['GET'])
+def get_converted_files():
+    """Get list of converted files"""
+    try:
+        converted_dir = os.path.join(os.path.dirname(__file__), 'converted')
+        if not os.path.exists(converted_dir):
+            return jsonify({'files': []})
+        
+        files = []
+        for filename in os.listdir(converted_dir):
+            filepath = os.path.join(converted_dir, filename)
+            if os.path.isfile(filepath):
+                stat = os.stat(filepath)
+                files.append({
+                    'filename': filename,
+                    'size': stat.st_size,
+                    'created': datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    'url': f'/converted/{filename}'
+                })
+        
+        # Sort by creation time (newest first)
+        files.sort(key=lambda x: x['created'], reverse=True)
+        
+        return jsonify({'files': files})
+        
+    except Exception as e:
+        print(f"Error listing converted files: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
 # SOCKET.IO EVENTS
 # ============================================================================
 
