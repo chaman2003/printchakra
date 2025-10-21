@@ -22,6 +22,99 @@ interface ProcessingProgress {
   message: string;
 }
 
+// Custom hook to load images with proper headers
+const useImageWithHeaders = (imageUrl: string) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadImage = async () => {
+      try {
+        setLoading(true);
+        setError(false);
+        
+        const response = await axios.get(imageUrl, {
+          headers: getDefaultHeaders(),
+          responseType: 'blob',
+          timeout: 10000
+        });
+
+        if (isMounted) {
+          const blob = response.data;
+          const url = URL.createObjectURL(blob);
+          setBlobUrl(url);
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error('Failed to load image:', imageUrl, err);
+        if (isMounted) {
+          setError(true);
+          setLoading(false);
+        }
+      }
+    };
+
+    if (imageUrl) {
+      loadImage();
+    }
+
+    return () => {
+      isMounted = false;
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [imageUrl]);
+
+  return { blobUrl, loading, error };
+};
+
+// Image component that loads with proper headers
+const SecureImage: React.FC<{
+  filename: string;
+  alt: string;
+  className?: string;
+  onClick?: () => void;
+  style?: React.CSSProperties;
+}> = ({ filename, alt, className, onClick, style }) => {
+  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
+  const { blobUrl, loading, error } = useImageWithHeaders(imageUrl);
+
+  if (loading) {
+    return (
+      <div className={`${className} loading-placeholder`} style={style}>
+        <div className="spinner-small"></div>
+        <div style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: '#999' }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (error || !blobUrl) {
+    return (
+      <img
+        src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNjQiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEZvdW5kPC90ZXh0Pjx0ZXh0IHg9IjUwJSIgeT0iNjglIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNiYmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlByb2Nlc3NpbmcuLi48L3RleHQ+PC9zdmc+"
+        alt={alt}
+        className={className}
+        onClick={onClick}
+        style={style}
+      />
+    );
+  }
+
+  return (
+    <img
+      src={blobUrl}
+      alt={alt}
+      className={className}
+      onClick={onClick}
+      style={style}
+    />
+  );
+};
+
 const Dashboard: React.FC = () => {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -322,36 +415,11 @@ const Dashboard: React.FC = () => {
                       onClick={() => !file.processing && openImageModal(file.filename)}
                       style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
                     >
-                      <img
-                        src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`}
+                      <SecureImage
+                        filename={file.filename}
                         alt={file.filename}
                         className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
-                        loading="eager"
-                        crossOrigin="anonymous"
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement;
-                          const retryCount = parseInt(img.getAttribute('data-retry') || '0');
-                          
-                          console.log(`Image load error for ${file.filename}, retry: ${retryCount}`);
-                          
-                          if (retryCount < 2) {
-                            // Retry loading the processed image
-                            setTimeout(() => {
-                              img.setAttribute('data-retry', (retryCount + 1).toString());
-                              img.src = `${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}?t=${Date.now()}`;
-                              console.log(`Retrying image load: ${img.src}`);
-                            }, 500 * (retryCount + 1));
-                          } else if (retryCount === 2 && file.processing) {
-                            // Try uploads folder as fallback for processing files
-                            console.log(`Trying uploads folder for ${file.filename}`);
-                            img.setAttribute('data-retry', '3');
-                            img.src = `${API_BASE_URL}/uploads/${file.filename}?t=${Date.now()}`;
-                          } else {
-                            // Show placeholder with document icon
-                            console.log(`All retries failed for ${file.filename}, showing placeholder`);
-                            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNjQiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEZvdW5kPC90ZXh0Pjx0ZXh0IHg9IjUwJSIgeT0iNjglIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNiYmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlByb2Nlc3NpbmcuLi48L3RleHQ+PC9zdmc+';
-                          }
-                        }}
+                        onClick={() => !file.processing && openImageModal(file.filename)}
                       />
                       {file.processing && (
                         <div className="processing-overlay">
@@ -435,27 +503,42 @@ const Dashboard: React.FC = () => {
               <button className="close-btn" onClick={closeImageModal}>✕</button>
             </div>
             <div className="image-modal-body">
-              <img
-                src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
+              <SecureImage
+                filename={selectedImageFile}
                 alt={selectedImageFile}
                 className="modal-image"
-                crossOrigin="anonymous"
-                onError={(e) => {
-                  const img = e.target as HTMLImageElement;
-                  console.error('Modal image load failed:', selectedImageFile);
-                  img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDUlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iODQiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEZvdW5kPC90ZXh0Pjx0ZXh0IHg9IjUwJSIgeT0iNjglIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNiYmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkNoZWNrIGlmIGZpbGUgZXhpc3RzIG9uIHNlcnZlcjwvdGV4dD48L3N2Zz4=';
-                }}
               />
             </div>
             <div className="image-modal-footer">
               <button onClick={closeImageModal} className="btn btn-secondary">Close</button>
-              <a 
-                href={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
-                download={selectedImageFile}
+              <button 
+                onClick={async () => {
+                  try {
+                    const response = await axios.get(
+                      `${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`,
+                      {
+                        headers: getDefaultHeaders(),
+                        responseType: 'blob'
+                      }
+                    );
+                    const blob = response.data;
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = selectedImageFile;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('Download failed:', err);
+                    alert('Failed to download image');
+                  }
+                }}
                 className="btn btn-primary"
               >
                 📥 Download
-              </a>
+              </button>
             </div>
           </div>
         </div>
