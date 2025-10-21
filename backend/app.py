@@ -29,6 +29,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress verbose werkzeug logging (Flask request logs)
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
+# Suppress Socket.IO logging
+logging.getLogger('socketio').setLevel(logging.WARNING)
+logging.getLogger('engineio').setLevel(logging.WARNING)
+
 # Custom stderr filter to suppress ngrok malformed header errors
 class NgrokStderrFilter:
     """Filter to suppress specific stderr messages from ngrok"""
