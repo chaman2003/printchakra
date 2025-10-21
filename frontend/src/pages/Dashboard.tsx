@@ -317,29 +317,39 @@ const Dashboard: React.FC = () => {
               <div className="files-grid">
                 {files.map((file) => (
                   <div key={file.filename} className={`file-card ${file.processing ? 'processing' : ''}`}>
-                    <div className="file-preview" onClick={() => !file.processing && openImageModal(file.filename)}>
+                    <div 
+                      className="file-preview" 
+                      onClick={() => !file.processing && openImageModal(file.filename)}
+                      style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
+                    >
                       <img
-                        src={getImageUrl(API_ENDPOINTS.processed, file.filename)}
+                        src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`}
                         alt={file.filename}
                         className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
                         loading="eager"
+                        crossOrigin="anonymous"
                         onError={(e) => {
                           const img = e.target as HTMLImageElement;
                           const retryCount = parseInt(img.getAttribute('data-retry') || '0');
+                          
+                          console.log(`Image load error for ${file.filename}, retry: ${retryCount}`);
                           
                           if (retryCount < 2) {
                             // Retry loading the processed image
                             setTimeout(() => {
                               img.setAttribute('data-retry', (retryCount + 1).toString());
-                              img.src = getImageUrl(API_ENDPOINTS.processed, file.filename) + '?t=' + Date.now();
+                              img.src = `${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}?t=${Date.now()}`;
+                              console.log(`Retrying image load: ${img.src}`);
                             }, 500 * (retryCount + 1));
                           } else if (retryCount === 2 && file.processing) {
                             // Try uploads folder as fallback for processing files
+                            console.log(`Trying uploads folder for ${file.filename}`);
                             img.setAttribute('data-retry', '3');
-                            img.src = getImageUrl('/uploads', file.filename) + '?t=' + Date.now();
+                            img.src = `${API_BASE_URL}/uploads/${file.filename}?t=${Date.now()}`;
                           } else {
                             // Show placeholder with document icon
-                            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNDgiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2NSUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+UHJvY2Vzc2luZy4uLjwvdGV4dD48L3N2Zz4=';
+                            console.log(`All retries failed for ${file.filename}, showing placeholder`);
+                            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjI4MCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNjQiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEZvdW5kPC90ZXh0Pjx0ZXh0IHg9IjUwJSIgeT0iNjglIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiNiYmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPlByb2Nlc3NpbmcuLi48L3RleHQ+PC9zdmc+';
                           }
                         }}
                       />
@@ -426,19 +436,25 @@ const Dashboard: React.FC = () => {
             </div>
             <div className="image-modal-body">
               <img
-                src={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)}
+                src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
                 alt={selectedImageFile}
                 className="modal-image"
+                crossOrigin="anonymous"
+                onError={(e) => {
+                  const img = e.target as HTMLImageElement;
+                  console.error('Modal image load failed:', selectedImageFile);
+                  img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iNjAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDUlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iODQiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+SW1hZ2UgTm90IEZvdW5kPC90ZXh0Pjx0ZXh0IHg9IjUwJSIgeT0iNjglIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiNiYmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkNoZWNrIGlmIGZpbGUgZXhpc3RzIG9uIHNlcnZlcjwvdGV4dD48L3N2Zz4=';
+                }}
               />
             </div>
             <div className="image-modal-footer">
               <button onClick={closeImageModal} className="btn btn-secondary">Close</button>
               <a 
-                href={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)} 
-                download 
+                href={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
+                download={selectedImageFile}
                 className="btn btn-primary"
               >
-                Download
+                📥 Download
               </a>
             </div>
           </div>

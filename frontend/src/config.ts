@@ -49,8 +49,14 @@ export const getDefaultHeaders = () => {
 export const getImageUrl = (endpoint: string, filename: string) => {
   // Use direct HTTP for images to bypass WebSocket issues
   const baseUrl = API_BASE_URL;
+  
+  // For ngrok, we need to add the bypass header as a query parameter approach won't work
+  // Instead, images will need to be loaded through a proxy or with proper headers
   const fullUrl = `${baseUrl}${endpoint}/${filename}`;
-  return fullUrl;
+  
+  // Add timestamp to bypass cache
+  const separator = fullUrl.includes('?') ? '&' : '?';
+  return `${fullUrl}${separator}_t=${Date.now()}`;
 };
 
 // Socket.IO specific configuration
