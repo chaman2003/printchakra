@@ -20,5 +20,6 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-# Run ngrok with CORS headers, ngrok browser bypass, and custom domain
-ngrok http --log=false --domain=freezingly-nonsignificative-edison.ngrok-free.dev --response-header-add="Access-Control-Allow-Origin:*" --response-header-add="ngrok-skip-browser-warning:69" 5000
+# Run ngrok with browser bypass and custom domain
+# Note: CORS is handled by Flask-CORS, don't add duplicate headers here
+ngrok http --log=false --domain=freezingly-nonsignificative-edison.ngrok-free.dev 5000

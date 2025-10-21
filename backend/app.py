@@ -114,10 +114,10 @@ def handle_bad_request(e):
 from werkzeug.exceptions import BadRequest
 app.config['TRAP_BAD_REQUEST_ERRORS'] = True
 
-# Configure CORS for frontend - Allow all origins for image serving
+# Configure CORS for frontend - Allow all origins for flexibility
 CORS(app, resources={
     r"/*": {
-        "origins": ["https://printchakra.vercel.app", "http://localhost:3000", "http://127.0.0.1:3000", "https://freezingly-nonsignificative-edison.ngrok-free.dev", "https://*.vercel.app"],
+        "origins": "*",  # Allow all origins - ngrok domains change frequently
         "methods": ["GET", "POST", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
         "expose_headers": ["Content-Type", "Content-Disposition"],
