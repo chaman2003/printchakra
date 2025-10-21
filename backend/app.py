@@ -328,39 +328,97 @@ def extract_text(image_path):
         print(f"OCR Error: {str(e)}")
         return ""
 
+def order_points(pts):
+    """Order points in order: top-left, top-right, bottom-right, bottom-left"""
+    rect = np.zeros((4, 2), dtype="float32")
+    
+    # Sum: top-left will have smallest sum, bottom-right largest
+    s = pts.sum(axis=1)
+    rect[0] = pts[np.argmin(s)]
+    rect[2] = pts[np.argmax(s)]
+    
+    # Diff: top-right will have smallest diff, bottom-left largest
+    diff = np.diff(pts, axis=1)
+    rect[1] = pts[np.argmin(diff)]
+    rect[3] = pts[np.argmax(diff)]
+    
+    return rect
+
+def four_point_transform(image, pts):
+    """Apply perspective transform to get bird's-eye view"""
+    rect = order_points(pts)
+    (tl, tr, br, bl) = rect
+    
+    # Calculate width
+    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
+    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
+    maxWidth = max(int(widthA), int(widthB))
+    
+    # Calculate height
+    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
+    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
+    maxHeight = max(int(heightA), int(heightB))
+    
+    # Destination points
+    dst = np.array([
+        [0, 0],
+        [maxWidth - 1, 0],
+        [maxWidth - 1, maxHeight - 1],
+        [0, maxHeight - 1]], dtype="float32")
+    
+    # Perspective transform
+    M = cv2.getPerspectiveTransform(rect, dst)
+    warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
+    
+    return warped
+
+def find_document_contour(image):
+    """Find document contour using multi-strategy approach"""
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # Try Canny edge detection
+    edges = cv2.Canny(blurred, 75, 200)
+    edges = cv2.dilate(edges, np.ones((3, 3)), iterations=1)
+    
+    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Find largest contour
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)
+    
+    for contour in contours[:10]:
+        peri = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+        
+        if len(approx) == 4:
+            area = cv2.contourArea(approx)
+            image_area = image.shape[0] * image.shape[1]
+            area_ratio = area / image_area
+            
+            # Accept if reasonable size
+            if 0.1 <= area_ratio <= 0.9:
+                return approx.reshape(4, 2).astype(np.float32)
+    
+    return None
+
 def process_document_image(input_path, output_path, filename=None):
     """
-    Complete document processing pipeline with real-time progress tracking
+    Complete document processing pipeline - EXACT COPY FROM NOTEBOOK
     Pipeline stages:
-    1. Quality Validation - Check blur and focus
-    2. Color Space Conversion - Convert to grayscale
-    3. Threshold & Binarization - Create binary image
-    4. Noise Removal - Apply denoising
-    5. Edge Detection - Find document edges
-    6. Contour Detection - Identify document outline
-    7. Perspective Correction - Straighten document
-    8. Contrast Enhancement - Enhance clarity
-    9. Dilation & Erosion - Improve edge definition
-    10. OCR Processing - Extract text
-    11. Image Optimization - Compress and optimize
-    12. File Storage - Save to disk
+    1. Load Image
+    2. Document Detection & Perspective Transform
+    3. Grayscale Conversion
+    4. Gaussian Blur
+    5. Edge Detection (Canny)
+    6. Binary Thresholding
+    7. Morphological Operations
+    8. Contour Detection
+    9. Image Resizing
+    10. Brightness & Contrast Enhancement
+    11. Advanced OCR
+    12. Save Output
     """
     try:
-        steps = [
-            ('Quality Validation', 'Checking image blur and focus...'),
-            ('Color Space Conversion', 'Converting to grayscale...'),
-            ('Threshold & Binarization', 'Creating binary image...'),
-            ('Noise Removal', 'Applying denoising filter...'),
-            ('Edge Detection', 'Finding document edges...'),
-            ('Contour Detection', 'Identifying document outline...'),
-            ('Perspective Correction', 'Straightening document...'),
-            ('Contrast Enhancement', 'Enhancing image clarity...'),
-            ('Dilation & Erosion', 'Improving edge definition...'),
-            ('OCR Processing', 'Extracting text...'),
-            ('Image Optimization', 'Compressing image...'),
-            ('File Storage', 'Saving to disk...')
-        ]
-        
         # Helper function to emit progress
         def emit_progress(step, stage_name, message):
             progress_data = {
@@ -373,122 +431,167 @@ def process_document_image(input_path, output_path, filename=None):
             if filename:
                 update_processing_status(filename, step, 12, stage_name)
         
-        # Step 1: Quality Validation
-        print(f"\n[STEP 1/12] Quality Validation - Checking image blur and focus...")
-        emit_progress(1, 'Quality Validation', 'Checking image blur and focus...')
+        # Step 1: Load Image
+        print(f"\n[STEP 1/12] Load Image")
+        emit_progress(1, 'Load Image', 'Loading image from disk...')
         
-        img = cv2.imread(input_path)
-        if img is None:
-            raise ValueError("Could not read image")
+        original_image = cv2.imread(input_path)
+        if original_image is None:
+            raise ValueError(f"Could not read image from {input_path}")
         
-        original_shape = img.shape
-        print(f"  ✓ Image loaded: {original_shape}")
+        print(f"  ✓ Image loaded: {original_image.shape}")
         
-        # Step 2: Color Space Conversion
-        print(f"[STEP 2/12] Color Space Conversion - Converting to grayscale...")
-        emit_progress(2, 'Color Space Conversion', 'Converting to grayscale...')
+        # Step 2: Document Detection & Perspective Transform
+        print(f"[STEP 2/12] Document Detection & Perspective Transform")
+        emit_progress(2, 'Document Detection', 'Detecting document boundaries...')
         
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        doc_contour = find_document_contour(original_image)
+        if doc_contour is not None:
+            warped = four_point_transform(original_image, doc_contour)
+            print(f"  ✓ Document detected and warped: {warped.shape}")
+        else:
+            warped = original_image.copy()
+            print(f"  ⚠ No document detected, using original image")
+        
+        # Step 3: Grayscale Conversion
+        print(f"[STEP 3/12] Grayscale Conversion")
+        emit_progress(3, 'Grayscale Conversion', 'Converting to grayscale...')
+        
+        gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
         print(f"  ✓ Converted to grayscale: {gray.shape}")
         
-        # Step 3: Threshold & Binarization
-        print(f"[STEP 3/12] Threshold & Binarization - Creating binary image...")
-        emit_progress(3, 'Threshold & Binarization', 'Creating binary image...')
+        # Step 4: Gaussian Blur
+        print(f"[STEP 4/12] Gaussian Blur")
+        emit_progress(4, 'Gaussian Blur', 'Applying blur to reduce noise...')
         
-        thresh = cv2.adaptiveThreshold(
-            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-            cv2.THRESH_BINARY, 11, 2
-        )
-        print(f"  ✓ Threshold applied: {thresh.shape}")
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        print(f"  ✓ Blur applied: {blurred.shape}")
         
-        # Step 4: Noise Removal
-        print(f"[STEP 4/12] Noise Removal - Applying denoising filter...")
-        emit_progress(4, 'Noise Removal', 'Applying denoising filter...')
-        
-        denoised = cv2.fastNlMeansDenoising(thresh, None, 10, 7, 21)
-        print(f"  ✓ Noise removed: {denoised.shape}")
-        
-        # Step 5: Edge Detection
-        print(f"[STEP 5/12] Edge Detection - Finding document edges...")
+        # Step 5: Edge Detection (Canny)
+        print(f"[STEP 5/12] Edge Detection (Canny)")
         emit_progress(5, 'Edge Detection', 'Finding document edges...')
         
-        edges = cv2.Canny(denoised, 100, 200)
-        print(f"  ✓ Edges detected: {edges.shape}")
+        edges = cv2.Canny(blurred, 50, 150)
+        print(f"  ✓ Edges detected: {np.count_nonzero(edges)} edge pixels")
         
-        # Step 6: Contour Detection
-        print(f"[STEP 6/12] Contour Detection - Identifying document outline...")
-        emit_progress(6, 'Contour Detection', 'Identifying document outline...')
+        # Step 6: Binary Thresholding
+        print(f"[STEP 6/12] Binary Thresholding")
+        emit_progress(6, 'Binary Thresholding', 'Creating binary image...')
         
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        threshold_value, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        print(f"  ✓ Threshold applied (value={threshold_value:.0f}): {binary.shape}")
+        
+        # Step 7: Morphological Operations
+        print(f"[STEP 7/12] Morphological Operations")
+        emit_progress(7, 'Morphological Operations', 'Cleaning up image...')
+        
+        kernel = np.ones((3, 3), np.uint8)
+        eroded = cv2.erode(binary, kernel, iterations=1)
+        dilated = cv2.dilate(eroded, kernel, iterations=1)
+        print(f"  ✓ Morphology applied: {dilated.shape}")
+        
+        # Step 8: Contour Detection
+        print(f"[STEP 8/12] Contour Detection")
+        emit_progress(8, 'Contour Detection', 'Detecting contours...')
+        
+        contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         print(f"  ✓ Found {len(contours)} contours")
         
-        # Step 7: Perspective Correction
-        print(f"[STEP 7/12] Perspective Correction - Straightening document...")
-        emit_progress(7, 'Perspective Correction', 'Straightening document...')
+        # Step 9: Image Resizing
+        print(f"[STEP 9/12] Image Resizing")
+        emit_progress(9, 'Image Resizing', 'Resizing to optimal dimensions...')
         
-        # Find largest contour and apply perspective transform
-        if contours:
-            largest_contour = max(contours, key=cv2.contourArea)
-            epsilon = 0.02 * cv2.arcLength(largest_contour, True)
-            approx = cv2.approxPolyDP(largest_contour, epsilon, True)
-            if len(approx) == 4:
-                pts = np.float32(approx)
-                pts = pts.reshape(4, 2)
-                rect = cv2.boundingRect(largest_contour)
-                dst_pts = np.float32([[0, 0], [rect[2], 0], [rect[2], rect[3]], [0, rect[3]]])
-                matrix = cv2.getPerspectiveTransform(pts, dst_pts)
-                denoised = cv2.warpPerspective(denoised, matrix, (rect[2], rect[3]))
-                print(f"  ✓ Perspective corrected to: {denoised.shape}")
+        target_width = 800
+        if gray.shape[1] > target_width:
+            aspect_ratio = target_width / gray.shape[1]
+            new_height = int(gray.shape[0] * aspect_ratio)
+            gray = cv2.resize(gray, (target_width, new_height), interpolation=cv2.INTER_AREA)
+            print(f"  ✓ Resized to: {gray.shape}")
+        else:
+            print(f"  ✓ Image already optimal size: {gray.shape}")
         
-        # Step 8: Contrast Enhancement
-        print(f"[STEP 8/12] Contrast Enhancement - Enhancing image clarity...")
-        emit_progress(8, 'Contrast Enhancement', 'Enhancing image clarity...')
+        # Step 10: Brightness & Contrast Enhancement
+        print(f"[STEP 10/12] Brightness & Contrast Enhancement")
+        emit_progress(10, 'Brightness & Contrast', 'Enhancing image clarity...')
         
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        enhanced = clahe.apply(denoised)
-        print(f"  ✓ Contrast enhanced: {enhanced.shape}")
+        # Adjustable parameters from notebook
+        brightness_boost = 25
+        equalization_strength = 0.4
+        clahe_clip_limit = 2.0
+        clahe_tile_size = 8
         
-        # Step 9: Dilation & Erosion
-        print(f"[STEP 9/12] Dilation & Erosion - Improving edge definition...")
-        emit_progress(9, 'Dilation & Erosion', 'Improving edge definition...')
+        # Brightness boost
+        brightened = cv2.convertScaleAbs(gray, alpha=1.0, beta=brightness_boost)
         
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
-        enhanced = cv2.morphologyEx(enhanced, cv2.MORPH_CLOSE, kernel)
-        print(f"  ✓ Morphological operations applied: {enhanced.shape}")
+        # Blended equalization
+        equalized_full = cv2.equalizeHist(brightened)
+        equalized_gentle = cv2.addWeighted(brightened, 1.0 - equalization_strength, 
+                                           equalized_full, equalization_strength, 0)
         
-        # Step 10: OCR Processing
-        print(f"[STEP 10/12] OCR Processing - Extracting text...")
-        emit_progress(10, 'OCR Processing', 'Extracting text...')
+        # CLAHE for local contrast
+        clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, 
+                                tileGridSize=(clahe_tile_size, clahe_tile_size))
+        equalized_clahe = clahe.apply(equalized_gentle)
         
-        # Save enhanced image temporarily for OCR
-        temp_ocr_path = output_path.replace('.jpg', '_temp.jpg')
-        cv2.imwrite(temp_ocr_path, enhanced)
+        # Final blend
+        enhanced = cv2.addWeighted(equalized_gentle, 0.5, equalized_clahe, 0.5, 0)
+        print(f"  ✓ Enhancement complete: brightness +{brightness_boost}, contrast improved")
         
+        # Step 11: Advanced OCR
+        print(f"[STEP 11/12] Advanced OCR")
+        emit_progress(11, 'OCR Processing', 'Extracting text with multiple strategies...')
+        
+        # Try multiple OCR configurations
+        ocr_results = []
         try:
-            img_for_ocr = Image.open(temp_ocr_path)
-            text = pytesseract.image_to_string(img_for_ocr, lang='eng')
-            print(f"  ✓ Text extracted: {len(text)} characters")
-            if os.path.exists(temp_ocr_path):
-                os.remove(temp_ocr_path)
+            # PSM 3: Fully automatic page segmentation
+            custom_config1 = r'--oem 3 --psm 3'
+            text1 = pytesseract.image_to_string(enhanced, lang='eng', config=custom_config1)
+            ocr_results.append(('PSM 3', text1, len(text1.strip())))
+            
+            # PSM 6: Assume uniform block of text
+            custom_config2 = r'--oem 3 --psm 6'
+            text2 = pytesseract.image_to_string(enhanced, lang='eng', config=custom_config2)
+            ocr_results.append(('PSM 6', text2, len(text2.strip())))
+            
+            # PSM 4: Single column
+            custom_config3 = r'--oem 3 --psm 4'
+            text3 = pytesseract.image_to_string(enhanced, lang='eng', config=custom_config3)
+            ocr_results.append(('PSM 4', text3, len(text3.strip())))
+            
+            # Pick the result with most characters (usually best)
+            best_config, best_text, best_length = max(ocr_results, key=lambda x: x[2])
+            text = best_text
+            
+            print(f"  ✓ OCR complete: {best_length} characters extracted ({best_config})")
+            
         except Exception as ocr_error:
             print(f"  ⚠ OCR failed: {ocr_error}")
             text = ""
         
-        # Step 11: Image Optimization
-        print(f"[STEP 11/12] Image Optimization - Compressing image...")
-        emit_progress(11, 'Image Optimization', 'Compressing image...')
+        # Step 12: Save Output
+        print(f"[STEP 12/12] Save Output")
+        emit_progress(12, 'Save Output', 'Saving processed image to disk...')
         
-        # Convert back to color for final save
-        final_image = cv2.cvtColor(enhanced, cv2.COLOR_GRAY2BGR)
-        print(f"  ✓ Image optimized: {final_image.shape}")
+        # Save processed image with high quality (matching notebook quality 95)
+        cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        print(f"  ✓ Image saved: {output_path}")
         
-        # Step 12: File Storage
-        print(f"[STEP 12/12] File Storage - Saving to disk...")
-        emit_progress(12, 'File Storage', 'Saving to disk...')
+        # Save extracted text
+        if text and text.strip():
+            text_output_path = output_path.replace('.jpg', '.txt').replace('.png', '.txt').replace('.jpeg', '.txt')
+            text_output_path = text_output_path.replace('/processed/', '/processed_text/')
+            os.makedirs(os.path.dirname(text_output_path), exist_ok=True)
+            with open(text_output_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print(f"  ✓ Text saved: {text_output_path}")
         
-        # Save processed image
-        cv2.imwrite(output_path, final_image, [cv2.IMWRITE_JPEG_QUALITY, 90])
-        print(f"  ✓ File saved: {output_path}")
+        print(f"\n{'='*60}")
+        print(f"✅ PROCESSING COMPLETE!")
+        print(f"   Input: {input_path}")
+        print(f"   Output: {output_path}")
+        print(f"   Text extracted: {len(text)} characters")
+        print(f"{'='*60}\n")
         
         # Emit completion
         socketio.emit('processing_complete', {
