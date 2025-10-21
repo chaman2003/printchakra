@@ -267,7 +267,7 @@
 
 .files-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
 }
 
@@ -275,51 +275,102 @@
   background-color: white;
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s, box-shadow 0.3s;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  border: 1px solid #e8e8e8;
 }
 
 .file-card.processing {
   border: 2px solid #667eea;
-  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.25);
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% {
+    border-color: #667eea;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.25);
+  }
+  50% {
+    border-color: #764ba2;
+    box-shadow: 0 6px 24px rgba(118, 75, 162, 0.35);
+  }
 }
 
 .file-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.file-card.processing:hover {
+  box-shadow: 0 8px 28px rgba(102, 126, 234, 0.4);
 }
 
 .file-preview {
   width: 100%;
-  height: 200px;
+  height: 240px;
   overflow: hidden;
-  background-color: #f5f5f5;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
   position: relative;
+  cursor: pointer;
+  border-bottom: 1px solid #e0e0e0;
 }
 
 .file-preview img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background-color: #fff;
+  display: block;
 }
 
 .file-preview img.thumbnail-image {
-  transition: transform 0.2s, filter 0.2s;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+  opacity: 1;
 }
 
-.file-preview img.thumbnail-image:not(.processing-image):hover {
+.file-preview:hover img.thumbnail-image:not(.processing-image) {
   transform: scale(1.05);
-  filter: brightness(0.9);
 }
 
 .file-preview img.processing-image {
-  opacity: 0.6;
-  filter: grayscale(0.3);
+  opacity: 0.5;
+  filter: grayscale(0.5) blur(1px);
 }
 
-.file-preview img.preview-image {
-  opacity: 0.6;
-  filter: grayscale(0.3);
+/* Hover overlay for non-processing images */
+.image-hover-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 1.5rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.file-preview:hover .image-hover-overlay {
+  opacity: 1;
+}
+
+.hover-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.hover-text {
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .processing-overlay {
