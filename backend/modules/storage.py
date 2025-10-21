@@ -6,11 +6,20 @@ Automatic file naming, compression, and cloud storage
 import os
 import re
 import cv2
-import boto3
 from datetime import datetime
 from typing import Optional, Dict, Tuple
 from PIL import Image
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Optional: AWS S3 support
+try:
+    import boto3
+    BOTO3_AVAILABLE = True
+except ImportError:
+    BOTO3_AVAILABLE = False
 
 
 class StorageModule:
@@ -39,6 +48,11 @@ class StorageModule:
     
     def _init_s3(self):
         """Initialize AWS S3 client"""
+        if not BOTO3_AVAILABLE:
+            logger.warning("boto3 not available - S3 storage disabled")
+            self.s3_client = None
+            return
+        
         try:
             self.s3_client = boto3.client(
                 's3',
@@ -46,8 +60,9 @@ class StorageModule:
                 aws_secret_access_key=self.aws_config.get('secret_key'),
                 region_name=self.aws_config.get('region', 'us-east-1')
             )
+            logger.info("✅ S3 client initialized successfully")
         except Exception as e:
-            print(f"S3 initialization error: {str(e)}")
+            logger.error(f"S3 initialization error: {str(e)}")
             self.s3_client = None
     
     def generate_filename(self, text_content: str = "", 

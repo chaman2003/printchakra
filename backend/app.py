@@ -11,6 +11,71 @@ import uuid
 import subprocess
 import traceback
 import threading
+import logging
+import sys
+
+# Fix Windows console encoding issues
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except Exception:
+        pass  # Fallback if reconfigure not available
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Custom stderr filter to suppress ngrok malformed header errors
+class NgrokStderrFilter:
+    """Filter to suppress specific stderr messages from ngrok"""
+    def __init__(self, stream):
+        self.stream = stream
+    
+    def write(self, text):
+        # Suppress "ERROR: Malformed header" messages from ngrok only
+        if text.strip().startswith('ERROR:') and 'Malformed header' in text:
+            return  # Silently discard
+        # Write everything else normally
+        self.stream.write(text)
+        self.stream.flush()
+    
+    def flush(self):
+        self.stream.flush()
+    
+    def isatty(self):
+        return self.stream.isatty()
+
+# Apply stderr filter after logging is configured
+original_stderr = sys.stderr
+sys.stderr = NgrokStderrFilter(original_stderr)
+
+# Suppress stderr output for malformed header errors (ngrok proxy issue)
+# Temporarily disabled to debug startup issues
+# class ErrorFilter:
+#     """Filter to suppress specific stderr messages"""
+#     def __init__(self, stream):
+#         self.stream = stream
+#         self.buffer = []
+    
+#     def write(self, text):
+#         # Suppress "ERROR: Malformed header" messages from ngrok
+#         if 'Malformed header' in text:
+#             return  # Silently discard
+#         if text.strip().startswith('ERROR:') and 'Malformed' in text:
+#             return  # Silently discard
+#         # Write everything else
+#         self.stream.write(text)
+#         self.stream.flush()
+    
+#     def flush(self):
+#         self.stream.flush()
+
+# Apply stderr filter
+# sys.stderr = ErrorFilter(sys.stderr)  # Disabled for debugging
 
 # Import new modular pipeline
 try:
@@ -30,6 +95,17 @@ except Exception as e:
 
 # Initialize Flask app
 app = Flask(__name__)
+
+# Custom error handler for malformed requests (from ngrok)
+@app.errorhandler(400)
+def handle_bad_request(e):
+    """Silently handle malformed requests from ngrok proxy"""
+    # Don't log these - they're just ngrok proxy issues
+    return jsonify({"error": "Bad request"}), 400
+
+# Suppress Flask's default error logging for 400 errors
+from werkzeug.exceptions import BadRequest
+app.config['TRAP_BAD_REQUEST_ERRORS'] = True
 
 # Configure CORS for frontend - Allow all origins for image serving
 CORS(app, resources={
@@ -1493,6 +1569,6 @@ if __name__ == '__main__':
         app,
         host='0.0.0.0',
         port=5000,
-        debug=True,
+        debug=True,  # Re-enabled
         allow_unsafe_werkzeug=True
     )
