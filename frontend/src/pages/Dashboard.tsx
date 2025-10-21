@@ -317,7 +317,32 @@ const Dashboard: React.FC = () => {
               <div className="files-grid">
                 {files.map((file) => (
                   <div key={file.filename} className={`file-card ${file.processing ? 'processing' : ''}`}>
-                    <div className="file-preview">
+                    <div className="file-preview" onClick={() => !file.processing && openImageModal(file.filename)}>
+                      <img
+                        src={getImageUrl(API_ENDPOINTS.processed, file.filename)}
+                        alt={file.filename}
+                        className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
+                        loading="eager"
+                        onError={(e) => {
+                          const img = e.target as HTMLImageElement;
+                          const retryCount = parseInt(img.getAttribute('data-retry') || '0');
+                          
+                          if (retryCount < 2) {
+                            // Retry loading the processed image
+                            setTimeout(() => {
+                              img.setAttribute('data-retry', (retryCount + 1).toString());
+                              img.src = getImageUrl(API_ENDPOINTS.processed, file.filename) + '?t=' + Date.now();
+                            }, 500 * (retryCount + 1));
+                          } else if (retryCount === 2 && file.processing) {
+                            // Try uploads folder as fallback for processing files
+                            img.setAttribute('data-retry', '3');
+                            img.src = getImageUrl('/uploads', file.filename) + '?t=' + Date.now();
+                          } else {
+                            // Show placeholder with document icon
+                            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1ZjVmNSIvPjx0ZXh0IHg9IjUwJSIgeT0iNDAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iNDgiIGZpbGw9IiNjY2MiIHRleHQtYW5jaG9yPSJtaWRkbGUiPvCfk4Q8L3RleHQ+PHRleHQgeD0iNTAlIiB5PSI2NSUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+UHJvY2Vzc2luZy4uLjwvdGV4dD48L3N2Zz4=';
+                          }
+                        }}
+                      />
                       {file.processing && (
                         <div className="processing-overlay">
                           <div className="spinner"></div>
@@ -328,32 +353,12 @@ const Dashboard: React.FC = () => {
                           </div>
                         </div>
                       )}
-                      <img
-                        src={file.processing 
-                          ? getImageUrl('/uploads', file.filename) 
-                          : getImageUrl(API_ENDPOINTS.processed, file.filename)
-                        }
-                        alt={file.filename}
-                        className={`thumbnail-image ${file.processing ? 'processing-image' : ''}`}
-                        onClick={() => !file.processing && openImageModal(file.filename)}
-                        style={{ cursor: file.processing ? 'not-allowed' : 'pointer' }}
-                        onError={(e) => {
-                          const img = e.target as HTMLImageElement;
-                          const retryCount = parseInt(img.getAttribute('data-retry') || '0');
-                          
-                          if (retryCount < 3) {
-                            // Retry loading the image
-                            setTimeout(() => {
-                              img.setAttribute('data-retry', (retryCount + 1).toString());
-                              const endpoint = file.processing ? '/uploads' : API_ENDPOINTS.processed;
-                              img.src = getImageUrl(endpoint, file.filename) + '?retry=' + Date.now();
-                            }, 1000 * (retryCount + 1));
-                          } else {
-                            // Show placeholder if all retries fail
-                            img.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5JbWFnZSBMb2FkIEZhaWxlZDwvdGV4dD48L3N2Zz4=';
-                          }
-                        }}
-                      />
+                      {!file.processing && (
+                        <div className="image-hover-overlay">
+                          <div className="hover-icon">🔍</div>
+                          <div className="hover-text">Click to view full size</div>
+                        </div>
+                      )}
                     </div>
                     <div className="file-info">
                       <h4 className="file-name">{file.filename}</h4>
