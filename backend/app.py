@@ -373,33 +373,238 @@ def four_point_transform(image, pts):
     return warped
 
 def find_document_contour(image):
-    """Find document contour using multi-strategy approach"""
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    """
+    Ultra-robust multi-strategy document detection - EXACT FROM NOTEBOOK
+    Tests multiple scales, edge detection methods, and scoring criteria
+    """
+    print("   Starting multi-strategy document detection...")
     
-    # Try Canny edge detection
-    edges = cv2.Canny(blurred, 75, 200)
-    edges = cv2.dilate(edges, np.ones((3, 3)), iterations=1)
+    # Strategy 1: High-resolution edge detection with multiple scales
+    candidates = []
     
-    contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Find largest contour
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)
-    
-    for contour in contours[:10]:
-        peri = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.02 * peri, True)
+    # Test at FULL resolution and scaled versions
+    for scale in [1.0, 0.8, 0.6]:
+        if scale < 1.0:
+            scaled = cv2.resize(image, (int(image.shape[1] * scale), int(image.shape[0] * scale)))
+        else:
+            scaled = image.copy()
         
-        if len(approx) == 4:
-            area = cv2.contourArea(approx)
-            image_area = image.shape[0] * image.shape[1]
-            area_ratio = area / image_area
+        gray = cv2.cvtColor(scaled, cv2.COLOR_BGR2GRAY)
+        
+        # Approach A: Enhanced Canny with multiple threshold combinations
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        
+        for low, high in [(40, 120), (50, 150), (60, 180), (75, 200), (90, 250)]:
+            edges = cv2.Canny(blurred, low, high)
+            edges = cv2.dilate(edges, np.ones((2, 2)), iterations=1)
             
-            # Accept if reasonable size
-            if 0.1 <= area_ratio <= 0.9:
-                return approx.reshape(4, 2).astype(np.float32)
+            contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            for c in contours:
+                area = cv2.contourArea(c)
+                if area > 500:
+                    candidates.append((c, area, scale, f"Canny({low},{high})"))
+        
+        # Approach B: Laplacian edge detection
+        laplacian = cv2.Laplacian(blurred, cv2.CV_64F)
+        laplacian = np.uint8(np.absolute(laplacian))
+        _, laplacian = cv2.threshold(laplacian, 30, 255, cv2.THRESH_BINARY)
+        laplacian = cv2.dilate(laplacian, np.ones((3, 3)), iterations=1)
+        
+        contours, _ = cv2.findContours(laplacian, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area > 500:
+                candidates.append((c, area, scale, "Laplacian"))
+        
+        # Approach C: White paper detection (HSV)
+        hsv = cv2.cvtColor(scaled, cv2.COLOR_BGR2HSV)
+        lower_white = np.array([0, 0, 175])
+        upper_white = np.array([180, 45, 255])
+        mask = cv2.inRange(hsv, lower_white, upper_white)
+        
+        # Morphological operations
+        kernel_small = np.ones((2, 2), np.uint8)
+        kernel_med = np.ones((5, 5), np.uint8)
+        mask = cv2.erode(mask, kernel_small, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_med, iterations=2)
+        mask = cv2.dilate(mask, kernel_small, iterations=1)
+        
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area > 500:
+                candidates.append((c, area, scale, "ColorWhite"))
+        
+        # Approach D: Adaptive threshold with edge focus
+        adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                        cv2.THRESH_BINARY, 11, 2)
+        adaptive = cv2.bitwise_not(adaptive)
+        adaptive_edges = cv2.Canny(adaptive, 50, 150)
+        adaptive_edges = cv2.dilate(adaptive_edges, np.ones((3, 3)), iterations=1)
+        
+        contours, _ = cv2.findContours(adaptive_edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+        for c in contours:
+            area = cv2.contourArea(c)
+            if area > 500:
+                candidates.append((c, area, scale, "AdaptiveEdge"))
     
-    return None
+    print(f"   Found {len(candidates)} contour candidates")
+    
+    # Strategy 2: Filter and score candidates
+    scored_candidates = []
+    image_area = image.shape[0] * image.shape[1]
+    
+    for contour, area, scale, method in candidates:
+        # Scale contour back to original size
+        if scale < 1.0:
+            contour = (contour / scale).astype(np.int32)
+            area = area / (scale * scale)
+        
+        peri = cv2.arcLength(contour, True)
+        
+        # Try multiple epsilon values
+        for epsilon_factor in [0.003, 0.005, 0.008, 0.01, 0.012, 0.015, 0.018]:
+            approx = cv2.approxPolyDP(contour, epsilon_factor * peri, True)
+            
+            if len(approx) == 4:
+                score = 0
+                area_ratio = area / image_area
+                
+                # Factor 1: Size filtering
+                if 0.10 <= area_ratio <= 0.35:
+                    score += 100
+                    if 0.15 <= area_ratio <= 0.30:
+                        score += 80
+                    elif 0.10 <= area_ratio <= 0.15:
+                        score += 40
+                    elif 0.30 <= area_ratio <= 0.35:
+                        score += 40
+                elif 0.35 < area_ratio <= 0.45:
+                    score -= 30
+                elif area_ratio > 0.45:
+                    score -= 150
+                elif area_ratio < 0.10:
+                    score -= 200
+                
+                # Factor 2: Aspect ratio
+                rect = cv2.minAreaRect(approx)
+                width, height = rect[1]
+                aspect = 1.0
+                if width > 0 and height > 0:
+                    aspect = max(width, height) / min(width, height)
+                    if 1.2 <= aspect <= 1.8:
+                        score += 40
+                    elif 1.0 <= aspect <= 2.5:
+                        score += 25
+                    else:
+                        score -= 20
+                
+                # Factor 3: Convexity
+                hull_area = cv2.contourArea(cv2.convexHull(approx))
+                convexity = 0
+                if hull_area > 0:
+                    convexity = area / hull_area
+                    if convexity > 0.95:
+                        score += 30
+                    elif convexity > 0.90:
+                        score += 20
+                    else:
+                        score += convexity * 10
+                
+                # Factor 4: Corner angles
+                angles = []
+                pts = approx.reshape(4, 2).astype(np.float32)
+                for i in range(4):
+                    p1 = pts[i]
+                    p2 = pts[(i + 1) % 4]
+                    p3 = pts[(i + 2) % 4]
+                    
+                    v1 = p1 - p2
+                    v2 = p3 - p2
+                    
+                    norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
+                    if norm_product > 0:
+                        angle = np.arccos(np.clip(np.dot(v1, v2) / norm_product, -1.0, 1.0))
+                        angles.append(np.degrees(angle))
+                
+                if len(angles) == 4:
+                    angle_errors = [abs(a - 90) for a in angles]
+                    avg_error = np.mean(angle_errors)
+                    
+                    if avg_error < 10:
+                        score += 35
+                    elif avg_error < 20:
+                        score += 25
+                    elif avg_error < 30:
+                        score += 15
+                
+                # Factor 5: Method bonuses
+                if method == "ColorWhite":
+                    score += 60
+                elif method.startswith("Canny"):
+                    score += 10
+                elif method == "Laplacian":
+                    score += 15
+                
+                # Factor 6: Compactness
+                if peri > 0:
+                    compactness = (4 * np.pi * area) / (peri * peri)
+                    if 0.5 < compactness < 0.9:
+                        score += 15
+                
+                # Factor 7: Position preference
+                center = np.mean(pts, axis=0)
+                center_x_ratio = center[0] / image.shape[1]
+                center_y_ratio = center[1] / image.shape[0]
+                if 0.2 < center_x_ratio < 0.8 and 0.2 < center_y_ratio < 0.8:
+                    score += 15
+                
+                # Factor 8: Edge margins
+                edge_margin_left = np.min(pts[:, 0])
+                edge_margin_right = image.shape[1] - np.max(pts[:, 0])
+                edge_margin_top = np.min(pts[:, 1])
+                edge_margin_bottom = image.shape[0] - np.max(pts[:, 1])
+                total_margin = edge_margin_left + edge_margin_right + edge_margin_top + edge_margin_bottom
+                margin_ratio = total_margin / (image.shape[0] + image.shape[1])
+                
+                if margin_ratio > 0.3:
+                    score += 30
+                elif margin_ratio < 0.1:
+                    score -= 100
+                
+                scored_candidates.append({
+                    'contour': approx,
+                    'area': area,
+                    'score': score,
+                    'method': method,
+                    'area_ratio': area_ratio,
+                    'aspect': aspect,
+                    'convexity': convexity
+                })
+    
+    if not scored_candidates:
+        print("   No suitable document found")
+        return None
+    
+    # Sort by score
+    scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+    
+    # Show top candidates
+    print(f"   Top candidate: Score={scored_candidates[0]['score']:.1f}, "
+          f"Area={(scored_candidates[0]['area_ratio']*100):.1f}%, "
+          f"Method={scored_candidates[0]['method']}")
+    
+    # Find best candidate
+    best = None
+    for cand in scored_candidates:
+        if 0.08 <= cand['area_ratio'] <= 0.40:
+            best = cand
+            break
+    
+    if best is None:
+        best = scored_candidates[0]
+    
+    return best['contour'].reshape(4, 2).astype(np.float32)
 
 def process_document_image(input_path, output_path, filename=None):
     """
