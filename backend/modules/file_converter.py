@@ -274,3 +274,71 @@ class FileConverter:
                 })
         
         return success_count, fail_count, results
+    
+    @staticmethod
+    def merge_images_to_pdf(input_files: List[str], output_path: str) -> Tuple[bool, str]:
+        """
+        Merge multiple images into a single PDF
+        Args:
+            input_files: List of image file paths
+            output_path: Output PDF file path
+        Returns:
+            (success, message)
+        """
+        try:
+            if not input_files:
+                return False, "No input files provided"
+            
+            print(f"\n🔄 Merging {len(input_files)} images into single PDF...")
+            
+            # Prepare images for conversion
+            converted_images = []
+            temp_files = []
+            
+            for input_file in input_files:
+                try:
+                    # Open and process image
+                    with Image.open(input_file) as img:
+                        # Convert RGBA to RGB if needed
+                        if img.mode == 'RGBA':
+                            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
+                            rgb_img.paste(img, mask=img.split()[3])
+                            temp_path = input_file + '_temp.jpg'
+                            rgb_img.save(temp_path, 'JPEG', quality=95)
+                            converted_images.append(temp_path)
+                            temp_files.append(temp_path)
+                        else:
+                            converted_images.append(input_file)
+                except Exception as e:
+                    print(f"⚠️ Skipping {input_file}: {e}")
+                    continue
+            
+            if not converted_images:
+                return False, "No valid images to merge"
+            
+            # Convert all images to single PDF
+            with open(output_path, 'wb') as f:
+                f.write(img2pdf.convert(converted_images))
+            
+            # Cleanup temp files
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            
+            print(f"✅ Merged {len(converted_images)} images into PDF: {output_path}")
+            return True, f"Successfully merged {len(converted_images)} images into single PDF"
+        
+        except Exception as e:
+            error_msg = f"PDF merge failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            traceback.print_exc()
+            
+            # Cleanup temp files on error
+            for temp_file in temp_files:
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
+            
+            return False, error_msg

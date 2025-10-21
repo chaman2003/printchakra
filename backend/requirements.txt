@@ -34,3 +34,7 @@ boto3>=1.28.0
 # Windows printing
 # Windows specific (for printing)
 pywin32>=307
+
+pdf2image
+img2pdf
+python-docx

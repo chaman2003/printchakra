@@ -134,6 +134,11 @@ const Dashboard: React.FC = () => {
   const [targetFormat, setTargetFormat] = useState<string>('pdf');
   const [converting, setConverting] = useState(false);
   const [conversionProgress, setConversionProgress] = useState<string>('');
+  const [mergePdf, setMergePdf] = useState<boolean>(true); // New: merge PDF option
+  
+  // Converted files state
+  const [showConvertedFiles, setShowConvertedFiles] = useState(false);
+  const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
 
   useEffect(() => {
     // Only connect Socket.IO if enabled (local development only)
@@ -394,7 +399,8 @@ const Dashboard: React.FC = () => {
         `${API_BASE_URL}/convert`,
         {
           files: selectedFiles,
-          format: targetFormat
+          format: targetFormat,
+          merge_pdf: mergePdf && targetFormat === 'pdf' // Only merge if format is PDF
         },
         {
           headers: getDefaultHeaders()
@@ -402,20 +408,30 @@ const Dashboard: React.FC = () => {
       );
 
       if (response.data.success) {
-        const { success_count, fail_count, results } = response.data;
+        const { success_count, fail_count, results, merged } = response.data;
         
-        setConversionProgress(
-          `✅ Conversion complete!\nSuccess: ${success_count}\nFailed: ${fail_count}`
-        );
+        if (merged) {
+          setConversionProgress(
+            `✅ Merged into single PDF!\n${selectedFiles.length} files combined`
+          );
+        } else {
+          setConversionProgress(
+            `✅ Conversion complete!\nSuccess: ${success_count}\nFailed: ${fail_count}`
+          );
+        }
 
         // Show detailed results
         const successFiles = results.filter((r: any) => r.success).map((r: any) => r.output);
         if (successFiles.length > 0) {
           setTimeout(() => {
-            alert(`Converted files:\n${successFiles.join('\n')}\n\nFiles saved in backend/converted/ folder`);
+            const message = merged 
+              ? `Merged PDF created:\n${successFiles[0]}\n\nFile saved in backend/converted/ folder`
+              : `Converted files:\n${successFiles.join('\n')}\n\nFiles saved in backend/converted/ folder`;
+            alert(message);
             closeConversionModal();
             setSelectionMode(false);
             setSelectedFiles([]);
+            loadConvertedFiles(); // Refresh converted files list
           }, 1500);
         }
       } else {
@@ -426,6 +442,20 @@ const Dashboard: React.FC = () => {
       setConversionProgress(`❌ Conversion error: ${err.message}`);
     } finally {
       setConverting(false);
+    }
+  };
+  
+  // Load converted files
+  const loadConvertedFiles = async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/get-converted-files`, {
+        headers: getDefaultHeaders()
+      });
+      if (response.data.files) {
+        setConvertedFiles(response.data.files);
+      }
+    } catch (err) {
+      console.error('Failed to load converted files:', err);
     }
   };
 
@@ -467,6 +497,15 @@ const Dashboard: React.FC = () => {
             🔄 Convert ({selectedFiles.length})
           </button>
         )}
+        <button 
+          onClick={() => {
+            setShowConvertedFiles(!showConvertedFiles);
+            if (!showConvertedFiles) loadConvertedFiles();
+          }} 
+          className="btn btn-info"
+        >
+          📁 {showConvertedFiles ? 'Hide' : 'Show'} Converted Files
+        </button>
       </div>
 
       {error && (
@@ -681,6 +720,26 @@ const Dashboard: React.FC = () => {
                 </select>
               </div>
 
+              {targetFormat === 'pdf' && selectedFiles.length > 1 && (
+                <div className="conversion-option">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={mergePdf}
+                      onChange={(e) => setMergePdf(e.target.checked)}
+                      disabled={converting}
+                    />
+                    <span>Merge all images into single PDF</span>
+                  </label>
+                  <p className="option-description">
+                    {mergePdf 
+                      ? `All ${selectedFiles.length} files will be combined into one PDF document`
+                      : `Each file will be converted to a separate PDF`
+                    }
+                  </p>
+                </div>
+              )}
+
               {conversionProgress && (
                 <div className="conversion-progress">
                   <pre>{conversionProgress}</pre>
@@ -704,6 +763,73 @@ const Dashboard: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {showConvertedFiles && (
+        <div className="converted-files-section">
+          <div className="section-header">
+            <h3>📁 Converted Files</h3>
+            <button 
+              onClick={() => setShowConvertedFiles(false)} 
+              className="btn btn-sm btn-secondary"
+            >
+              Hide
+            </button>
+          </div>
+          
+          {convertedFiles.length === 0 ? (
+            <div className="no-files">
+              <p>No converted files yet. Use the conversion feature to create some!</p>
+            </div>
+          ) : (
+            <div className="converted-files-grid">
+              {convertedFiles.map((file) => (
+                <div key={file.filename} className="converted-file-card">
+                  <div className="file-icon">
+                    {file.filename.endsWith('.pdf') ? '📄' : 
+                     file.filename.endsWith('.docx') ? '📝' : '🖼️'}
+                  </div>
+                  <div className="file-info">
+                    <h4 className="file-name">{file.filename}</h4>
+                    <p className="file-meta">
+                      {(file.size / 1024).toFixed(2)} KB • {new Date(file.created).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="file-actions">
+                    <a
+                      href={`${API_BASE_URL}/converted/${file.filename}`}
+                      download={file.filename}
+                      className="btn btn-sm btn-primary"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        // Download with headers
+                        axios.get(`${API_BASE_URL}/converted/${file.filename}`, {
+                          headers: getDefaultHeaders(),
+                          responseType: 'blob'
+                        }).then(response => {
+                          const blob = response.data;
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = file.filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }).catch(err => {
+                          console.error('Download failed:', err);
+                          alert('Failed to download file');
+                        });
+                      }}
+                    >
+                      📥 Download
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -200,3 +200,10 @@ ngrok.exe
 # Build outputs
 build/
 dist/
+
+# Application data (keep folders, ignore contents)
+converted/*
+pdfs/*
+processed/*
+processed_text/*
+uploads/*
