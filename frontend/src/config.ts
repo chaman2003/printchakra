@@ -11,7 +11,7 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
   
-  // Production fallback to ngrok (or your custom domain)
+  // Production fallback - using ngrok with custom domain
   const prodUrl = 'https://freezingly-nonsignificative-edison.ngrok-free.dev';
   console.log('Using production URL:', prodUrl);
   return prodUrl;
