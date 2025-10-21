@@ -766,18 +766,18 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {showConvertedFiles && (
-        <div className="converted-files-section">
-          <div className="section-header">
-            <h3>📁 Converted Files</h3>
-            <button 
-              onClick={() => setShowConvertedFiles(false)} 
-              className="btn btn-sm btn-secondary"
-            >
-              Hide
-            </button>
+      {/* Converted files drawer (right-side slide-in) */}
+      <div className={`drawer-overlay ${showConvertedFiles ? 'open' : ''}`} onClick={() => setShowConvertedFiles(false)} />
+
+      <aside className={`converted-drawer ${showConvertedFiles ? 'open' : ''}`} aria-hidden={!showConvertedFiles}>
+        <div className="drawer-header">
+          <h3>📁 Converted Files</h3>
+          <div>
+            <button className="btn btn-sm btn-secondary" onClick={() => setShowConvertedFiles(false)}>Hide</button>
           </div>
-          
+        </div>
+
+        <div className="drawer-body">
           {convertedFiles.length === 0 ? (
             <div className="no-files">
               <p>No converted files yet. Use the conversion feature to create some!</p>
@@ -797,12 +797,10 @@ const Dashboard: React.FC = () => {
                     </p>
                   </div>
                   <div className="file-actions">
-                    <a
-                      href={`${API_BASE_URL}/converted/${file.filename}`}
-                      download={file.filename}
+                    <button
                       className="btn btn-sm btn-primary"
                       onClick={(e) => {
-                        e.preventDefault();
+                        e.stopPropagation();
                         // Download with headers
                         axios.get(`${API_BASE_URL}/converted/${file.filename}`, {
                           headers: getDefaultHeaders(),
@@ -824,14 +822,18 @@ const Dashboard: React.FC = () => {
                       }}
                     >
                       📥 Download
-                    </a>
+                    </button>
                   </div>
                 </div>
               ))}
             </div>
           )}
         </div>
-      )}
+
+        <div className="drawer-footer">
+          <button className="btn btn-secondary" onClick={() => setShowConvertedFiles(false)}>Close</button>
+        </div>
+      </aside>
     </div>
   );
 };
