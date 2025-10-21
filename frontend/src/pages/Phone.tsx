@@ -1,8 +1,41 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { io } from 'socket.io-client';
 import axios from 'axios';
+import {
+  Alert,
+  AlertDescription,
+  AlertIcon,
+  Box,
+  Button,
+  ButtonGroup,
+  Card,
+  CardBody,
+  CardHeader,
+  Flex,
+  Grid,
+  Heading,
+  Stack,
+  Switch,
+  Tag,
+  Text,
+  Tooltip,
+  useColorModeValue,
+  useToast,
+  VStack,
+} from '@chakra-ui/react';
+import {
+  FiAlertTriangle,
+  FiAperture,
+  FiCamera,
+  FiCheckCircle,
+  FiCpu,
+  FiMaximize2,
+  FiMinimize2,
+  FiUpload,
+  FiWifi,
+} from 'react-icons/fi';
 import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
-import './Phone.css';
+import Iconify from '../components/Iconify';
 
 interface QualityCheck {
   blur_score: number;
@@ -18,7 +51,6 @@ interface QualityCheck {
 
 const Phone: React.FC = () => {
   const [connected, setConnected] = useState(false);
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [uploading, setUploading] = useState(false);
   const [captureMode, setCaptureMode] = useState<'file' | 'camera'>('file');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -43,71 +75,22 @@ const Phone: React.FC = () => {
   const [detectionActive, setDetectionActive] = useState(false);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
+  const toast = useToast();
+  
+  // Theme values with insane visual enhancements
+  const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
+  const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
+  const borderColor = useColorModeValue('brand.200', 'nebula.700');
+  const borderSubtle = useColorModeValue('brand.100', 'whiteAlpha.200');
+  const accentPrimary = useColorModeValue('brand.500', 'nebula.400');
+  const muted = useColorModeValue('gray.600', 'whiteAlpha.700');
+  const textInverse = useColorModeValue('gray.800', 'whiteAlpha.900');
+  const hoverBg = useColorModeValue('brand.50', 'whiteAlpha.100');
 
-  useEffect(() => {
-    // Only connect Socket.IO if enabled (local development only)
-    if (!SOCKET_IO_ENABLED) {
-      console.log('⚠️ Socket.IO disabled on production - using HTTP polling only');
-      setConnected(true); // UI will show connected but won't use real-time features
-      return;
-    }
-
-    // Initialize Socket.IO connection with better error handling
-    console.log('🔌 Initializing Socket.IO connection to:', API_BASE_URL);
-    const newSocket = io(API_BASE_URL, {
-      ...SOCKET_CONFIG,
-      forceNew: true,
-    });
-
-    newSocket.on('connect', () => {
-      console.log('✅ Connected to server');
-      setConnected(true);
-      setMessage('✅ Connected to backend');
-    });
-
-    newSocket.on('disconnect', (reason) => {
-      console.log('❌ Disconnected from server:', reason);
-      setConnected(false);
-      setMessage(`⚠️ Disconnected: ${reason}`);
-    });
-
-    newSocket.on('connect_error', (error: any) => {
-      console.error('⚠️ Connection error:', error);
-      const errorMsg = error?.message || error?.data?.content?.message || String(error);
-      setMessage(`Connection issue: ${errorMsg}. Retrying...`);
-    });
-
-    newSocket.on('error', (error: any) => {
-      console.error('⚠️ Socket error:', error);
-      setMessage(`Socket error: ${error}. Retrying...`);
-    });
-
-    newSocket.on('capture_now', (data) => {
-      console.log('Received capture command:', data);
-      showMessage('📸 Capture triggered from Dashboard!');
-      setTimeout(() => {
-        if (captureMode === 'camera' && stream) {
-          captureFromCamera();
-        } else {
-          showMessage('💡 Switch to Camera mode to auto-capture');
-        }
-      }, 500);
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.close();
-      stopCamera();
-      stopAutoCapture();
-      stopRealTimeDetection();
-    };
-  }, [captureMode, stream]);
-
-  const showMessage = (msg: string) => {
+  const showMessage = useCallback((msg: string) => {
     setMessage(msg);
     setTimeout(() => setMessage(''), 5000);
-  };
+  }, []);
 
   const toggleFullScreen = async () => {
     if (!isFullScreen) {
@@ -162,14 +145,14 @@ const Phone: React.FC = () => {
     }, 1000);
   };
 
-  const stopAutoCapture = () => {
+  const stopAutoCapture = useCallback(() => {
     if (autoCaptureIntervalRef.current) {
       clearInterval(autoCaptureIntervalRef.current);
       autoCaptureIntervalRef.current = null;
     }
     setAutoCapture(false);
     setAutoCaptureCountdown(0);
-  };
+  }, []);
 
   const startRealTimeDetection = () => {
     if (!videoRef.current || !canvasOverlayRef.current) return;
@@ -220,14 +203,14 @@ const Phone: React.FC = () => {
     }, 500); // Run detection every 500ms
   };
 
-  const stopRealTimeDetection = () => {
+  const stopRealTimeDetection = useCallback(() => {
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
       detectionIntervalRef.current = null;
     }
     setDetectionActive(false);
     setDocumentDetection(null);
-  };
+  }, []);
 
   const drawDetectionOverlay = (detection: any) => {
     if (!canvasOverlayRef.current) return;
@@ -319,13 +302,13 @@ const Phone: React.FC = () => {
     }
   };
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
     }
     stopRealTimeDetection();
-  };
+  }, [stream, stopRealTimeDetection]);
 
   const handleCaptureMode = (mode: 'file' | 'camera') => {
     setCaptureMode(mode);
@@ -341,7 +324,7 @@ const Phone: React.FC = () => {
     }
   };
 
-  const checkImageQuality = async (file: Blob): Promise<QualityCheck | null> => {
+  const checkImageQuality = useCallback(async (file: Blob): Promise<QualityCheck | null> => {
     if (!validateQuality) return null;
 
     try {
@@ -384,9 +367,59 @@ const Phone: React.FC = () => {
       }
       return null; // Continue without quality check on error
     }
-  };
+  }, [showMessage, validateQuality]);
 
-  const captureFromCamera = async () => {
+  const uploadImage = useCallback(async (file: Blob, filename: string) => {
+    try {
+      setUploading(true);
+      const formData = new FormData();
+      formData.append('file', file, filename);
+      
+      // Add processing options
+      formData.append('auto_crop', processingOptions.autoCrop.toString());
+      formData.append('ai_enhance', processingOptions.aiEnhance.toString());
+      formData.append('strict_quality', processingOptions.strictQuality.toString());
+
+      const response = await axios.post(
+        `${API_BASE_URL}${API_ENDPOINTS.upload}`,
+        formData,
+        {
+          headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' },
+        }
+      );
+
+      showMessage(`✅ ${response.data.message || 'Upload successful'}`);
+      toast({
+        title: 'Upload successful',
+        description: 'Document dispatched to the processing pipeline.',
+        status: 'success',
+        duration: 4000,
+      });
+      console.log('Upload response:', response.data);
+      
+      // Show additional message about checking dashboard
+      setTimeout(() => {
+        showMessage('📊 Image is processing... Check the Dashboard in ~5-10 seconds to see the result!');
+      }, 1500);
+      
+      // Clear quality check after successful upload
+      setQualityCheck(null);
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      const errorMsg = err.response?.data?.error || err.message || 'Upload failed';
+      showMessage(`❌ ${errorMsg}`);
+      toast({
+        title: 'Upload failed',
+        description: errorMsg,
+        status: 'error',
+        duration: 4000,
+      });
+    } finally {
+      setUploading(false);
+    }
+  }, [processingOptions.aiEnhance, processingOptions.autoCrop, processingOptions.strictQuality, showMessage, toast]);
+
+  const captureFromCamera = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -414,7 +447,7 @@ const Phone: React.FC = () => {
         uploadImage(blob, `capture_${Date.now()}.jpg`);
       }
     }, 'image/jpeg', 0.9);
-  };
+  }, [checkImageQuality, qualityCheck, uploadImage, validateQuality]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -438,238 +471,363 @@ const Phone: React.FC = () => {
     uploadImage(file, file.name);
   };
 
-  const uploadImage = async (file: Blob, filename: string) => {
-    try {
-      setUploading(true);
-      const formData = new FormData();
-      formData.append('file', file, filename);
-      
-      // Add processing options
-      formData.append('auto_crop', processingOptions.autoCrop.toString());
-      formData.append('ai_enhance', processingOptions.aiEnhance.toString());
-      formData.append('strict_quality', processingOptions.strictQuality.toString());
 
-      const response = await axios.post(
-        `${API_BASE_URL}${API_ENDPOINTS.upload}`,
-        formData,
-        {
-          headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' },
-        }
-      );
-
-      showMessage(`✅ ${response.data.message || 'Upload successful'}`);
-      console.log('Upload response:', response.data);
-      
-      // Show additional message about checking dashboard
-      setTimeout(() => {
-        showMessage('📊 Image is processing... Check the Dashboard in ~5-10 seconds to see the result!');
-      }, 1500);
-      
-      // Clear quality check after successful upload
-      setQualityCheck(null);
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      const errorMsg = err.response?.data?.error || err.message || 'Upload failed';
-      showMessage(`❌ ${errorMsg}`);
-    } finally {
-      setUploading(false);
+  useEffect(() => {
+    // Only connect Socket.IO if enabled (local development only)
+    if (!SOCKET_IO_ENABLED) {
+      console.log('⚠️ Socket.IO disabled on production - using HTTP polling only');
+      setConnected(true); // UI will show connected but won't use real-time features
+      return;
     }
-  };
+
+    // Initialize Socket.IO connection with better error handling
+    console.log('🔌 Initializing Socket.IO connection to:', API_BASE_URL);
+    const newSocket = io(API_BASE_URL, {
+      ...SOCKET_CONFIG,
+      forceNew: true,
+    });
+
+    newSocket.on('connect', () => {
+      console.log('✅ Connected to server');
+      setConnected(true);
+      setMessage('✅ Connected to backend');
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from server:', reason);
+      setConnected(false);
+      setMessage(`⚠️ Disconnected: ${reason}`);
+    });
+
+    newSocket.on('connect_error', (error: any) => {
+      console.error('⚠️ Connection error:', error);
+      const errorMsg = error?.message || error?.data?.content?.message || String(error);
+      setMessage(`Connection issue: ${errorMsg}. Retrying...`);
+    });
+
+    newSocket.on('error', (error: any) => {
+      console.error('⚠️ Socket error:', error);
+      setMessage(`Socket error: ${error}. Retrying...`);
+    });
+
+    newSocket.on('capture_now', (data) => {
+      console.log('Received capture command:', data);
+      showMessage('📸 Capture triggered from Dashboard!');
+      setTimeout(() => {
+        if (captureMode === 'camera' && stream) {
+          captureFromCamera();
+        } else {
+          showMessage('💡 Switch to Camera mode to auto-capture');
+        }
+      }, 500);
+    });
+
+    return () => {
+      newSocket.close();
+      stopCamera();
+      stopAutoCapture();
+      stopRealTimeDetection();
+    };
+  }, [captureFromCamera, captureMode, showMessage, stopAutoCapture, stopCamera, stopRealTimeDetection, stream]);
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h2 className="page-title">📱 Phone Interface</h2>
-        <p className="page-description">Capture and upload documents</p>
-        <div className={`status-indicator ${connected ? 'connected' : 'disconnected'}`}>
-          <span className="status-dot"></span>
-          {connected ? 'Connected to server' : 'Disconnected'}
-        </div>
-      </div>
+    <VStack align="stretch" spacing={10} pb={16}>
+      <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
+        <Stack spacing={2}>
+          <Heading size="lg" display="flex" alignItems="center" gap={3}>
+            📱 Phone Interface
+          </Heading>
+          <Text color={muted} maxW="lg">
+            Deploy the mobile capture cockpit to ingest pristine documents with AI guidance.
+          </Text>
+        </Stack>
+        <Flex align="center" gap={3} bg="surface.blur" borderRadius="full" border="1px solid rgba(121,95,238,0.22)" px={5} py={2}>
+          <Box w={3} h={3} borderRadius="full" bg={connected ? 'green.400' : 'red.400'} boxShadow={`0 0 12px ${connected ? 'rgba(72,187,120,0.6)' : 'rgba(245,101,101,0.6)'}`} />
+          <Text fontWeight="600" color={muted} display="flex" alignItems="center" gap={2}>
+            <Iconify icon={FiWifi} boxSize={5} />
+            {connected ? 'Connected to processing hub' : 'Link offline'}
+          </Text>
+        </Flex>
+      </Flex>
 
       {message && (
-        <div className="message-banner">
-          {message}
-        </div>
+        <Alert status="info" borderRadius="xl" bg="rgba(69,202,255,0.1)" border="1px solid rgba(69,202,255,0.25)">
+          <AlertIcon />
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="phone-options">
-        <label className="option-label">
-          <input
-            type="checkbox"
-            checked={validateQuality}
-            onChange={(e) => setValidateQuality(e.target.checked)}
-          />
-          Validate quality before upload
-        </label>
-        <label className="option-label">
-          <input
-            type="checkbox"
-            checked={processingOptions.autoCrop}
-            onChange={(e) => setProcessingOptions({...processingOptions, autoCrop: e.target.checked})}
-          />
-          Auto-crop document
-        </label>
-        <label className="option-label">
-          <input
-            type="checkbox"
-            checked={processingOptions.aiEnhance}
-            onChange={(e) => setProcessingOptions({...processingOptions, aiEnhance: e.target.checked})}
-          />
-          AI enhancement
-        </label>
-      </div>
+      <Card bg={panelBg} border="1px solid rgba(121,95,238,0.18)" boxShadow="subtle">
+        <CardHeader>
+          <Heading size="sm">Capture Preferences</Heading>
+        </CardHeader>
+        <CardBody>
+          <Grid templateColumns={{ base: '1fr', md: 'repeat(3, 1fr)' }} gap={4}>
+            <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
+              <Stack spacing={1}>
+                <Text fontWeight="600">Quality validation</Text>
+                <Text fontSize="sm" color={muted}>Detect blur and focus issues before upload.</Text>
+              </Stack>
+              <Switch colorScheme="brand" isChecked={validateQuality} onChange={(e) => setValidateQuality(e.target.checked)} />
+            </Flex>
+
+            <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
+              <Stack spacing={1}>
+                <Text fontWeight="600">Auto crop</Text>
+                <Text fontSize="sm" color={muted}>Automatically align document edges.</Text>
+              </Stack>
+              <Switch colorScheme="brand" isChecked={processingOptions.autoCrop} onChange={(e) => setProcessingOptions({ ...processingOptions, autoCrop: e.target.checked })} />
+            </Flex>
+
+            <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
+              <Stack spacing={1}>
+                <Text fontWeight="600">AI enhancement</Text>
+                <Text fontSize="sm" color={muted}>Boost clarity with AI-driven retouching.</Text>
+              </Stack>
+              <Switch colorScheme="brand" isChecked={processingOptions.aiEnhance} onChange={(e) => setProcessingOptions({ ...processingOptions, aiEnhance: e.target.checked })} />
+            </Flex>
+          </Grid>
+        </CardBody>
+      </Card>
 
       {qualityCheck && (
-        <div className={`quality-indicator ${qualityCheck.quality.overall_acceptable ? 'good' : 'warning'}`}>
-          <h4>📊 Quality Check</h4>
-          <div className="quality-metrics">
-            <span className={`metric ${qualityCheck.is_blurry ? 'bad' : 'good'}`}>
-              Blur: {qualityCheck.blur_score.toFixed(1)} {qualityCheck.is_blurry ? '❌' : '✓'}
-            </span>
-            <span className={`metric ${qualityCheck.is_focused ? 'good' : 'bad'}`}>
-              Focus: {qualityCheck.focus_score.toFixed(1)} {qualityCheck.is_focused ? '✓' : '❌'}
-            </span>
-          </div>
-          {qualityCheck.quality.issues.length > 0 && (
-            <div className="quality-issues">
-              <strong>Issues:</strong>
-              <ul>
-                {qualityCheck.quality.issues.map((issue, i) => (
-                  <li key={i}>{issue}</li>
+        <Card bg={panelBg} border={`1px solid ${qualityCheck.quality.overall_acceptable ? 'rgba(72,187,120,0.25)' : 'rgba(246,173,85,0.35)'}`} boxShadow="subtle">
+          <CardHeader display="flex" alignItems="center" justifyContent="space-between">
+              <Heading size="sm" display="flex" alignItems="center" gap={2}>
+              <Iconify icon={qualityCheck.quality.overall_acceptable ? FiCheckCircle : FiAlertTriangle} boxSize={5} />
+              Quality Analysis
+            </Heading>
+            <Tag colorScheme={qualityCheck.quality.overall_acceptable ? 'green' : 'orange'} borderRadius="full">
+              {qualityCheck.quality.overall_acceptable ? 'Ready to upload' : 'Review suggested'}
+            </Tag>
+          </CardHeader>
+          <CardBody>
+            <Grid templateColumns={{ base: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }} gap={4} mb={4}>
+              <Flex direction="column" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.22)">
+                <Text fontSize="xs" textTransform="uppercase" color={muted}>Blur score</Text>
+                <Text fontWeight="700">{qualityCheck.blur_score.toFixed(1)}</Text>
+                <Text fontSize="sm" color={qualityCheck.is_blurry ? 'orange.300' : 'green.300'}>
+                  {qualityCheck.is_blurry ? 'Requires attention' : 'Crystal clear'}
+                </Text>
+              </Flex>
+              <Flex direction="column" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.22)">
+                <Text fontSize="xs" textTransform="uppercase" color={muted}>Focus score</Text>
+                <Text fontWeight="700">{qualityCheck.focus_score.toFixed(1)}</Text>
+                <Text fontSize="sm" color={qualityCheck.is_focused ? 'green.300' : 'orange.300'}>
+                  {qualityCheck.is_focused ? 'Focused' : 'Adjust focus'}
+                </Text>
+              </Flex>
+            </Grid>
+
+            {qualityCheck.quality.issues.length > 0 && (
+              <Stack spacing={2}>
+                <Text fontWeight="600">Detected issues</Text>
+                {qualityCheck.quality.issues.map((issue, index) => (
+                  <Flex key={index} align="center" gap={2} bg="rgba(246,173,85,0.1)" borderRadius="md" px={3} py={2}>
+                    <Iconify icon={FiAlertTriangle} color="orange.300" />
+                    <Text color={muted}>{issue}</Text>
+                  </Flex>
                 ))}
-              </ul>
-            </div>
-          )}
-        </div>
+              </Stack>
+            )}
+          </CardBody>
+        </Card>
       )}
 
-      <div className="phone-content">
-        <div className="capture-mode-selector">
-          <button
-            className={`mode-btn ${captureMode === 'file' ? 'active' : ''}`}
-            onClick={() => handleCaptureMode('file')}
-          >
-            📁 Choose File
-          </button>
-          <button
-            className={`mode-btn ${captureMode === 'camera' ? 'active' : ''}`}
-            onClick={() => handleCaptureMode('camera')}
-          >
-            📷 Use Camera
-          </button>
-        </div>
+      <Card bg={panelBg} border="1px solid rgba(121,95,238,0.18)">
+        <CardBody>
+          <Stack spacing={8}>
+            <ButtonGroup isAttached variant="ghost" alignSelf="center">
+              <Button
+                leftIcon={<Iconify icon={FiUpload} boxSize={5} />}
+                colorScheme={captureMode === 'file' ? 'brand' : undefined}
+                onClick={() => handleCaptureMode('file')}
+              >
+                Choose File
+              </Button>
+              <Button
+                leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                colorScheme={captureMode === 'camera' ? 'brand' : undefined}
+                onClick={() => handleCaptureMode('camera')}
+              >
+                Live Camera
+              </Button>
+            </ButtonGroup>
 
-        {captureMode === 'file' ? (
-          <div className="file-upload-section">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileSelect}
-              accept="image/*,image/jpeg,image/jpg,image/png"
-              capture="environment"
-              style={{ display: 'none' }}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="btn btn-large btn-primary"
-              disabled={uploading}
-            >
-              {uploading ? '⏳ Uploading...' : '📂 Select Image'}
-            </button>
-            <p className="helper-text">
-              Choose an image from your device or take a photo
-            </p>
-          </div>
-        ) : (
-          <div className="camera-section">
-            <div className="camera-view" ref={cameraContainerRef}>
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="video-preview"
-              />
-              <canvas 
-                ref={canvasOverlayRef} 
-                className="detection-overlay"
-                style={{ display: detectionActive ? 'block' : 'none' }}
-              />
-              <canvas ref={canvasRef} style={{ display: 'none' }} />
-              {/* Reference line for layout detection */}
-              <div className="layout-reference-line"></div>
-              
-              {/* Fullscreen capture button */}
-              {isFullScreen && (
-                <button
-                  onClick={captureFromCamera}
-                  className="fullscreen-capture-btn"
-                  disabled={!stream || uploading || autoCapture}
+            {captureMode === 'file' ? (
+              <Stack spacing={4} align="center">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  accept="image/*,image/jpeg,image/jpg,image/png"
+                  capture="environment"
+                  style={{ display: 'none' }}
+                />
+                <Button
+                  size="lg"
+                  colorScheme="brand"
+                  leftIcon={<Iconify icon={FiUpload} boxSize={5} />}
+                  onClick={() => fileInputRef.current?.click()}
+                  isLoading={uploading}
+                  loadingText="Uploading"
                 >
-                  <span className="capture-icon">📸</span>
-                  {uploading ? 'Uploading...' : 'Capture'}
-                </button>
-              )}
-            </div>
-            <div className="camera-controls">
-              <button
-                onClick={captureFromCamera}
-                className="btn btn-large btn-success capture-btn"
-                disabled={!stream || uploading || autoCapture}
-              >
-                {uploading ? '⏳ Uploading...' : '📸 Capture'}
-              </button>
-              <button
-                onClick={autoCapture ? stopAutoCapture : startAutoCapture}
-                className={`btn btn-large auto-capture-btn ${autoCapture ? 'active' : ''}`}
-                disabled={!stream || uploading}
-              >
-                {autoCapture ? `⏱️ ${autoCaptureCountdown}s` : '⏱️ Auto Capture'}
-              </button>
-              <button
-                onClick={() => {
-                  if (detectionActive) {
-                    stopRealTimeDetection();
-                  } else {
-                    startRealTimeDetection();
-                  }
-                }}
-                className={`btn btn-large detection-toggle-btn ${detectionActive ? 'active' : ''}`}
-                disabled={!stream}
-              >
-                {detectionActive ? '🔍 Detection ON' : '🔍 Detection OFF'}
-              </button>
-              <button
-                onClick={toggleFullScreen}
-                className="btn btn-large btn-info fullscreen-btn"
-                disabled={!stream}
-              >
-                {isFullScreen ? '🗗 Exit Fullscreen' : '⛶ Fullscreen'}
-              </button>
-            </div>
-          </div>
-        )}
+                  Select Image
+                </Button>
+                <Text fontSize="sm" color={muted} textAlign="center">
+                  Upload an existing document or snap a fresh capture from your device.
+                </Text>
+              </Stack>
+            ) : (
+              <Stack spacing={6}>
+                <Box
+                  ref={cameraContainerRef}
+                  position="relative"
+                  borderRadius="2xl"
+                  overflow="hidden"
+                  border="1px solid rgba(69,202,255,0.25)"
+                  boxShadow="halo"
+                >
+                  <Box position="relative" bg="black" aspectRatio={3 / 4}>
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    <canvas
+                      ref={canvasOverlayRef}
+                      style={{
+                        display: detectionActive ? 'block' : 'none',
+                        position: 'absolute',
+                        inset: 0,
+                      }}
+                    />
+                    <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    <Box position="absolute" left="50%" top="10%" transform="translateX(-50%)" h="80%" borderLeft="1px dashed rgba(255,255,255,0.35)" />
 
-        {previewImage && (
-          <div className="preview-section">
-            <h3>Preview</h3>
-            <img src={previewImage} alt="Preview" className="preview-image" />
-          </div>
-        )}
+                    {isFullScreen && (
+                      <Button
+                        position="absolute"
+                        bottom={6}
+                        left="50%"
+                        transform="translateX(-50%)"
+                        colorScheme="brand"
+                        size="lg"
+                        onClick={captureFromCamera}
+                        isDisabled={!stream || uploading || autoCapture}
+                        leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                      >
+                        {uploading ? 'Uploading…' : 'Capture' }
+                      </Button>
+                    )}
+                  </Box>
+                  {autoCapture && (
+                    <Tag position="absolute" top={4} right={4} colorScheme="brand" borderRadius="full">
+                      Auto capture in {autoCaptureCountdown}s
+                    </Tag>
+                  )}
+                </Box>
 
-        <div className="info-section">
-          <h3>ℹ️ How to use:</h3>
-          <ul>
-            <li>Choose between file upload or camera capture</li>
-            <li>Enable quality validation for automatic blur/focus detection</li>
-            <li>Select or capture a document image</li>
-            <li>The image will be automatically processed and uploaded</li>
-            <li>View processed files in the Dashboard</li>
-            <li>Trigger capture remotely from Dashboard's Print button</li>
-          </ul>
-        </div>
-      </div>
-    </div>
+                <Flex wrap="wrap" gap={3}>
+                  <Tooltip label="Capture instantly" hasArrow>
+                    <Button
+                      colorScheme="brand"
+                      leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                      onClick={captureFromCamera}
+                      isDisabled={!stream || uploading || autoCapture}
+                      isLoading={uploading}
+                      loadingText="Uploading"
+                    >
+                      Capture
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Auto capture with countdown" hasArrow>
+                    <Button
+                      variant={autoCapture ? 'solid' : 'outline'}
+                      colorScheme="orange"
+                      onClick={autoCapture ? stopAutoCapture : startAutoCapture}
+                      isDisabled={!stream || uploading}
+                      leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
+                    >
+                      {autoCapture ? `Cancel (${autoCaptureCountdown}s)` : 'Auto Capture'}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Real-time document detection" hasArrow>
+                    <Button
+                      variant={detectionActive ? 'solid' : 'outline'}
+                      colorScheme="purple"
+                      onClick={() => {
+                        if (detectionActive) {
+                          stopRealTimeDetection();
+                        } else {
+                          startRealTimeDetection();
+                        }
+                      }}
+                      isDisabled={!stream}
+                      leftIcon={<Iconify icon={FiCpu} boxSize={5} />}
+                    >
+                      {detectionActive ? 'Detection ON' : 'Detection OFF'}
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Fullscreen capture" hasArrow>
+                    <Button
+                      variant="outline"
+                      colorScheme="brand"
+                      onClick={toggleFullScreen}
+                      isDisabled={!stream}
+                      leftIcon={<Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />}
+                    >
+                      {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen' }
+                    </Button>
+                  </Tooltip>
+                </Flex>
+
+                {detectionActive && documentDetection && (
+                  <Flex
+                    align="center"
+                    gap={3}
+                    bg="surface.blur"
+                    borderRadius="lg"
+                    border="1px solid rgba(69,202,255,0.2)"
+                    px={4}
+                    py={3}
+                  >
+                    <Iconify icon={FiCpu} color="brand.300" />
+                    <Stack spacing={0}>
+                      <Text fontWeight="600">Document geometry locked</Text>
+                      <Text fontSize="sm" color={muted}>
+                        Coverage {documentDetection.coverage?.toFixed(1) ?? 0}% • Corners detected {documentDetection.corners?.length ?? 0}
+                      </Text>
+                    </Stack>
+                  </Flex>
+                )}
+              </Stack>
+            )}
+
+            {previewImage && (
+              <Stack spacing={3}>
+                <Heading size="sm">Preview</Heading>
+                <Box borderRadius="2xl" overflow="hidden" border="1px solid rgba(69,202,255,0.25)" boxShadow="subtle">
+                  <img src={previewImage} alt="Preview" style={{ width: '100%', display: 'block' }} />
+                </Box>
+              </Stack>
+            )}
+
+            <Stack spacing={3}>
+              <Heading size="sm">How it works</Heading>
+              <Stack spacing={2} color={muted} fontSize="sm">
+                <Text>1. Choose between live capture or file upload for your documents.</Text>
+                <Text>2. Enable quality validation to enforce blur and focus standards.</Text>
+                <Text>3. Leverage auto-detection to align documents before sending.</Text>
+                <Text>4. Once captured, files upload automatically to the Dashboard pipeline.</Text>
+                <Text>5. Monitor processing progress and results in the Dashboard experience.</Text>
+              </Stack>
+            </Stack>
+          </Stack>
+        </CardBody>
+      </Card>
+    </VStack>
   );
 };
 
