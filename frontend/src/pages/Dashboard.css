@@ -808,6 +808,120 @@
   color: #333;
 }
 
+/* Conversion Option Styles */
+.conversion-option {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #f0f4ff;
+  border-radius: 8px;
+  border: 2px solid #667eea;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #667eea;
+}
+
+.checkbox-label span {
+  user-select: none;
+}
+
+.option-description {
+  margin: 0.75rem 0 0 2.5rem;
+  font-size: 0.9rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Converted Files Section */
+.converted-files-section {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  animation: slideIn 0.3s ease-out;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.section-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.5rem;
+}
+
+.converted-files-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.converted-file-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+  transition: all 0.2s ease;
+}
+
+.converted-file-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.file-icon {
+  font-size: 2.5rem;
+  min-width: 50px;
+  text-align: center;
+}
+
+.converted-file-card .file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.converted-file-card .file-name {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #333;
+  word-break: break-word;
+}
+
+.converted-file-card .file-meta {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.converted-file-card .file-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
 @keyframes modalSlideIn {
   from {
     opacity: 0;

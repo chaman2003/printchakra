@@ -1850,6 +1850,7 @@ def convert_files():
         data = request.get_json()
         files = data.get('files', [])
         target_format = data.get('format', 'pdf').lower()
+        merge_pdf = data.get('merge_pdf', False)  # New option for merging PDFs
         
         if not files:
             return jsonify({
@@ -1884,8 +1885,58 @@ def convert_files():
         print(f"{'='*70}")
         print(f"  Files: {len(files)}")
         print(f"  Target format: {target_format.upper()}")
+        print(f"  Merge PDF: {merge_pdf}")
         
-        # Batch convert
+        # Check if merging to single PDF
+        if merge_pdf and target_format == 'pdf':
+            # Generate merged PDF filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            merged_filename = f"merged_document_{timestamp}.pdf"
+            merged_path = os.path.join(converted_dir, merged_filename)
+            
+            # Merge all images into single PDF
+            success, message = FileConverter.merge_images_to_pdf(input_paths, merged_path)
+            
+            print(f"\n{'='*70}")
+            print(f"✅ MERGE CONVERSION COMPLETED")
+            print(f"  Status: {'Success' if success else 'Failed'}")
+            print(f"{'='*70}\n")
+            
+            if success:
+                results = [{
+                    'input': ', '.join([os.path.basename(f) for f in files]),
+                    'output': merged_filename,
+                    'success': True,
+                    'message': message
+                }]
+                
+                # Emit Socket.IO event
+                try:
+                    socketio.emit('conversion_complete', {
+                        'success_count': 1,
+                        'fail_count': 0,
+                        'total': len(files),
+                        'merged': True
+                    })
+                except Exception as socket_error:
+                    print(f"⚠️ Socket.IO emit failed: {socket_error}")
+                
+                return jsonify({
+                    'success': True,
+                    'results': results,
+                    'success_count': 1,
+                    'fail_count': 0,
+                    'total': len(files),
+                    'merged': True,
+                    'merged_file': merged_filename
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': message
+                }), 500
+        
+        # Regular batch convert (separate files)
         success_count, fail_count, results = FileConverter.batch_convert(
             input_paths, converted_dir, target_format
         )
