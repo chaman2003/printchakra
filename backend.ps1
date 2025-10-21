@@ -18,7 +18,7 @@ $flaskCheck = & "$venvPath\Scripts\python.exe" -c "import flask; print('ok')" 2>
 if ($flaskCheck -ne "ok") {
     Write-Host "Warning: Dependencies may not be installed properly" -ForegroundColor Yellow
     Write-Host "Please run 'setup-backend.ps1' to install all dependencies." -ForegroundColor Yellow
-    Write-Host ""
+    Write-Host ""2
     Write-Host "Attempting to start anyway..." -ForegroundColor Cyan
     Start-Sleep -Seconds 2
 }
