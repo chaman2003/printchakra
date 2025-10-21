@@ -20,6 +20,7 @@ import {
   Flex,
   Heading,
   IconButton,
+  Input,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -200,6 +201,7 @@ const Dashboard: React.FC = () => {
   const [converting, setConverting] = useState(false);
   const [conversionProgress, setConversionProgress] = useState<string>('');
   const [mergePdf, setMergePdf] = useState<boolean>(true); // New: merge PDF option
+  const [customFilename, setCustomFilename] = useState<string>(''); // New: custom filename for merged PDF
   
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
@@ -210,15 +212,15 @@ const Dashboard: React.FC = () => {
   
   // Theme values with insane visual enhancements
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
-  const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
-  const borderColor = useColorModeValue('brand.200', 'nebula.700');
-  const borderSubtle = useColorModeValue('brand.100', 'whiteAlpha.200');
-  const accentPrimary = useColorModeValue('brand.500', 'nebula.400');
-  const accentSecondary = useColorModeValue('nebula.500', 'cyber.400');
-  const textMuted = useColorModeValue('gray.600', 'whiteAlpha.700');
-  const textInverse = useColorModeValue('gray.800', 'whiteAlpha.900');
-  const hoverBg = useColorModeValue('brand.50', 'whiteAlpha.100');
-  const glowColor = useColorModeValue('brand.500', 'nebula.400');
+  // const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
+  // const borderColor = useColorModeValue('brand.200', 'nebula.700');
+  // const borderSubtle = useColorModeValue('brand.100', 'whiteAlpha.200');
+  // const accentPrimary = useColorModeValue('brand.500', 'nebula.400');
+  // const accentSecondary = useColorModeValue('nebula.500', 'cyber.400');
+  // const textMuted = useColorModeValue('gray.600', 'whiteAlpha.700');
+  // const textInverse = useColorModeValue('gray.800', 'whiteAlpha.900');
+  // const hoverBg = useColorModeValue('brand.50', 'whiteAlpha.100');
+  // const glowColor = useColorModeValue('brand.500', 'nebula.400');
   
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
@@ -498,6 +500,7 @@ const Dashboard: React.FC = () => {
   const closeConversionModal = () => {
     setTargetFormat('pdf');
     setConversionProgress('');
+    setCustomFilename(''); // Reset custom filename
     conversionModal.onClose();
   };
 
@@ -511,7 +514,8 @@ const Dashboard: React.FC = () => {
         {
           files: selectedFiles,
           format: targetFormat,
-          merge_pdf: mergePdf && targetFormat === 'pdf' // Only merge if format is PDF
+          merge_pdf: mergePdf && targetFormat === 'pdf', // Only merge if format is PDF
+          filename: customFilename.trim() || undefined // Pass custom filename if provided
         },
         {
           headers: getDefaultHeaders()
@@ -942,6 +946,24 @@ const Dashboard: React.FC = () => {
                   </Stack>
                   <Checkbox isChecked={mergePdf} onChange={(e) => setMergePdf(e.target.checked)} isDisabled={converting} colorScheme="brand" />
                 </Flex>
+              )}
+
+              {targetFormat === 'pdf' && mergePdf && selectedFiles.length > 1 && (
+                <Box>
+                  <Text fontWeight="600" mb={2}>
+                    PDF Filename (optional)
+                  </Text>
+                  <Input
+                    placeholder="Enter custom filename (without .pdf extension)"
+                    value={customFilename}
+                    onChange={(e) => setCustomFilename(e.target.value)}
+                    isDisabled={converting}
+                    maxLength={50}
+                  />
+                  <Text fontSize="xs" color="text.muted" mt={1}>
+                    If empty, will use auto-generated name like "merged_document_20251021_123456.pdf"
+                  </Text>
+                </Box>
               )}
 
               {conversionProgress && (
