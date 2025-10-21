@@ -211,17 +211,14 @@ else:
 # Tesseract configuration (update path if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Middleware to add CORS headers to all responses
+# Middleware to add security headers to all responses
 @app.after_request
 def after_request(response):
-    """Add CORS and security headers to all responses"""
-    # CORS headers
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
-    response.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Type, Content-Disposition'
+    """Add security headers to all responses (CORS handled by Flask-CORS)"""
+    # Don't add CORS headers here - Flask-CORS already handles them
+    # Adding them again causes: "contains multiple values '*, *'"
     
-    # Security headers
+    # Security headers only
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     
