@@ -711,13 +711,18 @@ const Dashboard: React.FC = () => {
                         if (file.processing) return;
                         // Clear any existing timeout
                         if (hoverTimeout) clearTimeout(hoverTimeout);
-                        setHoveredFile(file.filename);
+                        // Add delay before showing preview to prevent flickering
+                        const timeout = setTimeout(() => {
+                          setHoveredFile(file.filename);
+                        }, 500);
+                        setHoverTimeout(timeout);
                       }}
                       onMouseLeave={() => {
-                        // Delay closing to allow mouse to move to modal
+                        // Clear hover timeout and delay closing with 1.5s cooldown
+                        if (hoverTimeout) clearTimeout(hoverTimeout);
                         const timeout = setTimeout(() => {
                           setHoveredFile(null);
-                        }, 300);
+                        }, 1500);
                         setHoverTimeout(timeout);
                       }}
                       cursor={!file.processing ? 'pointer' : 'default'}
@@ -870,8 +875,9 @@ const Dashboard: React.FC = () => {
           borderRadius="2xl" 
           border="1px solid rgba(121,95,238,0.25)" 
           boxShadow="halo"
-          maxH={{ base: "90vh", md: "85vh" }}
+          maxH={{ base: "95vh", md: "90vh" }}
           m={{ base: 2, md: 4 }}
+          overflow="hidden"
           onMouseEnter={() => {
             // Clear timeout when mouse enters modal
             if (hoverTimeout) {
@@ -880,37 +886,29 @@ const Dashboard: React.FC = () => {
             }
           }}
           onMouseLeave={() => {
-            // Close modal when mouse leaves modal
+            // Close modal when mouse leaves modal with 1.5s delay
             const timeout = setTimeout(() => {
               closeImageModal();
               setHoveredFile(null);
-            }, 200);
+            }, 1500);
             setHoverTimeout(timeout);
           }}
         >
           <ModalHeader>{selectedImageFile}</ModalHeader>
           <ModalCloseButton borderRadius="full" />
-          <ModalBody p={{ base: 2, md: 4 }}>
+          <ModalBody p={{ base: 2, md: 4 }} display="flex" alignItems="center" justifyContent="center" overflow="hidden">
             {selectedImageFile && (
-              <Box 
-                borderRadius="2xl" 
-                overflow="hidden" 
-                border="1px solid rgba(121,95,238,0.2)"
-                maxH={{ base: "60vh", md: "70vh" }}
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-              >
-                <Box
-                  as="img"
-                  src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
-                  alt={selectedImageFile}
-                  maxW="100%"
-                  maxH={{ base: "60vh", md: "70vh" }}
-                  objectFit="contain"
-                  borderRadius="lg"
-                />
-              </Box>
+              <Box
+                as="img"
+                src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
+                alt={selectedImageFile}
+                maxW="100%"
+                maxH={{ base: "calc(95vh - 120px)", md: "calc(90vh - 120px)" }}
+                w="auto"
+                h="auto"
+                objectFit="contain"
+                borderRadius="lg"
+              />
             )}
           </ModalBody>
           <ModalFooter>
