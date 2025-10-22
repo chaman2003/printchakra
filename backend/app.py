@@ -1851,6 +1851,7 @@ def convert_files():
         files = data.get('files', [])
         target_format = data.get('format', 'pdf').lower()
         merge_pdf = data.get('merge_pdf', False)  # New option for merging PDFs
+        custom_filename = data.get('filename', '').strip()  # New option for custom filename
         
         if not files:
             return jsonify({
@@ -1890,8 +1891,18 @@ def convert_files():
         # Check if merging to single PDF
         if merge_pdf and target_format == 'pdf':
             # Generate merged PDF filename
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            merged_filename = f"merged_document_{timestamp}.pdf"
+            if custom_filename:
+                # Sanitize filename - remove extension if provided, ensure .pdf extension
+                base_name = os.path.splitext(custom_filename)[0]
+                # Remove any potentially dangerous characters
+                safe_name = ''.join(c for c in base_name if c.isalnum() or c in ' -_').strip()
+                if not safe_name:
+                    safe_name = 'merged_document'
+                merged_filename = f"{safe_name}.pdf"
+            else:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                merged_filename = f"merged_document_{timestamp}.pdf"
+            
             merged_path = os.path.join(converted_dir, merged_filename)
             
             # Merge all images into single PDF
