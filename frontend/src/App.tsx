@@ -55,7 +55,7 @@ function App() {
                   PrintChakra
                 </MotionBox>
                 <Text fontSize="sm" color="text.muted">
-                  Neo-futuristic document operations hub
+                  All in One Document Solution is here!
                 </Text>
               </HStack>
 

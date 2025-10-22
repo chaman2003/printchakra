@@ -190,9 +190,11 @@ const Dashboard: React.FC = () => {
   const [connected, setConnected] = useState(false);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
+  const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
-  const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
+  const [hoveredFile, setHoveredFile] = useState<string | null>(null);
+  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // File conversion state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -226,58 +228,22 @@ const Dashboard: React.FC = () => {
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
 
   useEffect(() => {
-    // Only connect Socket.IO if enabled (local development only)
-    if (!SOCKET_IO_ENABLED) {
-      console.log('⚠️ Socket.IO disabled on production - using HTTP polling');
-      setConnected(true); // Assume connected for UI purposes
-      
-      // Load files immediately
-      loadFiles();
-      
-      let pollInterval = 3000; // Start with 3 seconds
-      const maxInterval = 30000; // Max 30 seconds between polls
-      let timeoutId: NodeJS.Timeout;
-      
-      // Recursive polling with dynamic interval
-      const startPolling = () => {
-        timeoutId = setTimeout(async () => {
-          console.log('📋 Polling for new files...');
-          try {
-            await loadFiles(false);
-            // On success, reset to normal interval
-            if (pollInterval > 3000) {
-              console.log('✅ Connection restored, resetting poll interval');
-              pollInterval = 3000;
-              setConnectionRetries(0);
-            }
-          } catch (err) {
-            // On error, increase poll interval (exponential backoff)
-            pollInterval = Math.min(pollInterval * 1.5, maxInterval);
-            setConnectionRetries(prev => prev + 1);
-            console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
-          }
-          startPolling(); // Schedule next poll
-        }, pollInterval);
-      };
-      
-      startPolling();
-      
-      // Also refresh when the page becomes visible (user switches tabs/apps)
-      const handleVisibilityChange = () => {
-        if (!document.hidden) {
-          console.log('📋 Page became visible - refreshing files');
-          loadFiles(false); // Don't show loading spinner
-        }
-      };
-      
-      document.addEventListener('visibilitychange', handleVisibilityChange);
-      
-      return () => {
-        clearTimeout(timeoutId);
-        document.removeEventListener('visibilitychange', handleVisibilityChange);
-      };
+    if (hoveredFile) {
+      openImageModal(hoveredFile);
+    } else if (imageModal.isOpen && !selectedImageFile) {
+      // Only close if we're not viewing a clicked image
+      closeImageModal();
     }
+  }, [hoveredFile]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hoverTimeout) clearTimeout(hoverTimeout);
+    };
+  }, [hoverTimeout]);
+
+  useEffect(() => {
     console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
     const newSocket = io(API_BASE_URL, {
       ...SOCKET_CONFIG,
@@ -330,7 +296,47 @@ const Dashboard: React.FC = () => {
 
     loadFiles();
 
+    let pollInterval = 3000; // Start with 3 seconds
+    const maxInterval = 30000; // Max 30 seconds between polls
+    let timeoutId: NodeJS.Timeout;
+
+    // Recursive polling with dynamic interval
+    const startPolling = () => {
+      timeoutId = setTimeout(async () => {
+        console.log('📋 Polling for new files...');
+        try {
+          await loadFiles(false);
+          // On success, reset to normal interval
+          if (pollInterval > 3000) {
+            console.log('✅ Connection restored, resetting poll interval');
+            pollInterval = 3000;
+            setConnectionRetries(0);
+          }
+        } catch (err) {
+          // On error, increase poll interval (exponential backoff)
+          pollInterval = Math.min(pollInterval * 1.5, maxInterval);
+          setConnectionRetries(prev => prev + 1);
+          console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
+        }
+        startPolling(); // Schedule next poll
+      }, pollInterval);
+    };
+
+    startPolling();
+
+    // Also refresh when the page becomes visible (user switches tabs/apps)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('📋 Page became visible - refreshing files');
+        loadFiles(false); // Don't show loading spinner
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       newSocket.close();
     };
   }, []);
@@ -468,6 +474,7 @@ const Dashboard: React.FC = () => {
 
   const closeImageModal = () => {
     setSelectedImageFile(null);
+    setHoveredFile(null);
     imageModal.onClose();
   };
 
@@ -575,6 +582,16 @@ const Dashboard: React.FC = () => {
       console.error('Failed to load converted files:', err);
     }
   };
+
+  // Manage modal based on hover state
+  useEffect(() => {
+    if (hoveredFile) {
+      openImageModal(hoveredFile);
+    } else if (imageModal.isOpen && !selectedImageFile) {
+      // Only close if we're not viewing a clicked image
+      closeImageModal();
+    }
+  }, [hoveredFile, openImageModal, closeImageModal, imageModal.isOpen, selectedImageFile]);
 
   return (
     <VStack align="stretch" spacing={10} pb={12}>
@@ -699,6 +716,20 @@ const Dashboard: React.FC = () => {
                       bg={surfaceCard}
                       position="relative"
                       overflow="hidden"
+                      onMouseEnter={() => {
+                        if (file.processing) return;
+                        // Clear any existing timeout
+                        if (hoverTimeout) clearTimeout(hoverTimeout);
+                        setHoveredFile(file.filename);
+                      }}
+                      onMouseLeave={() => {
+                        // Delay closing to allow mouse to move to modal
+                        const timeout = setTimeout(() => {
+                          setHoveredFile(null);
+                        }, 300);
+                        setHoverTimeout(timeout);
+                      }}
+                      cursor={!file.processing ? 'pointer' : 'default'}
                     >
                       {selectionMode && !file.processing && (
                         <Checkbox
@@ -739,23 +770,6 @@ const Dashboard: React.FC = () => {
                               onClick={() => !file.processing && openImageModal(file.filename)}
                             />
                           </Box>
-                          {!file.processing && (
-                            <Flex
-                              position="absolute"
-                              inset={0}
-                              align="center"
-                              justify="center"
-                              opacity={0}
-                              _hover={{ opacity: 1, backdropFilter: 'blur(8px)', bg: 'rgba(9,12,28,0.55)' }}
-                              color="white"
-                              transition="all 0.3s ease"
-                            >
-                              <Stack align="center" spacing={1}>
-                                <Iconify icon={FiZoomIn} boxSize={6} />
-                                <Text fontSize="sm">Amplify preview</Text>
-                              </Stack>
-                            </Flex>
-                          )}
 
                           {file.processing && (
                             <Flex
@@ -852,9 +866,32 @@ const Dashboard: React.FC = () => {
         </Stack>
       )}
 
-      <Modal isOpen={imageModal.isOpen && Boolean(selectedImageFile)} onClose={closeImageModal} size="4xl">
+      <Modal 
+        isOpen={imageModal.isOpen && Boolean(selectedImageFile)} 
+        onClose={closeImageModal} 
+        size="4xl"
+      >
         <ModalOverlay backdropFilter="blur(12px)" />
-        <ModalContent bg={surfaceCard} borderRadius="2xl" border="1px solid rgba(121,95,238,0.25)" boxShadow="halo">
+        <ModalContent 
+          bg={surfaceCard} 
+          borderRadius="2xl" 
+          border="1px solid rgba(121,95,238,0.25)" 
+          boxShadow="halo"
+          onMouseEnter={() => {
+            // Clear timeout when mouse enters modal
+            if (hoverTimeout) {
+              clearTimeout(hoverTimeout);
+              setHoverTimeout(null);
+            }
+          }}
+          onMouseLeave={() => {
+            // Close modal when mouse leaves modal (if it was opened by hover)
+            if (!selectedImageFile) {
+              closeImageModal();
+              setHoveredFile(null);
+            }
+          }}
+        >
           <ModalHeader>{selectedImageFile}</ModalHeader>
           <ModalCloseButton borderRadius="full" />
           <ModalBody>
