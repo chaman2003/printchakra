@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
 import {
@@ -42,7 +42,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } from 'react-icons/fi';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, getDefaultHeaders } from '../config';
 import Iconify from '../components/Iconify';
 
 interface FileInfo {
@@ -226,15 +226,6 @@ const Dashboard: React.FC = () => {
   
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
-
-  useEffect(() => {
-    if (hoveredFile) {
-      openImageModal(hoveredFile);
-    } else if (imageModal.isOpen && !selectedImageFile) {
-      // Only close if we're not viewing a clicked image
-      closeImageModal();
-    }
-  }, [hoveredFile]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -467,16 +458,16 @@ const Dashboard: React.FC = () => {
     loadFiles(true);
   };
 
-  const openImageModal = (filename: string) => {
+  const openImageModal = useCallback((filename: string) => {
     setSelectedImageFile(filename);
     imageModal.onOpen();
-  };
+  }, [imageModal]);
 
-  const closeImageModal = () => {
+  const closeImageModal = useCallback(() => {
     setSelectedImageFile(null);
     setHoveredFile(null);
     imageModal.onClose();
-  };
+  }, [imageModal]);
 
   // Conversion handlers
   const toggleSelectionMode = () => {
@@ -869,7 +860,9 @@ const Dashboard: React.FC = () => {
       <Modal 
         isOpen={imageModal.isOpen && Boolean(selectedImageFile)} 
         onClose={closeImageModal} 
-        size="4xl"
+        size={{ base: "full", sm: "xl", md: "2xl", lg: "3xl", xl: "4xl" }}
+        scrollBehavior="inside"
+        isCentered
       >
         <ModalOverlay backdropFilter="blur(12px)" />
         <ModalContent 
@@ -877,6 +870,8 @@ const Dashboard: React.FC = () => {
           borderRadius="2xl" 
           border="1px solid rgba(121,95,238,0.25)" 
           boxShadow="halo"
+          maxH={{ base: "90vh", md: "85vh" }}
+          m={{ base: 2, md: 4 }}
           onMouseEnter={() => {
             // Clear timeout when mouse enters modal
             if (hoverTimeout) {
@@ -885,19 +880,36 @@ const Dashboard: React.FC = () => {
             }
           }}
           onMouseLeave={() => {
-            // Close modal when mouse leaves modal (if it was opened by hover)
-            if (!selectedImageFile) {
+            // Close modal when mouse leaves modal
+            const timeout = setTimeout(() => {
               closeImageModal();
               setHoveredFile(null);
-            }
+            }, 200);
+            setHoverTimeout(timeout);
           }}
         >
           <ModalHeader>{selectedImageFile}</ModalHeader>
           <ModalCloseButton borderRadius="full" />
-          <ModalBody>
+          <ModalBody p={{ base: 2, md: 4 }}>
             {selectedImageFile && (
-              <Box borderRadius="2xl" overflow="hidden" border="1px solid rgba(121,95,238,0.2)">
-                <SecureImage filename={selectedImageFile} alt={selectedImageFile} />
+              <Box 
+                borderRadius="2xl" 
+                overflow="hidden" 
+                border="1px solid rgba(121,95,238,0.2)"
+                maxH={{ base: "60vh", md: "70vh" }}
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Box
+                  as="img"
+                  src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
+                  alt={selectedImageFile}
+                  maxW="100%"
+                  maxH={{ base: "60vh", md: "70vh" }}
+                  objectFit="contain"
+                  borderRadius="lg"
+                />
               </Box>
             )}
           </ModalBody>
