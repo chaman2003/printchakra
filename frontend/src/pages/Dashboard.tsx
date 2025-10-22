@@ -193,8 +193,6 @@ const Dashboard: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
-  const [hoveredFile, setHoveredFile] = useState<string | null>(null);
-  const [hoverTimeout, setHoverTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // File conversion state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -226,13 +224,6 @@ const Dashboard: React.FC = () => {
   
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hoverTimeout) clearTimeout(hoverTimeout);
-    };
-  }, [hoverTimeout]);
 
   useEffect(() => {
     console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
@@ -465,7 +456,6 @@ const Dashboard: React.FC = () => {
 
   const closeImageModal = useCallback(() => {
     setSelectedImageFile(null);
-    setHoveredFile(null);
     imageModal.onClose();
   }, [imageModal]);
 
@@ -573,16 +563,6 @@ const Dashboard: React.FC = () => {
       console.error('Failed to load converted files:', err);
     }
   };
-
-  // Manage modal based on hover state
-  useEffect(() => {
-    if (hoveredFile) {
-      openImageModal(hoveredFile);
-    } else if (imageModal.isOpen && !selectedImageFile) {
-      // Only close if we're not viewing a clicked image
-      closeImageModal();
-    }
-  }, [hoveredFile, openImageModal, closeImageModal, imageModal.isOpen, selectedImageFile]);
 
   return (
     <VStack align="stretch" spacing={10} pb={12}>
@@ -707,25 +687,6 @@ const Dashboard: React.FC = () => {
                       bg={surfaceCard}
                       position="relative"
                       overflow="hidden"
-                      onMouseEnter={() => {
-                        if (file.processing) return;
-                        // Clear any existing timeout
-                        if (hoverTimeout) clearTimeout(hoverTimeout);
-                        // Add delay before showing preview to prevent flickering
-                        const timeout = setTimeout(() => {
-                          setHoveredFile(file.filename);
-                        }, 500);
-                        setHoverTimeout(timeout);
-                      }}
-                      onMouseLeave={() => {
-                        // Clear hover timeout and delay closing with 1.5s cooldown
-                        if (hoverTimeout) clearTimeout(hoverTimeout);
-                        const timeout = setTimeout(() => {
-                          setHoveredFile(null);
-                        }, 1500);
-                        setHoverTimeout(timeout);
-                      }}
-                      cursor={!file.processing ? 'pointer' : 'default'}
                     >
                       {selectionMode && !file.processing && (
                         <Checkbox
@@ -878,21 +839,6 @@ const Dashboard: React.FC = () => {
           maxH={{ base: "95vh", md: "90vh" }}
           m={{ base: 2, md: 4 }}
           overflow="hidden"
-          onMouseEnter={() => {
-            // Clear timeout when mouse enters modal
-            if (hoverTimeout) {
-              clearTimeout(hoverTimeout);
-              setHoverTimeout(null);
-            }
-          }}
-          onMouseLeave={() => {
-            // Close modal when mouse leaves modal with 1.5s delay
-            const timeout = setTimeout(() => {
-              closeImageModal();
-              setHoveredFile(null);
-            }, 1500);
-            setHoverTimeout(timeout);
-          }}
         >
           <ModalHeader>{selectedImageFile}</ModalHeader>
           <ModalCloseButton borderRadius="full" />
