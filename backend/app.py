@@ -129,21 +129,15 @@ CORS(app, resources={
 # Initialize Socket.IO with comprehensive CORS configuration
 socketio = SocketIO(
     app, 
-    cors_allowed_origins=[
-        "https://printchakra.vercel.app",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://freezingly-nonsignificative-edison.ngrok-free.dev",
-        "*"  # Allow all origins as fallback
-    ],
+    cors_allowed_origins="*",  # Allow all origins for development
     async_mode='threading',
-    logger=False,  # Disable socket.io logger to reduce noise
-    engineio_logger=False,
-    ping_timeout=120,
-    ping_interval=30,
+    logger=True,  # Enable for debugging
+    engineio_logger=True,  # Enable for debugging
+    ping_timeout=60,
+    ping_interval=25,
     max_http_buffer_size=1e7,
-    upgrade=False,  # Disable upgrade to avoid WebSocket issues
-    transports=['polling', 'websocket'],
+    always_connect=True,
+    transports=['polling', 'websocket'],  # Support both
 )
 
 # Base directory

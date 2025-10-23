@@ -42,7 +42,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } from 'react-icons/fi';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, getDefaultHeaders } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
 import Iconify from '../components/Iconify';
 
 interface FileInfo {
@@ -227,54 +227,70 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
-    const newSocket = io(API_BASE_URL, {
-      ...SOCKET_CONFIG,
-      forceNew: true,
-    });
+    
+    // Only use Socket.IO if enabled
+    let newSocket: any = null;
+    
+    if (SOCKET_IO_ENABLED) {
+      try {
+        newSocket = io(API_BASE_URL, {
+          ...SOCKET_CONFIG,
+          forceNew: true,
+        });
 
-    newSocket.on('connect', () => {
-      console.log('✅ Dashboard: Connected to server');
-      setConnected(true);
-    });
+        newSocket.on('connect', () => {
+          console.log('✅ Dashboard: Connected to server');
+          setConnected(true);
+          setConnectionRetries(0);
+        });
 
-    newSocket.on('disconnect', (reason) => {
-      console.log('❌ Dashboard: Disconnected from server:', reason);
+        newSocket.on('disconnect', (reason: string) => {
+          console.log('❌ Dashboard: Disconnected from server:', reason);
+          setConnected(false);
+        });
+
+        newSocket.on('connect_error', (error: any) => {
+          console.error('⚠️ Dashboard: Connection error:', error.message);
+          setConnected(false);
+        });
+
+        newSocket.on('error', (error: any) => {
+          console.error('⚠️ Dashboard: Socket error:', error);
+        });
+
+        newSocket.on('new_file', (data: any) => {
+          console.log('New file uploaded:', data);
+          loadFiles(false); // Background refresh, no loading spinner
+        });
+
+        newSocket.on('file_deleted', (data: any) => {
+          console.log('File deleted:', data);
+          loadFiles(false);
+        });
+
+        newSocket.on('processing_progress', (data: ProcessingProgress) => {
+          console.log(`📊 Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
+          setProcessingProgress(data);
+        });
+
+        newSocket.on('processing_complete', (data: any) => {
+          console.log('✅ Processing complete:', data);
+          setProcessingProgress(null);
+          setTimeout(() => loadFiles(false), 500); // Refresh after processing
+        });
+
+        newSocket.on('processing_error', (data: any) => {
+          console.error('❌ Processing error:', data);
+          setProcessingProgress(null);
+        });
+      } catch (err) {
+        console.error('Failed to initialize Socket.IO:', err);
+        setConnected(false);
+      }
+    } else {
+      console.log('ℹ️ Socket.IO disabled - using HTTP polling only');
       setConnected(false);
-    });
-
-    newSocket.on('connect_error', (error: any) => {
-      console.error('⚠️ Dashboard: Connection error:', error);
-    });
-
-    newSocket.on('error', (error: any) => {
-      console.error('⚠️ Dashboard: Socket error:', error);
-    });
-
-    newSocket.on('new_file', (data) => {
-      console.log('New file uploaded:', data);
-      loadFiles(false); // Background refresh, no loading spinner
-    });
-
-    newSocket.on('file_deleted', (data) => {
-      console.log('File deleted:', data);
-      loadFiles(false);
-    });
-
-    newSocket.on('processing_progress', (data: ProcessingProgress) => {
-      console.log(`📊 Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
-      setProcessingProgress(data);
-    });
-
-    newSocket.on('processing_complete', (data) => {
-      console.log('✅ Processing complete:', data);
-      setProcessingProgress(null);
-      setTimeout(() => loadFiles(false), 500); // Refresh after processing
-    });
-
-    newSocket.on('processing_error', (data) => {
-      console.error('❌ Processing error:', data);
-      setProcessingProgress(null);
-    });
+    }
 
     loadFiles();
 
@@ -319,7 +335,9 @@ const Dashboard: React.FC = () => {
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      newSocket.close();
+      if (newSocket) {
+        newSocket.close();
+      }
     };
   }, []);
 
