@@ -65,13 +65,20 @@ export const getImageUrl = (endpoint: string, filename: string) => {
 // Socket.IO specific configuration
 export const SOCKET_CONFIG = {
   reconnection: true,
-  reconnectionDelay: 2000,
+  reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  reconnectionAttempts: 10,
-  transports: ['polling', 'websocket'], // Try polling first
-  upgrade: false, // Don't upgrade from polling to websocket
-  rememberUpgrade: true,
+  reconnectionAttempts: 5,
+  timeout: 10000,
+  transports: ['polling'] as ('polling' | 'websocket')[],
+  upgrade: true,
+  forceNew: false,
   path: '/socket.io/',
+  withCredentials: false,
+  ...(isUsingNgrok() ? {
+    extraHeaders: {
+      'ngrok-skip-browser-warning': 'true'
+    }
+  } : {})
 };
 
 export const API_ENDPOINTS = {
