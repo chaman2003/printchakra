@@ -1,19 +1,22 @@
 // Backend API Configuration
-// Priority: Environment variable > Local development > ngrok domain
+// Priority: Environment variable > Local development > Production URL
 const getApiBaseUrl = () => {
+  // 1. Check environment variable (highest priority)
   if (process.env.REACT_APP_API_URL) {
-    console.log('Using REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+    console.log('✅ Using REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     return process.env.REACT_APP_API_URL;
   }
   
-  // Check if running locally
+  // 2. Check if running locally (development)
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log('✅ Using local development URL: http://localhost:5000');
     return 'http://localhost:5000';
   }
   
-  // Production fallback - using ngrok with custom domain
+  // 3. Production fallback - using ngrok with custom domain
+  // Update this URL when deploying with a new ngrok instance
   const prodUrl = 'https://freezingly-nonsignificative-edison.ngrok-free.dev';
-  console.log('Using production URL:', prodUrl);
+  console.log('✅ Using production URL:', prodUrl);
   return prodUrl;
 };
 
@@ -72,27 +75,37 @@ export const SOCKET_CONFIG = {
 };
 
 export const API_ENDPOINTS = {
-  // Basic endpoints
+  // Core endpoints - Match backend exactly
   health: '/health',
   upload: '/upload',
   files: '/files',
   processed: '/processed',
+  uploads: '/uploads',
   delete: '/delete',
   ocr: '/ocr',
   print: '/print',
+  processingStatus: '/processing-status',
   
   // Advanced processing endpoints
   processAdvanced: '/process/advanced',
   validateQuality: '/validate/quality',
+  detectDocument: '/detect/document',
   exportPdf: '/export/pdf',
   pdf: '/pdf',
   pipelineInfo: '/pipeline/info',
   classifyDocument: '/classify/document',
   batchProcess: '/batch/process',
+  
+  // File conversion endpoints
+  convert: '/convert',
+  converted: '/converted',
+  getConvertedFiles: '/get-converted-files',
+  deleteConverted: '/delete-converted',
 };
 
 console.log('🔧 API Configuration:', { 
   API_BASE_URL, 
   hostname: window.location.hostname,
-  SOCKET_IO_ENABLED 
+  SOCKET_IO_ENABLED,
+  endpoints: Object.keys(API_ENDPOINTS).length + ' endpoints configured'
 });

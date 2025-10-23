@@ -148,16 +148,18 @@ socketio = SocketIO(
 
 # Base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, 'data')
 
 # Directories for file storage
-UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
-PROCESSED_DIR = os.path.join(BASE_DIR, 'processed')
-TEXT_DIR = os.path.join(BASE_DIR, 'processed_text')
+UPLOAD_DIR = os.path.join(DATA_DIR, 'uploads')
+PROCESSED_DIR = os.path.join(DATA_DIR, 'processed')
+TEXT_DIR = os.path.join(DATA_DIR, 'processed_text')
+PDF_DIR = os.path.join(DATA_DIR, 'pdfs')
+CONVERTED_DIR = os.path.join(DATA_DIR, 'converted')
 PRINT_DIR = os.path.join(BASE_DIR, 'print_scripts')
-PDF_DIR = os.path.join(BASE_DIR, 'pdfs')
 
 # Create directories if they don't exist
-for directory in [UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR]:
+for directory in [DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR, CONVERTED_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 # Processing status tracking (in-memory)
