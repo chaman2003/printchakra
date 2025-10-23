@@ -1,6 +1,7 @@
 """
-Modular Processing Pipeline
+Modular Processing Pipeline - Improved with notebook logic
 Integrates all modules into a complete document processing system
+Based on printchakra_clean.ipynb
 """
 
 import cv2
@@ -15,6 +16,9 @@ from .image_processing import ImageProcessingModule
 from .ocr_ai import OCRModule, DocumentClassifier, AIEnhancer
 from .storage import StorageModule
 from .export import ExportModule
+from .document_detection import DocumentDetector
+from .image_enhancement import ImageEnhancer
+from .utility import four_point_transform, order_points
 
 
 class DocumentPipeline:
@@ -25,7 +29,7 @@ class DocumentPipeline:
     
     def __init__(self, config: Optional[Dict] = None):
         """
-        Initialize pipeline with all modules
+        Initialize pipeline with all modules (improved)
         
         Args:
             config: Configuration dict for all modules
@@ -39,6 +43,10 @@ class DocumentPipeline:
         )
         
         self.processor = ImageProcessingModule()
+        
+        # Improved detection and enhancement modules
+        self.detector = DocumentDetector()
+        self.image_enhancer = ImageEnhancer()
         
         self.ocr = OCRModule(
             language=self.config.get('ocr_language', 'eng'),
@@ -107,77 +115,97 @@ class DocumentPipeline:
                 result['stage_failed'] = 'Stage 1: Quality Check'
                 return result
             
-            # Stage 2: Image processing and enhancement (SEQUENTIAL)
-            print("[STAGE 2/8] Image processing...")
-            processed = image.copy()  # Ensure we have a copy
+            # Stage 2: Document Detection & Perspective Transform (IMPROVED)
+            print("[STAGE 2/8] Document detection and cropping...")
+            processed = image.copy()
+            
+            # Step 2a: Improved document detection with corner refinement
+            if options.get('auto_crop', True):
+                print("  → Detecting document boundaries (improved algorithm)...")
+                try:
+                    doc_contour = self.detector.detect_document_refined(
+                        processed, 
+                        debug=True, 
+                        inset=options.get('corner_inset', 12)
+                    )
+                    
+                    if doc_contour is not None:
+                        # Apply perspective transform
+                        doc_contour_pts = doc_contour.reshape(4, 2).astype(np.float32)
+                        processed = four_point_transform(processed, doc_contour_pts)
+                        print(f"    ✓ Document cropped successfully - New shape: {processed.shape}")
+                        result['document_detected'] = True
+                    else:
+                        print("    ⚠ No document detected, using original image")
+                        result['document_detected'] = False
+                except Exception as detect_error:
+                    print(f"    ⚠ Detection failed: {str(detect_error)}, continuing with original...")
+                    result['detection_error'] = str(detect_error)
+                    result['document_detected'] = False
+            else:
+                print("  → Auto-crop disabled, skipping detection")
+                result['document_detected'] = False
+            
             result['processed_shape'] = processed.shape
             
-            # Step 2a: Auto-crop with fallback
-            if options.get('auto_crop', True):
-                print("  → Attempting document auto-crop...")
+            # Step 2b: Skew correction (optional)
+            if options.get('correct_skew', True):
+                print("  → Correcting skew...")
                 try:
-                    contour, _ = self.processor.find_document_contours(processed)
-                    if contour is not None:
-                        processed = self.processor.perspective_transform(processed, contour)
-                        print(f"    ✓ Auto-crop successful - New shape: {processed.shape}")
-                    else:
-                        print("    ⚠ No document contour found, skipping crop")
-                except Exception as crop_error:
-                    print(f"    ⚠ Auto-crop failed: {str(crop_error)}, continuing with original...")
+                    processed, angle = self.processor.correct_skew(processed)
+                    print(f"    ✓ Skew correction completed - Rotation angle: {angle:.2f}°")
+                    result['skew_angle'] = angle
+                except Exception as skew_error:
+                    print(f"    ⚠ Skew correction failed: {str(skew_error)}, continuing...")
+                    result['skew_error'] = str(skew_error)
             
-            # Step 2b: Skew correction
-            print("  → Correcting skew...")
+            result['stages_completed'].append('document_detection')
+            print(f"  ✓ Document detection stage completed - Final shape: {processed.shape}")
+            
+            # Stage 3: Image Enhancement (IMPROVED)
+            print("[STAGE 3/8] Image enhancement...")
             try:
-                processed, angle = self.processor.correct_skew(processed)
-                print(f"    ✓ Skew correction completed - Rotation angle: {angle:.2f}°")
-                result['skew_angle'] = angle
-            except Exception as skew_error:
-                print(f"    ⚠ Skew correction failed: {str(skew_error)}, continuing...")
-                result['skew_error'] = str(skew_error)
+                # Use improved multi-stage contrast enhancement
+                enhanced = self.image_enhancer.enhance_contrast(
+                    processed, 
+                    brightness=options.get('brightness', 25),
+                    eq_strength=options.get('eq_strength', 0.4)
+                )
+                processed = enhanced
+                print(f"  ✓ Multi-stage enhancement completed")
+                result['stages_completed'].append('enhancement')
+            except Exception as enhance_error:
+                print(f"  ⚠ Enhancement failed: {str(enhance_error)}, continuing...")
+                result['enhancement_error'] = str(enhance_error)
             
-            # Step 2c: Denoising
-            print("  → Applying denoising...")
-            try:
-                processed = self.processor.denoise_image(processed, method='bilateral')
-                print(f"    ✓ Denoising completed")
-            except Exception as denoise_error:
-                print(f"    ⚠ Denoising failed: {str(denoise_error)}, continuing...")
-                result['denoise_error'] = str(denoise_error)
-            
-            # Step 2d: Contrast enhancement
-            print("  → Enhancing contrast...")
-            try:
-                processed = self.processor.enhance_contrast(processed)
-                print(f"    ✓ Contrast enhancement completed")
-            except Exception as contrast_error:
-                print(f"    ⚠ Contrast enhancement failed: {str(contrast_error)}, continuing...")
-                result['contrast_error'] = str(contrast_error)
-            
-            result['stages_completed'].append('image_processing')
-            print(f"  ✓ Image processing stage completed - Final shape: {processed.shape}")
-            
-            # Stage 3: AI enhancement (optional) - SEQUENTIAL
+            # Optional AI enhancement
             if options.get('ai_enhance', False):
-                print("[STAGE 3/8] AI enhancement...")
+                print("  → Applying AI enhancement...")
                 try:
                     processed = self.enhancer.enhance_quality(processed)
                     print(f"  ✓ AI enhancement completed")
-                    result['stages_completed'].append('ai_enhancement')
+                    result['ai_enhanced'] = True
                 except Exception as ai_error:
                     print(f"  ⚠ AI enhancement failed: {str(ai_error)}, continuing...")
                     result['ai_enhancement_error'] = str(ai_error)
-            else:
-                print("[STAGE 3/8] AI enhancement... (skipped)")
             
-            # Stage 4: OCR text extraction - SEQUENTIAL
+            # Stage 4: OCR text extraction (IMPROVED - Multi-config)
             print("[STAGE 4/8] OCR text extraction...")
             try:
-                ocr_result = self.ocr.extract_text_with_confidence(processed)
-                result['text'] = ocr_result['text']
-                result['ocr_confidence'] = ocr_result['confidence']
-                result['word_count'] = ocr_result['word_count']
+                # Use improved multi-config OCR extraction
+                text, ocr_stats = self.ocr.extract_text_multi_config(processed, debug=True)
+                result['text'] = text
+                result['ocr_stats'] = ocr_stats
+                result['word_count'] = ocr_stats.get('words', 0)
+                result['char_count'] = ocr_stats.get('chars', 0)
+                result['line_count'] = ocr_stats.get('lines', 0)
+                result['best_config'] = ocr_stats.get('config', 'Unknown')
+                result['best_variant'] = ocr_stats.get('variant', 'Unknown')
                 result['stages_completed'].append('ocr')
-                print(f"  ✓ OCR extraction completed - Words: {ocr_result['word_count']}, Confidence: {ocr_result['confidence']:.2f}%")
+                
+                print(f"  ✓ OCR extraction completed:")
+                print(f"    Words: {ocr_stats.get('words', 0)}, Chars: {ocr_stats.get('chars', 0)}")
+                print(f"    Best config: {ocr_stats.get('config', 'Unknown')} ({ocr_stats.get('variant', 'Unknown')})")
             except Exception as ocr_error:
                 print(f"  ✗ OCR extraction failed: {str(ocr_error)}")
                 result['error'] = f"OCR stage failed: {str(ocr_error)}"
@@ -208,7 +236,7 @@ class DocumentPipeline:
                 
                 # Generate filename based on content
                 filename = self.storage.generate_filename(
-                    text_content=ocr_result['text'],
+                    text_content=result.get('text', ''),
                     prefix=options.get('filename_prefix', 'doc'),
                     extension='jpg'
                 )
@@ -226,7 +254,7 @@ class DocumentPipeline:
                 text_filename = os.path.splitext(filename)[0] + '.txt'
                 text_path = os.path.join(output_dir, text_filename)
                 with open(text_path, 'w', encoding='utf-8') as f:
-                    f.write(ocr_result['text'])
+                    f.write(result.get('text', ''))
                 print(f"  ✓ Text file saved: {text_path}")
                 result['text_file'] = text_path
                 
@@ -519,3 +547,6 @@ def create_default_pipeline(storage_dir: str = './documents') -> DocumentPipelin
     }
     
     return DocumentPipeline(config)
+
+
+print("✅ Pipeline loaded (improved with notebook logic)")

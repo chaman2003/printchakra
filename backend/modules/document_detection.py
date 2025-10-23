@@ -1,27 +1,287 @@
 """
-Real-time Document Detection Module
-Detects document borders and corners in real-time using OpenCV
+Document Detection Module - Improved Detection with Geometric Scoring
+Multi-method document boundary detection with corner refinement from notebook
 """
 
 import cv2
 import numpy as np
-from typing import Dict, Tuple, Optional, List
 import json
+from typing import Dict, Tuple, Optional, List
 
 
 class DocumentDetector:
     """
-    Real-time document detection with border and corner point visualization
+    Advanced document detection with geometric scoring and corner refinement
     """
     
     def __init__(self):
-        """Initialize document detector"""
-        self.min_area = 5000  # Minimum contour area to consider
+        """Initialize document detector with improved parameters"""
+        self.min_area = 8000  # Minimum contour area to consider
         self.min_perimeter = 100
+    
+    def score_contour(self, contour: np.ndarray, image_shape: Tuple[int, int]) -> Dict:
+        """
+        Score contour based on geometric criteria - improved to avoid background edges
         
+        Args:
+            contour: Contour to score
+            image_shape: Image dimensions (height, width)
+            
+        Returns:
+            Dictionary with scoring details
+        """
+        area = cv2.contourArea(contour)
+        image_area = image_shape[0] * image_shape[1]
+        area_ratio = area / image_area
+        height, width = image_shape
+        pts = contour.reshape(-1, 2)
+        
+        # Margin analysis - STRICT: penalize edges touching the image boundary
+        min_x, min_y = np.min(pts[:, 0]), np.min(pts[:, 1])
+        max_x, max_y = np.max(pts[:, 0]), np.max(pts[:, 1])
+        
+        # Calculate margins as percentage of image size
+        left_margin = min_x / width
+        right_margin = (width - max_x) / width
+        top_margin = min_y / height
+        bottom_margin = (height - max_y) / height
+        min_margin = min(left_margin, right_margin, top_margin, bottom_margin)
+        
+        # CRITICAL: Heavy penalty if edges are too close to image boundary
+        if min_margin < 0.04:
+            margin_score = -600  # Very strong penalty
+        elif min_margin < 0.06:
+            margin_score = -300  # Strong penalty
+        elif min_margin < 0.12:
+            margin_score = -50   # Mild penalty
+        else:
+            margin_score = 100   # Good margin
+        
+        # Rectangularity check
+        rect = cv2.minAreaRect(contour)
+        box = cv2.boxPoints(rect)
+        box_area = cv2.contourArea(box)
+        
+        if box_area > 0:
+            rectangularity = area / box_area
+        else:
+            rectangularity = 0
+        
+        # Angle analysis - measure how close corners are to 90 degrees
+        angles = []
+        for i in range(len(pts)):
+            p0, p1, p2 = pts[i], pts[(i+1) % len(pts)], pts[(i+2) % len(pts)]
+            v1, v2 = p0 - p1, p2 - p1
+            norm1, norm2 = np.linalg.norm(v1), np.linalg.norm(v2)
+            if norm1 > 0 and norm2 > 0:
+                angle = np.arccos(np.clip(np.dot(v1, v2) / (norm1 * norm2), -1, 1))
+                angles.append(np.degrees(angle))
+        
+        if angles:
+            angle_error = np.mean([abs(a - 90) for a in angles])
+        else:
+            angle_error = 180
+        
+        # Scoring for rectangularity
+        if angle_error < 8:
+            rect_score = 100
+        elif angle_error < 12:
+            rect_score = 60
+        elif angle_error < 18:
+            rect_score = 20
+        else:
+            rect_score = -100
+        
+        # Aspect ratio check (prefer close to 1:1.5 or similar)
+        if rect[1][0] > 0 and rect[1][1] > 0:
+            aspect = max(rect[1]) / min(rect[1])
+            if 1.2 <= aspect <= 2.5:  # Document-like aspect ratio
+                aspect_score = 40
+            elif aspect > 2.5 or aspect < 1.2:
+                aspect_score = -80
+            else:
+                aspect_score = 10
+        else:
+            aspect_score = 0
+        
+        # Area ratio scoring
+        if 0.10 <= area_ratio <= 0.70:
+            area_score = 100
+        elif 0.08 <= area_ratio < 0.10 or 0.70 < area_ratio <= 0.80:
+            area_score = 30
+        elif area_ratio > 0.80:
+            area_score = -400  # Too large, definitely capturing background
+        else:
+            area_score = -100  # Too small
+        
+        # Convexity check
+        hull_area = cv2.contourArea(cv2.convexHull(contour))
+        if hull_area > 0:
+            solidity = area / hull_area
+            if solidity > 0.96:
+                solidity_score = 50
+            elif solidity > 0.90:
+                solidity_score = 20
+            else:
+                solidity_score = -60
+        else:
+            solidity_score = 0
+        
+        # Total score
+        score = margin_score + rect_score + aspect_score + area_score + solidity_score
+        
+        return {
+            'score': score,
+            'area_ratio': area_ratio,
+            'angle_error': angle_error,
+            'min_margin': min_margin,
+            'rectangularity': rectangularity,
+            'margin_score': margin_score,
+            'rect_score': rect_score,
+            'area_score': area_score
+        }
+    
+    def detect_document(self, image: np.ndarray, debug: bool = False) -> Optional[np.ndarray]:
+        """
+        Document detection with strict margin filtering and multi-method approach
+        
+        Args:
+            image: Input image (BGR)
+            debug: Print debug information
+            
+        Returns:
+            Detected corners as numpy array (4, 1, 2) or None
+        """
+        candidates = []
+        orig_shape = image.shape[:2]
+        
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (7, 7), 0)
+        
+        # Method 1: Canny edge detection with strict filtering
+        for low, high in [(45, 125), (55, 160), (70, 200)]:
+            edges = cv2.Canny(blurred, low, high)
+            # Dilate to close small gaps
+            edges = cv2.dilate(edges, np.ones((5, 5)), iterations=2)
+            edges = cv2.erode(edges, np.ones((2, 2)), iterations=1)
+            
+            contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            
+            for c in contours:
+                area = cv2.contourArea(c)
+                if self.min_area < area < image.shape[0] * image.shape[1] * 0.75:
+                    peri = cv2.arcLength(c, True)
+                    for epsilon in [0.015, 0.020, 0.028]:
+                        approx = cv2.approxPolyDP(c, epsilon * peri, True)
+                        if len(approx) == 4:
+                            candidates.append((approx.reshape(4, 2), 'Canny', area))
+        
+        # Method 2: Adaptive thresholding
+        adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                          cv2.THRESH_BINARY_INV, 17, 5)
+        adaptive = cv2.morphologyEx(adaptive, cv2.MORPH_CLOSE, np.ones((7, 7)), iterations=2)
+        
+        contours, _ = cv2.findContours(adaptive, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        for c in contours:
+            area = cv2.contourArea(c)
+            if self.min_area < area < image.shape[0] * image.shape[1] * 0.75:
+                peri = cv2.arcLength(c, True)
+                for epsilon in [0.020, 0.028, 0.038]:
+                    approx = cv2.approxPolyDP(c, epsilon * peri, True)
+                    if len(approx) == 4:
+                        candidates.append((approx.reshape(4, 2), 'Adaptive', area))
+        
+        if not candidates:
+            if debug:
+                print("⚠️ No valid contours found")
+            return None
+        
+        # Score all candidates
+        scored = []
+        for quad, method, area in candidates:
+            scores = self.score_contour(quad.reshape(4, 1, 2), orig_shape)
+            scored.append((quad, method, scores['score'], scores))
+        
+        # Sort by score
+        scored.sort(key=lambda x: x[2], reverse=True)
+        
+        if debug and len(scored) > 0:
+            best = scored[0]
+            print(f"✅ Document detected (score: {best[2]:.1f})")
+            print(f"   Margin: {best[3]['min_margin']:.3f}")
+            print(f"   Area ratio: {best[3]['area_ratio']:.3f}")
+            print(f"   Angle error: {best[3]['angle_error']:.1f}°")
+        
+        # Return best candidate if acceptable score
+        if scored[0][2] > 50:
+            return scored[0][0].astype('int32').reshape(4, 1, 2)
+        
+        return None
+    
+    def refine_document_corners(self, image: np.ndarray, corners: np.ndarray, 
+                               inset_pixels: int = 15) -> np.ndarray:
+        """
+        Refine detected corners by moving them inward to avoid shadow boundaries.
+        This accounts for lighting gradients at document edges.
+        
+        Args:
+            image: Input image
+            corners: Detected corner points
+            inset_pixels: Number of pixels to move corners inward
+            
+        Returns:
+            Refined corner points
+        """
+        if corners is None or len(corners) != 4:
+            return corners
+        
+        corners = corners.reshape(4, 2).astype(np.float32)
+        
+        # Calculate center of document
+        center = corners.mean(axis=0)
+        
+        # Move each corner slightly toward center to account for shadows
+        refined = corners.copy()
+        for i in range(4):
+            direction = center - corners[i]
+            norm = np.linalg.norm(direction)
+            if norm > 0:
+                # Move inward by inset_pixels pixels
+                direction = direction / norm
+                refined[i] = corners[i] + direction * inset_pixels
+        
+        return refined.astype(np.int32)
+    
+    def detect_document_refined(self, image: np.ndarray, debug: bool = False, 
+                               inset: int = 12) -> Optional[np.ndarray]:
+        """
+        Document detection with corner refinement
+        
+        Args:
+            image: Input image (BGR)
+            debug: Print debug information
+            inset: Inset pixels for corner refinement
+            
+        Returns:
+            Refined corners as numpy array (4, 1, 2) or None
+        """
+        detected = self.detect_document(image, debug=debug)
+        
+        if detected is not None:
+            detected_clean = detected.reshape(4, 2)
+            refined = self.refine_document_corners(image, detected_clean, inset_pixels=inset)
+            
+            if debug:
+                print(f"   Corners refined (inset: {inset}px)")
+            
+            return refined.reshape(4, 1, 2).astype('int32')
+        
+        return None
+    
     def detect_document_borders(self, image: np.ndarray) -> Dict:
         """
-        Detect document borders and corner points in real-time
+        Detect document borders and corner points using improved detection
         
         Args:
             image: Input image (BGR)
@@ -30,54 +290,37 @@ class DocumentDetector:
             Dict with border data and visualization info
         """
         try:
-            # Convert to grayscale
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # Use improved detection with corner refinement
+            document_contour = self.detect_document_refined(image, debug=False, inset=12)
             
-            # Apply blur to reduce noise
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            
-            # Edge detection
-            edges = cv2.Canny(blurred, 50, 150)
-            
-            # Morphological operations to close gaps
-            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-            edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-            
-            # Find contours
-            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            
-            if not contours:
+            if document_contour is None:
                 return {
                     'success': False,
                     'message': 'No document detected',
                     'corners': []
                 }
             
-            # Find the largest rectangular contour
-            document_contour = self._find_document_contour(contours, image.shape)
-            
-            if document_contour is None:
-                return {
-                    'success': False,
-                    'message': 'No document rectangle detected',
-                    'corners': []
-                }
+            # Extract corners
+            corners = document_contour.reshape(4, 2)
             
             # Order corners
-            corners = self._order_corners(document_contour)
+            corners = self._order_corners(corners)
             
             # Normalize corners to percentage coordinates (0-100)
             height, width = image.shape[:2]
             normalized_corners = self._normalize_corners(corners, width, height)
+            
+            # Calculate area
+            contour_area = cv2.contourArea(document_contour)
             
             return {
                 'success': True,
                 'message': 'Document detected',
                 'corners': normalized_corners,  # Normalized [0-100]
                 'pixel_corners': corners.tolist(),  # Pixel coordinates
-                'contour_area': float(cv2.contourArea(document_contour)),
+                'contour_area': float(contour_area),
                 'image_area': float(width * height),
-                'coverage': float(cv2.contourArea(document_contour) / (width * height) * 100)
+                'coverage': float(contour_area / (width * height) * 100)
             }
             
         except Exception as e:
@@ -86,75 +329,7 @@ class DocumentDetector:
                 'message': f'Detection error: {str(e)}',
                 'corners': []
             }
-    
-    def _find_document_contour(self, contours: List, image_shape: Tuple) -> Optional[np.ndarray]:
-        """
-        Find the most likely document contour
-        
-        Args:
-            contours: List of contours
-            image_shape: Image shape (height, width, channels)
-            
-        Returns:
-            Document contour or None
-        """
-        height, width = image_shape[:2]
-        image_area = width * height
-        
-        for contour in sorted(contours, key=cv2.contourArea, reverse=True):
-            area = cv2.contourArea(contour)
-            
-            # Skip if too small or too large
-            if area < self.min_area or area > image_area * 0.95:
-                continue
-            
-            perimeter = cv2.arcLength(contour, True)
-            if perimeter < self.min_perimeter:
-                continue
-            
-            # Approximate contour
-            epsilon = 0.02 * perimeter
-            approx = cv2.approxPolyDP(contour, epsilon, True)
-            
-            # Check if it's a quadrilateral (4 corners)
-            if len(approx) == 4:
-                # Verify it's a reasonable rectangle
-                if self._is_valid_rectangle(approx, width, height):
-                    return approx
-        
-        return None
-    
-    def _is_valid_rectangle(self, contour: np.ndarray, width: int, height: int) -> bool:
-        """
-        Validate if contour is a reasonable rectangle
-        
-        Args:
-            contour: Contour points
-            width: Image width
-            height: Image height
-            
-        Returns:
-            True if valid rectangle
-        """
-        try:
-            x, y, w, h = cv2.boundingRect(contour)
-            
-            # Must be at least 20% of image
-            if w * h < (width * height * 0.20):
-                return False
-            
-            # Must be no more than 95% of image
-            if w * h > (width * height * 0.95):
-                return False
-            
-            # Aspect ratio should be reasonable (0.5 to 2.0)
-            aspect_ratio = float(w) / h if h > 0 else 0
-            if aspect_ratio < 0.5 or aspect_ratio > 2.0:
-                return False
-            
-            return True
-        except:
-            return False
+
     
     def _order_corners(self, contour: np.ndarray) -> np.ndarray:
         """
@@ -317,3 +492,6 @@ if __name__ == '__main__':
         cv2.imshow('Document Detection', overlay)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+
+print("✅ Document detection module loaded (improved v3)")

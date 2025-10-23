@@ -1,20 +1,20 @@
 """
-Image Enhancement Module - Advanced brightness and contrast enhancement
-Aligns with notebook processing.ipynb Step 11 implementation
+Image Enhancement Module - Improved multi-stage contrast enhancement
+Based on printchakra_clean.ipynb Section 4 implementation
 """
 
 import cv2
 import numpy as np
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, List
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 class ImageEnhancer:
-    """Advanced image enhancement with adjustable parameters"""
+    """Advanced image enhancement with multi-stage processing"""
     
-    # Default parameters (from notebook Step 11)
+    # Default parameters from improved notebook
     DEFAULT_PARAMS = {
         'brightness_boost': 25,              # 0-50 units
         'equalization_strength': 0.4,        # 0.0-1.0 blend ratio
@@ -35,10 +35,97 @@ class ImageEnhancer:
         
         logger.info(f"ImageEnhancer initialized with params: {self.params}")
     
+    def enhance_contrast(self, image: np.ndarray, brightness: int = 25, 
+                        eq_strength: float = 0.4) -> np.ndarray:
+        """
+        Multi-stage contrast enhancement from notebook Section 4
+        
+        Args:
+            image: Input image (BGR or grayscale)
+            brightness: Brightness boost (0-50)
+            eq_strength: Histogram equalization strength (0.0-1.0)
+            
+        Returns:
+            Enhanced grayscale image
+        """
+        try:
+            # Convert to grayscale if needed
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            
+            # Step 1: Brightness boost
+            brightened = cv2.convertScaleAbs(gray, alpha=1.0, beta=brightness)
+            
+            # Step 2: Gentle blended histogram equalization
+            equalized_full = cv2.equalizeHist(brightened)
+            equalized = cv2.addWeighted(brightened, 1.0 - eq_strength, equalized_full, eq_strength, 0)
+            
+            # Step 3: CLAHE enhancement
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            clahe_enhanced = clahe.apply(equalized)
+            
+            # Step 4: Final blend (50/50)
+            enhanced = cv2.addWeighted(equalized, 0.5, clahe_enhanced, 0.5, 0)
+            
+            return enhanced
+            
+        except Exception as e:
+            logger.error(f"Contrast enhancement error: {str(e)}")
+            return image
+    
+    def preprocess_for_ocr(self, image: np.ndarray) -> List[Tuple[np.ndarray, str]]:
+        """
+        Generate OCR-ready preprocessing variants for handwritten & printed text
+        From notebook Section 4
+        
+        Args:
+            image: Input image (BGR or grayscale)
+            
+        Returns:
+            List of (preprocessed_image, variant_name) tuples
+        """
+        try:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+            variants = []
+            
+            # Variant 1: Bilateral filter for noise reduction while preserving edges
+            bilateral = cv2.bilateralFilter(gray, 9, 75, 75)
+            variants.append((bilateral, 'bilateral'))
+            
+            # Variant 2: Adaptive thresholding with different block sizes
+            adaptive1 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                             cv2.THRESH_BINARY, 11, 2)
+            variants.append((adaptive1, 'adaptive_11'))
+            
+            adaptive2 = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                             cv2.THRESH_BINARY, 15, 3)
+            variants.append((adaptive2, 'adaptive_15'))
+            
+            # Variant 3: CLAHE + Sharpening for handwriting
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            enhanced = clahe.apply(bilateral)
+            kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+            sharpened = cv2.filter2D(enhanced, -1, kernel)
+            sharpened_thresh = cv2.adaptiveThreshold(sharpened, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                                     cv2.THRESH_BINARY, 13, 2)
+            variants.append((sharpened_thresh, 'clahe_sharpened'))
+            
+            # Variant 4: High contrast for handwriting
+            clahe_high = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            contrast = clahe_high.apply(bilateral)
+            contrast_thresh = cv2.adaptiveThreshold(contrast, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                                   cv2.THRESH_BINARY, 11, 3)
+            variants.append((contrast_thresh, 'high_contrast'))
+            
+            return variants
+            
+        except Exception as e:
+            logger.error(f"OCR preprocessing error: {str(e)}")
+            return [(image, 'original')]
+    
     def enhance_brightness_and_contrast(self, image: np.ndarray) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
-        Apply balanced brightness and contrast enhancement
-        Mirrors notebook Step 11: Balanced Contrast & Brightness Enhancement
+        Apply balanced brightness and contrast enhancement with statistics
+        Legacy wrapper for compatibility
         
         Args:
             image: Grayscale image (height, width) or BGR image
@@ -59,43 +146,10 @@ class ImageEnhancer:
             original_min = gray.min()
             original_max = gray.max()
             
-            # ========== STEP 1: Brightness Boost ==========
-            brightness_boost = self.params['brightness_boost']
-            brightened = cv2.convertScaleAbs(gray, alpha=1.0, beta=brightness_boost)
-            
-            # ========== STEP 2: Gentle Blended Equalization ==========
-            equalization_strength = self.params['equalization_strength']
-            
-            # Full histogram equalization
-            equalized_full = cv2.equalizeHist(brightened)
-            
-            # Gentle blend: (1 - strength) * original + strength * equalized
-            # Example: 0.4 strength = 60% original + 40% equalized
-            equalized_gentle = cv2.addWeighted(
-                brightened, 
-                1.0 - equalization_strength,
-                equalized_full, 
-                equalization_strength, 
-                0
-            )
-            
-            # ========== STEP 3: CLAHE Enhancement ==========
-            clahe_clip_limit = self.params['clahe_clip_limit']
-            clahe_tile_size = self.params['clahe_tile_size']
-            
-            clahe = cv2.createCLAHE(
-                clipLimit=clahe_clip_limit,
-                tileGridSize=(clahe_tile_size, clahe_tile_size)
-            )
-            equalized_clahe = clahe.apply(equalized_gentle)
-            
-            # ========== STEP 4: Final Blending ==========
-            # Blend gentle equalization and CLAHE (50/50)
-            enhanced = cv2.addWeighted(
-                equalized_gentle, 0.5,
-                equalized_clahe, 0.5,
-                0
-            )
+            # Use improved enhance_contrast
+            enhanced = self.enhance_contrast(gray, 
+                                            brightness=self.params['brightness_boost'],
+                                            eq_strength=self.params['equalization_strength'])
             
             # Calculate enhancement statistics
             enhanced_mean = enhanced.mean()
@@ -121,17 +175,12 @@ class ImageEnhancer:
                     'range': float(enhanced_max - enhanced_min)
                 },
                 'improvement': {
-                    'brightness_boost': brightness_boost,
+                    'brightness_boost': self.params['brightness_boost'],
                     'contrast_factor': float(contrast_improvement),
                     'mean_change': float(enhanced_mean - original_mean),
                     'std_change': float(enhanced_std - original_std),
                 },
-                'parameters': {
-                    'brightness_boost': brightness_boost,
-                    'equalization_strength': equalization_strength,
-                    'clahe_clip_limit': clahe_clip_limit,
-                    'clahe_tile_size': clahe_tile_size,
-                }
+                'parameters': self.params.copy()
             }
             
             logger.info(f"Brightness & contrast enhancement complete. Contrast improvement: {contrast_improvement:.2f}x")
@@ -361,3 +410,6 @@ class ImageEnhancer:
         """Reset to default parameters"""
         self.params = self.DEFAULT_PARAMS.copy()
         logger.info("Parameters reset to defaults")
+
+
+print("✅ Enhancement module loaded (improved)")

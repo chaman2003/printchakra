@@ -1,6 +1,7 @@
 """
-Section 3: OCR & AI Recognition Module
-Text extraction, document classification, and AI enhancement
+OCR & AI Recognition Module - Improved multi-config OCR extraction
+Text extraction with multiple preprocessing variants and configurations
+Based on printchakra_clean.ipynb Section 5
 """
 
 import cv2
@@ -15,7 +16,8 @@ import os
 
 class OCRModule:
     """
-    Handles OCR text extraction with configurable settings
+    Handles OCR text extraction with multi-configuration approach
+    Based on printchakra_clean.ipynb Section 5
     """
     
     def __init__(self, language: str = 'eng', psm: int = 3, oem: int = 3):
@@ -36,9 +38,71 @@ class OCRModule:
         self.oem = oem
         self.config = f'--oem {oem} --psm {psm}'
     
+    def extract_text_multi_config(self, image: np.ndarray, debug: bool = False) -> Tuple[str, Dict]:
+        """
+        Extract text with multiple OCR configurations and preprocessing variants
+        From notebook Section 5 - improved multi-config approach
+        
+        Args:
+            image: Input image
+            debug: Print debug information
+            
+        Returns:
+            Tuple of (best_text, statistics_dict)
+        """
+        from .image_enhancement import ImageEnhancer
+        
+        configs = [
+            ('PSM 3 (Auto)', '--oem 3 --psm 3'),
+            ('PSM 6 (Block)', '--oem 3 --psm 6'),
+            ('PSM 4 (Column)', '--oem 3 --psm 4')
+        ]
+        
+        # Get preprocessing variants
+        enhancer = ImageEnhancer()
+        variants = enhancer.preprocess_for_ocr(image)
+        results = []
+        
+        try:
+            for img, variant_name in variants:
+                for config_name, config_str in configs:
+                    text = pytesseract.image_to_string(img, lang=self.language, config=config_str)
+                    results.append({
+                        'text': text,
+                        'length': len(text.strip()),
+                        'config': config_name,
+                        'variant': variant_name
+                    })
+            
+            # Select best result (longest text)
+            best = max(results, key=lambda x: x['length'])
+            
+            if debug:
+                print(f"✅ Best OCR: {best['config']} ({best['variant']}) - {best['length']} chars")
+            
+            # Get detailed stats from first variant
+            data = pytesseract.image_to_data(variants[0][0], output_type=pytesseract.Output.DICT)
+            words = [w for w in data['text'] if w.strip()]
+            lines = set(data['line_num'])
+            
+            stats = {
+                'chars': len(best['text']),
+                'words': len(words),
+                'lines': len(lines),
+                'config': best['config'],
+                'variant': best['variant']
+            }
+            
+            return best['text'], stats
+            
+        except Exception as e:
+            if debug:
+                print(f"OCR error: {e}")
+            return "", {}
+    
     def extract_text(self, image: np.ndarray) -> str:
         """
-        Extract text from image
+        Extract text from image (simple version for compatibility)
         
         Args:
             image: Input image
@@ -59,7 +123,7 @@ class OCRModule:
     
     def extract_text_with_confidence(self, image: np.ndarray) -> Dict:
         """
-        Extract text with confidence scores
+        Extract text with confidence scores using multi-config approach
         
         Args:
             image: Input image
@@ -68,6 +132,10 @@ class OCRModule:
             Dict with text and confidence data
         """
         try:
+            # Use multi-config extraction for better results
+            text, stats = self.extract_text_multi_config(image, debug=False)
+            
+            # Get confidence data
             data = pytesseract.image_to_data(
                 image, 
                 lang=self.language, 
@@ -81,18 +149,17 @@ class OCRModule:
             
             for i in range(len(data['text'])):
                 if int(data['conf'][i]) > 30:  # Confidence threshold
-                    text = data['text'][i].strip()
-                    if text:
-                        filtered_text.append(text)
+                    text_word = data['text'][i].strip()
+                    if text_word:
+                        filtered_text.append(text_word)
                         confidences.append(int(data['conf'][i]))
             
-            full_text = ' '.join(filtered_text)
             avg_confidence = np.mean(confidences) if confidences else 0
             
             return {
-                'text': full_text,
+                'text': text,  # Use multi-config text (better quality)
                 'confidence': float(avg_confidence),
-                'word_count': len(filtered_text),
+                'word_count': stats.get('words', len(filtered_text)),
                 'all_confidences': confidences
             }
         except Exception as e:
@@ -365,3 +432,6 @@ class AIEnhancer:
             interpolation=cv2.INTER_CUBIC
         )
         return enhanced
+
+
+print("✅ OCR module loaded (improved multi-config)")
