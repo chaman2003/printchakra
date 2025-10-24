@@ -4,9 +4,9 @@
 
 ### *AI-Powered Smart Print & Capture Solution*
 
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg?style=for-the-badge)](https://github.com/chaman2003/printchakra)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg?style=for-the-badge)](https://github.com/chaman2003/printchakra)
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![React](https://img.shields.io/badge/React-18+-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+[![React](https://img.shields.io/badge/React-19+-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0+-000000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
@@ -28,7 +28,6 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 ---
 
 ## ✨ Key Features
-
 <table>
 <tr>
 <td width="50%">
@@ -37,12 +36,12 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 - 📊 Manage processed documents
 - 📄 View extracted OCR text
 - 📥 Download enhanced images
-- 🗑️ Delete files with one click
 - ⚡ Real-time auto-refresh
 - 🎛️ Advanced processing options
 - 🔧 Pipeline configuration display
+- 📦 Batch file operations
+- 🔄 Socket.IO synchronization
 
-</td>
 <td width="50%">
 
 ### 📱 **Mobile Capture**
@@ -53,32 +52,35 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 - ✨ Seamless user experience
 - ✅ **Real-time quality validation**
 - 📊 Blur & focus score metrics
+- 🎯 Document border detection
 
 </td>
 </tr>
 <tr>
 <td width="50%">
 
-### 🤖 **AI Processing**
-- 🔍 Tesseract OCR engine
-- 🖼️ OpenCV enhancement
-- ✂️ Edge detection & cropping
-- 📐 Skew correction
-- 💾 Automatic text extraction
-- 📋 Document classification
-- 🔄 Batch processing support
+### 🤖 **AI Processing Pipeline**
+- 🔍 Multi-strategy document detection
+- ✂️ Perspective correction & cropping
+- � 12-stage sequential processing
+- 📐 Corner refinement algorithms
+- 🖼️ 4-stage image enhancement
+- 📝 Multi-configuration OCR (15 attempts)
+- � Automatic best-result selection
+- 📋 Document classification (optional)
 
 </td>
 <td width="50%">
 
 ### 🚀 **Developer Experience**
-- ⚡ One-command startup
+- ⚡ One-command startup scripts
 - 🔧 PowerShell automation
 - 🌍 ngrok public tunneling
 - 📦 Pre-configured deployment
 - 🛠️ Comprehensive logging
 - 📚 Complete API documentation
 - 🧪 Advanced testing tools
+- 🔄 File conversion (PDF, DOCX)
 
 </td>
 </tr>
@@ -90,43 +92,23 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                         PrintChakra Ecosystem                          │
-└────────────────────────────────────────────────────────────────────────┘
-
-    ┌─────────────────┐         ┌──────────────────┐         ┌─────────────┐
-    │  Web Dashboard  │◄───────►│  Flask Backend   │◄───────►│    ngrok    │
-    │   (React TS)    │         │  (Python 3.8+)   │         │   Tunnel    │
-    │   Port: 3000    │         │   Port: 5000     │         │  (Public)   │
-    └────────┬────────┘         └────────┬─────────┘         └─────────────┘
-             │                           │
-             │      Socket.IO            │
-             │   ◄─────────────────────► │
-             │      WebSocket            │
-             │                           │
-    ┌────────▼────────┐         ┌────────▼─────────┐
-    │  Phone Camera   │         │  File Processing │
-    │   Interface     │         │  ┌─────────────┐ │
-    │  /phone route   │         │  │   OpenCV    │ │
-    └─────────────────┘         │  │  Tesseract  │ │
-                                │  │   Pillow    │ │
-                                │  └─────────────┘ │
-                                └──────────────────┘
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    │                    │                    │
-            ┌───────▼─────┐    ┌────────▼──────┐    ┌───────▼────────┐
-            │   uploads/   │    │  processed/   │    │ processed_text/│
-            │  (Original)  │    │  (Enhanced)   │    │   (OCR Data)   │
-            └──────────────┘    └───────────────┘    └────────────────┘
+│                           PrintChakra System                           │
+├────────────────────────────────────────────────────────────────────────┤
+│  📱 Phone Camera   │         │  🖥️ Desktop Processing                │
+│  /phone route      │◄────────┤  │   OpenCV + Tesseract              │ │
+└────────────────────┘         │  │  Flask-SocketIO Backend           │ │
+            │   uploads/      │  │  React-TypeScript Frontend        │ │
+            └─────────────────┘  │  Real-time Synchronization         │ │
+                                 └─────────────────────────────────────┘
 ```
 
 ### 🔄 Processing Flow
 
 ```
-📱 Upload Image  →  🔍 Edge Detection  →  ✂️ Crop & Enhance  →  📝 OCR Extract  →  💾 Save Results
+📱 Upload Image → 🔍 Multi-Strategy Detection → ✂️ Perspective Transform → 🖼️ Enhancement Pipeline → 📝 OCR Extraction → 💾 Save Results
 ```
 
-> 📘 See **[doc/flow.txt](doc/flow.txt)** for detailed technology pipeline with 15 processing stages.
+> 📘 **Processing Stages**: Load → Detect → Grayscale → Blur → Edge Detection → Threshold → Morphology → Contour → Resize → Brightness → OCR → Save (12 stages)
 
 ---
 
@@ -143,13 +125,13 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 
 ### ⚡ Installation
 
-```powershell
+```bash
 # 1. Clone the repository
 git clone https://github.com/chaman2003/printchakra.git
 cd printchakra
 
 # 2. Setup backend (automated - creates venv + installs dependencies)
-.\setup-backend.ps1
+.\scripts\setup-backend.ps1
 
 # 3. Setup frontend
 cd frontend
@@ -162,34 +144,40 @@ npm install
 
 **Option A: Start Everything (Recommended)**
 ```powershell
-# Opens 3 terminal windows: Backend + Frontend + ngrok
-.\fullstart.ps1
+# From project root
+.\scripts\start-full-online.ps1    # With ngrok tunneling
+# OR
+.\scripts\start-full-offline.ps1   # Local only
 ```
 
-**Option B: Start Backend Only**
+**Option B: Start Components Separately**
 ```powershell
-# Backend + ngrok tunnel
-.\backend.ps1
+# Backend only
+.\scripts\backend.ps1
+
+# Frontend only (in new terminal)
+cd frontend
+npm start
 ```
 
-### 🌐 Access Points
+**Access URLs:**
+- 🔌 **Backend API**: http://localhost:5000
+- 🖥️ **Frontend Dashboard**: http://localhost:3000
+- 📱 **Mobile Capture**: http://localhost:3000/phone
+- 🌐 **Public URL**: Check ngrok console for tunnel URL
 
-| Interface | URL | Description |
-|-----------|-----|-------------|
-| 🖥️ **Dashboard** | http://localhost:3000 | Main document management |
-| 📱 **Phone UI** | http://localhost:3000/phone | Mobile capture interface |
-| 🔌 **API** | http://localhost:5000 | Backend REST endpoints |
-| 🌍 **Public** | https://freezingly-nonsignificative-edison.ngrok-free.dev | Remote access via ngrok |
+### 🧪 Testing
 
-### ✅ Test the Workflow
+```bash
+# Run backend tests
+cd backend
+.\venv\Scripts\Activate.ps1
+python -m pytest tests/ -v
 
-1. **Open Dashboard** → http://localhost:3000
-2. **Click "Print Blank"** → Triggers phone capture
-3. **Upload/Capture Image** → Automatic processing
-4. **View Results** → Enhanced image + extracted text
-5. **Download/Delete** → Manage your files
-
-**🎉 You're ready to go!**
+# Run frontend tests
+cd frontend
+npm test
+```
 
 ---
 
@@ -198,44 +186,91 @@ npm install
 ```
 printchakra/
 │
-├── 🎛️ PowerShell Scripts
-│   ├── setup-backend.ps1        # Setup backend venv + dependencies
-│   ├── backend.ps1              # Start backend + ngrok
-│   ├── fullstart.ps1            # Start all services
-│   └── .gitignore               # Git ignore rules
+├── 🔧 PowerShell Scripts (scripts/)
+│   ├── setup-backend.ps1        # Automated backend setup + venv
+│   ├── backend.ps1              # Start Flask backend only
+│   ├── ngrok.ps1                # Start ngrok tunneling
+│   ├── start-full-online.ps1    # Start all services + ngrok
+│   ├── start-full-offline.ps1   # Start all services locally
+│   ├── cleanup-data.ps1         # Clean data directories
+│   ├── backup-data.ps1          # Backup processed files
+│   └── restart-all.ps1          # Restart all services
 │
-├── 🐍 Backend (Flask)
-│   ├── app.py                   # Main Flask application
-│   ├── requirements.txt         # Python dependencies
-│   ├── venv/                    # Virtual environment
-│   ├── uploads/                 # Original uploaded files
-│   ├── processed/               # Enhanced images
-│   ├── processed_text/          # Extracted OCR text
-│   └── print_scripts/
-│       ├── print-file.py        # Windows printer integration
-│       └── blank.pdf            # Test print file
+├── 🐍 Backend (Flask + Python)
+│   ├── app.py                   # Main Flask application (2074 lines)
+│   ├── run.py                   # Alternative entry point
+│   ├── requirements.txt         # Python dependencies (25+ packages)
+│   ├── config/
+│   │   ├── settings.py          # Centralized configuration
+│   │   ├── __init__.py
+│   │   └── __pycache__/
+│   ├── modules/                 # Core processing modules
+│   │   ├── pipeline.py          # Main processing pipeline
+│   │   ├── document_detection.py # Multi-strategy detection
+│   │   ├── image_enhancement.py # 4-stage enhancement
+│   │   ├── ocr_ai.py           # Multi-config OCR (15 attempts)
+│   │   ├── utility.py           # Helper functions
+│   │   ├── api_endpoints.py     # API endpoint handlers
+│   │   ├── export.py            # PDF/Export functionality
+│   │   ├── file_converter.py    # File format conversion
+│   │   ├── scanning.py          # Scanning utilities
+│   │   ├── storage.py           # File storage management
+│   │   ├── enhanced_pipeline.py # Advanced pipeline
+│   │   └── __init__.py
+│   ├── data/                   # Consolidated data directory
+│   │   ├── uploads/            # Original uploaded files
+│   │   ├── processed/          # Enhanced images
+│   │   ├── processed_text/     # Extracted OCR text
+│   │   ├── pdfs/               # Generated PDFs
+│   │   └── converted/          # Converted files
+│   ├── print_scripts/          # Windows printing
+│   │   ├── create_blank_pdf.py # PDF generation
+│   │   └── print-file.py       # Print automation
+│   ├── logs/                   # Application logs
+│   ├── tests/                  # Unit tests
+│   │   ├── test_api.py
+│   │   ├── test_conversion.py
+│   │   └── test_sequential_processing.py
+│   ├── static/                 # Static assets
+│   └── __pycache__/
 │
 ├── ⚛️ Frontend (React + TypeScript)
-│   ├── public/
-│   │   ├── index.html
-│   │   └── manifest.json
-│   ├── src/
-│   │   ├── App.tsx              # Main React component
-│   │   ├── config.ts            # API configuration
-│   │   ├── index.tsx            # Entry point
-│   │   └── pages/
-│   │       ├── Dashboard.tsx    # Document management UI
-│   │       └── Phone.tsx        # Camera capture UI
 │   ├── package.json             # Node dependencies
 │   ├── tsconfig.json            # TypeScript config
-│   └── vercel.json              # Vercel deployment config
+│   ├── vercel.json              # Vercel deployment
+│   ├── public/
+│   │   ├── index.html
+│   │   ├── manifest.json
+│   │   └── robots.txt
+│   ├── src/
+│   │   ├── App.tsx              # Main app component
+│   │   ├── index.tsx            # React entry point
+│   │   ├── config.ts            # API configuration (18 endpoints)
+│   │   ├── theme.ts             # Chakra UI theme
+│   │   ├── components/
+│   │   │   └── Iconify.tsx      # Icon component
+│   │   └── pages/
+│   │       ├── Dashboard.tsx    # Document management (1076 lines)
+│   │       ├── Phone.tsx        # Mobile capture interface
+│   │       ├── Dashboard.css
+│   │       └── Phone.css
+│   ├── build/                   # Production build
+│   └── node_modules/
 │
-└── 📚 Documentation
-    ├── README.md                # This file
-    ├── FIXES.md                 # Troubleshooting guide
-    └── doc/
-        ├── printchakra.txt      # Future work & scope
-        └── flow.txt             # Processing pipeline
+├── 📚 Documentation & Notebooks
+│   ├── README.md                # This file
+│   ├── printchakra_clean.ipynb  # Original processing notebook
+│   └── processing.ipynb         # Additional processing examples
+│
+├── 🔧 Configuration Files
+│   ├── .gitignore               # Git ignore rules
+│   ├── .env.example             # Environment variables
+│   └── .env.local               # Local environment
+│
+└── 📦 Additional Files
+    ├── input.jpg                # Test input image
+    ├── output.jpg               # Test output image
+    └── restart-all.ps1          # Service restart script
 ```
 
 ---
@@ -246,70 +281,102 @@ printchakra/
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| ![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?logo=flask) | 3.0.0 | Web framework |
+| ![Flask](https://img.shields.io/badge/Flask-3.0.0-000000?logo=flask) | 3.0.0 | Web framework & API |
 | ![Socket.IO](https://img.shields.io/badge/Socket.IO-5.3.5-010101?logo=socketdotio) | 5.3.5 | Real-time WebSocket |
-| ![OpenCV](https://img.shields.io/badge/OpenCV-4.10.0-5C3EE8?logo=opencv) | 4.10.0 | Image processing |
-| ![Tesseract](https://img.shields.io/badge/Tesseract-OCR-4285F4) | Latest | Text extraction |
-| ![pywin32](https://img.shields.io/badge/pywin32-306-blue) | 306 | Windows printer API |
+| ![OpenCV](https://img.shields.io/badge/OpenCV-4.10.0-5C3EE8?logo=opencv) | 4.10.0 | Computer vision & image processing |
+| ![Tesseract](https://img.shields.io/badge/Tesseract-OCR-4285F4) | Latest | Text extraction & OCR |
+| ![NumPy](https://img.shields.io/badge/NumPy-2.1.1-013243) | 2.1.1 | Numerical computing |
+| ![Pillow](https://img.shields.io/badge/Pillow-11.0+-blue) | 11.0+ | Image manipulation |
+| ![scikit-learn](https://img.shields.io/badge/scikit--learn-1.3+-F7931E) | 1.3+ | Machine learning (classification) |
+| ![pywin32](https://img.shields.io/badge/pywin32-307-blue) | 307 | Windows printing API |
 | ![fpdf2](https://img.shields.io/badge/fpdf2-2.7.9-red) | 2.7.9 | PDF generation |
+| ![PyMuPDF](https://img.shields.io/badge/PyMuPDF-1.23+-red) | 1.23+ | PDF manipulation |
 
 ### Frontend Technologies
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| ![React](https://img.shields.io/badge/React-18.2.0-61DAFB?logo=react) | 18.2.0 | UI framework |
+| ![React](https://img.shields.io/badge/React-19.2.0-61DAFB?logo=react) | 19.2.0 | UI framework |
 | ![TypeScript](https://img.shields.io/badge/TypeScript-4.9.5-3178C6?logo=typescript) | 4.9.5 | Type safety |
+| ![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.10.3-319795) | 2.10.3 | Component library |
 | ![Socket.IO](https://img.shields.io/badge/Socket.IO_Client-4.8.1-010101) | 4.8.1 | WebSocket client |
 | ![Axios](https://img.shields.io/badge/Axios-1.12.2-5A29E4) | 1.12.2 | HTTP requests |
-| ![React Router](https://img.shields.io/badge/React_Router-6.28.0-CA4245) | 6.28.0 | Navigation |
+| ![React Router](https://img.shields.io/badge/React_Router-7.9.4-CA4245) | 7.9.4 | Navigation |
+| ![Framer Motion](https://img.shields.io/badge/Framer_Motion-11.11.17-0055FF) | 11.11.17 | Animations |
 
-### Infrastructure
+### Infrastructure & Tools
 
 - **ngrok** - Public tunneling service
-- **Vercel** - Frontend deployment platform (optional)
+- **Vercel** - Frontend deployment platform
 - **PowerShell** - Windows automation scripts
+- **Git** - Version control
+- **Jupyter** - Development notebooks
 
 ---
 
-### 📡 API Reference
+## 📡 API Reference
 
-### REST Endpoints
+### Core REST Endpoints
 
 | Method | Endpoint | Description | Response |
 |--------|----------|-------------|----------|
-| `GET` | `/health` | Server health check | `{ status: "ok" }` |
-| `POST` | `/upload` | Upload & process image | `{ success: true, filename: "..." }` |
-| `GET` | `/files` | List all processed files | `{ files: [...], count: n }` |
+| `GET` | `/` | Server info & health check | Service metadata |
+| `GET` | `/health` | Detailed health check | System status & features |
+| `POST` | `/upload` | Upload & process image | Processing result |
+| `GET` | `/files` | List processed files | File list with metadata |
 | `GET` | `/processed/<file>` | Get enhanced image | Image file |
-| `GET` | `/ocr/<file>` | Get extracted text | `{ text: "..." }` |
-| `DELETE` | `/delete/<file>` | Delete file | `{ success: true }` |
-| `POST` | `/print` | Trigger phone capture | `{ success: true }` |
-| `POST` | `/validate/quality` | Validate image quality before processing | `{ blur_score, focus_score, overall_acceptable, issues, recommendations }` |
-| `POST` | `/process/advanced` | Advanced processing with custom options | `{ success, filename, metadata }` |
-| `POST` | `/export/pdf` | Export text as PDF | `{ filename, filepath }` |
-| `GET` | `/pdf/<filename>` | Download generated PDF | PDF file |
-| `GET` | `/pipeline/info` | Get pipeline configuration & module status | `{ modules: {...}, features: [...] }` |
-| `POST` | `/classify/document` | Classify document type | `{ document_type, confidence }` |
-| `POST` | `/batch/process` | Process multiple files in batch | `{ batch_id, results: [...] }` |
+| `GET` | `/uploads/<file>` | Get original image | Image file |
+| `DELETE` | `/delete/<file>` | Delete file & text | Success confirmation |
+| `GET` | `/ocr/<file>` | Get extracted text | OCR text content |
+| `POST` | `/print` | Trigger phone capture | Print command result |
+| `GET` | `/processing-status/<file>` | Get processing status | Real-time progress |
+
+### Advanced Processing Endpoints
+
+| Method | Endpoint | Description | Features |
+|--------|----------|-------------|----------|
+| `POST` | `/process/advanced` | Advanced processing pipeline | Custom options, AI enhancement |
+| `POST` | `/validate/quality` | Image quality validation | Blur/focus scoring |
+| `POST` | `/detect/document` | Document border detection | Real-time corner detection |
+| `POST` | `/export/pdf` | Export to PDF | Batch PDF generation |
+| `GET` | `/pdf/<filename>` | Download PDF | Generated PDF files |
+| `GET` | `/pipeline/info` | Pipeline configuration | Module status & features |
+| `POST` | `/classify/document` | Document classification | ML-based categorization |
+| `POST` | `/batch/process` | Batch file processing | Sequential processing |
+
+### File Conversion Endpoints
+
+| Method | Endpoint | Description | Formats |
+|--------|----------|-------------|----------|
+| `POST` | `/convert` | Convert file formats | JPG, PNG, PDF, DOCX |
+| `GET` | `/converted/<file>` | Download converted file | Converted files |
+| `GET` | `/get-converted-files` | List converted files | File metadata |
 
 ### Socket.IO Events
 
 | Event | Direction | Payload | Description |
 |-------|-----------|---------|-------------|
-| `upload_complete` | Server → Client | `{ filename, success }` | File uploaded successfully |
-| `processing_complete` | Server → Client | `{ filename, text }` | OCR processing done |
-| `file_deleted` | Server → Client | `{ filename }` | File deleted |
-| `capture_now` | Server → Client | `{}` | Trigger phone camera |
+| `connect` | Client → Server | - | Client connection established |
+| `disconnect` | Client → Server | - | Client disconnected |
+| `upload_complete` | Server → Client | `{filename, success}` | File upload completed |
+| `processing_complete` | Server → Client | `{filename, text, ...}` | OCR processing done |
+| `processing_progress` | Server → Client | `{step, total, stage}` | Real-time progress updates |
+| `file_deleted` | Server → Client | `{filename}` | File deletion notification |
+| `capture_now` | Server → Client | `{message, timestamp}` | Trigger phone camera |
+| `detection_result` | Server → Client | `{corners, success}` | Document detection result |
+| `conversion_complete` | Server → Client | `{success_count, fail_count}` | File conversion completed |
 
 ---
 
-## 🐛 Troubleshooting
+## � Troubleshooting
+
+### Backend Issues
 
 <details>
 <summary><b>Backend won't start</b></summary>
 
 **Solutions:**
-- Run setup script first: `.\setup-backend.ps1`
+- Run setup script first: `.\scripts\setup-backend.ps1`
 - Check Python version: `python --version` (need 3.8+)
 - Check if venv exists: `Test-Path .\backend\venv`
 - Manually activate venv: `.\backend\venv\Scripts\Activate.ps1`
@@ -320,6 +387,33 @@ printchakra/
 </details>
 
 <details>
+<summary><b>Socket.IO connection errors</b></summary>
+
+**Solutions:**
+- Check `frontend/src/config.ts` - ensure correct API_BASE_URL
+- Verify Socket.IO versions match (backend 5.3.5, frontend 4.8.1)
+- Check CORS settings in `backend/config/settings.py`
+- Restart both backend and frontend servers
+- Check browser console for WebSocket errors
+- Use polling fallback: `transports: ['polling']`
+
+</details>
+
+<details>
+<summary><b>OCR not working / Tesseract errors</b></summary>
+
+**Solutions:**
+- Install Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
+- Add to PATH: `C:\Program Files\Tesseract-OCR`
+- Update path in `backend/app.py` if needed
+- Test with: `tesseract --version`
+- Check language data: `tesseract --list-langs`
+
+</details>
+
+### Frontend Issues
+
+<details>
 <summary><b>Frontend won't start</b></summary>
 
 **Solutions:**
@@ -327,27 +421,45 @@ printchakra/
 - Install dependencies: `npm install` in frontend folder
 - Check port 3000: `netstat -ano | findstr :3000`
 - Clear cache: `npm cache clean --force`
+- Check TypeScript errors: `npm run build`
 
 </details>
 
 <details>
-<summary><b>WebSocket errors / 500 errors</b></summary>
+<summary><b>Images not loading</b></summary>
 
 **Solutions:**
-- Check `app.py` - ensure no `broadcast=True` in `socketio.emit()`
-- Verify Socket.IO versions match (backend 5.3.5, frontend 4.8.1)
-- Check CORS settings in `app.py`
-- Restart both servers
+- Check ngrok bypass header in `frontend/src/config.ts`
+- Verify API_BASE_URL configuration
+- Check browser network tab for CORS errors
+- Use blob URLs for image loading (implemented)
+- Check backend CORS settings
+
+</details>
+
+### Processing Issues
+
+<details>
+<summary><b>Document detection failing</b></summary>
+
+**Solutions:**
+- Ensure good lighting and contrast
+- Hold camera steady for focus
+- Check image quality scores in logs
+- Adjust detection parameters in `backend/config/settings.py`
+- Use manual upload if auto-detection fails
 
 </details>
 
 <details>
-<summary><b>OCR not working / Tesseract not found</b></summary>
+<summary><b>OCR quality poor</b></summary>
 
 **Solutions:**
-- Install Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
-- Add to PATH: `C:\Program Files\Tesseract-OCR`
-- Update path in `app.py` if needed
+- Ensure clear, well-lit images
+- Check image enhancement settings
+- Try different PSM modes (3, 6, 4)
+- Verify Tesseract language data
+- Use preprocessing options
 
 </details>
 
@@ -357,46 +469,82 @@ printchakra/
 
 | Document | Description |
 |----------|-------------|
-| **[README.md](README.md)** | This file - Quick start guide |
-| **[FIXES.md](FIXES.md)** | WebSocket troubleshooting guide |
-| **[QUICKSTART.md](QUICKSTART.md)** | Detailed setup & testing guide with quality validation |
-| **[INTEGRATION_REPORT.md](INTEGRATION_REPORT.md)** | Technical architecture & new features documentation |
-| **[COMPLETE.md](COMPLETE.md)** | Session summary & implementation details |
-| **[doc/printchakra.txt](doc/printchakra.txt)** | Future work & long-term scope |
-| **[doc/flow.txt](doc/flow.txt)** | Processing pipeline (15 stages) |
+| **[README.md](README.md)** | Complete setup & usage guide |
+| **[printchakra_clean.ipynb](printchakra_clean.ipynb)** | Original processing algorithm notebook |
+| **[processing.ipynb](processing.ipynb)** | Additional processing examples |
+| **[backend/README.md](backend/README.md)** | Backend-specific documentation |
+| **[frontend/README.md](frontend/README.md)** | Frontend development guide |
 
 ---
 
 ## 🗺️ Roadmap
 
-### ✅ Completed Features
+### ✅ Completed Features (v2.1.0)
 
-- [x] Flask backend with OCR processing
-- [x] React TypeScript frontend
-- [x] Socket.IO real-time updates
-- [x] OpenCV image enhancement
-- [x] Tesseract text extraction
-- [x] Windows printer integration
-- [x] PowerShell automation scripts
-- [x] ngrok public tunneling
-- [x] Comprehensive error handling
-- [x] Dashboard file management
-- [x] **Quality validation system** ✨ NEW
-- [x] **Advanced processing options** ✨ NEW
-- [x] **Document classification API** ✨ NEW
-- [x] **Batch processing support** ✨ NEW
-- [x] **PDF export functionality** ✨ NEW
-- [x] **Pipeline info endpoint** ✨ NEW
+- [x] **Core Processing Pipeline**
+  - Multi-strategy document detection (8 scoring factors)
+  - 12-stage sequential processing with progress tracking
+  - 4-stage image enhancement (brightness, contrast, CLAHE, denoising)
+  - Multi-configuration OCR (15 attempts with best selection)
 
-### 🎯 Future Work
+- [x] **Backend Architecture**
+  - Flask 3.0 with Socket.IO 5.3.5 real-time communication
+  - Modular architecture with 12 core modules
+  - Centralized configuration system
+  - Comprehensive error handling and logging
 
-See **[doc/printchakra.txt](doc/printchakra.txt)** for complete roadmap including:
-- 📊 Advanced logging & monitoring
-- 🔐 User authentication system
-- 💾 Automatic backup system
-- 🎨 UI/UX improvements
-- ☁️ Cloud storage integration
-- 🤖 Advanced ML models
+- [x] **Frontend Interface**
+  - React 19 with TypeScript and Chakra UI
+  - Real-time Socket.IO synchronization
+  - Mobile-responsive design with camera integration
+  - Advanced file management with batch operations
+
+- [x] **Advanced Features**
+  - Quality validation with blur/focus scoring
+  - Document border detection with corner refinement
+  - File conversion (PDF, DOCX, multiple formats)
+  - Batch processing with sequential execution
+  - PDF export and generation
+  - Windows printing automation
+
+- [x] **Developer Experience**
+  - PowerShell automation scripts (8 scripts)
+  - One-command setup and deployment
+  - Comprehensive testing suite
+  - ngrok public tunneling integration
+  - Environment-based configuration
+
+### 🎯 Future Enhancements
+
+- [ ] **AI/ML Improvements**
+  - Custom document classification models
+  - Advanced OCR with transformer models
+  - Auto-cropping optimization
+  - Quality enhancement AI
+
+- [ ] **Cloud Integration**
+  - AWS S3 storage integration
+  - Google Cloud Vision API
+  - Multi-region deployment
+  - Backup and sync features
+
+- [ ] **Advanced Processing**
+  - Multi-page document handling
+  - Form recognition and extraction
+  - Signature detection and verification
+  - Table and structure recognition
+
+- [ ] **User Experience**
+  - Progressive Web App (PWA)
+  - Offline processing capabilities
+  - Advanced batch operations UI
+  - Custom processing profiles
+
+- [ ] **Enterprise Features**
+  - User authentication and authorization
+  - Team collaboration features
+  - Audit logging and compliance
+  - API rate limiting and quotas
 
 ---
 
@@ -409,6 +557,20 @@ We welcome contributions! Please:
 3. Commit changes: `git commit -m 'Add amazing feature'`
 4. Push to branch: `git push origin feature/amazing-feature`
 5. Open a Pull Request
+
+**Development Setup:**
+```bash
+# Backend development
+cd backend
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python app.py
+
+# Frontend development
+cd frontend
+npm install
+npm start
+```
 
 ---
 
@@ -424,6 +586,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 - 🐙 GitHub: [@chaman2003](https://github.com/chaman2003)
 - 📧 Email: [chamans7952@gmail.com](mailto:chamans7952@gmail.com)
+- 📱 LinkedIn: [Your LinkedIn Profile]
 
 ---
 
@@ -436,7 +599,27 @@ Special thanks to:
 - **[Flask](https://flask.palletsprojects.com/)** - Python web framework
 - **[React](https://reactjs.org/)** - JavaScript UI library
 - **[Socket.IO](https://socket.io/)** - Real-time communication
+- **[Chakra UI](https://chakra-ui.com/)** - React component library
 - **[ngrok](https://ngrok.com/)** - Public tunneling service
+- **[NumPy](https://numpy.org/)** - Scientific computing
+- **[scikit-learn](https://scikit-learn.org/)** - Machine learning
+
+---
+
+## 📊 System Requirements
+
+### Minimum Requirements
+- **OS**: Windows 10/11, macOS 10.15+, Linux (Ubuntu 18.04+)
+- **RAM**: 4GB
+- **Storage**: 2GB free space
+- **Network**: Stable internet for ngrok tunneling
+
+### Recommended Requirements
+- **OS**: Windows 11, macOS 12+, Linux (Ubuntu 20.04+)
+- **RAM**: 8GB
+- **Storage**: 5GB free space
+- **CPU**: Multi-core processor
+- **Network**: High-speed internet
 
 ---
 
@@ -444,8 +627,11 @@ Special thanks to:
 
 ### 💫 Made with ❤️ for intelligent document processing
 
-**PrintChakra v2.0.0** • October 2025
+**PrintChakra v2.1.0** • October 2025
 
 [⬆ Back to Top](#-printchakra)
 
 </div>
+
+2. **Click "Print Blank"** → Triggers phone capture
+3. **Upload/Capture Image** → Automatic processing
