@@ -1,4 +1,4 @@
-<div align="center">
+1113339987122<div align="center">
 
 # 🪷 PrintChakra
 
@@ -843,7 +843,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 - 🐙 GitHub: [@chaman2003](https://github.com/chaman2003)
 - 📧 Email: [chamans7952@gmail.com](mailto:chamans7952@gmail.com)
-- 📱 LinkedIn: [Your LinkedIn Profile]
+- 📱 LinkedIn: [chaman2003](https://www.linkedin.com/in/chaman2003/)
 
 ---
 
