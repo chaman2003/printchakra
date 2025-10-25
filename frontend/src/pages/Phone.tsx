@@ -29,6 +29,8 @@ import {
   FiCamera,
   FiCheckCircle,
   FiCpu,
+  FiEye,
+  FiEyeOff,
   FiMaximize2,
   FiMinimize2,
   FiUpload,
@@ -75,6 +77,9 @@ const Phone: React.FC = () => {
   const [detectionActive, setDetectionActive] = useState(false);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
+  const [showControls, setShowControls] = useState(true);
+  const [autoTriggerReady, setAutoTriggerReady] = useState(false);
+  const autoTriggerCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const toast = useToast();
   
   // Theme values with insane visual enhancements
@@ -125,6 +130,7 @@ const Phone: React.FC = () => {
   const startAutoCapture = () => {
     setAutoCapture(true);
     setAutoCaptureCountdown(3);
+    setAutoTriggerReady(false);
     
     autoCaptureIntervalRef.current = setInterval(() => {
       setAutoCaptureCountdown((prev) => {
@@ -137,12 +143,18 @@ const Phone: React.FC = () => {
           setTimeout(() => {
             captureFromCamera();
             setAutoCapture(false);
+            setAutoTriggerReady(false);
           }, 300);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
+    
+    // Start real-time detection for smart auto-capture
+    if (!detectionActive) {
+      startRealTimeDetection();
+    }
   };
 
   const stopAutoCapture = useCallback(() => {
@@ -150,8 +162,13 @@ const Phone: React.FC = () => {
       clearInterval(autoCaptureIntervalRef.current);
       autoCaptureIntervalRef.current = null;
     }
+    if (autoTriggerCountdownRef.current) {
+      clearInterval(autoTriggerCountdownRef.current);
+      autoTriggerCountdownRef.current = null;
+    }
     setAutoCapture(false);
     setAutoCaptureCountdown(0);
+    setAutoTriggerReady(false);
   }, []);
 
   const startRealTimeDetection = () => {
@@ -190,10 +207,41 @@ const Phone: React.FC = () => {
             { headers: { 'Content-Type': 'multipart/form-data' } }
           );
           
-          if (response.data.success && response.data.corners.length > 0) {
+          if (response.data.success && response.data.corners && response.data.corners.length > 0) {
             setDocumentDetection(response.data);
             // Draw detection overlay
             drawDetectionOverlay(response.data);
+            
+            // Smart auto-trigger: if document is fully detected and autoCapture is enabled
+            if (autoCapture && response.data.coverage && response.data.coverage >= 75) {
+              // Document is well-positioned (at least 75% of screen)
+              if (!autoTriggerReady) {
+                console.log('📸 Document detected! Ready to auto-capture...');
+                setAutoTriggerReady(true);
+                
+                // Auto-trigger capture after 1 second if still aligned
+                autoTriggerCountdownRef.current = setTimeout(() => {
+                  if (autoCapture && documentDetection && documentDetection.coverage >= 75) {
+                    console.log('📷 Auto-capturing document...');
+                    captureFromCamera();
+                    setAutoCapture(false);
+                    setAutoTriggerReady(false);
+                  }
+                }, 1000);
+              }
+            } else if (autoTriggerReady && (!response.data.coverage || response.data.coverage < 75)) {
+              // Document moved out of position
+              setAutoTriggerReady(false);
+              if (autoTriggerCountdownRef.current) {
+                clearInterval(autoTriggerCountdownRef.current);
+              }
+            }
+          } else {
+            // No document detected
+            setAutoTriggerReady(false);
+            if (autoTriggerCountdownRef.current) {
+              clearInterval(autoTriggerCountdownRef.current);
+            }
           }
         } catch (err) {
           // Silently fail for real-time detection
@@ -706,84 +754,157 @@ const Phone: React.FC = () => {
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                     <Box position="absolute" left="50%" top="10%" transform="translateX(-50%)" h="80%" borderLeft="1px dashed rgba(255,255,255,0.35)" />
 
-                    {isFullScreen && (
+                    {/* Eye Toggle Button - Top Right */}
+                    <Tooltip label={showControls ? 'Hide controls' : 'Show controls'} hasArrow placement="left">
                       <Button
+                        position="absolute"
+                        top={4}
+                        right={4}
+                        size="sm"
+                        colorScheme="brand"
+                        variant={showControls ? 'solid' : 'outline'}
+                        onClick={() => setShowControls(!showControls)}
+                        zIndex={10}
+                        borderRadius="full"
+                        p={2}
+                        minWidth="auto"
+                      >
+                        <Iconify icon={showControls ? FiEye : FiEyeOff} boxSize={5} />
+                      </Button>
+                    </Tooltip>
+
+                    {/* Auto-capture ready indicator */}
+                    {autoTriggerReady && (
+                      <Box
+                        position="absolute"
+                        top={4}
+                        left={4}
+                        bg="rgba(34,197,94,0.3)"
+                        border="2px solid rgb(34,197,94)"
+                        borderRadius="full"
+                        p={2}
+                        animation="pulse 0.5s infinite"
+                        _before={{
+                          content: '""',
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: 'full',
+                          border: '2px solid rgb(34,197,94)',
+                          animation: 'pulse 1.5s infinite',
+                        }}
+                      >
+                        <Box w={2} h={2} bg="green.400" borderRadius="full" />
+                      </Box>
+                    )}
+
+                    {/* Full-screen controls */}
+                    {isFullScreen && showControls && (
+                      <VStack
                         position="absolute"
                         bottom={6}
                         left="50%"
                         transform="translateX(-50%)"
-                        colorScheme="brand"
-                        size="lg"
-                        onClick={captureFromCamera}
-                        isDisabled={!stream || uploading || autoCapture}
-                        leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                        spacing={3}
+                        zIndex={5}
+                        animation="slideUp 0.3s ease-out"
                       >
-                        {uploading ? 'Uploading…' : 'Capture' }
-                      </Button>
+                        <Tooltip label={autoCapture ? `Auto capture in ${autoCaptureCountdown}s` : 'Auto capture on document detection'} hasArrow>
+                          <Button
+                            colorScheme={autoCapture ? 'orange' : 'brand'}
+                            size="lg"
+                            onClick={autoCapture ? stopAutoCapture : startAutoCapture}
+                            isDisabled={!stream || uploading}
+                            leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
+                            minW="160px"
+                          >
+                            {autoCapture ? `Auto (${autoCaptureCountdown}s)` : 'Auto Capture'}
+                          </Button>
+                        </Tooltip>
+                        <Tooltip label="Capture instantly" hasArrow>
+                          <Button
+                            colorScheme="brand"
+                            size="lg"
+                            onClick={captureFromCamera}
+                            isDisabled={!stream || uploading || autoCapture}
+                            isLoading={uploading}
+                            loadingText="Uploading"
+                            leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                            minW="160px"
+                          >
+                            Capture
+                          </Button>
+                        </Tooltip>
+                      </VStack>
+                    )}
+
+                    {/* Non-fullscreen controls info */}
+                    {!isFullScreen && autoCapture && (
+                      <Tag position="absolute" top={4} left={4} colorScheme="brand" borderRadius="full">
+                        Auto capture in {autoCaptureCountdown}s
+                      </Tag>
                     )}
                   </Box>
-                  {autoCapture && (
-                    <Tag position="absolute" top={4} right={4} colorScheme="brand" borderRadius="full">
-                      Auto capture in {autoCaptureCountdown}s
-                    </Tag>
-                  )}
                 </Box>
 
-                <Flex wrap="wrap" gap={3}>
-                  <Tooltip label="Capture instantly" hasArrow>
-                    <Button
-                      colorScheme="brand"
-                      leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
-                      onClick={captureFromCamera}
-                      isDisabled={!stream || uploading || autoCapture}
-                      isLoading={uploading}
-                      loadingText="Uploading"
-                    >
-                      Capture
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Auto capture with countdown" hasArrow>
-                    <Button
-                      variant={autoCapture ? 'solid' : 'outline'}
-                      colorScheme="orange"
-                      onClick={autoCapture ? stopAutoCapture : startAutoCapture}
-                      isDisabled={!stream || uploading}
-                      leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
-                    >
-                      {autoCapture ? `Cancel (${autoCaptureCountdown}s)` : 'Auto Capture'}
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Real-time document detection" hasArrow>
-                    <Button
-                      variant={detectionActive ? 'solid' : 'outline'}
-                      colorScheme="purple"
-                      onClick={() => {
-                        if (detectionActive) {
-                          stopRealTimeDetection();
-                        } else {
-                          startRealTimeDetection();
-                        }
-                      }}
-                      isDisabled={!stream}
-                      leftIcon={<Iconify icon={FiCpu} boxSize={5} />}
-                    >
-                      {detectionActive ? 'Detection ON' : 'Detection OFF'}
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Fullscreen capture" hasArrow>
-                    <Button
-                      variant="outline"
-                      colorScheme="brand"
-                      onClick={toggleFullScreen}
-                      isDisabled={!stream}
-                      leftIcon={<Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />}
-                    >
-                      {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen' }
-                    </Button>
-                  </Tooltip>
-                </Flex>
+                {/* Controls - Hidden in fullscreen, shown in normal mode */}
+                {!isFullScreen && showControls && (
+                  <Flex wrap="wrap" gap={3}>
+                    <Tooltip label="Capture instantly" hasArrow>
+                      <Button
+                        colorScheme="brand"
+                        leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                        onClick={captureFromCamera}
+                        isDisabled={!stream || uploading || autoCapture}
+                        isLoading={uploading}
+                        loadingText="Uploading"
+                      >
+                        Capture
+                      </Button>
+                    </Tooltip>
+                    <Tooltip label="Auto capture with countdown" hasArrow>
+                      <Button
+                        variant={autoCapture ? 'solid' : 'outline'}
+                        colorScheme="orange"
+                        onClick={autoCapture ? stopAutoCapture : startAutoCapture}
+                        isDisabled={!stream || uploading}
+                        leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
+                      >
+                        {autoCapture ? `Cancel (${autoCaptureCountdown}s)` : 'Auto Capture'}
+                      </Button>
+                    </Tooltip>
+                    <Tooltip label="Real-time document detection" hasArrow>
+                      <Button
+                        variant={detectionActive ? 'solid' : 'outline'}
+                        colorScheme="purple"
+                        onClick={() => {
+                          if (detectionActive) {
+                            stopRealTimeDetection();
+                          } else {
+                            startRealTimeDetection();
+                          }
+                        }}
+                        isDisabled={!stream}
+                        leftIcon={<Iconify icon={FiCpu} boxSize={5} />}
+                      >
+                        {detectionActive ? 'Detection ON' : 'Detection OFF'}
+                      </Button>
+                    </Tooltip>
+                    <Tooltip label={isFullScreen ? 'Exit fullscreen' : 'Fullscreen capture mode'} hasArrow>
+                      <Button
+                        variant="outline"
+                        colorScheme="brand"
+                        onClick={toggleFullScreen}
+                        isDisabled={!stream}
+                        leftIcon={<Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />}
+                      >
+                        {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen' }
+                      </Button>
+                    </Tooltip>
+                  </Flex>
+                )}
 
-                {detectionActive && documentDetection && (
+                {/* Detection Status - Always visible when detection is active */}
+                {detectionActive && documentDetection && showControls && (
                   <Flex
                     align="center"
                     gap={3}
