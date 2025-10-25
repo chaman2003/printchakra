@@ -118,21 +118,31 @@ app.config['TRAP_BAD_REQUEST_ERRORS'] = True
 CORS(app, resources={
     r"/*": {
         "origins": "*",  # Allow all origins - ngrok domains change frequently
-        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+        "methods": ["GET", "POST", "DELETE", "OPTIONS", "PUT", "PATCH"],
+        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning", "X-Requested-With"],
         "expose_headers": ["Content-Type", "Content-Disposition"],
         "supports_credentials": False,
         "max_age": 3600
     }
 })
 
+# Add CORS headers to all responses
+@app.after_request
+def after_request(response):
+    """Add CORS headers to all responses"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS,PUT,PATCH')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    return response
+
 # Initialize Socket.IO with comprehensive CORS configuration
 socketio = SocketIO(
     app, 
     cors_allowed_origins="*",  # Allow all origins for development
     async_mode='threading',
-    logger=True,  # Enable for debugging
-    engineio_logger=True,  # Enable for debugging
+    logger=False,  # Disable verbose logging
+    engineio_logger=False,  # Disable verbose logging
     ping_timeout=60,
     ping_interval=25,
     max_http_buffer_size=1e7,
@@ -207,14 +217,19 @@ else:
 # Tesseract configuration (update path if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Middleware to add security headers to all responses
+# Middleware to add CORS and security headers to all responses
 @app.after_request
-def after_request(response):
-    """Add security headers to all responses (CORS handled by Flask-CORS)"""
-    # Don't add CORS headers here - Flask-CORS already handles them
-    # Adding them again causes: "contains multiple values '*, *'"
+def after_request_handler(response):
+    """Add CORS and security headers to all responses"""
+    # CORS headers (ensure they're always present)
+    origin = request.headers.get('Origin', '*')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Type,Content-Disposition'
     
-    # Security headers only
+    # Security headers
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     
@@ -861,6 +876,18 @@ def index():
 def favicon():
     """Serve favicon to prevent 404 errors"""
     return '', 204  # No Content response
+
+# Global OPTIONS handler for CORS preflight
+@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+@app.route('/<path:path>', methods=['OPTIONS'])
+def handle_options(path):
+    """Handle CORS preflight requests for all routes"""
+    response = jsonify({'status': 'ok'})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response, 200
 
 @app.route('/health')
 def health():
