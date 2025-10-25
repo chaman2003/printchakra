@@ -29,6 +29,8 @@ import {
   ModalHeader,
   ModalOverlay,
   Progress,
+  Radio,
+  RadioGroup,
   Select,
   SimpleGrid,
   Spinner,
@@ -1296,7 +1298,7 @@ const Dashboard: React.FC = () => {
                     <Heading size="sm" mb={3}>Select Page Scan Mode</Heading>
                     <RadioGroup
                       value={orchestrateOptions.scanPageMode}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
                     >
                       <Stack spacing={2}>
                         <Radio value="all">Scan All Pages</Radio>
@@ -1323,7 +1325,7 @@ const Dashboard: React.FC = () => {
                     <Heading size="sm" mb={3}>Select Scan Layout</Heading>
                     <RadioGroup
                       value={orchestrateOptions.scanLayout}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: value as any })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: value as any })}
                     >
                       <Stack spacing={2}>
                         <Radio value="portrait">Portrait</Radio>
@@ -1334,7 +1336,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Paper Size */}
                   <Box>
-                    <Label fontSize="sm" fontWeight="600" mb={2}>Select Paper Size</Label>
+                    <Text fontSize="sm" fontWeight="600" mb={2}>Select Paper Size</Text>
                     <Select
                       value={orchestrateOptions.scanPaperSize}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: e.target.value })}
@@ -1348,7 +1350,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Resolution */}
                   <Box>
-                    <Label fontSize="sm" fontWeight="600" mb={2}>Select Resolution (DPI)</Label>
+                    <Text fontSize="sm" fontWeight="600" mb={2}>Select Resolution (DPI)</Text>
                     <Select
                       value={orchestrateOptions.scanResolution}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: e.target.value })}
@@ -1364,7 +1366,7 @@ const Dashboard: React.FC = () => {
                     <Heading size="sm" mb={3}>Select Color Mode</Heading>
                     <RadioGroup
                       value={orchestrateOptions.scanColorMode}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: value as any })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: value as any })}
                     >
                       <Stack spacing={2}>
                         <Radio value="color">Color</Radio>
@@ -1405,7 +1407,7 @@ const Dashboard: React.FC = () => {
                     <Heading size="sm" mb={3}>Pages</Heading>
                     <RadioGroup
                       value={orchestrateOptions.printPages}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
                     >
                       <Stack spacing={2}>
                         <Radio value="all">All (Default)</Radio>
@@ -1421,7 +1423,7 @@ const Dashboard: React.FC = () => {
                     <Heading size="sm" mb={3}>Layout</Heading>
                     <RadioGroup
                       value={orchestrateOptions.printLayout}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printLayout: value as any })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printLayout: value as any })}
                     >
                       <Stack spacing={2}>
                         <Radio value="portrait">Portrait</Radio>
@@ -1432,7 +1434,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Paper Size */}
                   <Box>
-                    <Label fontSize="sm" fontWeight="600" mb={2}>Paper Size</Label>
+                    <Text fontSize="sm" fontWeight="600" mb={2}>Paper Size</Text>
                     <Select
                       value={orchestrateOptions.printPaperSize}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: e.target.value })}
@@ -1446,7 +1448,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Scale */}
                   <Box>
-                    <Label fontSize="sm" fontWeight="600" mb={2}>Scale (%)</Label>
+                    <Text fontSize="sm" fontWeight="600" mb={2}>Scale (%)</Text>
                     <Select
                       value={orchestrateOptions.printScale}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
@@ -1460,7 +1462,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Margins */}
                   <Box>
-                    <Label fontSize="sm" fontWeight="600" mb={2}>Margins</Label>
+                    <Text fontSize="sm" fontWeight="600" mb={2}>Margins</Text>
                     <Select
                       value={orchestrateOptions.printMargins}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printMargins: e.target.value as any })}
@@ -1472,7 +1474,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Pages per Sheet */}
                   <Box>
-                    <Label fontSize="sm" fontWeight="600" mb={2}>Pages per Sheet</Label>
+                    <Text fontSize="sm" fontWeight="600" mb={2}>Pages per Sheet</Text>
                     <Select
                       value={orchestrateOptions.printPagesPerSheet}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: e.target.value })}
