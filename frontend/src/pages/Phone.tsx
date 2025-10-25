@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
-import axios from 'axios';
+import apiClient from '../apiClient';
 import {
   Alert,
   AlertDescription,
@@ -184,10 +184,10 @@ const Phone: React.FC = () => {
           const formData = new FormData();
           formData.append('file', blob, 'frame.jpg');
           
-          const response = await axios.post(
-            `${API_BASE_URL}/detect/document`,
+          const response = await apiClient.post(
+            '/detect/document',
             formData,
-            { headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' } }
+            { headers: { 'Content-Type': 'multipart/form-data' } }
           );
           
           if (response.data.success && response.data.corners.length > 0) {
@@ -331,11 +331,11 @@ const Phone: React.FC = () => {
       const formData = new FormData();
       formData.append('file', file, 'temp.jpg');
 
-      const response = await axios.post(
-        `${API_BASE_URL}${API_ENDPOINTS.validateQuality}`,
+      const response = await apiClient.post(
+        API_ENDPOINTS.validateQuality,
         formData,
         {
-          headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' },
+          headers: { 'Content-Type': 'multipart/form-data' },
         }
       );
 
@@ -380,11 +380,11 @@ const Phone: React.FC = () => {
       formData.append('ai_enhance', processingOptions.aiEnhance.toString());
       formData.append('strict_quality', processingOptions.strictQuality.toString());
 
-      const response = await axios.post(
-        `${API_BASE_URL}${API_ENDPOINTS.upload}`,
+      const response = await apiClient.post(
+        API_ENDPOINTS.upload,
         formData,
         {
-          headers: { ...getDefaultHeaders(), 'Content-Type': 'multipart/form-data' },
+          headers: { 'Content-Type': 'multipart/form-data' },
         }
       );
 
