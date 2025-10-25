@@ -126,16 +126,6 @@ CORS(app, resources={
     }
 })
 
-# Add CORS headers to all responses
-@app.after_request
-def after_request(response):
-    """Add CORS headers to all responses"""
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS,PUT,PATCH')
-    response.headers.add('Access-Control-Max-Age', '3600')
-    return response
-
 # Initialize Socket.IO with comprehensive CORS configuration
 socketio = SocketIO(
     app, 

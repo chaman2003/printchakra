@@ -15,11 +15,11 @@ Write-Host "IMPORTANT: Make sure Flask backend is running first!" -ForegroundCol
 Write-Host "  Run in another terminal: .\backend.ps1" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Expected tunnel URL:" -ForegroundColor Cyan
-Write-Host "  https://freezingly-nonsignificative-edison.ngrok-free.dev" -ForegroundColor Green
+Write-Host "  https://ostensible-unvibrant-clarisa.ngrok-free.dev" -ForegroundColor Green
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
 # Run ngrok with browser bypass and custom domain
 # Note: CORS is handled by Flask-CORS, don't add duplicate headers here
-ngrok http --log=false --domain=freezingly-nonsignificative-edison.ngrok-free.dev 5000
+ngrok http --log=false --domain=ostensible-unvibrant-clarisa.ngrok-free.dev 5000
