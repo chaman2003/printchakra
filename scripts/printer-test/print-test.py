@@ -16,8 +16,9 @@ try:
 except Exception as e:
     print(f"Error getting printer info: {e}")
 
-# Use the PDF file
-file_path = os.path.join(os.getcwd(), "blank.pdf")
+# Use the PDF file with absolute path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+file_path = os.path.join(script_dir, "blank.pdf")
 print(f"File to print: {file_path}")
 
 if os.path.exists(file_path):
@@ -41,3 +42,4 @@ if os.path.exists(file_path):
         
 else:
     print(f"File not found: {file_path}")
+

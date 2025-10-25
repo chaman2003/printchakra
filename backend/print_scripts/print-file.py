@@ -16,7 +16,7 @@ try:
 except Exception as e:
     print(f"Error getting printer info: {e}")
 
-# Use the blank PDF file
+# Use the PDF file
 file_path = os.path.join(os.getcwd(), "blank.pdf")
 print(f"File to print: {file_path}")
 

@@ -1427,7 +1427,7 @@ def printer_diagnostics():
         from contextlib import redirect_stdout, redirect_stderr
         
         # Path to the diagnostics script
-        diag_script = os.path.join(os.path.dirname(PRINT_DIR), 'scripts', 'printer-test.py')
+        diag_script = os.path.join(os.path.dirname(PRINT_DIR), 'scripts', 'printer-test', 'print-test.py')
         
         if not os.path.exists(diag_script):
             return jsonify({
