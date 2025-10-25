@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
 import apiClient from '../apiClient';
+import { useSocket } from '../context/SocketContext';
 import {
   Alert,
   AlertDescription,
@@ -519,46 +519,23 @@ const Phone: React.FC = () => {
     uploadImage(file, file.name);
   };
 
+  // Use shared Socket from context instead of creating new connections
+  const { socket, connected: socketConnected } = useSocket();
 
   useEffect(() => {
-    // Only connect Socket.IO if enabled (local development only)
-    if (!SOCKET_IO_ENABLED) {
-      console.log('⚠️ Socket.IO disabled on production - using HTTP polling only');
-      setConnected(true); // UI will show connected but won't use real-time features
+    // Sync local connected state with socket context
+    setConnected(socketConnected);
+  }, [socketConnected]);
+
+  useEffect(() => {
+    console.log('🔌 Phone: Setting up Socket.IO event listeners');
+    
+    if (!socket) {
+      console.log('⚠️ Socket not available yet');
       return;
     }
 
-    // Initialize Socket.IO connection with better error handling
-    console.log('🔌 Initializing Socket.IO connection to:', API_BASE_URL);
-    const newSocket = io(API_BASE_URL, {
-      ...SOCKET_CONFIG,
-      forceNew: true,
-    });
-
-    newSocket.on('connect', () => {
-      console.log('✅ Connected to server');
-      setConnected(true);
-      setMessage('✅ Connected to backend');
-    });
-
-    newSocket.on('disconnect', (reason) => {
-      console.log('❌ Disconnected from server:', reason);
-      setConnected(false);
-      setMessage(`⚠️ Disconnected: ${reason}`);
-    });
-
-    newSocket.on('connect_error', (error: any) => {
-      console.error('⚠️ Connection error:', error);
-      const errorMsg = error?.message || error?.data?.content?.message || String(error);
-      setMessage(`Connection issue: ${errorMsg}. Retrying...`);
-    });
-
-    newSocket.on('error', (error: any) => {
-      console.error('⚠️ Socket error:', error);
-      setMessage(`Socket error: ${error}. Retrying...`);
-    });
-
-    newSocket.on('capture_now', (data) => {
+    socket.on('capture_now', (data) => {
       console.log('Received capture command:', data);
       showMessage('📸 Capture triggered from Dashboard!');
       setTimeout(() => {
@@ -571,12 +548,12 @@ const Phone: React.FC = () => {
     });
 
     return () => {
-      newSocket.close();
+      socket.off('capture_now');
       stopCamera();
       stopAutoCapture();
       stopRealTimeDetection();
     };
-  }, [captureFromCamera, captureMode, showMessage, stopAutoCapture, stopCamera, stopRealTimeDetection, stream]);
+  }, [socket, captureFromCamera, captureMode, showMessage, stopAutoCapture, stopCamera, stopRealTimeDetection, stream]);
 
   return (
     <VStack align="stretch" spacing={10} pb={16}>
