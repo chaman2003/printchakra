@@ -24,9 +24,9 @@ export const API_BASE_URL = getApiBaseUrl();
 
 // Check if Socket.IO is available
 const isSocketIOEnabled = () => {
-  // Disable Socket.IO on deployed Vercel app due to ngrok limitations
-  // Use HTTP polling instead
-  return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  // Enable Socket.IO everywhere - let transport fallback handle ngrok
+  // This allows real-time updates on both local and ngrok deployments
+  return true;
 };
 
 export const SOCKET_IO_ENABLED = isSocketIOEnabled();
@@ -67,13 +67,15 @@ export const SOCKET_CONFIG = {
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  reconnectionAttempts: 5,
-  timeout: 10000,
-  transports: ['polling'] as ('polling' | 'websocket')[],
+  reconnectionAttempts: 10,
+  timeout: 15000,
+  transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
   upgrade: true,
   forceNew: false,
   path: '/socket.io/',
   withCredentials: false,
+  secure: API_BASE_URL.startsWith('https'),
+  rejectUnauthorized: false,
   ...(isUsingNgrok() ? {
     extraHeaders: {
       'ngrok-skip-browser-warning': 'true'
