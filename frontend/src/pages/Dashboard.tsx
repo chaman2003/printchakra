@@ -237,6 +237,27 @@ const Dashboard: React.FC = () => {
   const convertedDrawer = useDisclosure();
   const orchestrateModal = useDisclosure();
   
+  // File cache system - stores file metadata and counts
+  const [filesCacheRef, setFilesCacheRef] = useState<{
+    data: any[] | null;
+    lastCount: number;
+    timestamp: number;
+  }>({
+    data: null,
+    lastCount: 0,
+    timestamp: 0,
+  });
+  
+  const [convertedFilesCacheRef, setConvertedFilesCacheRef] = useState<{
+    data: any[] | null;
+    lastCount: number;
+    timestamp: number;
+  }>({
+    data: null,
+    lastCount: 0,
+    timestamp: 0,
+  });
+  
   // Theme values with insane visual enhancements
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
   // const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
@@ -325,20 +346,26 @@ const Dashboard: React.FC = () => {
 
     loadFiles();
 
-    let pollInterval = 3000; // Start with 3 seconds
-    const maxInterval = 30000; // Max 30 seconds between polls
+    // SMART CACHING MODE: Polling disabled for network efficiency
+    // Files are cached and only updated when:
+    // 1. Socket.IO events indicate new_file, file_deleted, or processing_complete
+    // 2. User clicks the manual Reload button
+    // 3. Page visibility changes (user switches tabs)
+    
+    let pollInterval = 60000; // Long interval (1 minute) - mostly for safety net
+    const maxInterval = 300000; // Max 5 minutes between polls
     let timeoutId: NodeJS.Timeout;
 
-    // Recursive polling with dynamic interval
+    // Recursive polling with long intervals (safety net only)
     const startPolling = () => {
       timeoutId = setTimeout(async () => {
-        console.log('📋 Polling for new files...');
+        console.log('📋 Safety net polling for new files...');
         try {
           await loadFiles(false);
           // On success, reset to normal interval
-          if (pollInterval > 3000) {
+          if (pollInterval > 60000) {
             console.log('✅ Connection restored, resetting poll interval');
-            pollInterval = 3000;
+            pollInterval = 60000;
             setConnectionRetries(0);
           }
         } catch (err) {
@@ -370,7 +397,7 @@ const Dashboard: React.FC = () => {
         newSocket.close();
       }
     };
-  }, []);
+  }, [filesCacheRef]);
 
   const loadFiles = async (showLoading = true) => {
     try {
@@ -381,7 +408,26 @@ const Dashboard: React.FC = () => {
         timeout: 10000 // 10 second timeout
       });
       const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
-      setFiles(filesData);
+      
+      // Smart cache: only update if file count changed
+      const newCount = filesData.length;
+      if (newCount !== filesCacheRef.lastCount) {
+        console.log(`📁 File count changed: ${filesCacheRef.lastCount} → ${newCount}, updating cache`);
+        setFiles(filesData);
+        setFilesCacheRef({
+          data: filesData,
+          lastCount: newCount,
+          timestamp: Date.now(),
+        });
+      } else {
+        console.log(`📁 File count unchanged (${newCount}), using cached data`);
+        // Use cached data if available
+        if (filesCacheRef.data) {
+          setFiles(filesCacheRef.data);
+        } else {
+          setFiles(filesData);
+        }
+      }
       setError(null);
     } catch (err: any) {
       console.error('Failed to load files:', err);
@@ -729,7 +775,25 @@ const Dashboard: React.FC = () => {
     try {
       const response = await apiClient.get('/get-converted-files');
       if (response.data.files) {
-        setConvertedFiles(response.data.files);
+        // Smart cache: only update if file count changed
+        const newCount = response.data.files.length;
+        if (newCount !== convertedFilesCacheRef.lastCount) {
+          console.log(`📄 Converted file count changed: ${convertedFilesCacheRef.lastCount} → ${newCount}, updating cache`);
+          setConvertedFiles(response.data.files);
+          setConvertedFilesCacheRef({
+            data: response.data.files,
+            lastCount: newCount,
+            timestamp: Date.now(),
+          });
+        } else {
+          console.log(`📄 Converted file count unchanged (${newCount}), using cached data`);
+          // Use cached data if available
+          if (convertedFilesCacheRef.data) {
+            setConvertedFiles(convertedFilesCacheRef.data);
+          } else {
+            setConvertedFiles(response.data.files);
+          }
+        }
       }
     } catch (err) {
       console.error('Failed to load converted files:', err);
