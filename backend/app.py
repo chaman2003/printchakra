@@ -85,11 +85,36 @@ sys.stderr = NgrokStderrFilter(original_stderr)
 # sys.stderr = ErrorFilter(sys.stderr)  # Disabled for debugging
 
 # Import new modular pipeline
+# Note: We use lazy loading to avoid sklearn/scipy import issues at startup
+MODULES_AVAILABLE = False
+DocumentPipeline = None
+create_default_pipeline = None
+validate_image_file = None
+DocumentDetector = None
+detect_and_serialize = None
+
 try:
-    from modules import DocumentPipeline, create_default_pipeline, validate_image_file
-    from modules.document_detection import DocumentDetector, detect_and_serialize
-    MODULES_AVAILABLE = True
-    print("✅ All modules loaded successfully")
+    # Try importing basic modules first (no sklearn dependency)
+    from modules.scanning import validate_image_file as validate_image_file_import
+    from modules.document_detection import DocumentDetector as DocumentDetector_import
+    from modules.document_detection import detect_and_serialize as detect_and_serialize_import
+    
+    validate_image_file = validate_image_file_import
+    DocumentDetector = DocumentDetector_import
+    detect_and_serialize = detect_and_serialize_import
+    
+    # Now try the pipeline (which may depend on sklearn)
+    try:
+        from modules import DocumentPipeline as DP, create_default_pipeline as CDP
+        DocumentPipeline = DP
+        create_default_pipeline = CDP
+        MODULES_AVAILABLE = True
+        print("✅ All modules loaded successfully (including sklearn-dependent modules)")
+    except (ImportError, RuntimeError) as ie:
+        print(f"⚠️ sklearn-dependent modules unavailable: {ie}")
+        print("   Basic processing will work, advanced classification disabled")
+        MODULES_AVAILABLE = True  # Set to True because we have basic modules
+        
 except ImportError as ie:
     MODULES_AVAILABLE = False
     print(f"⚠️ Module import failed: {ie}")
@@ -114,30 +139,47 @@ def handle_bad_request(e):
 from werkzeug.exceptions import BadRequest
 app.config['TRAP_BAD_REQUEST_ERRORS'] = True
 
-# Configure CORS for frontend - Allow all origins for flexibility
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",  # Allow all origins - ngrok domains change frequently
-        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
-        "expose_headers": ["Content-Type", "Content-Disposition"],
-        "supports_credentials": False,
-        "max_age": 3600
-    }
-})
+# Configure CORS for frontend - MAXIMUM PERMISSIVENESS (no security restrictions)
+CORS(app, 
+     resources={r"/*": {"origins": "*"}},
+     allow_headers="*",
+     expose_headers="*",
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     supports_credentials=False,
+     send_wildcard=True,
+     always_send=True)
 
-# Initialize Socket.IO with comprehensive CORS configuration
+# Force CORS headers on EVERY response (override ngrok proxy issues)
+@app.after_request
+def after_request(response):
+    """Add CORS headers to every response - maximum permissiveness"""
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', '*')
+    response.headers.add('Access-Control-Allow-Methods', '*')
+    response.headers.add('Access-Control-Expose-Headers', '*')
+    response.headers.add('Access-Control-Max-Age', '3600')
+    return response
+
+# Initialize Socket.IO with MAXIMUM permissiveness (no security restrictions)
 socketio = SocketIO(
     app, 
-    cors_allowed_origins="*",  # Allow all origins for development
+    cors_allowed_origins="*",  # Allow ALL origins
     async_mode='threading',
-    logger=True,  # Enable for debugging
-    engineio_logger=True,  # Enable for debugging
+    logger=False,
+    engineio_logger=False,
     ping_timeout=60,
     ping_interval=25,
     max_http_buffer_size=1e7,
     always_connect=True,
-    transports=['polling', 'websocket'],  # Support both
+    transports=['polling', 'websocket'],
+    allow_upgrades=True,
+    manage_session=False,
+    # Maximum CORS permissiveness
+    cors_credentials=False,
+    engineio_options={
+        'cors_allowed_origins': '*',
+        'cors_credentials': False
+    }
 )
 
 # Base directory
@@ -208,6 +250,18 @@ else:
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Middleware to add security headers to all responses
+@app.before_request
+def before_request():
+    """Handle preflight OPTIONS requests explicitly"""
+    if request.method == 'OPTIONS':
+        # Explicitly handle CORS preflight
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning, Accept'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response, 200
+
 @app.after_request
 def after_request(response):
     """Add security headers to all responses (CORS handled by Flask-CORS)"""
