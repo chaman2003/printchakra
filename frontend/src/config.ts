@@ -15,7 +15,7 @@ const getApiBaseUrl = () => {
   
   // 3. Production fallback - using localtunnel with fixed subdomain
   // This URL is consistent when using the instatunnel.ps1 script
-  const prodUrl = 'https://printchakra-api.loca.lt';
+  const prodUrl = 'https://printchakra-backend-2025.loca.lt';
   console.log('✅ Using production URL (LocalTunnel):', prodUrl);
   return prodUrl;
 };

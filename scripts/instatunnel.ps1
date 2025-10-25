@@ -7,7 +7,7 @@ Write-Host "============================================================" -Foreg
 Write-Host ""
 
 # Fixed subdomain for consistency
-$SUBDOMAIN = "printchakra-api"
+$SUBDOMAIN = "printchakra-backend-2025"
 $PORT = 5000
 $FULL_URL = "https://$SUBDOMAIN.loca.lt"
 
