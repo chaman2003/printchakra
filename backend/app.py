@@ -212,17 +212,23 @@ else:
 @app.after_request
 def after_request_handler(response):
     """Add CORS and security headers to all responses"""
-    # CORS headers (ensure they're always present)
+    # Get origin from request
     origin = request.headers.get('Origin', '*')
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    response.headers['Access-Control-Expose-Headers'] = 'Content-Type,Content-Disposition'
     
-    # Security headers
+    # For ngrok, we need to be more permissive with CORS
+    # Always allow the origin to avoid preflight failures
+    response.headers['Access-Control-Allow-Origin'] = origin if origin != 'null' else '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With,Accept'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH,HEAD'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Type,Content-Disposition,Content-Length'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
+    # ngrok specific header
+    response.headers['ngrok-skip-browser-warning'] = 'true'
+    
+    # Security headers (but not too strict for local/ngrok)
     response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     
     return response
 
@@ -873,11 +879,13 @@ def favicon():
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     """Handle CORS preflight requests for all routes"""
+    origin = request.headers.get('Origin', '*')
     response = jsonify({'status': 'ok'})
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH'
-    response.headers['Access-Control-Max-Age'] = '3600'
+    response.headers['Access-Control-Allow-Origin'] = origin if origin != 'null' else '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With,Accept'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH,HEAD'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response, 200
 
 @app.route('/health')
