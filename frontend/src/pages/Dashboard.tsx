@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import io from 'socket.io-client';
-import axios from 'axios';
+import apiClient from '../apiClient';
 import {
   Badge,
   Box,
@@ -78,8 +78,7 @@ const useImageWithHeaders = (imageUrl: string) => {
         setLoading(true);
         setError(false);
         
-        const response = await axios.get(imageUrl, {
-          headers: getDefaultHeaders(),
+        const response = await apiClient.get(imageUrl.replace(API_BASE_URL, ''), {
           responseType: 'blob',
           timeout: 10000
         });
@@ -350,8 +349,7 @@ const Dashboard: React.FC = () => {
       if (showLoading) {
         setLoading(true);
       }
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.files}`, {
-        headers: getDefaultHeaders(),
+      const response = await apiClient.get(API_ENDPOINTS.files, {
         timeout: 10000 // 10 second timeout
       });
       const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
@@ -381,9 +379,7 @@ const Dashboard: React.FC = () => {
     }
 
     try {
-      await axios.delete(`${API_BASE_URL}${API_ENDPOINTS.delete}/${filename}`, {
-        headers: getDefaultHeaders()
-      });
+      await apiClient.delete(`${API_ENDPOINTS.delete}/${filename}`);
       setFiles(files.filter(f => f.filename !== filename));
       if (selectedFile === filename) {
         setSelectedFile(null);
@@ -400,9 +396,7 @@ const Dashboard: React.FC = () => {
 
   const viewOCR = async (filename: string) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}${API_ENDPOINTS.ocr}/${filename}`, {
-        headers: getDefaultHeaders()
-      });
+      const response = await apiClient.get(`${API_ENDPOINTS.ocr}/${filename}`);
       setOcrText(response.data.text || 'No text found');
       setSelectedFile(filename);
     } catch (err: any) {
@@ -416,10 +410,8 @@ const Dashboard: React.FC = () => {
 
   const triggerPrint = async () => {
     try {
-      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
+      const response = await apiClient.post(API_ENDPOINTS.print, {
         type: 'blank'
-      }, {
-        headers: getDefaultHeaders()
       });
       toast({
         title: 'Print initiated',
@@ -437,10 +429,8 @@ const Dashboard: React.FC = () => {
 
   const testPrinter = async () => {
     try {
-      const response = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.print}`, {
+      const response = await apiClient.post(API_ENDPOINTS.print, {
         type: 'test'
-      }, {
-        headers: getDefaultHeaders()
       });
       toast({
         title: 'Test successful',
@@ -519,16 +509,13 @@ const Dashboard: React.FC = () => {
       setConverting(true);
       setConversionProgress('Starting conversion...');
 
-      const response = await axios.post(
-        `${API_BASE_URL}/convert`,
+      const response = await apiClient.post(
+        '/convert',
         {
           files: selectedFiles,
           format: targetFormat,
           merge_pdf: mergePdf && targetFormat === 'pdf', // Only merge if format is PDF
           filename: customFilename.trim() || undefined // Pass custom filename if provided
-        },
-        {
-          headers: getDefaultHeaders()
         }
       );
 
@@ -575,9 +562,7 @@ const Dashboard: React.FC = () => {
   // Load converted files
   const loadConvertedFiles = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/get-converted-files`, {
-        headers: getDefaultHeaders()
-      });
+      const response = await apiClient.get('/get-converted-files');
       if (response.data.files) {
         setConvertedFiles(response.data.files);
       }
@@ -889,10 +874,9 @@ const Dashboard: React.FC = () => {
               onClick={async () => {
                 if (!selectedImageFile) return;
                 try {
-                  const response = await axios.get(
-                    `${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`,
+                  const response = await apiClient.get(
+                    `${API_ENDPOINTS.processed}/${selectedImageFile}`,
                     {
-                      headers: getDefaultHeaders(),
                       responseType: 'blob',
                     }
                   );
@@ -1033,8 +1017,7 @@ const Dashboard: React.FC = () => {
                           leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
                           onClick={async () => {
                             try {
-                              const response = await axios.get(`${API_BASE_URL}/converted/${file.filename}`, {
-                                headers: getDefaultHeaders(),
+                              const response = await apiClient.get(`/converted/${file.filename}`, {
                                 responseType: 'blob',
                               });
                               const blob = response.data;
