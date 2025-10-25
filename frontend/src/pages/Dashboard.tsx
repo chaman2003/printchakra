@@ -204,10 +204,36 @@ const Dashboard: React.FC = () => {
   
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
+  
+  // Orchestrate Print & Capture state
+  const [orchestrateStep, setOrchestrateStep] = useState<number>(1); // 1=mode, 2=options, 3=confirm
+  const [orchestrateMode, setOrchestrateMode] = useState<'scan' | 'print' | null>(null);
+  const [orchestrateOptions, setOrchestrateOptions] = useState({
+    // Scan options
+    scanPageMode: 'all' as 'all' | 'odd' | 'even' | 'custom',
+    scanCustomRange: '',
+    scanLayout: 'portrait' as 'portrait' | 'landscape',
+    scanPaperSize: 'A4',
+    scanResolution: '300',
+    scanColorMode: 'color' as 'color' | 'bw',
+    // Print options
+    printPages: 'all' as 'all' | 'odd' | 'even' | 'custom',
+    printLayout: 'portrait' as 'portrait' | 'landscape',
+    printPaperSize: 'A4',
+    printScale: '100',
+    printMargins: 'default' as 'default' | 'custom',
+    printPagesPerSheet: '1',
+    printFiles: [] as File[],
+    printConvertedFiles: [] as string[],
+    // Default settings
+    saveAsDefault: false,
+  });
+  
   const toast = useToast();
   const imageModal = useDisclosure();
   const conversionModal = useDisclosure();
   const convertedDrawer = useDisclosure();
+  const orchestrateModal = useDisclosure();
   
   // Theme values with insane visual enhancements
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
@@ -408,41 +434,178 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const triggerPrint = async () => {
+  const openOrchestrateModal = () => {
+    // Reset state
+    setOrchestrateStep(1);
+    setOrchestrateMode(null);
+    
+    // If files are selected, auto-select print mode
+    if (selectedFiles.length > 0) {
+      setOrchestrateMode('print');
+      setOrchestrateStep(2);
+    }
+    
+    orchestrateModal.onOpen();
+  };
+
+  const handleOrchestrateNext = () => {
+    if (orchestrateStep === 1 && orchestrateMode) {
+      setOrchestrateStep(2);
+    } else if (orchestrateStep === 2) {
+      // Execute the action
+      if (orchestrateMode === 'print') {
+        executePrintJob();
+      } else {
+        executeScanJob();
+      }
+    }
+  };
+
+  const handleOrchestrateBack = () => {
+    if (orchestrateStep === 2) {
+      if (selectedFiles.length > 0) {
+        // If came from dashboard selection, close modal
+        orchestrateModal.onClose();
+      } else {
+        setOrchestrateStep(1);
+      }
+    }
+  };
+
+  const executePrintJob = async () => {
     try {
-      const response = await apiClient.post(API_ENDPOINTS.print, {
-        type: 'blank'
+      const formData = new FormData();
+      
+      // Add uploaded files
+      orchestrateOptions.printFiles.forEach((file, index) => {
+        formData.append('files', file);
       });
+      
+      // Add converted PDFs
+      formData.append('convertedFiles', JSON.stringify(orchestrateOptions.printConvertedFiles));
+      
+      // Add selected dashboard files if any
+      if (selectedFiles.length > 0) {
+        formData.append('dashboardFiles', JSON.stringify(selectedFiles));
+      }
+      
+      // Add print options
+      formData.append('options', JSON.stringify({
+        pages: orchestrateOptions.printPages,
+        layout: orchestrateOptions.printLayout,
+        paperSize: orchestrateOptions.printPaperSize,
+        scale: orchestrateOptions.printScale,
+        margins: orchestrateOptions.printMargins,
+        pagesPerSheet: orchestrateOptions.printPagesPerSheet,
+        saveAsDefault: orchestrateOptions.saveAsDefault,
+      }));
+
+      const response = await apiClient.post('/orchestrate/print', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
       toast({
-        title: 'Print initiated',
-        description: response.data.message,
+        title: 'Print Job Submitted',
+        description: response.data.message || 'Documents sent to printer',
         status: 'success',
       });
+
+      orchestrateModal.onClose();
+      
     } catch (err: any) {
       toast({
-        title: 'Print failed',
-        description: err.message,
+        title: 'Print Failed',
+        description: err.response?.data?.error || err.message,
         status: 'error',
       });
     }
   };
 
-  const testPrinter = async () => {
+  const executeScanJob = async () => {
     try {
-      const response = await apiClient.post(API_ENDPOINTS.print, {
-        type: 'test'
+      const response = await apiClient.post('/orchestrate/scan', {
+        pageMode: orchestrateOptions.scanPageMode,
+        customRange: orchestrateOptions.scanCustomRange,
+        layout: orchestrateOptions.scanLayout,
+        paperSize: orchestrateOptions.scanPaperSize,
+        resolution: orchestrateOptions.scanResolution,
+        colorMode: orchestrateOptions.scanColorMode,
+        saveAsDefault: orchestrateOptions.saveAsDefault,
       });
+
       toast({
-        title: 'Test successful',
-        description: response.data.message,
+        title: 'Scan Job Initiated',
+        description: response.data.message || 'Scanner is ready',
         status: 'success',
       });
+
+      orchestrateModal.onClose();
+      
     } catch (err: any) {
       toast({
-        title: 'Test failed',
-        description: err.message,
+        title: 'Scan Failed',
+        description: err.response?.data?.error || err.message,
         status: 'error',
       });
+    }
+  };
+
+  const triggerPrint = async () => {
+    // Use the new orchestrate modal
+    openOrchestrateModal();
+  };
+
+  const testPrinter = async () => {
+    try {
+      // Show a loading toast
+      const loadingToast = toast({
+        title: 'Running Diagnostics...',
+        description: 'Checking printer configuration and connectivity',
+        status: 'info',
+        duration: null,
+        isClosable: true,
+      });
+
+      // Call the diagnostics endpoint
+      const response = await apiClient.get('/printer/diagnostics');
+      
+      // Close loading toast
+      toast.close(loadingToast);
+
+      // Display results
+      if (response.data.success) {
+        toast({
+          title: 'Diagnostics Complete ✅',
+          description: 'Printer is functioning properly',
+          status: 'success',
+          duration: 5,
+        });
+      } else {
+        toast({
+          title: 'Diagnostics Complete ⚠️',
+          description: 'Printer may have issues - check details',
+          status: 'warning',
+          duration: 5,
+        });
+      }
+
+      // Store diagnostics output for display
+      setSelectedFile(null);
+      
+      // Show detailed output in a modal-like way using alert for now
+      // Better: you could add a Modal component to show the full output
+      const shortOutput = response.data.output.split('\n').slice(0, 10).join('\n');
+      console.log('Full Diagnostics Output:', response.data.output);
+      console.log('Printer Status:', response.data);
+      
+    } catch (err: any) {
+      toast({
+        title: 'Diagnostics Failed',
+        description: err.message || 'Could not run printer diagnostics',
+        status: 'error',
+        duration: 5,
+      });
+      console.error('Diagnostics error:', err);
     }
   };
 
@@ -1055,8 +1218,394 @@ const Dashboard: React.FC = () => {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      {/* Orchestrate Print & Capture Modal */}
+      <Modal isOpen={orchestrateModal.isOpen} onClose={orchestrateModal.onClose} size="lg" isCentered>
+        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalContent bg={surfaceCard} borderRadius="2xl" border="1px solid rgba(121,95,238,0.25)">
+          {/* STEP 1: Choose Mode */}
+          {orchestrateStep === 1 && (
+            <>
+              <ModalHeader>Orchestrate Print & Capture</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <Stack spacing={6}>
+                  <Text color="text.muted">Please choose an operation:</Text>
+                  <VStack spacing={4} align="start">
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="2px"
+                      borderColor={orchestrateMode === 'scan' ? 'brand.400' : 'whiteAlpha.200'}
+                      bg={orchestrateMode === 'scan' ? 'rgba(121,95,238,0.1)' : 'transparent'}
+                      cursor="pointer"
+                      onClick={() => setOrchestrateMode('scan')}
+                      _hover={{ borderColor: 'brand.400', bg: 'rgba(121,95,238,0.05)' }}
+                    >
+                      <Radio isChecked={orchestrateMode === 'scan'} mr={3}>
+                        <Stack spacing={1} ml={2}>
+                          <Heading size="sm">Scan Mode</Heading>
+                          <Text fontSize="sm" color="text.muted">Capture documents from your scanner</Text>
+                        </Stack>
+                      </Radio>
+                    </Box>
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="2px"
+                      borderColor={orchestrateMode === 'print' ? 'brand.400' : 'whiteAlpha.200'}
+                      bg={orchestrateMode === 'print' ? 'rgba(121,95,238,0.1)' : 'transparent'}
+                      cursor="pointer"
+                      onClick={() => setOrchestrateMode('print')}
+                      _hover={{ borderColor: 'brand.400', bg: 'rgba(121,95,238,0.05)' }}
+                    >
+                      <Radio isChecked={orchestrateMode === 'print'} mr={3}>
+                        <Stack spacing={1} ml={2}>
+                          <Heading size="sm">Print Mode</Heading>
+                          <Text fontSize="sm" color="text.muted">Print documents from your collection</Text>
+                        </Stack>
+                      </Radio>
+                    </Box>
+                  </VStack>
+                </Stack>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={orchestrateModal.onClose}>
+                  Cancel
+                </Button>
+                <Button
+                  colorScheme="brand"
+                  onClick={() => setOrchestrateStep(2)}
+                  isDisabled={!orchestrateMode}
+                >
+                  Continue
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+
+          {/* STEP 2: Scan Options */}
+          {orchestrateStep === 2 && orchestrateMode === 'scan' && (
+            <>
+              <ModalHeader>Scan Options</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <Stack spacing={6}>
+                  {/* Page Scan Mode */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Select Page Scan Mode</Heading>
+                    <RadioGroup
+                      value={orchestrateOptions.scanPageMode}
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
+                    >
+                      <Stack spacing={2}>
+                        <Radio value="all">Scan All Pages</Radio>
+                        <Radio value="odd">Odd Pages Only</Radio>
+                        <Radio value="even">Even Pages Only</Radio>
+                        <Radio value="custom">
+                          Custom Page Range:
+                          <Input
+                            size="sm"
+                            ml={3}
+                            width="150px"
+                            placeholder="e.g., 1-5,7,9"
+                            isDisabled={orchestrateOptions.scanPageMode !== 'custom'}
+                            value={orchestrateOptions.scanCustomRange}
+                            onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
+                          />
+                        </Radio>
+                      </Stack>
+                    </RadioGroup>
+                  </Box>
+
+                  {/* Scan Layout */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Select Scan Layout</Heading>
+                    <RadioGroup
+                      value={orchestrateOptions.scanLayout}
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: value as any })}
+                    >
+                      <Stack spacing={2}>
+                        <Radio value="portrait">Portrait</Radio>
+                        <Radio value="landscape">Landscape</Radio>
+                      </Stack>
+                    </RadioGroup>
+                  </Box>
+
+                  {/* Paper Size */}
+                  <Box>
+                    <Label fontSize="sm" fontWeight="600" mb={2}>Select Paper Size</Label>
+                    <Select
+                      value={orchestrateOptions.scanPaperSize}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: e.target.value })}
+                    >
+                      <option value="A4">A4</option>
+                      <option value="Letter">Letter</option>
+                      <option value="Legal">Legal</option>
+                      <option value="A3">A3</option>
+                    </Select>
+                  </Box>
+
+                  {/* Resolution */}
+                  <Box>
+                    <Label fontSize="sm" fontWeight="600" mb={2}>Select Resolution (DPI)</Label>
+                    <Select
+                      value={orchestrateOptions.scanResolution}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: e.target.value })}
+                    >
+                      <option value="150">150 DPI (Draft)</option>
+                      <option value="300">300 DPI (Standard)</option>
+                      <option value="600">600 DPI (High Quality)</option>
+                    </Select>
+                  </Box>
+
+                  {/* Color Mode */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Select Color Mode</Heading>
+                    <RadioGroup
+                      value={orchestrateOptions.scanColorMode}
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: value as any })}
+                    >
+                      <Stack spacing={2}>
+                        <Radio value="color">Color</Radio>
+                        <Radio value="bw">Black & White</Radio>
+                      </Stack>
+                    </RadioGroup>
+                  </Box>
+
+                  {/* Save as Default */}
+                  <Checkbox
+                    isChecked={orchestrateOptions.saveAsDefault}
+                    onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                  >
+                    Save as Default Settings
+                  </Checkbox>
+                </Stack>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(1)}>
+                  Back
+                </Button>
+                <Button colorScheme="brand" onClick={() => setOrchestrateStep(3)}>
+                  Proceed
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+
+          {/* STEP 2: Print Options */}
+          {orchestrateStep === 2 && orchestrateMode === 'print' && (
+            <>
+              <ModalHeader>Print Options</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody maxH="60vh" overflowY="auto">
+                <Stack spacing={6}>
+                  {/* Pages */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Pages</Heading>
+                    <RadioGroup
+                      value={orchestrateOptions.printPages}
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
+                    >
+                      <Stack spacing={2}>
+                        <Radio value="all">All (Default)</Radio>
+                        <Radio value="odd">Odd</Radio>
+                        <Radio value="even">Even</Radio>
+                        <Radio value="custom">Custom</Radio>
+                      </Stack>
+                    </RadioGroup>
+                  </Box>
+
+                  {/* Layout */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Layout</Heading>
+                    <RadioGroup
+                      value={orchestrateOptions.printLayout}
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printLayout: value as any })}
+                    >
+                      <Stack spacing={2}>
+                        <Radio value="portrait">Portrait</Radio>
+                        <Radio value="landscape">Landscape</Radio>
+                      </Stack>
+                    </RadioGroup>
+                  </Box>
+
+                  {/* Paper Size */}
+                  <Box>
+                    <Label fontSize="sm" fontWeight="600" mb={2}>Paper Size</Label>
+                    <Select
+                      value={orchestrateOptions.printPaperSize}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: e.target.value })}
+                    >
+                      <option value="A4">A4</option>
+                      <option value="Letter">Letter</option>
+                      <option value="Legal">Legal</option>
+                      <option value="A3">A3</option>
+                    </Select>
+                  </Box>
+
+                  {/* Scale */}
+                  <Box>
+                    <Label fontSize="sm" fontWeight="600" mb={2}>Scale (%)</Label>
+                    <Select
+                      value={orchestrateOptions.printScale}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
+                    >
+                      <option value="75">75%</option>
+                      <option value="100">100%</option>
+                      <option value="125">125%</option>
+                      <option value="150">150%</option>
+                    </Select>
+                  </Box>
+
+                  {/* Margins */}
+                  <Box>
+                    <Label fontSize="sm" fontWeight="600" mb={2}>Margins</Label>
+                    <Select
+                      value={orchestrateOptions.printMargins}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printMargins: e.target.value as any })}
+                    >
+                      <option value="default">Default</option>
+                      <option value="custom">Custom</option>
+                    </Select>
+                  </Box>
+
+                  {/* Pages per Sheet */}
+                  <Box>
+                    <Label fontSize="sm" fontWeight="600" mb={2}>Pages per Sheet</Label>
+                    <Select
+                      value={orchestrateOptions.printPagesPerSheet}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: e.target.value })}
+                    >
+                      <option value="1">1 Page</option>
+                      <option value="2">2 Pages</option>
+                      <option value="4">4 Pages</option>
+                    </Select>
+                  </Box>
+
+                  {/* Select Converted PDFs */}
+                  <Box>
+                    <Heading size="sm" mb={3}>Select Converted PDFs</Heading>
+                    {convertedFiles.length === 0 ? (
+                      <Text fontSize="sm" color="text.muted">No converted PDFs available</Text>
+                    ) : (
+                      <VStack spacing={2}>
+                        {convertedFiles.map((file) => (
+                          <Box
+                            key={file.filename}
+                            p={2}
+                            borderRadius="md"
+                            border="1px"
+                            borderColor="whiteAlpha.200"
+                            width="full"
+                            cursor="pointer"
+                            onClick={() => {
+                              const isSelected = orchestrateOptions.printConvertedFiles.includes(file.filename);
+                              setOrchestrateOptions({
+                                ...orchestrateOptions,
+                                printConvertedFiles: isSelected
+                                  ? orchestrateOptions.printConvertedFiles.filter((f) => f !== file.filename)
+                                  : [...orchestrateOptions.printConvertedFiles, file.filename],
+                              });
+                            }}
+                            bg={orchestrateOptions.printConvertedFiles.includes(file.filename) ? 'rgba(121,95,238,0.1)' : 'transparent'}
+                          >
+                            <Checkbox isChecked={orchestrateOptions.printConvertedFiles.includes(file.filename)}>
+                              {file.filename} ({(file.size / 1024).toFixed(2)} KB)
+                            </Checkbox>
+                          </Box>
+                        ))}
+                      </VStack>
+                    )}
+                  </Box>
+
+                  {/* Save as Default */}
+                  <Checkbox
+                    isChecked={orchestrateOptions.saveAsDefault}
+                    onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                  >
+                    Save as Default Settings
+                  </Checkbox>
+                </Stack>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(1)}>
+                  Back
+                </Button>
+                <Button colorScheme="brand" onClick={() => setOrchestrateStep(3)}>
+                  Proceed
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+
+          {/* STEP 3: Confirmation */}
+          {orchestrateStep === 3 && (
+            <>
+              <ModalHeader>Confirm {orchestrateMode === 'scan' ? 'Scan' : 'Print'} Settings</ModalHeader>
+              <ModalCloseButton />
+              <ModalBody>
+                <Stack spacing={4}>
+                  <Box bg="rgba(121,95,238,0.1)" p={4} borderRadius="lg">
+                    <Heading size="sm" mb={3}>Summary</Heading>
+                    <VStack spacing={2} align="start" fontSize="sm">
+                      {orchestrateMode === 'scan' ? (
+                        <>
+                          <Text><strong>Mode:</strong> Scan</Text>
+                          <Text><strong>Page Mode:</strong> {orchestrateOptions.scanPageMode}</Text>
+                          <Text><strong>Layout:</strong> {orchestrateOptions.scanLayout}</Text>
+                          <Text><strong>Paper Size:</strong> {orchestrateOptions.scanPaperSize}</Text>
+                          <Text><strong>Resolution:</strong> {orchestrateOptions.scanResolution} DPI</Text>
+                          <Text><strong>Color Mode:</strong> {orchestrateOptions.scanColorMode}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text><strong>Mode:</strong> Print</Text>
+                          <Text><strong>Pages:</strong> {orchestrateOptions.printPages}</Text>
+                          <Text><strong>Layout:</strong> {orchestrateOptions.printLayout}</Text>
+                          <Text><strong>Paper Size:</strong> {orchestrateOptions.printPaperSize}</Text>
+                          <Text><strong>Scale:</strong> {orchestrateOptions.printScale}%</Text>
+                          <Text><strong>Pages per Sheet:</strong> {orchestrateOptions.printPagesPerSheet}</Text>
+                          {orchestrateOptions.printConvertedFiles.length > 0 && (
+                            <Text><strong>Selected PDFs:</strong> {orchestrateOptions.printConvertedFiles.length} file(s)</Text>
+                          )}
+                        </>
+                      )}
+                      {orchestrateOptions.saveAsDefault && (
+                        <Text color="brand.400"><strong>✓</strong> Will save as default settings</Text>
+                      )}
+                    </VStack>
+                  </Box>
+                </Stack>
+              </ModalBody>
+              <ModalFooter>
+                <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(2)}>
+                  Back
+                </Button>
+                <Button
+                  colorScheme="brand"
+                  onClick={() => {
+                    toast({
+                      title: 'Operation Started',
+                      description: `${orchestrateMode === 'scan' ? 'Scanning' : 'Printing'} with your selected options...`,
+                      status: 'info',
+                      duration: 3000,
+                    });
+                    orchestrateModal.onClose();
+                    setOrchestrateStep(1);
+                    setOrchestrateMode(null);
+                  }}
+                >
+                  Proceed
+                </Button>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
     </VStack>
   );
 };
 
 export default Dashboard;
+

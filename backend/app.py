@@ -1414,6 +1414,69 @@ def trigger_print():
         print(f"Print error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/printer/diagnostics', methods=['GET', 'POST'])
+def printer_diagnostics():
+    """
+    Run printer diagnostics and return results
+    This endpoint executes the printer-test.py script and returns detailed diagnostics
+    """
+    try:
+        import subprocess
+        import io
+        import sys
+        from contextlib import redirect_stdout, redirect_stderr
+        
+        # Path to the diagnostics script
+        diag_script = os.path.join(os.path.dirname(PRINT_DIR), 'scripts', 'printer-test.py')
+        
+        if not os.path.exists(diag_script):
+            return jsonify({
+                'status': 'error',
+                'message': 'Diagnostics script not found',
+                'script_path': diag_script
+            }), 404
+        
+        print(f"Running diagnostics from: {diag_script}")
+        
+        # Run the diagnostics script and capture output
+        try:
+            result = subprocess.run(
+                [sys.executable, diag_script],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            diagnostics_output = result.stdout
+            if result.stderr:
+                diagnostics_output += "\n[STDERR]\n" + result.stderr
+            
+            return jsonify({
+                'status': 'success',
+                'message': 'Printer diagnostics completed',
+                'output': diagnostics_output,
+                'return_code': result.returncode,
+                'success': result.returncode == 0
+            })
+            
+        except subprocess.TimeoutExpired:
+            return jsonify({
+                'status': 'error',
+                'message': 'Diagnostics script timed out after 30 seconds'
+            }), 500
+        except Exception as e:
+            return jsonify({
+                'status': 'error',
+                'message': f'Error running diagnostics: {str(e)}'
+            }), 500
+            
+    except Exception as e:
+        print(f"Diagnostics error: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': f'Diagnostics endpoint error: {str(e)}'
+        }), 500
+
 # ============================================================================
 # ADVANCED PROCESSING ENDPOINTS (New Modular System)
 # ============================================================================
