@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import io from 'socket.io-client';
 import apiClient from '../apiClient';
+import { useSocket } from '../context/SocketContext';
 import {
   Badge,
   Box,
@@ -281,76 +281,48 @@ const Dashboard: React.FC = () => {
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
 
+  // Use shared Socket from context instead of creating new connections
+  const { socket, connected: socketConnected } = useSocket();
+
   useEffect(() => {
-    console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
+    // Sync local connected state with socket context
+    setConnected(socketConnected);
+  }, [socketConnected]);
+
+  useEffect(() => {
+    console.log('🔌 Dashboard: Setting up Socket.IO event listeners');
     
-    // Only use Socket.IO if enabled
-    let newSocket: any = null;
-    
-    if (SOCKET_IO_ENABLED) {
-      try {
-        console.log('🔌 Socket.IO Config:', SOCKET_CONFIG);
-        newSocket = io(API_BASE_URL, {
-          ...SOCKET_CONFIG,
-          forceNew: true,
-        });
-
-        newSocket.on('connect', () => {
-          console.log('✅ Dashboard: Connected to server');
-          console.log('📡 Transport:', newSocket.io.engine.transport.name);
-          setConnected(true);
-          setConnectionRetries(0);
-        });
-
-        newSocket.on('disconnect', (reason: string) => {
-          console.log('❌ Dashboard: Disconnected from server:', reason);
-          setConnected(false);
-        });
-
-        newSocket.on('connect_error', (error: any) => {
-          console.error('⚠️ Dashboard: Connection error:', error.message || error);
-          console.log('Retrying connection...');
-          setConnected(false);
-        });
-
-        newSocket.on('error', (error: any) => {
-          console.error('⚠️ Dashboard: Socket error:', error);
-          setConnected(false);
-        });
-
-        newSocket.on('new_file', (data: any) => {
-          console.log('New file uploaded:', data);
-          loadFiles(false); // Background refresh, no loading spinner
-        });
-
-        newSocket.on('file_deleted', (data: any) => {
-          console.log('File deleted:', data);
-          loadFiles(false);
-        });
-
-        newSocket.on('processing_progress', (data: ProcessingProgress) => {
-          console.log(`📊 Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
-          setProcessingProgress(data);
-        });
-
-        newSocket.on('processing_complete', (data: any) => {
-          console.log('✅ Processing complete:', data);
-          setProcessingProgress(null);
-          setTimeout(() => loadFiles(false), 500); // Refresh after processing
-        });
-
-        newSocket.on('processing_error', (data: any) => {
-          console.error('❌ Processing error:', data);
-          setProcessingProgress(null);
-        });
-      } catch (err) {
-        console.error('Failed to initialize Socket.IO:', err);
-        setConnected(false);
-      }
-    } else {
-      console.log('ℹ️ Socket.IO disabled - using HTTP polling only');
-      setConnected(false);
+    if (!socket) {
+      console.log('⚠️ Socket not available yet');
+      return;
     }
+
+    // Event listeners for file changes
+    socket.on('new_file', (data: any) => {
+      console.log('New file uploaded:', data);
+      loadFiles(false); // Background refresh, no loading spinner
+    });
+
+    socket.on('file_deleted', (data: any) => {
+      console.log('File deleted:', data);
+      loadFiles(false);
+    });
+
+    socket.on('processing_progress', (data: ProcessingProgress) => {
+      console.log(`📊 Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
+      setProcessingProgress(data);
+    });
+
+    socket.on('processing_complete', (data: any) => {
+      console.log('✅ Processing complete:', data);
+      setProcessingProgress(null);
+      setTimeout(() => loadFiles(false), 500); // Refresh after processing
+    });
+
+    socket.on('processing_error', (data: any) => {
+      console.error('❌ Processing error:', data);
+      setProcessingProgress(null);
+    });
 
     loadFiles();
 
@@ -401,11 +373,13 @@ const Dashboard: React.FC = () => {
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (newSocket) {
-        newSocket.close();
-      }
+      socket.off('new_file');
+      socket.off('file_deleted');
+      socket.off('processing_progress');
+      socket.off('processing_complete');
+      socket.off('processing_error');
     };
-  }, [filesCacheRef]);
+  }, [socket, filesCacheRef]);
 
   const loadFiles = async (showLoading = true) => {
     try {
