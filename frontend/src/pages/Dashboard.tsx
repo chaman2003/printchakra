@@ -46,6 +46,7 @@ import {
 import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } from 'react-icons/fi';
 import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
 import Iconify from '../components/Iconify';
+import FancySelect from '../components/FancySelect';
 
 interface FileInfo {
   filename: string;
@@ -215,16 +216,23 @@ const Dashboard: React.FC = () => {
     scanPageMode: 'all' as 'all' | 'odd' | 'even' | 'custom',
     scanCustomRange: '',
     scanLayout: 'portrait' as 'portrait' | 'landscape',
-    scanPaperSize: 'A4',
-    scanResolution: '300',
+    scanPaperSize: 'A4' as string,
+    scanPaperSizeCustom: '',
+    scanResolution: '300' as string,
+    scanResolutionCustom: '',
     scanColorMode: 'color' as 'color' | 'bw',
     // Print options
     printPages: 'all' as 'all' | 'odd' | 'even' | 'custom',
+    printCustomRange: '',
     printLayout: 'portrait' as 'portrait' | 'landscape',
-    printPaperSize: 'A4',
-    printScale: '100',
+    printPaperSize: 'A4' as string,
+    printPaperSizeCustom: '',
+    printScale: '100' as string,
+    printScaleCustom: '',
     printMargins: 'default' as 'default' | 'custom',
-    printPagesPerSheet: '1',
+    printMarginsCustom: '',
+    printPagesPerSheet: '1' as string,
+    printPagesPerSheetCustom: '',
     printFiles: [] as File[],
     printConvertedFiles: [] as string[],
     // Default settings
@@ -1365,19 +1373,20 @@ const Dashboard: React.FC = () => {
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
                     >
                       <Stack spacing={2}>
-                        <Radio value="all">Scan All Pages</Radio>
-                        <Radio value="odd">Odd Pages Only</Radio>
-                        <Radio value="even">Even Pages Only</Radio>
+                        <Radio value="all">📄 Scan All Pages</Radio>
+                        <Radio value="odd">🔢 Odd Pages Only (1, 3, 5...)</Radio>
+                        <Radio value="even">🔢 Even Pages Only (2, 4, 6...)</Radio>
                         <Radio value="custom">
                           Custom Page Range:
                           <Input
                             size="sm"
                             ml={3}
-                            width="150px"
+                            width="200px"
                             placeholder="e.g., 1-5,7,9"
                             isDisabled={orchestrateOptions.scanPageMode !== 'custom'}
                             value={orchestrateOptions.scanCustomRange}
                             onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
+                            mt={2}
                           />
                         </Radio>
                       </Stack>
@@ -1392,37 +1401,49 @@ const Dashboard: React.FC = () => {
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: value as any })}
                     >
                       <Stack spacing={2}>
-                        <Radio value="portrait">Portrait</Radio>
-                        <Radio value="landscape">Landscape</Radio>
+                        <Radio value="portrait">📄 Portrait (Vertical)</Radio>
+                        <Radio value="landscape">📐 Landscape (Horizontal)</Radio>
                       </Stack>
                     </RadioGroup>
                   </Box>
 
-                  {/* Paper Size */}
+                  {/* Paper Size - Fancy Select */}
                   <Box>
-                    <Text fontSize="sm" fontWeight="600" mb={2}>Select Paper Size</Text>
-                    <Select
+                    <FancySelect
+                      label="Paper Size"
+                      options={[
+                        { value: 'A4', label: 'A4 (210×297 mm)' },
+                        { value: 'Letter', label: 'Letter (8.5×11 in)' },
+                        { value: 'Legal', label: 'Legal (8.5×14 in)' },
+                        { value: 'A3', label: 'A3 (297×420 mm)' },
+                        { value: 'custom', label: '✏️ Custom Size' },
+                      ]}
                       value={orchestrateOptions.scanPaperSize}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: e.target.value })}
-                    >
-                      <option value="A4">A4</option>
-                      <option value="Letter">Letter</option>
-                      <option value="Legal">Legal</option>
-                      <option value="A3">A3</option>
-                    </Select>
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: value })}
+                      allowCustom={true}
+                      customValue={orchestrateOptions.scanPaperSizeCustom}
+                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSizeCustom: value })}
+                    />
                   </Box>
 
-                  {/* Resolution */}
+                  {/* Resolution - Fancy Select */}
                   <Box>
-                    <Text fontSize="sm" fontWeight="600" mb={2}>Select Resolution (DPI)</Text>
-                    <Select
+                    <FancySelect
+                      label="Scan Resolution (DPI)"
+                      options={[
+                        { value: '150', label: '150 DPI - Draft (Fast, Small File)' },
+                        { value: '200', label: '200 DPI - Good Quality' },
+                        { value: '300', label: '300 DPI - Standard (Recommended)' },
+                        { value: '600', label: '600 DPI - High Quality' },
+                        { value: '1200', label: '1200 DPI - Maximum Quality' },
+                        { value: 'custom', label: '✏️ Custom DPI' },
+                      ]}
                       value={orchestrateOptions.scanResolution}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: e.target.value })}
-                    >
-                      <option value="150">150 DPI (Draft)</option>
-                      <option value="300">300 DPI (Standard)</option>
-                      <option value="600">600 DPI (High Quality)</option>
-                    </Select>
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })}
+                      allowCustom={true}
+                      customValue={orchestrateOptions.scanResolutionCustom}
+                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanResolutionCustom: value })}
+                    />
                   </Box>
 
                   {/* Color Mode */}
@@ -1433,8 +1454,8 @@ const Dashboard: React.FC = () => {
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: value as any })}
                     >
                       <Stack spacing={2}>
-                        <Radio value="color">Color</Radio>
-                        <Radio value="bw">Black & White</Radio>
+                        <Radio value="color">🎨 Color (Full RGB)</Radio>
+                        <Radio value="bw">⬛ Black & White (Grayscale)</Radio>
                       </Stack>
                     </RadioGroup>
                   </Box>
@@ -1468,16 +1489,28 @@ const Dashboard: React.FC = () => {
                 <Stack spacing={6}>
                   {/* Pages */}
                   <Box>
-                    <Heading size="sm" mb={3}>Pages</Heading>
+                    <Heading size="sm" mb={3}>Pages to Print</Heading>
                     <RadioGroup
                       value={orchestrateOptions.printPages}
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
                     >
                       <Stack spacing={2}>
-                        <Radio value="all">All (Default)</Radio>
-                        <Radio value="odd">Odd</Radio>
-                        <Radio value="even">Even</Radio>
-                        <Radio value="custom">Custom</Radio>
+                        <Radio value="all">All Pages (Default)</Radio>
+                        <Radio value="odd">Odd Pages Only</Radio>
+                        <Radio value="even">Even Pages Only</Radio>
+                        <Radio value="custom">
+                          Custom Pages:
+                          <Input
+                            size="sm"
+                            ml={3}
+                            width="200px"
+                            placeholder="e.g., 1-5,7,9"
+                            isDisabled={orchestrateOptions.printPages !== 'custom'}
+                            value={orchestrateOptions.printCustomRange}
+                            onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printCustomRange: e.target.value })}
+                            mt={2}
+                          />
+                        </Radio>
                       </Stack>
                     </RadioGroup>
                   </Box>
@@ -1490,63 +1523,87 @@ const Dashboard: React.FC = () => {
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printLayout: value as any })}
                     >
                       <Stack spacing={2}>
-                        <Radio value="portrait">Portrait</Radio>
-                        <Radio value="landscape">Landscape</Radio>
+                        <Radio value="portrait">📄 Portrait</Radio>
+                        <Radio value="landscape">📐 Landscape</Radio>
                       </Stack>
                     </RadioGroup>
                   </Box>
 
-                  {/* Paper Size */}
+                  {/* Paper Size - Fancy Select */}
                   <Box>
-                    <Text fontSize="sm" fontWeight="600" mb={2}>Paper Size</Text>
-                    <Select
+                    <FancySelect
+                      label="Paper Size"
+                      options={[
+                        { value: 'A4', label: 'A4 (210×297 mm)' },
+                        { value: 'Letter', label: 'Letter (8.5×11 in)' },
+                        { value: 'Legal', label: 'Legal (8.5×14 in)' },
+                        { value: 'A3', label: 'A3 (297×420 mm)' },
+                        { value: 'custom', label: '✏️ Custom Size' },
+                      ]}
                       value={orchestrateOptions.printPaperSize}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: e.target.value })}
-                    >
-                      <option value="A4">A4</option>
-                      <option value="Letter">Letter</option>
-                      <option value="Legal">Legal</option>
-                      <option value="A3">A3</option>
-                    </Select>
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })}
+                      allowCustom={true}
+                      customValue={orchestrateOptions.printPaperSizeCustom}
+                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSizeCustom: value })}
+                    />
                   </Box>
 
-                  {/* Scale */}
+                  {/* Scale - Fancy Select */}
                   <Box>
-                    <Text fontSize="sm" fontWeight="600" mb={2}>Scale (%)</Text>
-                    <Select
+                    <FancySelect
+                      label="Print Scale (%)"
+                      options={[
+                        { value: '50', label: '50% - Reduced' },
+                        { value: '75', label: '75% - Smaller' },
+                        { value: '100', label: '100% - Actual Size' },
+                        { value: '125', label: '125% - Larger' },
+                        { value: '150', label: '150% - Extra Large' },
+                        { value: 'custom', label: '✏️ Custom Scale' },
+                      ]}
                       value={orchestrateOptions.printScale}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
-                    >
-                      <option value="75">75%</option>
-                      <option value="100">100%</option>
-                      <option value="125">125%</option>
-                      <option value="150">150%</option>
-                    </Select>
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printScale: value })}
+                      allowCustom={true}
+                      customValue={orchestrateOptions.printScaleCustom}
+                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printScaleCustom: value })}
+                    />
                   </Box>
 
-                  {/* Margins */}
+                  {/* Margins - Fancy Select */}
                   <Box>
-                    <Text fontSize="sm" fontWeight="600" mb={2}>Margins</Text>
-                    <Select
+                    <FancySelect
+                      label="Margins"
+                      options={[
+                        { value: 'default', label: 'Default (1 inch)' },
+                        { value: 'narrow', label: 'Narrow (0.5 inch)' },
+                        { value: 'wide', label: 'Wide (1.5 inch)' },
+                        { value: 'custom', label: '✏️ Custom Margins' },
+                      ]}
                       value={orchestrateOptions.printMargins}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printMargins: e.target.value as any })}
-                    >
-                      <option value="default">Default</option>
-                      <option value="custom">Custom</option>
-                    </Select>
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printMargins: value as any })}
+                      allowCustom={true}
+                      customValue={orchestrateOptions.printMarginsCustom}
+                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printMarginsCustom: value })}
+                    />
                   </Box>
 
-                  {/* Pages per Sheet */}
+                  {/* Pages per Sheet - Fancy Select */}
                   <Box>
-                    <Text fontSize="sm" fontWeight="600" mb={2}>Pages per Sheet</Text>
-                    <Select
+                    <FancySelect
+                      label="Pages per Sheet"
+                      options={[
+                        { value: '1', label: '1 Page per Sheet (Normal)' },
+                        { value: '2', label: '2 Pages per Sheet (A5 Size)' },
+                        { value: '4', label: '4 Pages per Sheet (Booklet)' },
+                        { value: '6', label: '6 Pages per Sheet' },
+                        { value: '9', label: '9 Pages per Sheet' },
+                        { value: 'custom', label: '✏️ Custom Layout' },
+                      ]}
                       value={orchestrateOptions.printPagesPerSheet}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: e.target.value })}
-                    >
-                      <option value="1">1 Page</option>
-                      <option value="2">2 Pages</option>
-                      <option value="4">4 Pages</option>
-                    </Select>
+                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: value })}
+                      allowCustom={true}
+                      customValue={orchestrateOptions.printPagesPerSheetCustom}
+                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheetCustom: value })}
+                    />
                   </Box>
 
                   {/* Select Converted PDFs */}
