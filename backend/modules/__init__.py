@@ -8,28 +8,7 @@ __author__ = 'Chaman S'
 
 from .scanning import ScanningModule, validate_image_file
 from .image_processing import ImageProcessingModule
-
-# Lazy load OCR module to avoid sklearn import issues at startup
-def _lazy_load_ocr():
-    from .ocr_ai import OCRModule, DocumentClassifier, AIEnhancer
-    return OCRModule, DocumentClassifier, AIEnhancer
-
-# Provide a fallback until modules are actually used
-class _LazyOCRModule:
-    def __getattr__(self, name):
-        OCRModule, _, _ = _lazy_load_ocr()
-        return getattr(OCRModule, name)
-
-OCRModule = None
-DocumentClassifier = None
-AIEnhancer = None
-
-# Import them lazily when app.py first accesses them
-try:
-    from .ocr_ai import OCRModule, DocumentClassifier, AIEnhancer
-except ImportError:
-    pass
-
+from .ocr_ai import OCRModule, DocumentClassifier, AIEnhancer
 from .storage import StorageModule
 from .export import ExportModule
 from .pipeline import DocumentPipeline, create_default_pipeline

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+﻿from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 import os
@@ -85,36 +85,11 @@ sys.stderr = NgrokStderrFilter(original_stderr)
 # sys.stderr = ErrorFilter(sys.stderr)  # Disabled for debugging
 
 # Import new modular pipeline
-# Note: We use lazy loading to avoid sklearn/scipy import issues at startup
-MODULES_AVAILABLE = False
-DocumentPipeline = None
-create_default_pipeline = None
-validate_image_file = None
-DocumentDetector = None
-detect_and_serialize = None
-
 try:
-    # Try importing basic modules first (no sklearn dependency)
-    from modules.scanning import validate_image_file as validate_image_file_import
-    from modules.document_detection import DocumentDetector as DocumentDetector_import
-    from modules.document_detection import detect_and_serialize as detect_and_serialize_import
-    
-    validate_image_file = validate_image_file_import
-    DocumentDetector = DocumentDetector_import
-    detect_and_serialize = detect_and_serialize_import
-    
-    # Now try the pipeline (which may depend on sklearn)
-    try:
-        from modules import DocumentPipeline as DP, create_default_pipeline as CDP
-        DocumentPipeline = DP
-        create_default_pipeline = CDP
-        MODULES_AVAILABLE = True
-        print("✅ All modules loaded successfully (including sklearn-dependent modules)")
-    except (ImportError, RuntimeError) as ie:
-        print(f"⚠️ sklearn-dependent modules unavailable: {ie}")
-        print("   Basic processing will work, advanced classification disabled")
-        MODULES_AVAILABLE = True  # Set to True because we have basic modules
-        
+    from modules import DocumentPipeline, create_default_pipeline, validate_image_file
+    from modules.document_detection import DocumentDetector, detect_and_serialize
+    MODULES_AVAILABLE = True
+    print("✅ All modules loaded successfully")
 except ImportError as ie:
     MODULES_AVAILABLE = False
     print(f"⚠️ Module import failed: {ie}")
@@ -139,42 +114,30 @@ def handle_bad_request(e):
 from werkzeug.exceptions import BadRequest
 app.config['TRAP_BAD_REQUEST_ERRORS'] = True
 
-# Configure CORS for frontend - MAXIMUM PERMISSIVENESS (no security restrictions)
-CORS(app, 
-     resources={r"/*": {"origins": "*"}},
-     allow_headers="*",
-     expose_headers="*",
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-     supports_credentials=False,
-     send_wildcard=True,
-     always_send=True)
+# Configure CORS for frontend - Allow all origins for flexibility
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",  # Allow all origins - ngrok domains change frequently
+        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning"],
+        "expose_headers": ["Content-Type", "Content-Disposition"],
+        "supports_credentials": False,
+        "max_age": 3600
+    }
+})
 
-# Force CORS headers on EVERY response (override ngrok proxy issues)
-@app.after_request
-def after_request(response):
-    """Add CORS headers to every response - maximum permissiveness"""
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', '*')
-    response.headers.add('Access-Control-Allow-Methods', '*')
-    response.headers.add('Access-Control-Expose-Headers', '*')
-    response.headers.add('Access-Control-Max-Age', '3600')
-    return response
-
-# Initialize Socket.IO with MAXIMUM permissiveness (no security restrictions)
+# Initialize Socket.IO with comprehensive CORS configuration
 socketio = SocketIO(
     app, 
-    cors_allowed_origins="*",  # Allow ALL origins
+    cors_allowed_origins="*",  # Allow all origins for development
     async_mode='threading',
-    logger=False,
-    engineio_logger=False,
+    logger=True,  # Enable for debugging
+    engineio_logger=True,  # Enable for debugging
     ping_timeout=60,
     ping_interval=25,
     max_http_buffer_size=1e7,
     always_connect=True,
-    transports=['polling', 'websocket'],
-    allow_upgrades=True,
-    # Maximum CORS permissiveness
-    cors_credentials=False
+    transports=['polling', 'websocket'],  # Support both
 )
 
 # Base directory
@@ -245,20 +208,17 @@ else:
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Middleware to add security headers to all responses
-@app.before_request
-def before_request():
-    """Handle preflight OPTIONS requests explicitly"""
-    if request.method == 'OPTIONS':
-        # Explicitly handle CORS preflight
-        response = jsonify({'status': 'ok'})
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning, Accept'
-        response.headers['Access-Control-Max-Age'] = '3600'
-        return response, 200
-
-# Note: after_request handler for CORS is already defined above (line 153)
-# No need to duplicate it here
+@app.after_request
+def after_request(response):
+    """Add security headers to all responses (CORS handled by Flask-CORS)"""
+    # Don't add CORS headers here - Flask-CORS already handles them
+    # Adding them again causes: "contains multiple values '*, *'"
+    
+    # Security headers only
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    
+    return response
 
 # ============================================================================
 # FALLBACK QUALITY CHECK FUNCTION (for when modules unavailable)
@@ -2104,18 +2064,10 @@ if __name__ == '__main__':
     print("="*60)
     
     # Run with Socket.IO
-    try:
-        print("🚀 Starting Socket.IO server...")
-        socketio.run(
-            app,
-            host='0.0.0.0',
-            port=5000,
-            debug=False,
-            use_reloader=False,
-            log_output=True
-        )
-    except Exception as e:
-        print(f"❌ Error starting server: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    socketio.run(
+        app,
+        host='0.0.0.0',
+        port=5000,
+        debug=True,  # Re-enabled
+        allow_unsafe_werkzeug=True
+    )
