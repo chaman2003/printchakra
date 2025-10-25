@@ -570,40 +570,13 @@ const Phone: React.FC = () => {
       }, 500);
     });
 
-    newSocket.on('scan_ready', (data) => {
-      console.log('Received scan ready notification:', data);
-      toast({
-        title: '🖨️ Blank Page Printed',
-        description: data.message || 'Place your document on the blank page and capture',
-        status: 'success',
-        duration: 10000,
-        isClosable: true,
-      });
-      
-      // Auto-switch to camera mode if not already
-      if (captureMode !== 'camera') {
-        setCaptureMode('camera');
-        showMessage('📷 Switched to camera mode - ready to scan');
-      } else {
-        showMessage('📸 Ready to scan - position document and capture');
-      }
-      
-      // Optionally start detection automatically
-      if (!detectionActive && stream) {
-        setTimeout(() => {
-          startRealTimeDetection();
-          showMessage('🔍 Document detection activated');
-        }, 1000);
-      }
-    });
-
     return () => {
       newSocket.close();
       stopCamera();
       stopAutoCapture();
       stopRealTimeDetection();
     };
-  }, [captureFromCamera, captureMode, showMessage, stopAutoCapture, stopCamera, stopRealTimeDetection, stream, detectionActive, startRealTimeDetection, toast]);
+  }, [captureFromCamera, captureMode, showMessage, stopAutoCapture, stopCamera, stopRealTimeDetection, stream]);
 
   return (
     <VStack align="stretch" spacing={10} pb={16}>
