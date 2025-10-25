@@ -1133,6 +1133,10 @@ def list_files():
         for filename in os.listdir(PROCESSED_DIR):
             if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                 file_path = os.path.join(PROCESSED_DIR, filename)
+                # Verify file still exists (it may have been deleted)
+                if not os.path.exists(file_path):
+                    print(f"⚠️ File listed but doesn't exist: {file_path}")
+                    continue
                 file_stat = os.stat(file_path)
                 
                 # Check if text file exists
