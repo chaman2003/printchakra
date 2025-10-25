@@ -62,17 +62,15 @@ export const getImageUrl = (endpoint: string, filename: string) => {
   return `${fullUrl}${separator}_t=${Date.now()}`;
 };
 
-// Socket.IO specific configuration - Use polling only for ngrok reliability
+// Socket.IO specific configuration
 export const SOCKET_CONFIG = {
   reconnection: true,
-  reconnectionDelay: 500,
-  reconnectionDelayMax: 3000,
-  reconnectionAttempts: 15,
-  timeout: 10000,
-  transports: isUsingNgrok() 
-    ? ['polling'] as ('polling' | 'websocket')[]  // ngrok WSS is unstable, use polling
-    : ['websocket', 'polling'] as ('polling' | 'websocket')[],  // local: prefer WebSocket
-  upgrade: false,  // Don't upgrade if on polling
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 10,
+  timeout: 15000,
+  transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
+  upgrade: true,
   forceNew: false,
   path: '/socket.io/',
   withCredentials: false,
