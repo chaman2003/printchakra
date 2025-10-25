@@ -523,7 +523,11 @@ const Phone: React.FC = () => {
     });
 
     return () => {
-      newSocket.close();
+      try {
+        newSocket.disconnect();
+      } catch (error) {
+        console.warn('Error disconnecting socket:', error);
+      }
       stopCamera();
       stopAutoCapture();
       stopRealTimeDetection();

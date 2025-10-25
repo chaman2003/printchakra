@@ -228,8 +228,8 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     console.log('🔌 Dashboard: Initializing Socket.IO connection to:', API_BASE_URL);
     
-    // Only use Socket.IO if enabled
     let newSocket: any = null;
+    let socketConnected = false;
     
     if (SOCKET_IO_ENABLED) {
       try {
@@ -242,29 +242,30 @@ const Dashboard: React.FC = () => {
         newSocket.on('connect', () => {
           console.log('✅ Dashboard: Connected to server');
           console.log('📡 Transport:', newSocket.io.engine.transport.name);
+          socketConnected = true;
           setConnected(true);
           setConnectionRetries(0);
         });
 
         newSocket.on('disconnect', (reason: string) => {
           console.log('❌ Dashboard: Disconnected from server:', reason);
+          socketConnected = false;
           setConnected(false);
         });
 
         newSocket.on('connect_error', (error: any) => {
-          console.error('⚠️ Dashboard: Connection error:', error.message || error);
-          console.log('Retrying connection...');
+          console.warn('⚠️ Dashboard: Connection error:', error.message || error);
+          socketConnected = false;
           setConnected(false);
         });
 
         newSocket.on('error', (error: any) => {
-          console.error('⚠️ Dashboard: Socket error:', error);
-          setConnected(false);
+          console.warn('⚠️ Dashboard: Socket error:', error);
         });
 
         newSocket.on('new_file', (data: any) => {
           console.log('New file uploaded:', data);
-          loadFiles(false); // Background refresh, no loading spinner
+          loadFiles(false);
         });
 
         newSocket.on('file_deleted', (data: any) => {
@@ -280,15 +281,15 @@ const Dashboard: React.FC = () => {
         newSocket.on('processing_complete', (data: any) => {
           console.log('✅ Processing complete:', data);
           setProcessingProgress(null);
-          setTimeout(() => loadFiles(false), 500); // Refresh after processing
+          setTimeout(() => loadFiles(false), 500);
         });
 
         newSocket.on('processing_error', (data: any) => {
-          console.error('❌ Processing error:', data);
+          console.warn('⚠️ Processing error:', data);
           setProcessingProgress(null);
         });
       } catch (err) {
-        console.error('Failed to initialize Socket.IO:', err);
+        console.warn('Failed to initialize Socket.IO:', err);
         setConnected(false);
       }
     } else {
@@ -298,39 +299,33 @@ const Dashboard: React.FC = () => {
 
     loadFiles();
 
-    let pollInterval = 3000; // Start with 3 seconds
-    const maxInterval = 30000; // Max 30 seconds between polls
+    let pollInterval = 3000;
+    const maxInterval = 30000;
     let timeoutId: NodeJS.Timeout;
 
-    // Recursive polling with dynamic interval
     const startPolling = () => {
       timeoutId = setTimeout(async () => {
-        console.log('📋 Polling for new files...');
         try {
           await loadFiles(false);
-          // On success, reset to normal interval
           if (pollInterval > 3000) {
             console.log('✅ Connection restored, resetting poll interval');
             pollInterval = 3000;
             setConnectionRetries(0);
           }
         } catch (err) {
-          // On error, increase poll interval (exponential backoff)
           pollInterval = Math.min(pollInterval * 1.5, maxInterval);
           setConnectionRetries(prev => prev + 1);
-          console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
         }
-        startPolling(); // Schedule next poll
+        startPolling();
       }, pollInterval);
     };
 
     startPolling();
 
-    // Also refresh when the page becomes visible (user switches tabs/apps)
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         console.log('📋 Page became visible - refreshing files');
-        loadFiles(false); // Don't show loading spinner
+        loadFiles(false);
       }
     };
 
@@ -339,8 +334,12 @@ const Dashboard: React.FC = () => {
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (newSocket) {
-        newSocket.close();
+      if (newSocket && socketConnected) {
+        try {
+          newSocket.disconnect();
+        } catch (e) {
+          // Ignore disconnect errors
+        }
       }
     };
   }, []);
