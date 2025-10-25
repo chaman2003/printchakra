@@ -545,6 +545,15 @@ const Phone: React.FC = () => {
       console.log('❌ Disconnected from server:', reason);
       setConnected(false);
       setMessage(`⚠️ Disconnected: ${reason}`);
+      
+      // Log disconnect reasons for debugging
+      if (reason === 'io client disconnect') {
+        console.log('   (Client disconnected intentionally)');
+      } else if (reason === 'io server disconnect') {
+        console.log('   (Server disconnected)');
+      } else if (reason.includes('timeout')) {
+        console.log('   (Connection timeout - ngrok may be slow)');
+      }
     });
 
     newSocket.on('connect_error', (error: any) => {

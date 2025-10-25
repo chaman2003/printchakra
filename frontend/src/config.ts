@@ -68,12 +68,12 @@ export const getImageUrl = (endpoint: string, filename: string) => {
 };
 
 // Socket.IO specific configuration
-export const SOCKET_CONFIG = {
+const baseSocketConfig = {
   reconnection: true,
-  reconnectionDelay: 1000,
-  reconnectionDelayMax: 5000,
-  reconnectionAttempts: 20,  // More attempts for unstable ngrok
-  timeout: 20000,  // Longer timeout for polling
+  reconnectionDelay: 3000,  // Wait 3s before retry (from 1s)
+  reconnectionDelayMax: 10000,  // Max wait 10s (from 5s)
+  reconnectionAttempts: 5,  // Limit attempts to prevent spam (from 20)
+  timeout: 30000,  // 30s connection timeout (was 20s)
   // Use polling first for ngrok, then try websocket
   transports: isUsingNgrok() 
     ? ['polling', 'websocket'] as ('polling' | 'websocket')[]
@@ -84,12 +84,19 @@ export const SOCKET_CONFIG = {
   withCredentials: false,
   secure: API_BASE_URL.startsWith('https'),
   rejectUnauthorized: false,
-  extraHeaders: isUsingNgrok() ? {
-    'ngrok-skip-browser-warning': '69'
-  } : {},
-  // More lenient polling for ngrok
-  pollInterval: isUsingNgrok() ? 3000 : 1000,  // Poll every 3s for ngrok instead of 1s
+  // More lenient polling for ngrok - check less frequently
+  pollInterval: isUsingNgrok() ? 5000 : 1000,  // Poll every 5s for ngrok (reduce server load)
 };
+
+// Add extraHeaders only for ngrok to avoid type issues
+export const SOCKET_CONFIG = isUsingNgrok() 
+  ? {
+      ...baseSocketConfig,
+      extraHeaders: {
+        'ngrok-skip-browser-warning': '69'
+      }
+    }
+  : baseSocketConfig;
 
 export const API_ENDPOINTS = {
   // Core endpoints - Match backend exactly
