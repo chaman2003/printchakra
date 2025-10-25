@@ -579,6 +579,15 @@ const Dashboard: React.FC = () => {
 
   const executeScanJob = async () => {
     try {
+      // Show initial toast
+      const loadingToast = toast({
+        title: 'Initializing Scan...',
+        description: 'Preparing printer and camera system',
+        status: 'info',
+        duration: null,
+        isClosable: false,
+      });
+
       const response = await apiClient.post('/orchestrate/scan', {
         pageMode: orchestrateOptions.scanPageMode,
         customRange: orchestrateOptions.scanCustomRange,
@@ -589,19 +598,31 @@ const Dashboard: React.FC = () => {
         saveAsDefault: orchestrateOptions.saveAsDefault,
       });
 
+      // Close loading toast
+      toast.close(loadingToast);
+
+      // Show success with detailed information
       toast({
-        title: 'Scan Job Initiated',
-        description: response.data.message || 'Scanner is ready',
+        title: '🖨️ Blank Page Printed!',
+        description: response.data.next_steps || 'Place your document on the blank page and capture using phone camera',
         status: 'success',
+        duration: 8000,
+        isClosable: true,
       });
 
       orchestrateModal.onClose();
       
+      // Optionally navigate to phone capture page or show instructions
+      if (response.data.details?.scan_notification_sent) {
+        console.log('Scan notification sent to phone camera');
+      }
+      
     } catch (err: any) {
       toast({
         title: 'Scan Failed',
-        description: err.response?.data?.error || err.message,
+        description: err.response?.data?.message || err.message || 'Unable to initialize scan',
         status: 'error',
+        duration: 6000,
       });
     }
   };
