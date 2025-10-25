@@ -11,7 +11,7 @@ $SUBDOMAIN = "printchakra-api"
 $PORT = 5000
 $FULL_URL = "https://$SUBDOMAIN.loca.lt"
 
-Write-Host "📡 Starting LocalTunnel with fixed subdomain..." -ForegroundColor Yellow
+Write-Host "Starting LocalTunnel with fixed subdomain..." -ForegroundColor Yellow
 Write-Host "   Subdomain: $SUBDOMAIN" -ForegroundColor White
 Write-Host "   Local Port: $PORT" -ForegroundColor White
 Write-Host "   Public URL: $FULL_URL" -ForegroundColor Green
@@ -19,9 +19,9 @@ Write-Host ""
 
 # Check if localtunnel is installed
 if (-not (Get-Command lt -ErrorAction SilentlyContinue)) {
-    Write-Host "❌ LocalTunnel not found. Installing..." -ForegroundColor Red
+    Write-Host "LocalTunnel not found. Installing..." -ForegroundColor Red
     npm install -g localtunnel
-    Write-Host "✅ LocalTunnel installed successfully!" -ForegroundColor Green
+    Write-Host "LocalTunnel installed successfully!" -ForegroundColor Green
     Write-Host ""
 }
 
@@ -35,7 +35,7 @@ try {
 }
 
 if (-not $backendRunning) {
-    Write-Host "⚠️  Backend not running on port $PORT" -ForegroundColor Yellow
+    Write-Host "Backend not running on port $PORT" -ForegroundColor Yellow
     Write-Host "   Please start the backend first:" -ForegroundColor White
     Write-Host "   1. Open a new terminal" -ForegroundColor White
     Write-Host "   2. Run: .\backend.ps1" -ForegroundColor Cyan
@@ -47,7 +47,7 @@ if (-not $backendRunning) {
     }
 }
 
-Write-Host "🚀 Starting tunnel..." -ForegroundColor Yellow
+Write-Host "Starting tunnel..." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "IMPORTANT: Copy this URL to frontend config!" -ForegroundColor Green
