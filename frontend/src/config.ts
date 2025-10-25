@@ -17,8 +17,6 @@ const getApiBaseUrl = () => {
   // Update this URL when your ngrok tunnel changes
   const prodUrl = 'https://ostensible-unvibrant-clarisa.ngrok-free.dev';
   console.log('✅ Using production URL (ngrok):', prodUrl);
-  console.log('   Frontend hostname:', window.location.hostname);
-  console.log('   Frontend origin:', window.location.origin);
   return prodUrl;
 };
 
@@ -40,14 +38,11 @@ const isUsingNgrok = () => {
 
 // Get default headers for axios requests
 export const getDefaultHeaders = () => {
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = {};
   
-  // Always add ngrok bypass header for all requests
+  // Add ngrok bypass header if using ngrok
   if (isUsingNgrok()) {
-    headers['ngrok-skip-browser-warning'] = '69';  // ngrok requires a specific value
+    headers['ngrok-skip-browser-warning'] = 'true';
   }
   
   return headers;
@@ -68,35 +63,25 @@ export const getImageUrl = (endpoint: string, filename: string) => {
 };
 
 // Socket.IO specific configuration
-const baseSocketConfig = {
+export const SOCKET_CONFIG = {
   reconnection: true,
-  reconnectionDelay: 3000,  // Wait 3s before retry (from 1s)
-  reconnectionDelayMax: 10000,  // Max wait 10s (from 5s)
-  reconnectionAttempts: 5,  // Limit attempts to prevent spam (from 20)
-  timeout: 30000,  // 30s connection timeout (was 20s)
-  // Use polling first for ngrok, then try websocket
-  transports: isUsingNgrok() 
-    ? ['polling', 'websocket'] as ('polling' | 'websocket')[]
-    : ['websocket', 'polling'] as ('polling' | 'websocket')[],
-  upgrade: false,  // Never upgrade transport (polling is safer for ngrok)
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  reconnectionAttempts: 10,
+  timeout: 15000,
+  transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
+  upgrade: true,
   forceNew: false,
   path: '/socket.io/',
   withCredentials: false,
   secure: API_BASE_URL.startsWith('https'),
   rejectUnauthorized: false,
-  // More lenient polling for ngrok - check less frequently
-  pollInterval: isUsingNgrok() ? 5000 : 1000,  // Poll every 5s for ngrok (reduce server load)
-};
-
-// Add extraHeaders only for ngrok to avoid type issues
-export const SOCKET_CONFIG = isUsingNgrok() 
-  ? {
-      ...baseSocketConfig,
-      extraHeaders: {
-        'ngrok-skip-browser-warning': '69'
-      }
+  ...(isUsingNgrok() ? {
+    extraHeaders: {
+      'ngrok-skip-browser-warning': 'true'
     }
-  : baseSocketConfig;
+  } : {})
+};
 
 export const API_ENDPOINTS = {
   // Core endpoints - Match backend exactly
