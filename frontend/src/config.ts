@@ -13,10 +13,10 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
   
-  // 3. Production fallback - using localtunnel with fixed subdomain
-  // This URL is consistent when using the instatunnel.ps1 script
-  const prodUrl = 'https://printchakra-backend-2025.loca.lt';
-  console.log('✅ Using production URL (LocalTunnel):', prodUrl);
+  // 3. Production fallback - using ngrok tunnel
+  // Update this URL when your ngrok tunnel changes
+  const prodUrl = 'https://ostensible-unvibrant-clarisa.ngrok-free.dev';
+  console.log('✅ Using production URL (ngrok):', prodUrl);
   return prodUrl;
 };
 
