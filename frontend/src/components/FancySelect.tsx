@@ -13,6 +13,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiChevronDown } from 'react-icons/fi';
+import Iconify from './Iconify';
 
 interface FancySelectOption {
   value: string;
@@ -68,7 +69,7 @@ const FancySelect: React.FC<FancySelectProps> = ({
       <Menu>
         <MenuButton
           as={Button}
-          rightIcon={<FiChevronDown />}
+          rightIcon={<Iconify icon={FiChevronDown} />}
           width="full"
           justifyContent="space-between"
           variant="outline"
