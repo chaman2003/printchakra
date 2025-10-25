@@ -17,6 +17,8 @@ const getApiBaseUrl = () => {
   // Update this URL when your ngrok tunnel changes
   const prodUrl = 'https://ostensible-unvibrant-clarisa.ngrok-free.dev';
   console.log('✅ Using production URL (ngrok):', prodUrl);
+  console.log('   Frontend hostname:', window.location.hostname);
+  console.log('   Frontend origin:', window.location.origin);
   return prodUrl;
 };
 
@@ -45,7 +47,7 @@ export const getDefaultHeaders = () => {
   
   // Always add ngrok bypass header for all requests
   if (isUsingNgrok()) {
-    headers['ngrok-skip-browser-warning'] = 'true';
+    headers['ngrok-skip-browser-warning'] = '69';  // ngrok requires a specific value
   }
   
   return headers;
@@ -70,23 +72,23 @@ export const SOCKET_CONFIG = {
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  reconnectionAttempts: 10,
-  timeout: 15000,
+  reconnectionAttempts: 20,  // More attempts for unstable ngrok
+  timeout: 20000,  // Longer timeout for polling
   // Use polling first for ngrok, then try websocket
   transports: isUsingNgrok() 
     ? ['polling', 'websocket'] as ('polling' | 'websocket')[]
     : ['websocket', 'polling'] as ('polling' | 'websocket')[],
-  upgrade: isUsingNgrok() ? false : true, // Disable upgrade for ngrok
+  upgrade: false,  // Never upgrade transport (polling is safer for ngrok)
   forceNew: false,
   path: '/socket.io/',
   withCredentials: false,
   secure: API_BASE_URL.startsWith('https'),
   rejectUnauthorized: false,
-  ...(isUsingNgrok() ? {
-    extraHeaders: {
-      'ngrok-skip-browser-warning': 'true'
-    }
-  } : {})
+  extraHeaders: isUsingNgrok() ? {
+    'ngrok-skip-browser-warning': '69'
+  } : {},
+  // More lenient polling for ngrok
+  pollInterval: isUsingNgrok() ? 3000 : 1000,  // Poll every 3s for ngrok instead of 1s
 };
 
 export const API_ENDPOINTS = {

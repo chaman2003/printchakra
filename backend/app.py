@@ -117,14 +117,14 @@ app.config['TRAP_BAD_REQUEST_ERRORS'] = True
 # Configure CORS for frontend - Allow all origins for flexibility
 CORS(app, resources={
     r"/*": {
-        "origins": "*",  # Allow all origins - ngrok domains change frequently
-        "methods": ["GET", "POST", "DELETE", "OPTIONS", "PUT", "PATCH"],
-        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning", "X-Requested-With"],
-        "expose_headers": ["Content-Type", "Content-Disposition"],
+        "origins": ["*"],  # Allow all origins
+        "methods": ["GET", "POST", "DELETE", "OPTIONS", "PUT", "PATCH", "HEAD"],
+        "allow_headers": ["Content-Type", "Authorization", "ngrok-skip-browser-warning", "X-Requested-With", "Accept"],
+        "expose_headers": ["Content-Type", "Content-Disposition", "Content-Length"],
         "supports_credentials": False,
-        "max_age": 3600
+        "max_age": 86400
     }
-})
+}, intercept_exceptions=False)  # Don't intercept exceptions
 
 # Initialize Socket.IO with comprehensive CORS configuration
 socketio = SocketIO(
@@ -139,6 +139,7 @@ socketio = SocketIO(
     always_connect=True,
     transports=['polling', 'websocket'],  # Polling first for better ngrok compatibility
     allow_upgrades=False,  # Disable transport upgrades to prevent websocket frame errors
+    manage_http_exception=False,  # Don't let Socket.IO handle exceptions
 )
 
 # Base directory
@@ -211,24 +212,22 @@ else:
 # Middleware to add CORS and security headers to all responses
 @app.after_request
 def after_request_handler(response):
-    """Add CORS and security headers to all responses"""
-    # Get origin from request
-    origin = request.headers.get('Origin', '*')
-    
-    # For ngrok, we need to be more permissive with CORS
-    # Always allow the origin to avoid preflight failures
-    response.headers['Access-Control-Allow-Origin'] = origin if origin != 'null' else '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization,ngrok-skip-browser-warning,X-Requested-With,Accept'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH,HEAD'
-    response.headers['Access-Control-Max-Age'] = '86400'
-    response.headers['Access-Control-Expose-Headers'] = 'Content-Type,Content-Disposition,Content-Length'
-    response.headers['Access-Control-Allow-Credentials'] = 'true'
+    """Add additional headers to responses"""
+    # Flask-CORS already handles Access-Control headers, just add extras
     
     # ngrok specific header
     response.headers['ngrok-skip-browser-warning'] = 'true'
     
-    # Security headers (but not too strict for local/ngrok)
+    # Security headers
     response.headers['X-Content-Type-Options'] = 'nosniff'
+    
+    # Ensure these critical headers are present (fallback if CORS didn't set them)
+    if 'Access-Control-Allow-Origin' not in response.headers:
+        origin = request.headers.get('Origin', '*')
+        response.headers['Access-Control-Allow-Origin'] = origin if origin != 'null' else '*'
+    
+    if 'Access-Control-Allow-Credentials' not in response.headers:
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
     
     return response
 
@@ -879,6 +878,7 @@ def favicon():
 @app.route('/<path:path>', methods=['OPTIONS'])
 def handle_options(path):
     """Handle CORS preflight requests for all routes"""
+    # Flask-CORS should handle this, but provide explicit fallback
     origin = request.headers.get('Origin', '*')
     response = jsonify({'status': 'ok'})
     response.headers['Access-Control-Allow-Origin'] = origin if origin != 'null' else '*'
@@ -886,6 +886,7 @@ def handle_options(path):
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,DELETE,OPTIONS,PUT,PATCH,HEAD'
     response.headers['Access-Control-Max-Age'] = '86400'
     response.headers['Access-Control-Allow-Credentials'] = 'true'
+    response.headers['ngrok-skip-browser-warning'] = 'true'
     return response, 200
 
 @app.route('/health')
