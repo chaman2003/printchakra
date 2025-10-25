@@ -137,7 +137,8 @@ socketio = SocketIO(
     ping_interval=25,
     max_http_buffer_size=1e7,
     always_connect=True,
-    transports=['polling', 'websocket'],  # Support both
+    transports=['polling', 'websocket'],  # Polling first for better ngrok compatibility
+    allow_upgrades=False,  # Disable transport upgrades to prevent websocket frame errors
 )
 
 # Base directory

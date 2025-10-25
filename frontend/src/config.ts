@@ -69,8 +69,11 @@ export const SOCKET_CONFIG = {
   reconnectionDelayMax: 5000,
   reconnectionAttempts: 10,
   timeout: 15000,
-  transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
-  upgrade: true,
+  // Use polling first for ngrok, then try websocket
+  transports: isUsingNgrok() 
+    ? ['polling', 'websocket'] as ('polling' | 'websocket')[]
+    : ['websocket', 'polling'] as ('polling' | 'websocket')[],
+  upgrade: isUsingNgrok() ? false : true, // Disable upgrade for ngrok
   forceNew: false,
   path: '/socket.io/',
   withCredentials: false,
