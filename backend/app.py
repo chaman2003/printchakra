@@ -173,13 +173,8 @@ socketio = SocketIO(
     always_connect=True,
     transports=['polling', 'websocket'],
     allow_upgrades=True,
-    manage_session=False,
     # Maximum CORS permissiveness
-    cors_credentials=False,
-    engineio_options={
-        'cors_allowed_origins': '*',
-        'cors_credentials': False
-    }
+    cors_credentials=False
 )
 
 # Base directory
@@ -262,17 +257,8 @@ def before_request():
         response.headers['Access-Control-Max-Age'] = '3600'
         return response, 200
 
-@app.after_request
-def after_request(response):
-    """Add security headers to all responses (CORS handled by Flask-CORS)"""
-    # Don't add CORS headers here - Flask-CORS already handles them
-    # Adding them again causes: "contains multiple values '*, *'"
-    
-    # Security headers only
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    
-    return response
+# Note: after_request handler for CORS is already defined above (line 153)
+# No need to duplicate it here
 
 # ============================================================================
 # FALLBACK QUALITY CHECK FUNCTION (for when modules unavailable)
@@ -2118,10 +2104,18 @@ if __name__ == '__main__':
     print("="*60)
     
     # Run with Socket.IO
-    socketio.run(
-        app,
-        host='0.0.0.0',
-        port=5000,
-        debug=True,  # Re-enabled
-        allow_unsafe_werkzeug=True
-    )
+    try:
+        print("🚀 Starting Socket.IO server...")
+        socketio.run(
+            app,
+            host='0.0.0.0',
+            port=5000,
+            debug=False,
+            use_reloader=False,
+            log_output=True
+        )
+    except Exception as e:
+        print(f"❌ Error starting server: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
