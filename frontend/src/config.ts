@@ -38,9 +38,12 @@ const isUsingNgrok = () => {
 
 // Get default headers for axios requests
 export const getDefaultHeaders = () => {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  };
   
-  // Add ngrok bypass header if using ngrok
+  // Always add ngrok bypass header for all requests
   if (isUsingNgrok()) {
     headers['ngrok-skip-browser-warning'] = 'true';
   }

@@ -4,24 +4,25 @@ import { API_BASE_URL, getDefaultHeaders } from './config';
 // Create axios instance with default configuration
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
+  withCredentials: false,
   headers: getDefaultHeaders()
 });
 
 // Request interceptor to ensure headers are always present
 apiClient.interceptors.request.use(
   (config) => {
-    // Merge with default headers
+    // Get fresh default headers
     const defaultHeaders = getDefaultHeaders();
     
-    // Safely merge headers
-    Object.keys(defaultHeaders).forEach(key => {
-      config.headers.set(key, defaultHeaders[key]);
+    // Apply default headers to every request
+    Object.entries(defaultHeaders).forEach(([key, value]) => {
+      if (!config.headers.has(key)) {
+        config.headers.set(key, value);
+      }
     });
     
-    console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-      headers: config.headers
-    });
+    console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`);
     
     return config;
   },
@@ -43,6 +44,7 @@ apiClient.interceptors.response.use(
     if (error.response) {
       console.error(`❌ API Error Response: ${error.response.status}`, {
         url: error.config?.url,
+        message: error.response.data?.message || error.response.data?.error,
         data: error.response.data
       });
     } else if (error.request) {
