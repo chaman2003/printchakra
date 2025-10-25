@@ -140,6 +140,29 @@ socketio = SocketIO(
     transports=['polling', 'websocket'],  # Support both
 )
 
+# Handle OPTIONS preflight requests explicitly
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning, Accept, X-Requested-With'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response, 200
+
+# Force CORS headers on ALL responses
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning, Accept, X-Requested-With'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Content-Disposition'
+    # Security headers
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    return response
+
 # Base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
@@ -207,19 +230,7 @@ else:
 # Tesseract configuration (update path if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
-# Middleware to add security headers to all responses
-@app.after_request
-def after_request(response):
-    """Add security headers to all responses (CORS handled by Flask-CORS)"""
-    # Don't add CORS headers here - Flask-CORS already handles them
-    # Adding them again causes: "contains multiple values '*, *'"
-    
-    # Security headers only
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-    
-    return response
-
+# Note: CORS and security headers are handled by @app.after_request above (after Socket.IO init)
 # ============================================================================
 # FALLBACK QUALITY CHECK FUNCTION (for when modules unavailable)
 # ============================================================================
@@ -2064,10 +2075,19 @@ if __name__ == '__main__':
     print("="*60)
     
     # Run with Socket.IO
-    socketio.run(
-        app,
-        host='0.0.0.0',
-        port=5000,
-        debug=True,  # Re-enabled
-        allow_unsafe_werkzeug=True
-    )
+    try:
+        print("🚀 About to start socketio.run()...")
+        socketio.run(
+            app,
+            host='0.0.0.0',
+            port=5000,
+            debug=False,  # Disabled to prevent reload loop
+            allow_unsafe_werkzeug=True
+        )
+        print("✅ socketio.run() completed normally")
+    except KeyboardInterrupt:
+        print("\n👋 Server stopped by user")
+    except Exception as e:
+        print(f"\n❌ ERROR: {e}")
+        import traceback
+        traceback.print_exc()
