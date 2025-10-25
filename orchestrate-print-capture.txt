@@ -1,0 +1,105 @@
+
+
+When I click **"Orchestrate Print & Capture"**, I want the following **step-by-step flow**:
+
+---
+
+### **Step 1 — Choose Mode**
+
+```
+-----------------------------------------
+       Orchestrate Print & Capture
+-----------------------------------------
+Please choose an operation:
+
+( ) Scan Mode
+( ) Print Mode
+
+[ Cancel ]                        [ Continue ]
+-----------------------------------------
+```
+
+---
+
+### **Step 2a — Scan Mode Selected**
+
+```
+-----------------------------------------
+           Scan Options
+-----------------------------------------
+Select Page Scan Mode:
+
+( ) Scan All Pages
+( ) Odd Pages Only
+( ) Even Pages Only
+( ) Custom Page Range: [ __________ ]
+Select Scan Layout:
+( ) Portrait
+( ) Landscape
+Select Paper Size: [ Dropdown ▾ ]
+Select Resolution: [ DPI ▾ ]
+Select Color Mode:
+( ) Color
+( ) Black & White
+Set Default Scan Settings for Future Use:
+[ ] Save as Default Settings (dont save default number of pages)
+[ Back ]                        [ Proceed ]
+-----------------------------------------
+```
+
+---
+
+### **Step 2b — Print Mode Selected**
+
+```
+-----------------------------------------
+          Print Options
+-----------------------------------------
+Pages:
+( ) All (Default)
+( ) Odd
+( ) Even
+( ) Custom
+
+Layout:
+( ) Portrait
+( ) Landscape
+
+Paper Size: [ Dropdown ▾ ]
+Scale: [ % ▾ ]
+Margins: [ Default / Custom ▾ ]
+Pages per Sheet: [ 1 / 2 / 4 ▾ ]
+
+Upload Documents:
+[ + Add PDF Files ]   (Multiple allowed)
+
+Select Converted PDFs:
+[ Dropdown or Slider ▾ ]   (Choose previously converted PDF files)
+
+Set Default Print Settings for Future Use:
+[ ] Save as Default Settings (dont save default number of pages)
+
+[ Back ]                        [ Proceed ]
+-----------------------------------------
+```
+
+---
+
+### **Additional Functional Requirements**
+
+1. **Dashboard Integration**:
+
+   * When selecting images from the **dashboard** via the **Select Files** button and clicking **"Orchestrate Print & Capture"**, the above **Print Mode flow** should appear automatically.
+
+2. **File Conversion**:
+
+   * Fix **file conversion failures** so that uploaded images can be successfully converted to PDF for printing.
+
+3. **Converted PDF Selection**:
+
+   * In **Print Mode**, allow selecting **already converted PDF files** via a **dropdown or slider** to include them in the print job.
+
+4. **Default Settings**:
+
+   * Allow saving selected print options as **default settings** for future print jobs.
+
