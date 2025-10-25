@@ -13,10 +13,10 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
   
-  // 3. Production fallback - using ngrok with custom domain
-  // Update this URL when deploying with a new ngrok instance
-  const prodUrl = 'https://freezingly-nonsignificative-edison.ngrok-free.dev';
-  console.log('✅ Using production URL:', prodUrl);
+  // 3. Production fallback - using localtunnel with fixed subdomain
+  // This URL is consistent when using the instatunnel.ps1 script
+  const prodUrl = 'https://printchakra-api.loca.lt';
+  console.log('✅ Using production URL (LocalTunnel):', prodUrl);
   return prodUrl;
 };
 
@@ -31,9 +31,9 @@ const isSocketIOEnabled = () => {
 
 export const SOCKET_IO_ENABLED = isSocketIOEnabled();
 
-// Check if using ngrok (needs bypass header)
+// Check if using ngrok or localtunnel (needs bypass header)
 const isUsingNgrok = () => {
-  return API_BASE_URL.includes('ngrok');
+  return API_BASE_URL.includes('ngrok') || API_BASE_URL.includes('loca.lt');
 };
 
 // Get default headers for axios requests
