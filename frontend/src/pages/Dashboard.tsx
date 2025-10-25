@@ -233,6 +233,7 @@ const Dashboard: React.FC = () => {
     
     if (SOCKET_IO_ENABLED) {
       try {
+        console.log('🔌 Socket.IO Config:', SOCKET_CONFIG);
         newSocket = io(API_BASE_URL, {
           ...SOCKET_CONFIG,
           forceNew: true,
@@ -240,6 +241,7 @@ const Dashboard: React.FC = () => {
 
         newSocket.on('connect', () => {
           console.log('✅ Dashboard: Connected to server');
+          console.log('📡 Transport:', newSocket.io.engine.transport.name);
           setConnected(true);
           setConnectionRetries(0);
         });
@@ -250,12 +252,14 @@ const Dashboard: React.FC = () => {
         });
 
         newSocket.on('connect_error', (error: any) => {
-          console.error('⚠️ Dashboard: Connection error:', error.message);
+          console.error('⚠️ Dashboard: Connection error:', error.message || error);
+          console.log('Retrying connection...');
           setConnected(false);
         });
 
         newSocket.on('error', (error: any) => {
           console.error('⚠️ Dashboard: Socket error:', error);
+          setConnected(false);
         });
 
         newSocket.on('new_file', (data: any) => {
