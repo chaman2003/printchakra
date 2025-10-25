@@ -33,13 +33,26 @@ class FileConverter:
     def convert_image_to_pdf(input_path: str, output_path: str) -> Tuple[bool, str]:
         """
         Convert image (JPG/PNG) to PDF
-        Uses img2pdf for better quality and smaller file size
+        Uses img2pdf for better quality and smaller file size, with PIL fallback
         """
         try:
+            print(f"🔄 Converting image to PDF: {input_path}")
+            
+            # Validate input file exists
+            if not os.path.exists(input_path):
+                return False, f"Input file not found: {input_path}"
+            
+            # Get file size
+            file_size_mb = os.path.getsize(input_path) / (1024 * 1024)
+            print(f"   File size: {file_size_mb:.2f} MB")
+            
             # Open and validate image
             with Image.open(input_path) as img:
+                print(f"   Image mode: {img.mode}, Size: {img.size}")
+                
                 # Convert RGBA to RGB if needed
                 if img.mode == 'RGBA':
+                    print(f"   Converting RGBA to RGB...")
                     rgb_img = Image.new('RGB', img.size, (255, 255, 255))
                     rgb_img.paste(img, mask=img.split()[3])
                     temp_path = input_path + '_temp.jpg'
@@ -48,16 +61,38 @@ class FileConverter:
                 else:
                     input_to_convert = input_path
             
-            # Convert to PDF
-            with open(output_path, 'wb') as f:
-                f.write(img2pdf.convert(input_to_convert))
+            # Try img2pdf first (better quality)
+            try:
+                print(f"   Using img2pdf for conversion...")
+                with open(output_path, 'wb') as f:
+                    f.write(img2pdf.convert(input_to_convert))
+                print(f"   ✅ img2pdf conversion successful")
+            except Exception as img2pdf_error:
+                print(f"   ⚠️ img2pdf failed: {img2pdf_error}")
+                print(f"   Trying fallback method with PIL...")
+                
+                # Fallback: Use PIL to save as PDF
+                with Image.open(input_to_convert) as img:
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    img.save(output_path, 'PDF', quality=95)
+                print(f"   ✅ PIL fallback conversion successful")
             
             # Cleanup temp file
             if input_to_convert != input_path and os.path.exists(input_to_convert):
-                os.remove(input_to_convert)
+                try:
+                    os.remove(input_to_convert)
+                    print(f"   Cleaned up temp file")
+                except:
+                    pass
             
-            print(f"✅ Converted image to PDF: {output_path}")
-            return True, f"Successfully converted to PDF"
+            # Validate output file
+            if not os.path.exists(output_path):
+                return False, "Output PDF file was not created"
+            
+            output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+            print(f"✅ Converted image to PDF: {output_path} ({output_size_mb:.2f} MB)")
+            return True, f"Successfully converted to PDF ({output_size_mb:.2f} MB)"
         
         except Exception as e:
             error_msg = f"Image to PDF conversion failed: {str(e)}"
@@ -232,15 +267,33 @@ class FileConverter:
         success_count = 0
         fail_count = 0
         
-        for input_file in input_files:
+        print(f"\n🔄 Batch Converting {len(input_files)} files to {target_format.upper()}...")
+        
+        for idx, input_file in enumerate(input_files, 1):
             try:
+                print(f"\n   [{idx}/{len(input_files)}] Processing: {os.path.basename(input_file)}")
+                
+                # Validate input file exists
+                if not os.path.exists(input_file):
+                    fail_count += 1
+                    results.append({
+                        'input': os.path.basename(input_file),
+                        'output': None,
+                        'success': False,
+                        'message': f'Input file not found: {input_file}'
+                    })
+                    print(f"   ❌ Input file not found")
+                    continue
+                
                 # Get source format
                 source_format = FileConverter.get_file_extension(input_file)
+                print(f"       Source format: {source_format}")
                 
                 # Generate output filename
                 base_name = os.path.splitext(os.path.basename(input_file))[0]
                 output_filename = f"{base_name}.{target_format}"
                 output_path = os.path.join(output_dir, output_filename)
+                print(f"       Target: {output_filename}")
                 
                 # Convert
                 success, message = FileConverter.convert_file(
@@ -249,12 +302,15 @@ class FileConverter:
                 
                 if success:
                     success_count += 1
+                    file_size = os.path.getsize(output_path) / (1024 * 1024)
                     results.append({
                         'input': os.path.basename(input_file),
                         'output': output_filename,
                         'success': True,
-                        'message': message
+                        'message': message,
+                        'size_mb': round(file_size, 2)
                     })
+                    print(f"       ✅ Success ({file_size:.2f} MB): {message}")
                 else:
                     fail_count += 1
                     results.append({
@@ -263,16 +319,21 @@ class FileConverter:
                         'success': False,
                         'message': message
                     })
+                    print(f"       ❌ Failed: {message}")
             
             except Exception as e:
                 fail_count += 1
+                error_msg = str(e)
                 results.append({
                     'input': os.path.basename(input_file),
                     'output': None,
                     'success': False,
-                    'message': str(e)
+                    'message': error_msg
                 })
+                print(f"       ❌ Exception: {error_msg}")
+                traceback.print_exc()
         
+        print(f"\n📊 Batch conversion complete: {success_count} succeeded, {fail_count} failed\n")
         return success_count, fail_count, results
     
     @staticmethod
@@ -291,6 +352,12 @@ class FileConverter:
             
             print(f"\n🔄 Merging {len(input_files)} images into single PDF...")
             
+            # Validate all input files exist
+            for i, f in enumerate(input_files, 1):
+                if not os.path.exists(f):
+                    return False, f"Input file #{i} not found: {f}"
+                print(f"   [{i}/{len(input_files)}] ✓ {os.path.basename(f)}")
+            
             # Prepare images for conversion
             converted_images = []
             temp_files = []
@@ -299,6 +366,8 @@ class FileConverter:
                 try:
                     # Open and process image
                     with Image.open(input_file) as img:
+                        print(f"   Processing: {os.path.basename(input_file)} ({img.mode}, {img.size})")
+                        
                         # Convert RGBA to RGB if needed
                         if img.mode == 'RGBA':
                             rgb_img = Image.new('RGB', img.size, (255, 255, 255))
@@ -310,23 +379,56 @@ class FileConverter:
                         else:
                             converted_images.append(input_file)
                 except Exception as e:
-                    print(f"⚠️ Skipping {input_file}: {e}")
+                    print(f"   ⚠️ Skipping {os.path.basename(input_file)}: {e}")
                     continue
             
             if not converted_images:
                 return False, "No valid images to merge"
             
+            print(f"   Converting {len(converted_images)} images to PDF...")
+            
             # Convert all images to single PDF
-            with open(output_path, 'wb') as f:
-                f.write(img2pdf.convert(converted_images))
+            try:
+                with open(output_path, 'wb') as f:
+                    f.write(img2pdf.convert(converted_images))
+            except Exception as img2pdf_error:
+                print(f"   ⚠️ img2pdf failed: {img2pdf_error}, trying PIL fallback...")
+                # Fallback: Use PIL
+                first_img = Image.open(converted_images[0])
+                if first_img.mode != 'RGB':
+                    first_img = first_img.convert('RGB')
+                
+                image_list = []
+                for img_path in converted_images:
+                    img = Image.open(img_path)
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    image_list.append(img)
+                
+                first_img.save(output_path, 'PDF', save_all=True, append_images=image_list[1:] if len(image_list) > 1 else [])
+                print(f"   ✅ PIL fallback successful")
             
             # Cleanup temp files
             for temp_file in temp_files:
                 if os.path.exists(temp_file):
-                    os.remove(temp_file)
+                    try:
+                        os.remove(temp_file)
+                    except:
+                        pass
             
-            print(f"✅ Merged {len(converted_images)} images into PDF: {output_path}")
-            return True, f"Successfully merged {len(converted_images)} images into single PDF"
+            # Validate output
+            if not os.path.exists(output_path):
+                return False, "Output PDF file was not created"
+            
+            output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+            print(f"✅ Merged {len(converted_images)} images into PDF: {output_path} ({output_size_mb:.2f} MB)")
+            return True, f"Successfully merged {len(converted_images)} images into single PDF ({output_size_mb:.2f} MB)"
+        
+        except Exception as e:
+            error_msg = f"Image merge failed: {str(e)}"
+            print(f"❌ {error_msg}")
+            traceback.print_exc()
+            return False, error_msg
         
         except Exception as e:
             error_msg = f"PDF merge failed: {str(e)}"
