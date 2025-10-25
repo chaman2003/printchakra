@@ -8,10 +8,29 @@ import cv2
 import numpy as np
 import pytesseract
 from typing import Dict, List, Tuple, Optional
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
 import pickle
 import os
+
+# Sklearn is completely optional - we'll handle missing it gracefully
+SKLEARN_AVAILABLE = False
+KNeighborsClassifier = None
+StandardScaler = None
+
+# Try importing in a lazy way
+def _try_import_sklearn():
+    global SKLEARN_AVAILABLE, KNeighborsClassifier, StandardScaler
+    if SKLEARN_AVAILABLE:
+        return True
+    try:
+        from sklearn.neighbors import KNeighborsClassifier as KNC
+        from sklearn.preprocessing import StandardScaler as SC
+        KNeighborsClassifier = KNC
+        StandardScaler = SC
+        SKLEARN_AVAILABLE = True
+        return True
+    except ImportError:
+        return False
+
 
 
 class OCRModule:
@@ -222,6 +241,12 @@ class DocumentClassifier:
         Args:
             model_path: Path to saved model (optional)
         """
+        if not SKLEARN_AVAILABLE:
+            self.model = None
+            self.scaler = None
+            self.is_trained = False
+            return
+            
         self.model = KNeighborsClassifier(n_neighbors=3)
         self.scaler = StandardScaler()
         self.is_trained = False
@@ -309,6 +334,9 @@ class DocumentClassifier:
             images: List of training images
             labels: List of corresponding labels
         """
+        if not SKLEARN_AVAILABLE or self.model is None:
+            return  # Silently skip training if sklearn unavailable
+            
         # Extract features
         features = np.array([self.extract_features(img) for img in images])
         
@@ -329,7 +357,7 @@ class DocumentClassifier:
         Returns:
             Tuple of (predicted_type, confidence)
         """
-        if not self.is_trained:
+        if not SKLEARN_AVAILABLE or self.model is None or not self.is_trained:
             return 'OTHER', 0.0
         
         # Extract and scale features
