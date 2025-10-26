@@ -1955,24 +1955,24 @@ def convert_files():
             }), 400
         
         # Create converted directory if it doesn't exist
-        converted_dir = os.path.join(os.path.dirname(__file__), 'converted')
+        converted_dir = os.path.join(DATA_DIR, 'converted')
         os.makedirs(converted_dir, exist_ok=True)
         
-        # Resolve full paths
-        processed_dir = os.path.join(os.path.dirname(__file__), 'processed')
-        input_paths = [os.path.join(processed_dir, f) for f in files]
+        # Resolve full paths using the correct DATA_DIR
+        input_paths = [os.path.join(PROCESSED_DIR, f) for f in files]
         
         # Validate files exist
         missing_files = [f for f, p in zip(files, input_paths) if not os.path.exists(p)]
         if missing_files:
             print(f"❌ Missing files: {missing_files}")
+            print(f"   Looking in: {PROCESSED_DIR}")
             return jsonify({
                 'success': False,
                 'error': f'Files not found: {", ".join(missing_files)}'
             }), 404
         
         print(f"📂 Files validated successfully")
-        print(f"📂 Processed dir: {processed_dir}")
+        print(f"📂 Processed dir: {PROCESSED_DIR}")
         
         print(f"\n{'='*70}")
         print(f"🔄 FILE CONVERSION STARTED")
@@ -2083,8 +2083,7 @@ def convert_files():
 def serve_converted_file(filename):
     """Serve converted files"""
     try:
-        converted_dir = os.path.join(os.path.dirname(__file__), 'converted')
-        return send_from_directory(converted_dir, filename)
+        return send_from_directory(CONVERTED_DIR, filename)
     except Exception as e:
         print(f"Error serving converted file: {e}")
         return jsonify({'error': str(e)}), 404
@@ -2093,13 +2092,12 @@ def serve_converted_file(filename):
 def get_converted_files():
     """Get list of converted files"""
     try:
-        converted_dir = os.path.join(os.path.dirname(__file__), 'converted')
-        if not os.path.exists(converted_dir):
+        if not os.path.exists(CONVERTED_DIR):
             return jsonify({'files': []})
         
         files = []
-        for filename in os.listdir(converted_dir):
-            filepath = os.path.join(converted_dir, filename)
+        for filename in os.listdir(CONVERTED_DIR):
+            filepath = os.path.join(CONVERTED_DIR, filename)
             if os.path.isfile(filepath):
                 stat = os.stat(filepath)
                 files.append({
