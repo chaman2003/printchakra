@@ -784,6 +784,8 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+
   return (
     <VStack align="stretch" spacing={10} pb={12}>
       <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
@@ -852,9 +854,6 @@ const Dashboard: React.FC = () => {
       )}
 
   <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
-// ...existing code...
-// Add state for showing connection status
-const [showConnectionStatus, setShowConnectionStatus] = useState(false);
         <Button size="lg" colorScheme="brand" variant="solid" onClick={triggerPrint} leftIcon={<Iconify icon={FiLayers} boxSize={5} />}>
           Orchestrate Print Capture
         </Button>
