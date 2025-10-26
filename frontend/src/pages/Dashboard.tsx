@@ -1220,17 +1220,20 @@ const Dashboard: React.FC = () => {
                 {convertedFiles.map((file) => (
                   <Card key={file.filename} borderRadius="xl" border="1px solid rgba(69,202,255,0.18)">
                     <CardBody>
-                      <Flex justify="space-between" align="center">
-                        <Stack spacing={1} flex={1}>
+                      <Stack spacing={3}>
+                        <Stack spacing={1}>
                           <Heading size="sm">{file.filename}</Heading>
                           <Text fontSize="xs" color="text.muted">
                             {(file.size / 1024).toFixed(2)} KB · {new Date(file.created).toLocaleString()}
                           </Text>
                         </Stack>
-                        <Flex gap={2}>
+                        <Flex gap={2} wrap="wrap">
                           <Button
                             variant="ghost"
-                            leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
+                            size="sm"
+                            flex={1}
+                            minW="120px"
+                            leftIcon={<Iconify icon={FiDownload} boxSize={4} />}
                             onClick={async () => {
                               try {
                                 const response = await apiClient.get(`/converted/${file.filename}`, {
@@ -1259,8 +1262,11 @@ const Dashboard: React.FC = () => {
                           </Button>
                           <Button
                             variant="ghost"
+                            size="sm"
+                            flex={1}
+                            minW="120px"
                             colorScheme="red"
-                            leftIcon={<Iconify icon={FiTrash2} boxSize={5} />}
+                            leftIcon={<Iconify icon={FiTrash2} boxSize={4} />}
                             onClick={async () => {
                               if (!window.confirm(`Delete ${file.filename}?`)) return;
                               
@@ -1285,7 +1291,7 @@ const Dashboard: React.FC = () => {
                             Delete
                           </Button>
                         </Flex>
-                      </Flex>
+                      </Stack>
                     </CardBody>
                   </Card>
                 ))}
