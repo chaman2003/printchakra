@@ -425,22 +425,19 @@ class FileConverter:
             return True, f"Successfully merged {len(converted_images)} images into single PDF ({output_size_mb:.2f} MB)"
         
         except Exception as e:
-            error_msg = f"Image merge failed: {str(e)}"
-            print(f"❌ {error_msg}")
-            traceback.print_exc()
-            return False, error_msg
-        
-        except Exception as e:
             error_msg = f"PDF merge failed: {str(e)}"
             print(f"❌ {error_msg}")
             traceback.print_exc()
             
             # Cleanup temp files on error
-            for temp_file in temp_files:
-                if os.path.exists(temp_file):
-                    try:
-                        os.remove(temp_file)
-                    except:
-                        pass
+            try:
+                for temp_file in temp_files:
+                    if os.path.exists(temp_file):
+                        try:
+                            os.remove(temp_file)
+                        except:
+                            pass
+            except:
+                pass
             
             return False, error_msg
