@@ -155,48 +155,12 @@ class FileConverter:
     def convert_pdf_to_images(input_path: str, output_dir: str, format: str = 'jpg') -> Tuple[bool, str, List[str]]:
         """
         Convert PDF to images (one image per page)
-        Returns: (success, message, list of output files)
+        Note: This feature requires additional dependencies (pdf2image)
+        Currently returning error to indicate feature not available
         """
-        try:
-            output_files = []
-            
-            # Open PDF
-            pdf_document = fitz.open(input_path)
-            base_name = os.path.splitext(os.path.basename(input_path))[0]
-            
-            # Convert each page
-            for page_num in range(len(pdf_document)):
-                page = pdf_document[page_num]
-                
-                # Render page to image (300 DPI)
-                zoom = 2  # 2x zoom = ~200 DPI
-                mat = fitz.Matrix(zoom, zoom)
-                pix = page.get_pixmap(matrix=mat)
-                
-                # Save image
-                output_filename = f"{base_name}_page{page_num + 1}.{format}"
-                output_path = os.path.join(output_dir, output_filename)
-                
-                if format.lower() == 'png':
-                    pix.save(output_path)
-                else:
-                    # Convert to PIL Image for JPEG
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                    img.save(output_path, 'JPEG', quality=95)
-                
-                output_files.append(output_filename)
-                print(f"✅ Converted page {page_num + 1} to {format.upper()}")
-            
-            pdf_document.close()
-            
-            message = f"Successfully converted {len(output_files)} pages to {format.upper()}"
-            return True, message, output_files
-        
-        except Exception as e:
-            error_msg = f"PDF to image conversion failed: {str(e)}"
-            print(f"❌ {error_msg}")
-            traceback.print_exc()
-            return False, error_msg, []
+        error_msg = "PDF to image conversion is not currently supported. Please install pdf2image package if needed."
+        print(f"ℹ️ {error_msg}")
+        return False, error_msg, []
     
     @staticmethod
     def convert_file(input_path: str, output_path: str, source_format: str, target_format: str) -> Tuple[bool, str]:

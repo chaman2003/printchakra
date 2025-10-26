@@ -2116,6 +2116,49 @@ def get_converted_files():
         print(f"Error listing converted files: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/delete-converted/<filename>', methods=['DELETE', 'OPTIONS'])
+def delete_converted_file(filename):
+    """Delete a converted file"""
+    # Handle OPTIONS preflight request
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, ngrok-skip-browser-warning'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        return response, 200
+    
+    try:
+        # Security: prevent directory traversal
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+        
+        file_path = os.path.join(CONVERTED_DIR, filename)
+        
+        # Verify file exists and is in the converted directory
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        # Verify file is actually in CONVERTED_DIR (security check)
+        if not os.path.abspath(file_path).startswith(os.path.abspath(CONVERTED_DIR)):
+            return jsonify({'error': 'Invalid file path'}), 400
+        
+        # Delete the file
+        os.remove(file_path)
+        print(f"✅ Deleted converted file: {filename}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully deleted {filename}'
+        })
+    
+    except Exception as e:
+        print(f"❌ Error deleting converted file: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # ============================================================================
 # SOCKET.IO EVENTS
 # ============================================================================
