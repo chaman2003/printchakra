@@ -210,6 +210,10 @@ const Dashboard: React.FC = () => {
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
   
+  // Image selection state for range selection
+  const [rangeSelectionMode, setRangeSelectionMode] = useState(false);
+  const [rangeSelectionStart, setRangeSelectionStart] = useState<number | null>(null);
+  
   // Orchestrate Print & Capture state
   const [orchestrateStep, setOrchestrateStep] = useState<number>(1); // 1=mode, 2=options, 3=confirm
   const [orchestrateMode, setOrchestrateMode] = useState<'scan' | 'print' | null>(null);
@@ -680,6 +684,47 @@ const Dashboard: React.FC = () => {
     );
   };
 
+  const selectAll = () => {
+    setSelectedFiles(files.map(f => f.filename));
+  };
+
+  const deselectAll = () => {
+    setSelectedFiles([]);
+  };
+
+  const selectEven = () => {
+    const evenFiles = files
+      .map((f, idx) => ({ filename: f.filename, index: idx }))
+      .filter(f => f.index % 2 === 1) // 0-indexed, so odd index = even position (2nd, 4th, etc)
+      .map(f => f.filename);
+    setSelectedFiles(evenFiles);
+  };
+
+  const selectOdd = () => {
+    const oddFiles = files
+      .map((f, idx) => ({ filename: f.filename, index: idx }))
+      .filter(f => f.index % 2 === 0) // 0-indexed, so even index = odd position (1st, 3rd, etc)
+      .map(f => f.filename);
+    setSelectedFiles(oddFiles);
+  };
+
+  const handleRangeSelection = (index: number) => {
+    if (!rangeSelectionMode) return;
+
+    if (rangeSelectionStart === null) {
+      setRangeSelectionStart(index);
+    } else {
+      const start = Math.min(rangeSelectionStart, index);
+      const end = Math.max(rangeSelectionStart, index);
+      const rangeFiles = files
+        .slice(start, end + 1)
+        .map(f => f.filename);
+      setSelectedFiles(rangeFiles);
+      setRangeSelectionStart(null);
+      setRangeSelectionMode(false);
+    }
+  };
+
   const openConversionModal = () => {
     if (selectedFiles.length === 0) {
       toast({
@@ -917,6 +962,37 @@ const Dashboard: React.FC = () => {
               )}
             </Flex>
 
+            {/* Selection Buttons - Only show in selection mode */}
+            {selectionMode && files.length > 0 && (
+              <Stack spacing={3} mb={6}>
+                <Flex gap={2} wrap="wrap">
+                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectAll}>
+                    Select All
+                  </Button>
+                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectOdd}>
+                    Select Odd
+                  </Button>
+                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectEven}>
+                    Select Even
+                  </Button>
+                  <Button
+                    size="sm"
+                    colorScheme={rangeSelectionMode ? 'green' : 'blue'}
+                    variant={rangeSelectionMode ? 'solid' : 'outline'}
+                    onClick={() => {
+                      setRangeSelectionMode(!rangeSelectionMode);
+                      setRangeSelectionStart(null);
+                    }}
+                  >
+                    {rangeSelectionStart !== null ? 'Click last image...' : 'Select Range'}
+                  </Button>
+                  <Button size="sm" colorScheme="red" variant="outline" onClick={deselectAll}>
+                    Deselect All
+                  </Button>
+                </Flex>
+              </Stack>
+            )}
+
             {files.length === 0 ? (
               <Card border="1px solid rgba(121,95,238,0.2)" bg={surfaceCard} backdropFilter="blur(10px)" textAlign="center" py={10}>
                 <CardBody>
@@ -932,17 +1008,32 @@ const Dashboard: React.FC = () => {
               </Card>
             ) : (
               <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={6}>
-                {files.map((file) => {
+                {files.map((file, index) => {
                   const isSelected = selectedFiles.includes(file.filename);
                   return (
                     <Card
                       key={file.filename}
                       borderRadius="2xl"
-                      border={`1px solid ${isSelected ? 'rgba(69,202,255,0.45)' : 'rgba(121,95,238,0.18)'}`}
-                      boxShadow={isSelected ? 'halo' : 'subtle'}
+                      border={`2px solid ${isSelected ? 'rgba(72, 187, 120, 0.6)' : 'rgba(121,95,238,0.18)'}`}
+                      boxShadow={isSelected ? '0 0 20px rgba(72, 187, 120, 0.4)' : 'subtle'}
                       bg={surfaceCard}
                       position="relative"
                       overflow="hidden"
+                      cursor={selectionMode ? 'pointer' : 'default'}
+                      onClick={() => {
+                        if (selectionMode && !file.processing) {
+                          if (rangeSelectionMode) {
+                            handleRangeSelection(index);
+                          } else {
+                            toggleFileSelection(file.filename);
+                          }
+                        }
+                      }}
+                      _hover={selectionMode && !file.processing ? {
+                        borderColor: isSelected ? 'rgba(72, 187, 120, 0.8)' : 'rgba(69,202,255,0.35)',
+                        transform: 'translateY(-2px)',
+                        transition: 'all 0.2s ease'
+                      } : {}}
                     >
                       {selectionMode && !file.processing && (
                         <Checkbox
