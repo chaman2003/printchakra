@@ -714,12 +714,28 @@ const Dashboard: React.FC = () => {
     if (rangeSelectionStart === null) {
       setRangeSelectionStart(index);
     } else {
-      const start = Math.min(rangeSelectionStart, index);
-      const end = Math.max(rangeSelectionStart, index);
-      const rangeFiles = files
-        .slice(start, end + 1)
-        .map(f => f.filename);
-      setSelectedFiles(rangeFiles);
+      // Get indices of all currently selected files
+      const selectedIndices = selectedFiles
+        .map(filename => files.findIndex(f => f.filename === filename))
+        .filter(idx => idx !== -1)
+        .sort((a, b) => a - b);
+
+      // If no files selected, just select from start to clicked index
+      if (selectedIndices.length === 0) {
+        const start = Math.min(rangeSelectionStart, index);
+        const end = Math.max(rangeSelectionStart, index);
+        const rangeFiles = files.slice(start, end + 1).map(f => f.filename);
+        setSelectedFiles(rangeFiles);
+      } else {
+        // Select all files between the first and last selected files
+        const minIndex = Math.min(...selectedIndices);
+        const maxIndex = Math.max(...selectedIndices);
+        const rangeFiles = files
+          .slice(minIndex, maxIndex + 1)
+          .map(f => f.filename);
+        setSelectedFiles(rangeFiles);
+      }
+      
       setRangeSelectionStart(null);
       setRangeSelectionMode(false);
     }
@@ -965,30 +981,41 @@ const Dashboard: React.FC = () => {
             {/* Selection Buttons - Only show in selection mode */}
             {selectionMode && files.length > 0 && (
               <Stack spacing={3} mb={6}>
-                <Flex gap={2} wrap="wrap">
-                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectAll}>
-                    Select All
-                  </Button>
-                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectOdd}>
-                    Select Odd
-                  </Button>
-                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectEven}>
-                    Select Even
-                  </Button>
-                  <Button
-                    size="sm"
-                    colorScheme={rangeSelectionMode ? 'green' : 'blue'}
-                    variant={rangeSelectionMode ? 'solid' : 'outline'}
-                    onClick={() => {
-                      setRangeSelectionMode(!rangeSelectionMode);
-                      setRangeSelectionStart(null);
-                    }}
-                  >
-                    {rangeSelectionStart !== null ? 'Click last image...' : 'Select Range'}
-                  </Button>
-                  <Button size="sm" colorScheme="red" variant="outline" onClick={deselectAll}>
-                    Deselect All
-                  </Button>
+                <Flex gap={2} wrap="wrap" justify="space-between" align="center">
+                  {/* Left side - Conditional buttons only shown when more than one image selected */}
+                  <Flex gap={2} wrap="wrap">
+                    {selectedFiles.length > 1 && (
+                      <>
+                        <Button size="sm" colorScheme="blue" variant="outline" onClick={selectOdd}>
+                          Select Odd
+                        </Button>
+                        <Button size="sm" colorScheme="blue" variant="outline" onClick={selectEven}>
+                          Select Even
+                        </Button>
+                        <Button
+                          size="sm"
+                          colorScheme={rangeSelectionMode ? 'green' : 'blue'}
+                          variant={rangeSelectionMode ? 'solid' : 'outline'}
+                          onClick={() => {
+                            setRangeSelectionMode(!rangeSelectionMode);
+                            setRangeSelectionStart(null);
+                          }}
+                        >
+                          {rangeSelectionStart !== null ? 'Click end image...' : 'Select Range'}
+                        </Button>
+                      </>
+                    )}
+                  </Flex>
+
+                  {/* Right side - Always shown */}
+                  <Flex gap={2} wrap="wrap">
+                    <Button size="sm" colorScheme="blue" variant="outline" onClick={selectAll}>
+                      Select All
+                    </Button>
+                    <Button size="sm" colorScheme="red" variant="outline" onClick={deselectAll}>
+                      Deselect All
+                    </Button>
+                  </Flex>
                 </Flex>
               </Stack>
             )}
