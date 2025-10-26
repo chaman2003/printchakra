@@ -1221,41 +1221,70 @@ const Dashboard: React.FC = () => {
                   <Card key={file.filename} borderRadius="xl" border="1px solid rgba(69,202,255,0.18)">
                     <CardBody>
                       <Flex justify="space-between" align="center">
-                        <Stack spacing={1}>
+                        <Stack spacing={1} flex={1}>
                           <Heading size="sm">{file.filename}</Heading>
                           <Text fontSize="xs" color="text.muted">
                             {(file.size / 1024).toFixed(2)} KB · {new Date(file.created).toLocaleString()}
                           </Text>
                         </Stack>
-                        <Button
-                          variant="ghost"
-                          leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
-                          onClick={async () => {
-                            try {
-                              const response = await apiClient.get(`/converted/${file.filename}`, {
-                                responseType: 'blob',
-                              });
-                              const blob = response.data;
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = file.filename;
-                              document.body.appendChild(a);
-                              a.click();
-                              document.body.removeChild(a);
-                              URL.revokeObjectURL(url);
-                            } catch (err: any) {
-                              console.error('Download failed:', err);
-                              toast({
-                                title: 'Download failed',
-                                description: err.message,
-                                status: 'error',
-                              });
-                            }
-                          }}
-                        >
-                          Download
-                        </Button>
+                        <Flex gap={2}>
+                          <Button
+                            variant="ghost"
+                            leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
+                            onClick={async () => {
+                              try {
+                                const response = await apiClient.get(`/converted/${file.filename}`, {
+                                  responseType: 'blob',
+                                });
+                                const blob = response.data;
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = file.filename;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(url);
+                              } catch (err: any) {
+                                console.error('Download failed:', err);
+                                toast({
+                                  title: 'Download failed',
+                                  description: err.message,
+                                  status: 'error',
+                                });
+                              }
+                            }}
+                          >
+                            Download
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            colorScheme="red"
+                            leftIcon={<Iconify icon={FiTrash2} boxSize={5} />}
+                            onClick={async () => {
+                              if (!window.confirm(`Delete ${file.filename}?`)) return;
+                              
+                              try {
+                                await apiClient.delete(`/delete-converted/${file.filename}`);
+                                setConvertedFiles(convertedFiles.filter(f => f.filename !== file.filename));
+                                toast({
+                                  title: 'File deleted',
+                                  description: `${file.filename} has been deleted.`,
+                                  status: 'success',
+                                });
+                              } catch (err: any) {
+                                console.error('Delete failed:', err);
+                                toast({
+                                  title: 'Delete failed',
+                                  description: err.message,
+                                  status: 'error',
+                                });
+                              }
+                            }}
+                          >
+                            Delete
+                          </Button>
+                        </Flex>
                       </Flex>
                     </CardBody>
                   </Card>
