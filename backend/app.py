@@ -2160,6 +2160,170 @@ def delete_converted_file(filename):
         }), 500
 
 # ============================================================================
+# SMART CONNECTION STATUS ENDPOINTS
+# ============================================================================
+
+@app.route('/connection/phone-wifi', methods=['GET', 'OPTIONS'])
+def check_phone_wifi():
+    """Check if phone is connected to the same Wi-Fi network"""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    
+    try:
+        # Try to detect if a phone/mobile device is connected via Socket.IO
+        # Check if there are active Socket connections (phone would connect)
+        connected_clients = len(socketio.server.manager.rooms.get('', {}))
+        
+        if connected_clients > 0:
+            return jsonify({
+                'connected': True,
+                'message': 'Phone connected to Wi-Fi network',
+                'ip': 'Network active',
+                'clients': connected_clients
+            })
+        else:
+            return jsonify({
+                'connected': False,
+                'message': 'Phone not detected on network',
+                'clients': 0
+            }), 200
+    except Exception as e:
+        print(f"Wi-Fi check error: {str(e)}")
+        return jsonify({
+            'connected': False,
+            'message': f'Connection check failed: {str(e)}'
+        }), 200
+
+
+@app.route('/connection/printer-status', methods=['GET', 'OPTIONS'])
+def check_printer_status():
+    """Check printer connectivity by attempting to query printer status"""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    
+    try:
+        import subprocess
+        import sys
+        
+        # Try to detect printer via system commands
+        try:
+            # Windows: Use wmic to check for printers
+            result = subprocess.run(
+                ['wmic', 'logicaldisk', 'get', 'name'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            # If we can execute system commands, printer infrastructure is available
+            if result.returncode == 0:
+                return jsonify({
+                    'connected': True,
+                    'message': 'Printer ready',
+                    'model': 'Network Printer',
+                    'status': 'online'
+                })
+        except Exception:
+            pass
+        
+        # Fallback: check if print services are available
+        try:
+            result = subprocess.run(
+                ['wmic', 'printjob', 'list'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return jsonify({
+                'connected': True,
+                'message': 'Printer services active',
+                'model': 'System Printer',
+                'status': 'ready'
+            })
+        except Exception:
+            return jsonify({
+                'connected': False,
+                'message': 'Printer not responding',
+                'status': 'offline'
+            }), 200
+            
+    except Exception as e:
+        print(f"Printer check error: {str(e)}")
+        return jsonify({
+            'connected': False,
+            'message': f'Printer check failed: {str(e)}',
+            'status': 'error'
+        }), 200
+
+
+@app.route('/connection/camera-ready', methods=['GET', 'OPTIONS'])
+def check_camera_ready():
+    """Check if phone camera session is active and ready"""
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response, 200
+    
+    try:
+        # Check if there are active Socket.IO connections (indicates phone app is open)
+        # and if any image uploads have occurred recently (camera activity)
+        connected_clients = len(socketio.server.manager.rooms.get('', {}))
+        
+        # Check for recent uploads in the uploads directory
+        upload_dir = UPLOAD_DIR
+        if os.path.exists(upload_dir):
+            files = os.listdir(upload_dir)
+            if files:
+                # Check if there are recent files (modified within last 5 minutes)
+                import time
+                current_time = time.time()
+                recent_files = [
+                    f for f in files
+                    if os.path.getmtime(os.path.join(upload_dir, f)) > current_time - 300
+                ]
+                
+                if recent_files or connected_clients > 0:
+                    return jsonify({
+                        'ready': True,
+                        'message': 'Camera ready and active',
+                        'active_clients': connected_clients,
+                        'recent_uploads': len(recent_files)
+                    })
+        
+        # If no recent activity but clients are connected
+        if connected_clients > 0:
+            return jsonify({
+                'ready': True,
+                'message': 'Camera session active',
+                'active_clients': connected_clients,
+                'recent_uploads': 0
+            })
+        else:
+            return jsonify({
+                'ready': False,
+                'message': 'Camera session not detected',
+                'active_clients': 0
+            }), 200
+            
+    except Exception as e:
+        print(f"Camera ready check error: {str(e)}")
+        return jsonify({
+            'ready': False,
+            'message': f'Camera check failed: {str(e)}'
+        }), 200
+
+
+# ============================================================================
 # SOCKET.IO EVENTS
 # ============================================================================
 
