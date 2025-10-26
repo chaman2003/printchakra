@@ -47,6 +47,7 @@ import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } fro
 import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
 import Iconify from '../components/Iconify';
 import FancySelect from '../components/FancySelect';
+
 import SmartConnectionStatus from '../components/SmartConnectionStatus';
 
 interface FileInfo {
@@ -813,19 +814,47 @@ const Dashboard: React.FC = () => {
         </Stack>
       </Flex>
 
-      {/* Smart Connection Status */}
-      <SmartConnectionStatus onStatusComplete={(allConnected: boolean) => {
-        if (allConnected) {
-          toast({
-            title: '✅ System Ready',
-            description: 'All devices connected. Ready to print and scan!',
-            status: 'success',
-            duration: 4000,
-          });
-        }
-      }} />
 
-      <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
+      {/* Smart Connection Status - only show when button is clicked */}
+      <Button
+        size="lg"
+        colorScheme="cyan"
+        variant="outline"
+        mb={4}
+        onClick={() => setShowConnectionStatus(true)}
+      >
+        Show Connection Status
+      </Button>
+      {showConnectionStatus && (
+        <Box mb={6}>
+          <SmartConnectionStatus
+            onStatusComplete={(allConnected: boolean) => {
+              if (allConnected) {
+                toast({
+                  title: '✅ System Ready',
+                  description: 'All devices connected. Ready to print and scan!',
+                  status: 'success',
+                  duration: 4000,
+                });
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            mt={2}
+            colorScheme="gray"
+            variant="ghost"
+            onClick={() => setShowConnectionStatus(false)}
+          >
+            Close Connection Status
+          </Button>
+        </Box>
+      )}
+
+  <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
+// ...existing code...
+// Add state for showing connection status
+const [showConnectionStatus, setShowConnectionStatus] = useState(false);
         <Button size="lg" colorScheme="brand" variant="solid" onClick={triggerPrint} leftIcon={<Iconify icon={FiLayers} boxSize={5} />}>
           Orchestrate Print Capture
         </Button>
