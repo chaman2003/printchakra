@@ -1,17 +1,16 @@
 """
 File Format Converter Module
 Supports conversion between various formats: JPG, PNG, PDF, DOCX
+Uses PIL (Pillow) as primary method for maximum compatibility
 """
 
 import os
 import io
 from PIL import Image
-import img2pdf
 from docx import Document
 from docx.shared import Inches
-import fitz  # PyMuPDF
-from typing import List, Tuple, Optional
 import traceback
+from typing import List, Tuple, Optional
 
 
 class FileConverter:
@@ -32,11 +31,11 @@ class FileConverter:
     @staticmethod
     def convert_image_to_pdf(input_path: str, output_path: str) -> Tuple[bool, str]:
         """
-        Convert image (JPG/PNG) to PDF
-        Uses img2pdf for better quality and smaller file size, with PIL fallback
+        Convert image (JPG/PNG) to PDF using PIL
+        Robust method that works with all image formats
         """
         try:
-            print(f"🔄 Converting image to PDF: {input_path}")
+            print(f"🔄 Converting image to PDF: {os.path.basename(input_path)}")
             
             # Validate input file exists
             if not os.path.exists(input_path):
@@ -44,55 +43,44 @@ class FileConverter:
             
             # Get file size
             file_size_mb = os.path.getsize(input_path) / (1024 * 1024)
-            print(f"   File size: {file_size_mb:.2f} MB")
+            print(f"   Input file size: {file_size_mb:.2f} MB")
             
-            # Open and validate image
+            # Open image and convert to RGB (required for PDF)
             with Image.open(input_path) as img:
-                print(f"   Image mode: {img.mode}, Size: {img.size}")
+                print(f"   Image format: {img.format}, Mode: {img.mode}, Size: {img.size}")
                 
-                # Convert RGBA to RGB if needed
-                if img.mode == 'RGBA':
-                    print(f"   Converting RGBA to RGB...")
+                # Convert any image mode to RGB
+                if img.mode in ('RGBA', 'LA', 'P', '1', 'L'):
+                    # Create white background for transparency
                     rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                    rgb_img.paste(img, mask=img.split()[3])
-                    temp_path = input_path + '_temp.jpg'
-                    rgb_img.save(temp_path, 'JPEG', quality=95)
-                    input_to_convert = temp_path
+                    
+                    if img.mode == 'P':
+                        # Handle palette mode
+                        img = img.convert('RGBA')
+                    
+                    if img.mode == 'RGBA' or img.mode == 'LA':
+                        # Paste with alpha channel
+                        rgb_img.paste(img, mask=img.split()[-1])
+                    else:
+                        # Direct paste
+                        rgb_img.paste(img)
+                    
+                    img_to_save = rgb_img
                 else:
-                    input_to_convert = input_path
-            
-            # Try img2pdf first (better quality)
-            try:
-                print(f"   Using img2pdf for conversion...")
-                with open(output_path, 'wb') as f:
-                    f.write(img2pdf.convert(input_to_convert))
-                print(f"   ✅ img2pdf conversion successful")
-            except Exception as img2pdf_error:
-                print(f"   ⚠️ img2pdf failed: {img2pdf_error}")
-                print(f"   Trying fallback method with PIL...")
+                    # Already in RGB or compatible mode
+                    img_to_save = img.convert('RGB') if img.mode != 'RGB' else img
                 
-                # Fallback: Use PIL to save as PDF
-                with Image.open(input_to_convert) as img:
-                    if img.mode != 'RGB':
-                        img = img.convert('RGB')
-                    img.save(output_path, 'PDF', quality=95)
-                print(f"   ✅ PIL fallback conversion successful")
+                # Save as PDF
+                print(f"   Saving as PDF...")
+                img_to_save.save(output_path, 'PDF', quality=95, optimize=True)
             
-            # Cleanup temp file
-            if input_to_convert != input_path and os.path.exists(input_to_convert):
-                try:
-                    os.remove(input_to_convert)
-                    print(f"   Cleaned up temp file")
-                except:
-                    pass
-            
-            # Validate output file
+            # Validate output
             if not os.path.exists(output_path):
                 return False, "Output PDF file was not created"
             
             output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-            print(f"✅ Converted image to PDF: {output_path} ({output_size_mb:.2f} MB)")
-            return True, f"Successfully converted to PDF ({output_size_mb:.2f} MB)"
+            print(f"✅ Successfully converted to PDF: {output_size_mb:.2f} MB")
+            return True, f"Converted to PDF ({output_size_mb:.2f} MB)"
         
         except Exception as e:
             error_msg = f"Image to PDF conversion failed: {str(e)}"
@@ -339,12 +327,8 @@ class FileConverter:
     @staticmethod
     def merge_images_to_pdf(input_files: List[str], output_path: str) -> Tuple[bool, str]:
         """
-        Merge multiple images into a single PDF
-        Args:
-            input_files: List of image file paths
-            output_path: Output PDF file path
-        Returns:
-            (success, message)
+        Merge multiple images into a single PDF using PIL
+        Robust method that handles all image types
         """
         try:
             if not input_files:
@@ -358,86 +342,66 @@ class FileConverter:
                     return False, f"Input file #{i} not found: {f}"
                 print(f"   [{i}/{len(input_files)}] ✓ {os.path.basename(f)}")
             
-            # Prepare images for conversion
-            converted_images = []
-            temp_files = []
+            # Process and convert all images to RGB
+            image_list = []
             
-            for input_file in input_files:
+            for idx, input_file in enumerate(input_files, 1):
                 try:
-                    # Open and process image
+                    print(f"   Processing [{idx}/{len(input_files)}]: {os.path.basename(input_file)}")
+                    
                     with Image.open(input_file) as img:
-                        print(f"   Processing: {os.path.basename(input_file)} ({img.mode}, {img.size})")
+                        print(f"      Format: {img.format}, Mode: {img.mode}, Size: {img.size}")
                         
-                        # Convert RGBA to RGB if needed
-                        if img.mode == 'RGBA':
+                        # Convert any mode to RGB
+                        if img.mode in ('RGBA', 'LA', 'P', '1', 'L'):
+                            # Create white background
                             rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-                            rgb_img.paste(img, mask=img.split()[3])
-                            temp_path = input_file + '_temp.jpg'
-                            rgb_img.save(temp_path, 'JPEG', quality=95)
-                            converted_images.append(temp_path)
-                            temp_files.append(temp_path)
+                            
+                            if img.mode == 'P':
+                                img = img.convert('RGBA')
+                            
+                            if img.mode in ('RGBA', 'LA'):
+                                rgb_img.paste(img, mask=img.split()[-1])
+                            else:
+                                rgb_img.paste(img)
+                            
+                            image_list.append(rgb_img)
                         else:
-                            converted_images.append(input_file)
+                            image_list.append(img.convert('RGB'))
+                
                 except Exception as e:
-                    print(f"   ⚠️ Skipping {os.path.basename(input_file)}: {e}")
-                    continue
+                    print(f"      ⚠️ Error processing image: {e}")
+                    return False, f"Failed to process {os.path.basename(input_file)}: {str(e)}"
             
-            if not converted_images:
+            if not image_list:
                 return False, "No valid images to merge"
             
-            print(f"   Converting {len(converted_images)} images to PDF...")
+            print(f"   Saving {len(image_list)} images to PDF...")
             
-            # Convert all images to single PDF
-            try:
-                with open(output_path, 'wb') as f:
-                    f.write(img2pdf.convert(converted_images))
-            except Exception as img2pdf_error:
-                print(f"   ⚠️ img2pdf failed: {img2pdf_error}, trying PIL fallback...")
-                # Fallback: Use PIL
-                first_img = Image.open(converted_images[0])
-                if first_img.mode != 'RGB':
-                    first_img = first_img.convert('RGB')
-                
-                image_list = []
-                for img_path in converted_images:
-                    img = Image.open(img_path)
-                    if img.mode != 'RGB':
-                        img = img.convert('RGB')
-                    image_list.append(img)
-                
-                first_img.save(output_path, 'PDF', save_all=True, append_images=image_list[1:] if len(image_list) > 1 else [])
-                print(f"   ✅ PIL fallback successful")
+            # Save all images as a single PDF
+            # First image is the main image, rest are appended
+            first_image = image_list[0]
+            remaining_images = image_list[1:] if len(image_list) > 1 else []
             
-            # Cleanup temp files
-            for temp_file in temp_files:
-                if os.path.exists(temp_file):
-                    try:
-                        os.remove(temp_file)
-                    except:
-                        pass
+            first_image.save(
+                output_path,
+                'PDF',
+                save_all=True,
+                append_images=remaining_images,
+                quality=95,
+                optimize=True
+            )
             
             # Validate output
             if not os.path.exists(output_path):
                 return False, "Output PDF file was not created"
             
             output_size_mb = os.path.getsize(output_path) / (1024 * 1024)
-            print(f"✅ Merged {len(converted_images)} images into PDF: {output_path} ({output_size_mb:.2f} MB)")
-            return True, f"Successfully merged {len(converted_images)} images into single PDF ({output_size_mb:.2f} MB)"
+            print(f"✅ Successfully merged {len(image_list)} images into PDF ({output_size_mb:.2f} MB)")
+            return True, f"Merged {len(image_list)} images into PDF ({output_size_mb:.2f} MB)"
         
         except Exception as e:
             error_msg = f"PDF merge failed: {str(e)}"
             print(f"❌ {error_msg}")
             traceback.print_exc()
-            
-            # Cleanup temp files on error
-            try:
-                for temp_file in temp_files:
-                    if os.path.exists(temp_file):
-                        try:
-                            os.remove(temp_file)
-                        except:
-                            pass
-            except:
-                pass
-            
             return False, error_msg
