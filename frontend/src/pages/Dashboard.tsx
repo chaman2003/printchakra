@@ -44,7 +44,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } from 'react-icons/fi';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
+import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import Iconify from '../components/Iconify';
 import FancySelect from '../components/FancySelect';
 
@@ -210,9 +210,10 @@ const Dashboard: React.FC = () => {
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
   
-  // Image selection state for range selection
-  const [rangeSelectionMode, setRangeSelectionMode] = useState(false);
-  const [rangeSelectionStart, setRangeSelectionStart] = useState<number | null>(null);
+  // Smart selection state - simple multi-select
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
+  const [rangeStart, setRangeStart] = useState<number | null>(null);
+  const [rangeEnd, setRangeEnd] = useState<number | null>(null);
   
   // Orchestrate Print & Capture state
   const [orchestrateStep, setOrchestrateStep] = useState<number>(1); // 1=mode, 2=options, 3=confirm
@@ -385,6 +386,7 @@ const Dashboard: React.FC = () => {
       socket.off('processing_complete');
       socket.off('processing_error');
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, filesCacheRef]);
 
   const loadFiles = async (showLoading = true) => {
@@ -484,6 +486,7 @@ const Dashboard: React.FC = () => {
     orchestrateModal.onOpen();
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleOrchestrateNext = () => {
     if (orchestrateStep === 1 && orchestrateMode) {
       setOrchestrateStep(2);
@@ -497,6 +500,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleOrchestrateBack = () => {
     if (orchestrateStep === 2) {
       if (selectedFiles.length > 0) {
@@ -591,6 +595,7 @@ const Dashboard: React.FC = () => {
     openOrchestrateModal();
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const testPrinter = async () => {
     try {
       // Show a loading toast
@@ -630,6 +635,7 @@ const Dashboard: React.FC = () => {
       
       // Show detailed output in a modal-like way using alert for now
       // Better: you could add a Modal component to show the full output
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const shortOutput = response.data.output.split('\n').slice(0, 10).join('\n');
       console.log('Full Diagnostics Output:', response.data.output);
       console.log('Printer Status:', response.data);
@@ -674,74 +680,98 @@ const Dashboard: React.FC = () => {
   const toggleSelectionMode = () => {
     setSelectionMode(!selectionMode);
     setSelectedFiles([]);
+    setLastClickedIndex(null);
+    setRangeStart(null);
+    setRangeEnd(null);
   };
 
-  const toggleFileSelection = (filename: string) => {
-    setSelectedFiles(prev => 
-      prev.includes(filename) 
+  const handleFileClick = (index: number, filename: string) => {
+    if (!selectionMode) return;
+
+    // Simply toggle the file selection
+    setSelectedFiles(prev => {
+      const isSelected = prev.includes(filename);
+      const newSelected = isSelected
         ? prev.filter(f => f !== filename)
-        : [...prev, filename]
-    );
+        : [...prev, filename];
+      
+      // Update range based on selected files
+      if (newSelected.length >= 2) {
+        const selectedIndices = files
+          .map((f, idx) => ({ filename: f.filename, index: idx }))
+          .filter(f => newSelected.includes(f.filename))
+          .map(f => f.index)
+          .sort((a, b) => a - b);
+        
+        setRangeStart(selectedIndices[0]);
+        setRangeEnd(selectedIndices[selectedIndices.length - 1]);
+      } else {
+        setRangeStart(null);
+        setRangeEnd(null);
+      }
+      
+      return newSelected;
+    });
+    
+    setLastClickedIndex(index);
   };
 
-  const selectAll = () => {
-    // If a range was selected (rangeSelectionStart exists), select all in range mode would select the clicked range
-    // For Select All, always select all files
-    setSelectedFiles(files.map(f => f.filename));
-  };
-
-  const deselectAll = () => {
-    setSelectedFiles([]);
-  };
-
-  const selectEven = () => {
-    // If a range was started (rangeSelectionStart), work within that range
-    const evenFiles = files
-      .map((f, idx) => ({ filename: f.filename, index: idx }))
-      .filter(f => {
-        // If range is active, only include files within the selected range
-        if (rangeSelectionStart !== null) {
-          return f.index === rangeSelectionStart || (f.index > rangeSelectionStart && f.index % 2 === 1);
-        }
-        // Otherwise, select all even positions
-        return f.index % 2 === 1; // 0-indexed, so odd index = even position (2nd, 4th, etc)
-      })
-      .map(f => f.filename);
-    setSelectedFiles(evenFiles);
+  const selectRange = () => {
+    if (rangeStart !== null && rangeEnd !== null) {
+      const start = Math.min(rangeStart, rangeEnd);
+      const end = Math.max(rangeStart, rangeEnd);
+      const rangeFiles = files.slice(start, end + 1).map(f => f.filename);
+      setSelectedFiles(rangeFiles);
+    }
   };
 
   const selectOdd = () => {
-    // If a range was started (rangeSelectionStart), work within that range
-    const oddFiles = files
-      .map((f, idx) => ({ filename: f.filename, index: idx }))
-      .filter(f => {
-        // If range is active, only include files within the selected range
-        if (rangeSelectionStart !== null) {
-          return f.index === rangeSelectionStart || (f.index > rangeSelectionStart && f.index % 2 === 0);
-        }
-        // Otherwise, select all odd positions
-        return f.index % 2 === 0; // 0-indexed, so even index = odd position (1st, 3rd, etc)
-      })
-      .map(f => f.filename);
-    setSelectedFiles(oddFiles);
+    if (rangeStart !== null && rangeEnd !== null) {
+      const start = Math.min(rangeStart, rangeEnd);
+      const end = Math.max(rangeStart, rangeEnd);
+      const oddFiles = files
+        .slice(start, end + 1)
+        .filter((_, idx) => idx % 2 === 0) // 0-indexed, so even idx = odd position (1st, 3rd, 5th...)
+        .map(f => f.filename);
+      setSelectedFiles(oddFiles);
+    }
   };
 
-  const handleRangeSelection = (index: number) => {
-    if (!rangeSelectionMode) return;
-
-    if (rangeSelectionStart === null) {
-      // First click - set the start
-      setRangeSelectionStart(index);
-    } else {
-      // Second click - select range
-      const start = Math.min(rangeSelectionStart, index);
-      const end = Math.max(rangeSelectionStart, index);
-      const rangeFiles = files.slice(start, end + 1).map(f => f.filename);
-      setSelectedFiles(rangeFiles);
-      
-      // Keep rangeSelectionStart to indicate range is still active for Odd/Even operations
-      // Don't reset rangeSelectionMode yet - user can still use Odd/Even on this range
+  const selectEven = () => {
+    if (rangeStart !== null && rangeEnd !== null) {
+      const start = Math.min(rangeStart, rangeEnd);
+      const end = Math.max(rangeStart, rangeEnd);
+      const evenFiles = files
+        .slice(start, end + 1)
+        .filter((_, idx) => idx % 2 === 1) // 0-indexed, so odd idx = even position (2nd, 4th, 6th...)
+        .map(f => f.filename);
+      setSelectedFiles(evenFiles);
     }
+  };
+
+  const selectAll = () => {
+    setSelectedFiles(files.map(f => f.filename));
+    setLastClickedIndex(null);
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  const clearSelection = () => {
+    setSelectedFiles([]);
+    setLastClickedIndex(null);
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  const invertSelection = () => {
+    const currentlySelected = new Set(selectedFiles);
+    const inverted = files
+      .filter(f => !currentlySelected.has(f.filename))
+      .map(f => f.filename);
+    setSelectedFiles(inverted);
+    setLastClickedIndex(null);
+    setRangeStart(null);
+    setRangeEnd(null);
   };
 
   const openConversionModal = () => {
@@ -981,60 +1011,11 @@ const Dashboard: React.FC = () => {
               )}
             </Flex>
 
-            {/* Selection Buttons - Only show in selection mode */}
+            {/* Selection Buttons - Simple multi-select */}
             {selectionMode && files.length > 0 && (
               <Stack spacing={3} mb={6}>
                 <Flex gap={2} wrap="wrap" align="center">
-                  {/* Select Odd */}
-                  <Button 
-                    size="sm" 
-                    colorScheme="blue" 
-                    variant="outline" 
-                    onClick={selectOdd}
-                  >
-                    Select Odd
-                  </Button>
-
-                  {/* Select Even */}
-                  <Button 
-                    size="sm" 
-                    colorScheme="blue" 
-                    variant="outline" 
-                    onClick={selectEven}
-                  >
-                    Select Even
-                  </Button>
-
-                  {/* Select Range - glows when active */}
-                  <Button
-                    size="sm"
-                    colorScheme={rangeSelectionMode ? 'green' : 'blue'}
-                    variant={rangeSelectionMode ? 'solid' : 'outline'}
-                    onClick={() => {
-                      setRangeSelectionMode(!rangeSelectionMode);
-                      setRangeSelectionStart(null);
-                    }}
-                    boxShadow={rangeSelectionMode ? '0 0 20px rgba(72, 187, 120, 0.6)' : 'none'}
-                  >
-                    {rangeSelectionStart !== null ? 'Click end image...' : 'Select Range'}
-                  </Button>
-
-                  {/* Clear Range - only show if a range has been selected */}
-                  {rangeSelectionStart !== null && (
-                    <Button 
-                      size="sm" 
-                      colorScheme="gray" 
-                      variant="outline"
-                      onClick={() => {
-                        setRangeSelectionMode(false);
-                        setRangeSelectionStart(null);
-                      }}
-                    >
-                      Clear Range
-                    </Button>
-                  )}
-
-                  {/* Select All */}
+                  {/* Always show basic buttons */}
                   <Button 
                     size="sm" 
                     colorScheme="blue" 
@@ -1044,15 +1025,52 @@ const Dashboard: React.FC = () => {
                     Select All
                   </Button>
 
-                  {/* Deselect All */}
                   <Button 
                     size="sm" 
-                    colorScheme="red" 
+                    colorScheme="gray" 
                     variant="outline" 
-                    onClick={deselectAll}
+                    onClick={clearSelection}
+                    isDisabled={selectedFiles.length === 0}
                   >
-                    Deselect All
+                    Clear All
                   </Button>
+
+                  {/* Show Select Range button when user has selected 2+ different items */}
+                  {selectedFiles.length >= 2 && rangeStart !== null && rangeEnd !== null && (
+                    <Button 
+                      size="sm" 
+                      colorScheme="green" 
+                      variant="solid"
+                      onClick={selectRange}
+                      leftIcon={<Box as="span">📍</Box>}
+                      boxShadow="0 0 20px rgba(72, 187, 120, 0.4)"
+                    >
+                      Select Range ({rangeEnd - rangeStart + 1} items)
+                    </Button>
+                  )}
+
+                  {/* Show Odd/Even buttons after a range is selected */}
+                  {selectedFiles.length > 1 && rangeStart !== null && rangeEnd !== null && (
+                    <>
+                      <Button 
+                        size="sm" 
+                        colorScheme="cyan" 
+                        variant="outline" 
+                        onClick={selectOdd}
+                      >
+                        Select Odd
+                      </Button>
+
+                      <Button 
+                        size="sm" 
+                        colorScheme="cyan" 
+                        variant="outline" 
+                        onClick={selectEven}
+                      >
+                        Select Even
+                      </Button>
+                    </>
+                  )}
                 </Flex>
               </Stack>
             )}
@@ -1084,13 +1102,9 @@ const Dashboard: React.FC = () => {
                       position="relative"
                       overflow="hidden"
                       cursor={selectionMode ? 'pointer' : 'default'}
-                      onClick={() => {
+                      onClick={(e) => {
                         if (selectionMode && !file.processing) {
-                          if (rangeSelectionMode) {
-                            handleRangeSelection(index);
-                          } else {
-                            toggleFileSelection(file.filename);
-                          }
+                          handleFileClick(index, file.filename);
                         }
                       }}
                       _hover={selectionMode && !file.processing ? {
@@ -1108,7 +1122,10 @@ const Dashboard: React.FC = () => {
                           size="lg"
                           borderRadius="md"
                           isChecked={isSelected}
-                          onChange={() => toggleFileSelection(file.filename)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleFileClick(index, file.filename);
+                          }}
                         />
                       )}
 

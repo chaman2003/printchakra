@@ -8,6 +8,23 @@ import '@fontsource-variable/plus-jakarta-sans';
 import '@fontsource-variable/space-grotesk';
 import './index.css';
 
+// Suppress webpack dev server deprecation warnings (non-critical)
+if (process.env.NODE_ENV === 'development') {
+  const originalWarn = console.warn;
+  console.warn = function(...args: any[]) {
+    const message = args[0]?.toString?.() || '';
+    if (
+      message.includes('DEP_WEBPACK_DEV_SERVER') ||
+      message.includes('onAfterSetupMiddleware') ||
+      message.includes('onBeforeSetupMiddleware') ||
+      message.includes('setupMiddlewares')
+    ) {
+      return;
+    }
+    return originalWarn.apply(console, args);
+  };
+}
+
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
