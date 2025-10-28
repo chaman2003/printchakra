@@ -71,6 +71,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
   const userMessageBg = useColorModeValue('blue.50', 'blue.900');
   const aiMessageBg = useColorModeValue('gray.50', 'gray.700');
   const systemMessageBg = useColorModeValue('yellow.50', 'yellow.900');
+  const chatBoxBg = useColorModeValue('gray.50', 'gray.700');
   
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -768,7 +769,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
         </DrawerBody>
         
         {isSessionActive && (
-          <Box borderTopWidth="1px" p={3} bg={useColorModeValue('gray.50', 'gray.700')}>
+          <Box borderTopWidth="1px" p={3} bg={chatBoxBg}>
             <InputGroup size="sm" mb={3}>
               <Input
                 ref={chatInputRef}
