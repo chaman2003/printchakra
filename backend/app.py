@@ -56,6 +56,49 @@ class NgrokStderrFilter:
     def isatty(self):
         return self.stream.isatty()
 
+
+# Message deduplication for logger
+class MessageCounter:
+    """Track message occurrences and append count to repeated messages"""
+    def __init__(self):
+        self.message_map = {}  # Maps message to count
+    
+    def track(self, message: str) -> str:
+        """Add message to counter and return message with count if repeated"""
+        if message in self.message_map:
+            self.message_map[message] += 1
+            return f"{message} (×{self.message_map[message]})"
+        else:
+            self.message_map[message] = 1
+            return message
+
+# Global message counter
+_message_counter = MessageCounter()
+
+# Monkey-patch logger methods to add message counting
+_original_info = logger.info
+_original_warning = logger.warning
+_original_error = logger.error
+
+def _counted_info(msg, *args, **kwargs):
+    if isinstance(msg, str):
+        msg = _message_counter.track(msg)
+    return _original_info(msg, *args, **kwargs)
+
+def _counted_warning(msg, *args, **kwargs):
+    if isinstance(msg, str):
+        msg = _message_counter.track(msg)
+    return _original_warning(msg, *args, **kwargs)
+
+def _counted_error(msg, *args, **kwargs):
+    if isinstance(msg, str):
+        msg = _message_counter.track(msg)
+    return _original_error(msg, *args, **kwargs)
+
+logger.info = _counted_info
+logger.warning = _counted_warning
+logger.error = _counted_error
+
 # Apply stderr filter after logging is configured
 original_stderr = sys.stderr
 sys.stderr = NgrokStderrFilter(original_stderr)
@@ -83,6 +126,31 @@ sys.stderr = NgrokStderrFilter(original_stderr)
 
 # Apply stderr filter
 # sys.stderr = ErrorFilter(sys.stderr)  # Disabled for debugging
+
+# Check GPU availability
+logger.info("=" * 60)
+logger.info("🚀 PrintChakra Backend Startup")
+logger.info("=" * 60)
+
+try:
+    import torch
+    gpu_available = torch.cuda.is_available()
+    if gpu_available:
+        gpu_name = torch.cuda.get_device_name(0)
+        cuda_version = torch.version.cuda
+        logger.info(f"✅ GPU ACCELERATION ENABLED")
+        logger.info(f"   GPU: {gpu_name}")
+        logger.info(f"   CUDA Version: {cuda_version}")
+        logger.info(f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+    else:
+        logger.warning("⚠️  GPU not detected - using CPU (slower)")
+        logger.warning("   Install CUDA and PyTorch with CUDA support for GPU acceleration")
+except ImportError:
+    logger.warning("⚠️  PyTorch not installed - GPU detection unavailable")
+except Exception as e:
+    logger.warning(f"⚠️  GPU detection failed: {e}")
+
+logger.info("=" * 60)
 
 # Import new modular pipeline
 try:
@@ -2351,6 +2419,325 @@ def handle_disconnect():
 def handle_ping():
     """Handle ping from client"""
     emit('pong', {'timestamp': datetime.now().isoformat()})
+
+# ============================================================================
+# VOICE AI ENDPOINTS
+# ============================================================================
+
+@app.route('/voice/start', methods=['POST'])
+def start_voice_session():
+    """
+    Start a new voice AI session
+    Loads Whisper model and checks Ollama availability
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        logger.info("Starting voice AI session...")
+        result = voice_ai_orchestrator.start_session()
+        
+        if result.get('success'):
+            logger.info("✅ Voice AI session started successfully")
+            return jsonify(result), 200
+        else:
+            logger.error(f"❌ Voice AI session start failed: {result.get('error')}")
+            return jsonify(result), 503
+            
+    except ImportError as e:
+        logger.error(f"Voice AI module import error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': 'Voice AI module not available. Install dependencies: pip install openai-whisper requests'
+        }), 503
+    except Exception as e:
+        logger.error(f"Voice session start error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/voice/transcribe', methods=['POST'])
+def transcribe_voice():
+    """
+    Transcribe audio to text using Whisper Large-v3 Turbo
+    Expects: multipart/form-data with 'audio' field (WAV format)
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        # Check if session is active
+        if not voice_ai_orchestrator.session_active:
+            return jsonify({
+                'success': False,
+                'error': 'No active voice session. Start a session first.'
+            }), 400
+        
+        # Get audio file
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            return jsonify({
+                'success': False,
+                'error': 'No audio file provided'
+            }), 400
+        
+        # Read audio bytes
+        audio_data = audio_file.read()
+        
+        logger.info(f"Received audio: {len(audio_data)} bytes")
+        
+        # Transcribe
+        transcription = voice_ai_orchestrator.whisper_service.transcribe_audio(audio_data)
+        
+        if transcription.get('success'):
+            logger.info(f"✅ Transcription: {transcription.get('text')}")
+            return jsonify(transcription), 200
+        else:
+            logger.error(f"❌ Transcription failed: {transcription.get('error')}")
+            return jsonify(transcription), 500
+            
+    except ImportError:
+        return jsonify({
+            'success': False,
+            'error': 'Voice AI module not available'
+        }), 503
+    except Exception as e:
+        logger.error(f"Transcription error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/voice/chat', methods=['POST'])
+def chat_with_ai():
+    """
+    Send text to smollm2:135m and get AI response
+    Expects: JSON with 'message' field
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        # Check if session is active
+        if not voice_ai_orchestrator.session_active:
+            return jsonify({
+                'success': False,
+                'error': 'No active voice session. Start a session first.'
+            }), 400
+        
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+        
+        if not user_message:
+            return jsonify({
+                'success': False,
+                'error': 'No message provided'
+            }), 400
+        
+        logger.info(f"User message: {user_message}")
+        
+        # Generate response (text only, no TTS)
+        response = voice_ai_orchestrator.chat_service.generate_response(user_message)
+        
+        if response.get('success'):
+            logger.info(f"✅ AI response: {response.get('response')}")
+            return jsonify(response), 200
+        else:
+            logger.error(f"❌ Chat failed: {response.get('error')}")
+            return jsonify(response), 500
+            
+    except ImportError:
+        return jsonify({
+            'success': False,
+            'error': 'Voice AI module not available'
+        }), 503
+    except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/voice/speak', methods=['POST'])
+def speak_text():
+    """
+    Speak text using TTS (blocking call)
+    Expects: JSON with 'text' field
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        data = request.get_json()
+        text = data.get('text', '').strip()
+        
+        if not text:
+            return jsonify({
+                'success': False,
+                'error': 'No text provided'
+            }), 400
+        
+        # Speak text (blocking)
+        result = voice_ai_orchestrator.speak_text_response(text)
+        
+        if result.get('success'):
+            return jsonify(result), 200
+        else:
+            return jsonify(result), 500
+            
+    except ImportError:
+        return jsonify({
+            'success': False,
+            'error': 'Voice AI module not available'
+        }), 503
+    except Exception as e:
+        logger.error(f"TTS error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/voice/process', methods=['POST'])
+def process_voice_complete():
+    """
+    Complete voice processing pipeline: Audio → Transcription → AI Response
+    Expects: multipart/form-data with 'audio' field (WAV format)
+    Returns: Transcription + AI response + session status
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        # Check if session is active
+        if not voice_ai_orchestrator.session_active:
+            logger.warning("Voice processing requested without active session")
+            return jsonify({
+                'success': False,
+                'error': 'No active voice session. Start a session first.'
+            }), 400
+        
+        # Get audio file
+        audio_file = request.files.get('audio')
+        if not audio_file:
+            logger.warning("Voice processing requested without audio file")
+            return jsonify({
+                'success': False,
+                'error': 'No audio file provided'
+            }), 400
+        
+        # Read audio bytes
+        audio_data = audio_file.read()
+        if not audio_data:
+            logger.warning("Audio file provided but is empty")
+            return jsonify({
+                'success': False,
+                'error': 'Audio file is empty'
+            }), 400
+        
+        logger.info(f"Processing voice input: {len(audio_data)} bytes, filename: {audio_file.filename}")
+        
+        # Validate audio file
+        logger.info(f"Audio file first 20 bytes (hex): {audio_data[:20].hex()}")
+        logger.info(f"Audio file first 20 bytes (raw): {audio_data[:20]}")
+        
+        # Check for RIFF header
+        if audio_data[:4] != b'RIFF':
+            logger.warning(f"⚠️ Audio file doesn't have RIFF header! Got: {audio_data[:4]}")
+            logger.warning(f"   This may cause FFmpeg errors during transcription")
+        else:
+            logger.info("✅ Audio file has valid RIFF header")
+        
+        # Process through complete pipeline
+        result = voice_ai_orchestrator.process_voice_input(audio_data)
+        
+        if result.get('success'):
+            logger.info(f"✅ Voice processing complete")
+            logger.info(f"   User: {result.get('user_text')}")
+            logger.info(f"   AI: {result.get('ai_response')}")
+            
+            # Emit to frontend via Socket.IO
+            try:
+                socketio.emit('voice_message', {
+                    'user_text': result.get('user_text'),
+                    'ai_response': result.get('ai_response'),
+                    'timestamp': datetime.now().isoformat(),
+                    'session_ended': result.get('session_ended', False)
+                })
+            except Exception as socket_error:
+                logger.warning(f"Socket.IO emit failed: {socket_error}")
+            
+            return jsonify(result), 200
+        else:
+            logger.error(f"❌ Voice processing failed: {result.get('error')}")
+            logger.error(f"   Error stage: {result.get('stage', 'unknown')}")
+            return jsonify(result), 500
+            
+    except ImportError as ie:
+        logger.error(f"Voice AI module import error: {str(ie)}")
+        return jsonify({
+            'success': False,
+            'error': 'Voice AI module not available',
+            'details': str(ie)
+        }), 503
+    except Exception as e:
+        logger.error(f"Voice processing error: {str(e)}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'details': traceback.format_exc()
+        }), 500
+
+@app.route('/voice/end', methods=['POST'])
+def end_voice_session():
+    """
+    End the voice AI session
+    Clears conversation history and resets state
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        voice_ai_orchestrator.end_session()
+        
+        logger.info("✅ Voice AI session ended")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Voice AI session ended'
+        }), 200
+        
+    except ImportError:
+        return jsonify({
+            'success': False,
+            'error': 'Voice AI module not available'
+        }), 503
+    except Exception as e:
+        logger.error(f"End session error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/voice/status', methods=['GET'])
+def voice_status():
+    """
+    Get voice AI system status
+    """
+    try:
+        from modules.voice_ai import voice_ai_orchestrator
+        
+        return jsonify({
+            'session_active': voice_ai_orchestrator.session_active,
+            'whisper_loaded': voice_ai_orchestrator.whisper_service.is_loaded,
+            'ollama_available': voice_ai_orchestrator.chat_service.check_ollama_available(),
+            'conversation_length': len(voice_ai_orchestrator.chat_service.conversation_history)
+        }), 200
+        
+    except ImportError:
+        return jsonify({
+            'available': False,
+            'error': 'Voice AI module not available'
+        }), 503
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        }), 500
 
 # ============================================================================
 # MAIN

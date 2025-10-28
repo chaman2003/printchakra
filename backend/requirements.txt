@@ -38,3 +38,10 @@ pywin32>=307
 pdf2image
 img2pdf
 python-docx
+
+# Voice AI dependencies
+openai-whisper>=20231117
+requests>=2.31.0
+pyttsx3>=2.99  # Text-to-Speech (Indian English - Microsoft Ravi)
+pypiwin32>=223  # Required for pyttsx3 on Windows
+comtypes>=1.4.0  # Required for pyttsx3 on Windows

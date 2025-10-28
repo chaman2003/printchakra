@@ -43,10 +43,11 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers } from 'react-icons/fi';
+import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers, FiMic } from 'react-icons/fi';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import Iconify from '../components/Iconify';
 import FancySelect from '../components/FancySelect';
+import VoiceAIChat from '../components/VoiceAIChat';
 
 import SmartConnectionStatus from '../components/SmartConnectionStatus';
 
@@ -251,6 +252,7 @@ const Dashboard: React.FC = () => {
   const conversionModal = useDisclosure();
   const convertedDrawer = useDisclosure();
   const orchestrateModal = useDisclosure();
+  const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
   
   // File cache system - stores file metadata and counts
   const [filesCacheRef, setFilesCacheRef] = useState<{
@@ -950,6 +952,15 @@ const Dashboard: React.FC = () => {
   <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
         <Button size="lg" colorScheme="brand" variant="solid" onClick={triggerPrint} leftIcon={<Iconify icon={FiLayers} boxSize={5} />}>
           Orchestrate Print Capture
+        </Button>
+        <Button 
+          size="lg" 
+          colorScheme="purple" 
+          variant="solid" 
+          onClick={voiceAIDrawer.onOpen} 
+          leftIcon={<Iconify icon={FiMic} boxSize={5} />}
+        >
+          Talk with PrintChakra AI
         </Button>
         <Button size="lg" variant={selectionMode ? 'solid' : 'ghost'} colorScheme={selectionMode ? 'orange' : 'brand'} onClick={toggleSelectionMode}>
           {selectionMode ? 'Cancel Selection' : 'Select Files'}
@@ -1949,6 +1960,9 @@ const Dashboard: React.FC = () => {
           )}
         </ModalContent>
       </Modal>
+      
+      {/* Voice AI Chat Drawer */}
+      <VoiceAIChat isOpen={voiceAIDrawer.isOpen} onClose={voiceAIDrawer.onClose} />
     </VStack>
   );
 };
