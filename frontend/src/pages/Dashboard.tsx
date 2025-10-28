@@ -685,6 +685,8 @@ const Dashboard: React.FC = () => {
   };
 
   const selectAll = () => {
+    // If a range was selected (rangeSelectionStart exists), select all in range mode would select the clicked range
+    // For Select All, always select all files
     setSelectedFiles(files.map(f => f.filename));
   };
 
@@ -693,17 +695,33 @@ const Dashboard: React.FC = () => {
   };
 
   const selectEven = () => {
+    // If a range was started (rangeSelectionStart), work within that range
     const evenFiles = files
       .map((f, idx) => ({ filename: f.filename, index: idx }))
-      .filter(f => f.index % 2 === 1) // 0-indexed, so odd index = even position (2nd, 4th, etc)
+      .filter(f => {
+        // If range is active, only include files within the selected range
+        if (rangeSelectionStart !== null) {
+          return f.index === rangeSelectionStart || (f.index > rangeSelectionStart && f.index % 2 === 1);
+        }
+        // Otherwise, select all even positions
+        return f.index % 2 === 1; // 0-indexed, so odd index = even position (2nd, 4th, etc)
+      })
       .map(f => f.filename);
     setSelectedFiles(evenFiles);
   };
 
   const selectOdd = () => {
+    // If a range was started (rangeSelectionStart), work within that range
     const oddFiles = files
       .map((f, idx) => ({ filename: f.filename, index: idx }))
-      .filter(f => f.index % 2 === 0) // 0-indexed, so even index = odd position (1st, 3rd, etc)
+      .filter(f => {
+        // If range is active, only include files within the selected range
+        if (rangeSelectionStart !== null) {
+          return f.index === rangeSelectionStart || (f.index > rangeSelectionStart && f.index % 2 === 0);
+        }
+        // Otherwise, select all odd positions
+        return f.index % 2 === 0; // 0-indexed, so even index = odd position (1st, 3rd, etc)
+      })
       .map(f => f.filename);
     setSelectedFiles(oddFiles);
   };
@@ -712,32 +730,17 @@ const Dashboard: React.FC = () => {
     if (!rangeSelectionMode) return;
 
     if (rangeSelectionStart === null) {
+      // First click - set the start
       setRangeSelectionStart(index);
     } else {
-      // Get indices of all currently selected files
-      const selectedIndices = selectedFiles
-        .map(filename => files.findIndex(f => f.filename === filename))
-        .filter(idx => idx !== -1)
-        .sort((a, b) => a - b);
-
-      // If no files selected, just select from start to clicked index
-      if (selectedIndices.length === 0) {
-        const start = Math.min(rangeSelectionStart, index);
-        const end = Math.max(rangeSelectionStart, index);
-        const rangeFiles = files.slice(start, end + 1).map(f => f.filename);
-        setSelectedFiles(rangeFiles);
-      } else {
-        // Select all files between the first and last selected files
-        const minIndex = Math.min(...selectedIndices);
-        const maxIndex = Math.max(...selectedIndices);
-        const rangeFiles = files
-          .slice(minIndex, maxIndex + 1)
-          .map(f => f.filename);
-        setSelectedFiles(rangeFiles);
-      }
+      // Second click - select range
+      const start = Math.min(rangeSelectionStart, index);
+      const end = Math.max(rangeSelectionStart, index);
+      const rangeFiles = files.slice(start, end + 1).map(f => f.filename);
+      setSelectedFiles(rangeFiles);
       
-      setRangeSelectionStart(null);
-      setRangeSelectionMode(false);
+      // Keep rangeSelectionStart to indicate range is still active for Odd/Even operations
+      // Don't reset rangeSelectionMode yet - user can still use Odd/Even on this range
     }
   };
 
@@ -981,41 +984,75 @@ const Dashboard: React.FC = () => {
             {/* Selection Buttons - Only show in selection mode */}
             {selectionMode && files.length > 0 && (
               <Stack spacing={3} mb={6}>
-                <Flex gap={2} wrap="wrap" justify="space-between" align="center">
-                  {/* Left side - Conditional buttons only shown when more than one image selected */}
-                  <Flex gap={2} wrap="wrap">
-                    {selectedFiles.length > 1 && (
-                      <>
-                        <Button size="sm" colorScheme="blue" variant="outline" onClick={selectOdd}>
-                          Select Odd
-                        </Button>
-                        <Button size="sm" colorScheme="blue" variant="outline" onClick={selectEven}>
-                          Select Even
-                        </Button>
-                        <Button
-                          size="sm"
-                          colorScheme={rangeSelectionMode ? 'green' : 'blue'}
-                          variant={rangeSelectionMode ? 'solid' : 'outline'}
-                          onClick={() => {
-                            setRangeSelectionMode(!rangeSelectionMode);
-                            setRangeSelectionStart(null);
-                          }}
-                        >
-                          {rangeSelectionStart !== null ? 'Click end image...' : 'Select Range'}
-                        </Button>
-                      </>
-                    )}
-                  </Flex>
+                <Flex gap={2} wrap="wrap" align="center">
+                  {/* Select Odd */}
+                  <Button 
+                    size="sm" 
+                    colorScheme="blue" 
+                    variant="outline" 
+                    onClick={selectOdd}
+                  >
+                    Select Odd
+                  </Button>
 
-                  {/* Right side - Always shown */}
-                  <Flex gap={2} wrap="wrap">
-                    <Button size="sm" colorScheme="blue" variant="outline" onClick={selectAll}>
-                      Select All
+                  {/* Select Even */}
+                  <Button 
+                    size="sm" 
+                    colorScheme="blue" 
+                    variant="outline" 
+                    onClick={selectEven}
+                  >
+                    Select Even
+                  </Button>
+
+                  {/* Select Range - glows when active */}
+                  <Button
+                    size="sm"
+                    colorScheme={rangeSelectionMode ? 'green' : 'blue'}
+                    variant={rangeSelectionMode ? 'solid' : 'outline'}
+                    onClick={() => {
+                      setRangeSelectionMode(!rangeSelectionMode);
+                      setRangeSelectionStart(null);
+                    }}
+                    boxShadow={rangeSelectionMode ? '0 0 20px rgba(72, 187, 120, 0.6)' : 'none'}
+                  >
+                    {rangeSelectionStart !== null ? 'Click end image...' : 'Select Range'}
+                  </Button>
+
+                  {/* Clear Range - only show if a range has been selected */}
+                  {rangeSelectionStart !== null && (
+                    <Button 
+                      size="sm" 
+                      colorScheme="gray" 
+                      variant="outline"
+                      onClick={() => {
+                        setRangeSelectionMode(false);
+                        setRangeSelectionStart(null);
+                      }}
+                    >
+                      Clear Range
                     </Button>
-                    <Button size="sm" colorScheme="red" variant="outline" onClick={deselectAll}>
-                      Deselect All
-                    </Button>
-                  </Flex>
+                  )}
+
+                  {/* Select All */}
+                  <Button 
+                    size="sm" 
+                    colorScheme="blue" 
+                    variant="outline" 
+                    onClick={selectAll}
+                  >
+                    Select All
+                  </Button>
+
+                  {/* Deselect All */}
+                  <Button 
+                    size="sm" 
+                    colorScheme="red" 
+                    variant="outline" 
+                    onClick={deselectAll}
+                  >
+                    Deselect All
+                  </Button>
                 </Flex>
               </Stack>
             )}
