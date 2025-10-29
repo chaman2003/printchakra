@@ -355,7 +355,14 @@ class WhisperTranscriptionService:
             try:
                 os.unlink(temp_audio_path)
             except Exception as cleanup_error:
-                logger.warning(f"Failed to delete temp file: {cleanup_error}")
+                logger.warning(f"Failed to delete temp file immediately: {cleanup_error}")
+                # Try to remove it later via garbage collection
+                import gc
+                gc.collect()
+                try:
+                    os.unlink(temp_audio_path)
+                except:
+                    logger.debug(f"Could not delete temp file: {temp_audio_path}")
             
             logger.info(f"✅ Transcription: {text[:100]}...")
             
@@ -375,7 +382,14 @@ class WhisperTranscriptionService:
                 if 'temp_audio_path' in locals() and os.path.exists(temp_audio_path):
                     os.unlink(temp_audio_path)
             except:
-                pass
+                # Force cleanup with garbage collection
+                import gc
+                gc.collect()
+                try:
+                    if 'temp_audio_path' in locals() and os.path.exists(temp_audio_path):
+                        os.unlink(temp_audio_path)
+                except:
+                    pass
             return {
                 'success': False,
                 'error': str(e),
