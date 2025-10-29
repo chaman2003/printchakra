@@ -2740,6 +2740,163 @@ def voice_status():
         }), 500
 
 # ============================================================================
+# CONNECTION VALIDATION ENDPOINTS
+# ============================================================================
+
+@app.route('/validate/connection', methods=['GET'])
+def validate_connection():
+    """
+    Validate phone-laptop connection (simple ping response)
+    """
+    try:
+        return jsonify({
+            'success': True,
+            'connected': True,
+            'server': 'PrintChakra Backend',
+            'timestamp': datetime.now().isoformat()
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'connected': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/validate/camera', methods=['POST'])
+def validate_camera():
+    """
+    Validate camera is active and capturing frames
+    Expects a small image frame from the phone camera
+    """
+    try:
+        # Check if image data is provided
+        if 'frame' not in request.files and 'image' not in request.files:
+            return jsonify({
+                'success': False,
+                'camera_active': False,
+                'error': 'No frame provided'
+            }), 400
+        
+        file = request.files.get('frame') or request.files.get('image')
+        
+        # Try to read the image
+        img_bytes = np.frombuffer(file.read(), np.uint8)
+        img = cv2.imdecode(img_bytes, cv2.IMREAD_COLOR)
+        
+        if img is None or img.size == 0:
+            return jsonify({
+                'success': False,
+                'camera_active': False,
+                'error': 'Invalid image data'
+            }), 400
+        
+        # Image is valid - camera is working
+        height, width = img.shape[:2]
+        return jsonify({
+            'success': True,
+            'camera_active': True,
+            'frame_size': f"{width}x{height}",
+            'timestamp': datetime.now().isoformat()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Camera validation error: {e}")
+        return jsonify({
+            'success': False,
+            'camera_active': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/validate/printer', methods=['POST'])
+def validate_printer():
+    """
+    Validate printer connection by printing a blank PDF
+    """
+    try:
+        import win32print
+        
+        # Get default printer
+        try:
+            printer_name = win32print.GetDefaultPrinter()
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'printer_connected': False,
+                'error': f'No default printer found: {str(e)}'
+            }), 500
+        
+        # Check printer status
+        try:
+            handle = win32print.OpenPrinter(printer_name)
+            printer_info = win32print.GetPrinter(handle, 2)
+            win32print.ClosePrinter(handle)
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'printer_connected': False,
+                'error': f'Cannot access printer: {str(e)}'
+            }), 500
+        
+        # Try to print blank.pdf
+        blank_pdf_path = os.path.join(BASE_DIR, 'print_scripts', 'blank.pdf')
+        
+        if not os.path.exists(blank_pdf_path):
+            return jsonify({
+                'success': False,
+                'printer_connected': False,
+                'error': f'Test file not found: {blank_pdf_path}'
+            }), 500
+        
+        # Print using PowerShell
+        try:
+            powershell_cmd = f'Get-Content "{blank_pdf_path}" -Raw | Out-Printer -Name "{printer_name}"'
+            result = subprocess.run([
+                'powershell.exe', '-Command', powershell_cmd
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                return jsonify({
+                    'success': True,
+                    'printer_connected': True,
+                    'printer_name': printer_name,
+                    'message': 'Test page sent to printer',
+                    'timestamp': datetime.now().isoformat()
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'printer_connected': False,
+                    'error': f'Print command failed: {result.stderr}'
+                }), 500
+                
+        except subprocess.TimeoutExpired:
+            return jsonify({
+                'success': False,
+                'printer_connected': False,
+                'error': 'Print command timeout'
+            }), 500
+        except Exception as e:
+            return jsonify({
+                'success': False,
+                'printer_connected': False,
+                'error': f'Print error: {str(e)}'
+            }), 500
+            
+    except ImportError:
+        return jsonify({
+            'success': False,
+            'printer_connected': False,
+            'error': 'win32print module not available (Windows only)'
+        }), 503
+    except Exception as e:
+        logger.error(f"Printer validation error: {e}")
+        return jsonify({
+            'success': False,
+            'printer_connected': False,
+            'error': str(e)
+        }), 500
+
+# ============================================================================
 # MAIN
 # ============================================================================
 

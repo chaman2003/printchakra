@@ -38,6 +38,7 @@ import {
 } from 'react-icons/fi';
 import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
 import Iconify from '../components/Iconify';
+import ConnectionValidator from '../components/ConnectionValidator';
 
 interface QualityCheck {
   blur_score: number;
@@ -80,6 +81,7 @@ const Phone: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const [autoTriggerReady, setAutoTriggerReady] = useState(false);
   const autoTriggerCountdownRef = useRef<NodeJS.Timeout | null>(null);
+  const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const toast = useToast();
   
   // Theme values with insane visual enhancements
@@ -103,6 +105,10 @@ const Phone: React.FC = () => {
         if (cameraContainerRef.current?.requestFullscreen) {
           await cameraContainerRef.current.requestFullscreen();
           setIsFullScreen(true);
+          // Show connection validator after entering fullscreen
+          setTimeout(() => {
+            setShowConnectionValidator(true);
+          }, 500);
         }
       } catch (err) {
         console.error('Failed to enter fullscreen:', err);
@@ -926,6 +932,13 @@ const Phone: React.FC = () => {
           </Stack>
         </CardBody>
       </Card>
+
+      {/* Connection Validator Modal */}
+      <ConnectionValidator
+        isOpen={showConnectionValidator}
+        onClose={() => setShowConnectionValidator(false)}
+        videoRef={videoRef}
+      />
     </VStack>
   );
 };
