@@ -712,6 +712,7 @@ const Phone: React.FC = () => {
                   overflow="hidden"
                   border="1px solid rgba(69,202,255,0.25)"
                   boxShadow="halo"
+                  className="camera-container-normal"
                 >
                   <Box position="relative" bg="black" aspectRatio={3 / 4}>
                     <video
