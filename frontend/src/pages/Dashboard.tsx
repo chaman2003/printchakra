@@ -48,8 +48,7 @@ import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import Iconify from '../components/Iconify';
 import FancySelect from '../components/FancySelect';
 import VoiceAIChat from '../components/VoiceAIChat';
-
-import SmartConnectionStatus from '../components/SmartConnectionStatus';
+import ConnectionValidator from '../components/ConnectionValidator';
 
 interface FileInfo {
   filename: string;
@@ -923,31 +922,12 @@ const Dashboard: React.FC = () => {
       >
         Show Connection Status
       </Button>
-      {showConnectionStatus && (
-        <Box mb={6}>
-          <SmartConnectionStatus
-            onStatusComplete={(allConnected: boolean) => {
-              if (allConnected) {
-                toast({
-                  title: '✅ System Ready',
-                  description: 'All devices connected. Ready to print and scan!',
-                  status: 'success',
-                  duration: 4000,
-                });
-              }
-            }}
-          />
-          <Button
-            size="sm"
-            mt={2}
-            colorScheme="gray"
-            variant="ghost"
-            onClick={() => setShowConnectionStatus(false)}
-          >
-            Close Connection Status
-          </Button>
-        </Box>
-      )}
+
+      {/* Connection Validator Modal */}
+      <ConnectionValidator
+        isOpen={showConnectionStatus}
+        onClose={() => setShowConnectionStatus(false)}
+      />
 
   <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
         <Button size="lg" colorScheme="brand" variant="solid" onClick={triggerPrint} leftIcon={<Iconify icon={FiLayers} boxSize={5} />}>
