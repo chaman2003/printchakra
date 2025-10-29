@@ -15,6 +15,7 @@ import {
   ModalCloseButton,
   Progress,
   Flex,
+  useToast,
 } from '@chakra-ui/react';
 import { FiCheckCircle, FiXCircle, FiWifi, FiCamera, FiPrinter } from 'react-icons/fi';
 import api from '../apiClient';
@@ -32,9 +33,16 @@ interface ConnectionValidatorProps {
   isOpen: boolean;
   onClose: () => void;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
+  onStatusComplete?: (allConnected: boolean) => void;
 }
 
-const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ isOpen, onClose, videoRef }) => {
+const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ 
+  isOpen, 
+  onClose, 
+  videoRef,
+  onStatusComplete 
+}) => {
+  const toast = useToast();
   const [steps, setSteps] = useState<ValidationStep[]>([
     {
       id: 'connection',
@@ -45,8 +53,8 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ isOpen, onClo
     },
     {
       id: 'camera',
-      label: 'Phone Camera',
-      description: 'Validating camera feed',
+      label: videoRef ? 'Phone Camera' : 'Phone Ready (Camera)',
+      description: videoRef ? 'Validating camera feed' : 'Camera check skipped',
       icon: FiCamera,
       status: 'pending',
     },
@@ -103,11 +111,18 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ isOpen, onClo
 
   const validateCamera = async (): Promise<boolean> => {
     updateStepStatus('camera', 'loading');
+    
+    // Skip camera validation if no videoRef provided (Dashboard page)
+    if (!videoRef) {
+      updateStepStatus('camera', 'success', undefined);
+      return true;
+    }
+    
     try {
       // Capture a frame from the video element
-      if (!videoRef?.current) {
-        updateStepStatus('camera', 'error', 'No video element found');
-        return false;
+      if (!videoRef.current) {
+        updateStepStatus('camera', 'success', undefined);
+        return true;
       }
 
       const video = videoRef.current;
@@ -191,6 +206,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ isOpen, onClo
     await new Promise((resolve) => setTimeout(resolve, 500)); // Delay for UX
 
     if (!connectionOk) {
+      if (onStatusComplete) onStatusComplete(false);
       return; // Stop if connection fails
     }
 
@@ -200,16 +216,33 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ isOpen, onClo
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     if (!cameraOk) {
+      if (onStatusComplete) onStatusComplete(false);
       return; // Stop if camera fails
     }
 
     // Step 3: Printer
     setCurrentStep(2);
-    await validatePrinter();
+    const printerOk = await validatePrinter();
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Mark complete
-    setAllComplete(true);
+    const allSuccess = connectionOk && cameraOk && printerOk;
+    setAllComplete(allSuccess);
+    
+    // Notify parent and show toast
+    if (onStatusComplete) {
+      onStatusComplete(allSuccess);
+    }
+    
+    if (allSuccess) {
+      toast({
+        title: '✅ System Ready',
+        description: 'All devices connected. Ready to print and scan!',
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+    }
   };
 
   useEffect(() => {
