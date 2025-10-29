@@ -254,11 +254,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           
           if (!hasVoice) {
             console.log('⏭️ No voice detected in audio - skipping processing');
-            addMessage('system', '🔇 No voice detected - please speak clearly');
+            // Don't show annoying "no voice" message - just silently retry
             
             // Auto-restart recording for continuous listening
             if (isSessionActive) {
-              setTimeout(() => startRecording(), 500);
+              setTimeout(() => startRecording(), 300);
             }
             return;
           }
@@ -436,28 +436,44 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       
       // Check if it's a keyword-related error
       if (error.response?.data?.requires_keyword) {
-        addMessage('system', `⚠️ ${errorMessage}`);
+        // Silent retry for keyword errors - don't spam user
+        console.log(`⏭️ Keyword detection error, retrying...`);
         setSessionStatus('Ready - Say "hey" to trigger AI');
         
         // Auto-restart recording after keyword error
-        setTimeout(() => startRecording(), 500);
+        setTimeout(() => startRecording(), 300);
       } else {
-        toast({
-          title: 'Processing Error',
-          description: errorMessage,
-          status: 'error',
-          duration: 5000,
-        });
+        // Only show non-retryable errors
+        console.error('Transcription error:', errorMessage);
         
-        setSessionStatus('Error - Retrying...');
-        
-        // Auto-restart recording after error
-        setTimeout(() => {
-          if (isSessionActive) {
-            setSessionStatus('Ready - Say "hey" to trigger AI');
-            startRecording();
-          }
-        }, 2000);
+        // Don't show file access errors - just retry silently
+        if (errorMessage.includes('process cannot access') || errorMessage.includes('being used')) {
+          console.log('⏭️ File access error, retrying...');
+          setSessionStatus('Ready - Say "hey" to trigger AI');
+          
+          setTimeout(() => {
+            if (isSessionActive) {
+              startRecording();
+            }
+          }, 500);
+        } else {
+          // Show only critical errors
+          toast({
+            title: 'Processing Error',
+            description: errorMessage,
+            status: 'error',
+            duration: 3000,
+          });
+          
+          setSessionStatus('Ready - Say "hey" to trigger AI');
+          
+          // Auto-restart recording after error
+          setTimeout(() => {
+            if (isSessionActive) {
+              startRecording();
+            }
+          }, 1000);
+        }
       }
     } finally {
       setIsProcessing(false);
