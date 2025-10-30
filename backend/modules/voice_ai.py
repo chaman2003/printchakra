@@ -420,19 +420,22 @@ class Smollm2ChatService:
         """
         self.model_name = model_name
         self.conversation_history = []
-        self.system_prompt = """You are PrintChakra AI assistant. ULTRA-CONCISE responses only.
+        self.system_prompt = """You are PrintChakra AI, a helpful voice assistant for document scanning and printing.
 
-STRICT RULES:
-1. Maximum 8 words per response
-2. Single short sentence
-3. No fluff or elaboration
+Be friendly and conversational. Keep responses SHORT but natural.
 
-Examples:
-- "what time?" → "It's 3:45 PM"
-- "how are you?" → "Great! Need help?"
-- "what can you do?" → "Scan and print documents"
+Response guidelines:
+- Use 5-12 words per response
+- Be warm and helpful
+- Give direct, clear answers
+- Sound like a friendly assistant, not a robot
 
-Keep it ultra-short!"""
+Example conversations:
+User: "who are you" → You: "I'm PrintChakra AI, your document assistant!"
+User: "what can you do" → You: "I help scan and print documents easily."
+User: "how are you" → You: "Doing great! How can I help you?"
+
+Be natural and conversational!"""
         
     def check_ollama_available(self) -> bool:
         """Check if Ollama is running and model is available"""
@@ -477,7 +480,7 @@ Keep it ultra-short!"""
                 {'role': 'system', 'content': self.system_prompt}
             ] + self.conversation_history
             
-            # Call Ollama API with aggressive speed optimizations
+            # Call Ollama API with speed optimizations
             logger.info(f"Generating response for: {user_message[:100]}...")
             response = requests.post(
                 'http://localhost:11434/api/chat',
@@ -486,33 +489,50 @@ Keep it ultra-short!"""
                     'messages': messages,
                     'stream': False,
                     'options': {
-                        'temperature': 0.5,  # Lower for faster, more focused responses
-                        'top_p': 0.8,  # Reduced for faster sampling
-                        'top_k': 20,  # Limit token choices for speed
-                        'num_predict': 20,  # Very short responses (reduced from 50)
-                        'num_ctx': 512,  # Smaller context window for speed (reduced from default 2048)
-                        'repeat_penalty': 1.1  # Prevent repetition
+                        'temperature': 0.7,  # Balanced for natural responses
+                        'top_p': 0.9,  # Allow more natural variation
+                        'top_k': 40,  # Increased for more natural language
+                        'num_predict': 30,  # Short but complete responses
+                        'num_ctx': 1024,  # Enough context for conversation
+                        'repeat_penalty': 1.2,  # Prevent repetition
+                        'stop': ['\n\n', 'User:', 'Assistant:']  # Stop at natural breaks
                     }
                 },
-                timeout=10  # Reduced from 30 to 10 seconds
+                timeout=15  # Allow time for complete responses
             )
             
             if response.status_code == 200:
                 result = response.json()
                 ai_response = result.get('message', {}).get('content', '').strip()
                 
-                # Ensure response is ultra-concise (max 1 sentence, 15 words)
+                # Clean up response - remove any formatting artifacts
+                ai_response = ai_response.replace('**', '').replace('*', '')
+                
+                # Take first sentence or two (max 2 sentences for voice)
                 sentences = ai_response.split('. ')
-                ai_response = sentences[0]  # Take only first sentence
+                if len(sentences) > 2:
+                    ai_response = '. '.join(sentences[:2])
+                    if not ai_response.endswith('.'):
+                        ai_response += '.'
                 
-                # Enforce word limit (15 words max)
+                # Enforce reasonable word limit (max 25 words for natural speech)
                 words = ai_response.split()
-                if len(words) > 15:
-                    ai_response = ' '.join(words[:15])
+                if len(words) > 25:
+                    # Try to find a natural break point
+                    truncated = ' '.join(words[:25])
+                    # Add punctuation if missing
+                    if truncated and truncated[-1] not in '.!?':
+                        truncated += '.'
+                    ai_response = truncated
                 
-                # Add punctuation if missing
+                # Ensure punctuation
                 if ai_response and ai_response[-1] not in '.!?':
                     ai_response += '.'
+                
+                # Filter out gibberish or single-word responses
+                if len(words) < 2 or not any(c.isalpha() for c in ai_response):
+                    logger.warning(f"⚠️ Invalid response detected: '{ai_response}'")
+                    ai_response = "I'm here to help with document scanning and printing!"
                 
                 # Add assistant response to history
                 self.conversation_history.append({
@@ -520,9 +540,9 @@ Keep it ultra-short!"""
                     'content': ai_response
                 })
                 
-                # Keep only last 6 exchanges (12 messages) for speed
-                if len(self.conversation_history) > 12:
-                    self.conversation_history = self.conversation_history[-12:]
+                # Keep only last 8 exchanges (16 messages) for context
+                if len(self.conversation_history) > 16:
+                    self.conversation_history = self.conversation_history[-16:]
                 
                 logger.info(f"✅ AI Response ({len(words)} words): {ai_response}")
                 
