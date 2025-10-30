@@ -139,7 +139,7 @@ const Phone: React.FC = () => {
     setAutoTriggerReady(false);
     
     autoCaptureIntervalRef.current = setInterval(() => {
-      setAutoCaptureCountdown((prev) => {
+      setAutoCaptureCountdown((prev: number) => {
         if (prev <= 1) {
           if (autoCaptureIntervalRef.current) {
             clearInterval(autoCaptureIntervalRef.current);
@@ -199,7 +199,7 @@ const Phone: React.FC = () => {
       context.drawImage(video, 0, 0);
       
       // Get frame as blob
-      canvas.toBlob(async (blob) => {
+      canvas.toBlob(async (blob: Blob | null) => {
         if (!blob) return;
         
         try {
@@ -358,7 +358,7 @@ const Phone: React.FC = () => {
 
   const stopCamera = useCallback(() => {
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       setStream(null);
     }
     stopRealTimeDetection();
@@ -486,7 +486,7 @@ const Phone: React.FC = () => {
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0);
 
-    canvas.toBlob(async (blob) => {
+    canvas.toBlob(async (blob: Blob | null) => {
       if (blob) {
         const url = URL.createObjectURL(blob);
         setPreviewImage(url);
@@ -541,7 +541,7 @@ const Phone: React.FC = () => {
       return;
     }
 
-    socket.on('capture_now', (data) => {
+    socket.on('capture_now', (data: any) => {
       console.log('Received capture command:', data);
       showMessage('📸 Capture triggered from Dashboard!');
       setTimeout(() => {
@@ -653,7 +653,7 @@ const Phone: React.FC = () => {
             {qualityCheck.quality.issues.length > 0 && (
               <Stack spacing={2}>
                 <Text fontWeight="600">Detected issues</Text>
-                {qualityCheck.quality.issues.map((issue, index) => (
+                {qualityCheck.quality.issues.map((issue: string, index: number) => (
                   <Flex key={index} align="center" gap={2} bg="rgba(246,173,85,0.1)" borderRadius="md" px={3} py={2}>
                     <Iconify icon={FiAlertTriangle} color="orange.300" />
                     <Text color={muted}>{issue}</Text>
