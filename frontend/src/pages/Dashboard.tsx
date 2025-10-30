@@ -122,13 +122,15 @@ const useImageWithHeaders = (imageUrl: string) => {
 };
 
 // Image component that loads with proper headers
-const SecureImage: React.FC<{
+interface SecureImageProps {
   filename: string;
   alt: string;
   className?: string;
   onClick?: () => void;
   style?: React.CSSProperties;
-}> = ({ filename, alt, className, onClick, style }) => {
+}
+
+const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onClick, style }) => {
   const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
   const { blobUrl, loading, error } = useImageWithHeaders(imageUrl);
 
@@ -263,7 +265,7 @@ const Dashboard: React.FC = () => {
     if (savedDefaults) {
       try {
         const parsed = JSON.parse(savedDefaults);
-        setOrchestrateOptions(prev => ({
+        setOrchestrateOptions((prev: typeof orchestrateOptions) => ({
           ...prev,
           ...parsed,
           // Don't restore files and saveAsDefault flag
@@ -372,7 +374,7 @@ const Dashboard: React.FC = () => {
 
     let pollInterval = 60000;
     const maxInterval = 300000;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
 
     const startPolling = () => {
       timeoutId = setTimeout(async () => {
@@ -386,7 +388,7 @@ const Dashboard: React.FC = () => {
           }
         } catch (err) {
           pollInterval = Math.min(pollInterval * 1.5, maxInterval);
-          setConnectionRetries(prev => prev + 1);
+          setConnectionRetries((prev: number) => prev + 1);
           console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
         }
         startPolling();
@@ -471,7 +473,7 @@ const Dashboard: React.FC = () => {
 
     try {
       await apiClient.delete(`${API_ENDPOINTS.delete}/${filename}`);
-      setFiles(files.filter(f => f.filename !== filename));
+      setFiles(files.filter((f: FileInfo) => f.filename !== filename));
       if (selectedFile === filename) {
         setSelectedFile(null);
         setOcrText('');
@@ -520,7 +522,7 @@ const Dashboard: React.FC = () => {
       const formData = new FormData();
       
       // Add uploaded files
-      orchestrateOptions.printFiles.forEach((file, index) => {
+      orchestrateOptions.printFiles.forEach((file: File, index: number) => {
         formData.append('files', file);
       });
       
@@ -686,19 +688,19 @@ const Dashboard: React.FC = () => {
     if (!selectionMode) return;
 
     // Simply toggle the file selection
-    setSelectedFiles(prev => {
+    setSelectedFiles((prev: string[]) => {
       const isSelected = prev.includes(filename);
       const newSelected = isSelected
-        ? prev.filter(f => f !== filename)
+        ? prev.filter((f: string) => f !== filename)
         : [...prev, filename];
       
       // Update range based on selected files
       if (newSelected.length >= 2) {
         const selectedIndices = files
-          .map((f, idx) => ({ filename: f.filename, index: idx }))
-          .filter(f => newSelected.includes(f.filename))
-          .map(f => f.index)
-          .sort((a, b) => a - b);
+          .map((f: FileInfo, idx: number) => ({ filename: f.filename, index: idx }))
+          .filter((f: { filename: string; index: number }) => newSelected.includes(f.filename))
+          .map((f: { filename: string; index: number }) => f.index)
+          .sort((a: number, b: number) => a - b);
         
         setRangeStart(selectedIndices[0]);
         setRangeEnd(selectedIndices[selectedIndices.length - 1]);
@@ -717,7 +719,7 @@ const Dashboard: React.FC = () => {
     if (rangeStart !== null && rangeEnd !== null) {
       const start = Math.min(rangeStart, rangeEnd);
       const end = Math.max(rangeStart, rangeEnd);
-      const rangeFiles = files.slice(start, end + 1).map(f => f.filename);
+      const rangeFiles = files.slice(start, end + 1).map((f: FileInfo) => f.filename);
       setSelectedFiles(rangeFiles);
     }
   };
@@ -728,8 +730,8 @@ const Dashboard: React.FC = () => {
       const end = Math.max(rangeStart, rangeEnd);
       const oddFiles = files
         .slice(start, end + 1)
-        .filter((_, idx) => idx % 2 === 0) // 0-indexed, so even idx = odd position (1st, 3rd, 5th...)
-        .map(f => f.filename);
+        .filter((_: FileInfo, idx: number) => idx % 2 === 0) // 0-indexed, so even idx = odd position (1st, 3rd, 5th...)
+        .map((f: FileInfo) => f.filename);
       setSelectedFiles(oddFiles);
     }
   };
@@ -740,14 +742,14 @@ const Dashboard: React.FC = () => {
       const end = Math.max(rangeStart, rangeEnd);
       const evenFiles = files
         .slice(start, end + 1)
-        .filter((_, idx) => idx % 2 === 1) // 0-indexed, so odd idx = even position (2nd, 4th, 6th...)
-        .map(f => f.filename);
+        .filter((_: FileInfo, idx: number) => idx % 2 === 1) // 0-indexed, so odd idx = even position (2nd, 4th, 6th...)
+        .map((f: FileInfo) => f.filename);
       setSelectedFiles(evenFiles);
     }
   };
 
   const selectAll = () => {
-    setSelectedFiles(files.map(f => f.filename));
+    setSelectedFiles(files.map((f: FileInfo) => f.filename));
     setLastClickedIndex(null);
     setRangeStart(null);
     setRangeEnd(null);
@@ -763,8 +765,8 @@ const Dashboard: React.FC = () => {
   const invertSelection = () => {
     const currentlySelected = new Set(selectedFiles);
     const inverted = files
-      .filter(f => !currentlySelected.has(f.filename))
-      .map(f => f.filename);
+      .filter((f: FileInfo) => !currentlySelected.has(f.filename))
+      .map((f: FileInfo) => f.filename);
     setSelectedFiles(inverted);
     setLastClickedIndex(null);
     setRangeStart(null);
@@ -1077,7 +1079,7 @@ const Dashboard: React.FC = () => {
               </Card>
             ) : (
               <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={6}>
-                {files.map((file, index) => {
+                {files.map((file: FileInfo, index: number) => {
                   const isSelected = selectedFiles.includes(file.filename);
                   return (
                     <Card
@@ -1328,7 +1330,7 @@ const Dashboard: React.FC = () => {
                 <Text fontWeight="600">Selected Files: {selectedFiles.length}</Text>
                 <Box mt={2} maxH="160px" overflowY="auto" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(121,95,238,0.2)">
                   <Stack spacing={2} fontSize="sm">
-                    {selectedFiles.map((filename) => (
+                    {selectedFiles.map((filename: string) => (
                       <Text key={filename}>{filename}</Text>
                     ))}
                   </Stack>
@@ -1414,7 +1416,7 @@ const Dashboard: React.FC = () => {
               </Flex>
             ) : (
               <Stack spacing={4}>
-                {convertedFiles.map((file) => (
+                {convertedFiles.map((file: any) => (
                   <Card key={file.filename} borderRadius="xl" border="1px solid rgba(69,202,255,0.18)">
                     <CardBody>
                       <Stack spacing={3}>
@@ -1469,7 +1471,7 @@ const Dashboard: React.FC = () => {
                               
                               try {
                                 await apiClient.delete(`/delete-converted/${file.filename}`);
-                                setConvertedFiles(convertedFiles.filter(f => f.filename !== file.filename));
+                                setConvertedFiles(convertedFiles.filter((f: any) => f.filename !== file.filename));
                                 toast({
                                   title: 'File deleted',
                                   description: `${file.filename} has been deleted.`,
@@ -1891,7 +1893,7 @@ const Dashboard: React.FC = () => {
                         { value: 'Legal', label: 'Legal (8.5×14 in)' },
                       ]}
                       value={orchestrateOptions.scanPaperSize}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: value })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: value })}
                     />
                   </Box>
 
@@ -1918,7 +1920,7 @@ const Dashboard: React.FC = () => {
                         { value: '1200', label: '1200 DPI - Professional' },
                       ]}
                       value={orchestrateOptions.scanResolution}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })}
                     />
                   </Box>
 
@@ -2256,7 +2258,7 @@ const Dashboard: React.FC = () => {
                         { value: 'Legal', label: 'Legal (8.5×14 in)' },
                       ]}
                       value={orchestrateOptions.printPaperSize}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })}
                     />
                   </Box>
 
@@ -2339,10 +2341,10 @@ const Dashboard: React.FC = () => {
                         { value: 'custom', label: '✏️ Custom Layout' },
                       ]}
                       value={orchestrateOptions.printPagesPerSheet}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: value })}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: value })}
                       allowCustom={true}
                       customValue={orchestrateOptions.printPagesPerSheetCustom}
-                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheetCustom: value })}
+                      onCustomChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheetCustom: value })}
                     />
                   </Box>
 
@@ -2353,7 +2355,7 @@ const Dashboard: React.FC = () => {
                       <Text fontSize="sm" color="text.muted">No converted PDFs available</Text>
                     ) : (
                       <VStack spacing={2}>
-                        {convertedFiles.map((file) => (
+                        {convertedFiles.map((file: any) => (
                           <Box
                             key={file.filename}
                             p={2}
@@ -2367,7 +2369,7 @@ const Dashboard: React.FC = () => {
                               setOrchestrateOptions({
                                 ...orchestrateOptions,
                                 printConvertedFiles: isSelected
-                                  ? orchestrateOptions.printConvertedFiles.filter((f) => f !== file.filename)
+                                  ? orchestrateOptions.printConvertedFiles.filter((f: string) => f !== file.filename)
                                   : [...orchestrateOptions.printConvertedFiles, file.filename],
                               });
                             }}
