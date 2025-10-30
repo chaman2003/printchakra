@@ -599,7 +599,7 @@ const Phone: React.FC = () => {
                 <Text fontWeight="600">Quality validation</Text>
                 <Text fontSize="sm" color={muted}>Detect blur and focus issues before upload.</Text>
               </Stack>
-              <Switch colorScheme="brand" isChecked={validateQuality} onChange={(e) => setValidateQuality(e.target.checked)} />
+              <Switch colorScheme="brand" isChecked={validateQuality} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValidateQuality(e.target.checked)} />
             </Flex>
 
             <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
@@ -607,7 +607,7 @@ const Phone: React.FC = () => {
                 <Text fontWeight="600">Auto crop</Text>
                 <Text fontSize="sm" color={muted}>Automatically align document edges.</Text>
               </Stack>
-              <Switch colorScheme="brand" isChecked={processingOptions.autoCrop} onChange={(e) => setProcessingOptions({ ...processingOptions, autoCrop: e.target.checked })} />
+              <Switch colorScheme="brand" isChecked={processingOptions.autoCrop} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingOptions({ ...processingOptions, autoCrop: e.target.checked })} />
             </Flex>
 
             <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
@@ -615,7 +615,7 @@ const Phone: React.FC = () => {
                 <Text fontWeight="600">AI enhancement</Text>
                 <Text fontSize="sm" color={muted}>Boost clarity with AI-driven retouching.</Text>
               </Stack>
-              <Switch colorScheme="brand" isChecked={processingOptions.aiEnhance} onChange={(e) => setProcessingOptions({ ...processingOptions, aiEnhance: e.target.checked })} />
+              <Switch colorScheme="brand" isChecked={processingOptions.aiEnhance} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingOptions({ ...processingOptions, aiEnhance: e.target.checked })} />
             </Flex>
           </Grid>
         </CardBody>

@@ -1091,7 +1091,7 @@ const Dashboard: React.FC = () => {
                       position="relative"
                       overflow="hidden"
                       cursor={selectionMode ? 'pointer' : 'default'}
-                      onClick={(e) => {
+                      onClick={(e: React.MouseEvent) => {
                         if (selectionMode && !file.processing) {
                           handleFileClick(index, file.filename);
                         }
@@ -1111,7 +1111,7 @@ const Dashboard: React.FC = () => {
                           size="lg"
                           borderRadius="md"
                           isChecked={isSelected}
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             e.stopPropagation();
                             handleFileClick(index, file.filename);
                           }}
@@ -1341,7 +1341,7 @@ const Dashboard: React.FC = () => {
                 <Text fontWeight="600" mb={2}>
                   Convert to
                 </Text>
-                <Select value={targetFormat} onChange={(e) => setTargetFormat(e.target.value)} isDisabled={converting}>
+                <Select value={targetFormat} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTargetFormat(e.target.value)} isDisabled={converting}>
                   <option value="pdf">PDF</option>
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
@@ -1357,7 +1357,7 @@ const Dashboard: React.FC = () => {
                       {mergePdf ? 'All files will merge into one premium PDF output.' : 'Each file becomes an individual PDF.'}
                     </Text>
                   </Stack>
-                  <Checkbox isChecked={mergePdf} onChange={(e) => setMergePdf(e.target.checked)} isDisabled={converting} colorScheme="brand" />
+                  <Checkbox isChecked={mergePdf} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMergePdf(e.target.checked)} isDisabled={converting} colorScheme="brand" />
                 </Flex>
               )}
 
@@ -1369,7 +1369,7 @@ const Dashboard: React.FC = () => {
                   <Input
                     placeholder="Enter custom filename (without .pdf extension)"
                     value={customFilename}
-                    onChange={(e) => setCustomFilename(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomFilename(e.target.value)}
                     isDisabled={converting}
                     maxLength={50}
                   />
@@ -1743,7 +1743,7 @@ const Dashboard: React.FC = () => {
                     </Heading>
                     <Select
                       value={orchestrateOptions.scanMode}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanMode: e.target.value as any })}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setOrchestrateOptions({ ...orchestrateOptions, scanMode: e.target.value as any })}
                       bg="whiteAlpha.50"
                       borderColor="brand.300"
                       size="lg"
@@ -1777,7 +1777,7 @@ const Dashboard: React.FC = () => {
                         size="lg"
                         colorScheme="brand"
                         isChecked={orchestrateOptions.scanTextMode}
-                        onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanTextMode: e.target.checked })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, scanTextMode: e.target.checked })}
                       >
                         <Text fontWeight="600">Enable OCR</Text>
                       </Checkbox>
@@ -1822,7 +1822,7 @@ const Dashboard: React.FC = () => {
                                 size="md"
                                 placeholder="e.g., 1-5,7,9-12"
                                 value={orchestrateOptions.scanCustomRange}
-                                onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
                                 bg="whiteAlpha.100"
                                 borderColor="brand.300"
                                 _hover={{ borderColor: 'brand.400' }}
@@ -1989,7 +1989,7 @@ const Dashboard: React.FC = () => {
                       size="lg"
                       colorScheme="brand"
                       isChecked={orchestrateOptions.saveAsDefault}
-                      onChange={(e) => {
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                         setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked });
                         if (e.target.checked) {
                           saveDefaultSettings();
@@ -2197,7 +2197,7 @@ const Dashboard: React.FC = () => {
                                 size="sm"
                                 placeholder="e.g., 1-5,7,9"
                                 value={orchestrateOptions.printCustomRange}
-                                onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printCustomRange: e.target.value })}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, printCustomRange: e.target.value })}
                                 bg="whiteAlpha.100"
                                 borderColor="brand.300"
                                 _hover={{ borderColor: 'brand.400' }}
@@ -2279,7 +2279,7 @@ const Dashboard: React.FC = () => {
                         min="25"
                         max="400"
                         value={orchestrateOptions.printScale}
-                        onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
                         bg="whiteAlpha.100"
                         borderColor="brand.300"
                         _hover={{ borderColor: 'brand.400' }}
@@ -2398,7 +2398,7 @@ const Dashboard: React.FC = () => {
                       size="lg"
                       colorScheme="brand"
                       isChecked={orchestrateOptions.saveAsDefault}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
                     >
                       <Text fontWeight="600">💾 Save as Default Settings</Text>
                     </Checkbox>
