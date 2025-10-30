@@ -20,6 +20,7 @@ import {
   Flex,
   Grid,
   Heading,
+  HStack,
   IconButton,
   Input,
   Modal,
@@ -1503,63 +1504,170 @@ const Dashboard: React.FC = () => {
       </Drawer>
 
       {/* Orchestrate Print & Capture Modal */}
-      <Modal isOpen={orchestrateModal.isOpen} onClose={orchestrateModal.onClose} size="lg" isCentered>
-        <ModalOverlay backdropFilter="blur(12px)" />
-        <ModalContent bg={surfaceCard} borderRadius="2xl" border="1px solid rgba(121,95,238,0.25)">
+      <Modal 
+        isOpen={orchestrateModal.isOpen} 
+        onClose={orchestrateModal.onClose} 
+        size="6xl" 
+        isCentered
+        scrollBehavior="inside"
+      >
+        <ModalOverlay 
+          backdropFilter="blur(16px)" 
+          bg="blackAlpha.700"
+        />
+        <ModalContent 
+          bg={surfaceCard} 
+          borderRadius="3xl" 
+          border="1px solid" 
+          borderColor="brand.300"
+          boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
+          maxH="90vh"
+          mx={4}
+        >
           {/* STEP 1: Choose Mode */}
           {orchestrateStep === 1 && (
             <>
-              <ModalHeader>Orchestrate Print & Capture</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody>
-                <Stack spacing={6}>
-                  <Text color="text.muted">Please choose an operation:</Text>
-                  <VStack spacing={4} align="start">
+              <ModalHeader 
+                fontSize="3xl" 
+                fontWeight="700" 
+                py={6}
+                bgGradient="linear(to-r, brand.500, nebula.500)"
+                bgClip="text"
+                display="flex"
+                alignItems="center"
+                gap={3}
+              >
+                <Iconify icon="solar:settings-bold-duotone" width={32} height={32} />
+                Orchestrate Print & Capture
+              </ModalHeader>
+              <ModalCloseButton 
+                size="lg" 
+                top={6} 
+                right={6}
+                _hover={{ bg: 'red.500', color: 'white' }}
+              />
+              <ModalBody py={8} px={10}>
+                <Stack spacing={8}>
+                  <Text 
+                    fontSize="lg" 
+                    color="text.muted" 
+                    textAlign="center"
+                    fontWeight="500"
+                  >
+                    Choose your operation to get started
+                  </Text>
+                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                     <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="2px"
+                      p={8}
+                      borderRadius="2xl"
+                      border="3px solid"
                       borderColor={orchestrateMode === 'scan' ? 'brand.400' : 'whiteAlpha.200'}
-                      bg={orchestrateMode === 'scan' ? 'rgba(121,95,238,0.1)' : 'transparent'}
+                      bg={orchestrateMode === 'scan' ? 'rgba(121,95,238,0.12)' : 'whiteAlpha.50'}
                       cursor="pointer"
                       onClick={() => setOrchestrateMode('scan')}
-                      _hover={{ borderColor: 'brand.400', bg: 'rgba(121,95,238,0.05)' }}
+                      _hover={{ 
+                        borderColor: 'brand.400', 
+                        bg: 'rgba(121,95,238,0.08)',
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 30px rgba(121,95,238,0.25)'
+                      }}
+                      transition="all 0.3s ease"
+                      position="relative"
+                      overflow="hidden"
                     >
-                      <Radio isChecked={orchestrateMode === 'scan'} mr={3}>
-                        <Stack spacing={1} ml={2}>
-                          <Heading size="sm">Scan Mode</Heading>
-                          <Text fontSize="sm" color="text.muted">Capture documents from your scanner</Text>
-                        </Stack>
-                      </Radio>
+                      {orchestrateMode === 'scan' && (
+                        <Box
+                          position="absolute"
+                          top={4}
+                          right={4}
+                          bg="brand.500"
+                          color="white"
+                          borderRadius="full"
+                          p={1}
+                        >
+                          <Iconify icon="solar:check-circle-bold" width={24} height={24} />
+                        </Box>
+                      )}
+                      <VStack align="start" spacing={4}>
+                        <Box 
+                          p={4} 
+                          bg="brand.500" 
+                          borderRadius="xl"
+                          color="white"
+                        >
+                          <Iconify icon="solar:document-add-bold-duotone" width={40} height={40} />
+                        </Box>
+                        <Heading size="lg">Scan Mode</Heading>
+                        <Text fontSize="md" color="text.muted" lineHeight="1.6">
+                          Capture physical documents from your scanner with advanced options for quality, layout, and text detection
+                        </Text>
+                      </VStack>
                     </Box>
                     <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="2px"
+                      p={8}
+                      borderRadius="2xl"
+                      border="3px solid"
                       borderColor={orchestrateMode === 'print' ? 'brand.400' : 'whiteAlpha.200'}
-                      bg={orchestrateMode === 'print' ? 'rgba(121,95,238,0.1)' : 'transparent'}
+                      bg={orchestrateMode === 'print' ? 'rgba(121,95,238,0.12)' : 'whiteAlpha.50'}
                       cursor="pointer"
                       onClick={() => setOrchestrateMode('print')}
-                      _hover={{ borderColor: 'brand.400', bg: 'rgba(121,95,238,0.05)' }}
+                      _hover={{ 
+                        borderColor: 'brand.400', 
+                        bg: 'rgba(121,95,238,0.08)',
+                        transform: 'translateY(-4px)',
+                        boxShadow: '0 12px 30px rgba(121,95,238,0.25)'
+                      }}
+                      transition="all 0.3s ease"
+                      position="relative"
+                      overflow="hidden"
                     >
-                      <Radio isChecked={orchestrateMode === 'print'} mr={3}>
-                        <Stack spacing={1} ml={2}>
-                          <Heading size="sm">Print Mode</Heading>
-                          <Text fontSize="sm" color="text.muted">Print documents from your collection</Text>
-                        </Stack>
-                      </Radio>
+                      {orchestrateMode === 'print' && (
+                        <Box
+                          position="absolute"
+                          top={4}
+                          right={4}
+                          bg="brand.500"
+                          color="white"
+                          borderRadius="full"
+                          p={1}
+                        >
+                          <Iconify icon="solar:check-circle-bold" width={24} height={24} />
+                        </Box>
+                      )}
+                      <VStack align="start" spacing={4}>
+                        <Box 
+                          p={4} 
+                          bg="nebula.500" 
+                          borderRadius="xl"
+                          color="white"
+                        >
+                          <Iconify icon="solar:printer-bold-duotone" width={40} height={40} />
+                        </Box>
+                        <Heading size="lg">Print Mode</Heading>
+                        <Text fontSize="md" color="text.muted" lineHeight="1.6">
+                          Print documents from your collection with precise control over layout, margins, scaling, and page selection
+                        </Text>
+                      </VStack>
                     </Box>
-                  </VStack>
+                  </SimpleGrid>
                 </Stack>
               </ModalBody>
-              <ModalFooter>
-                <Button variant="ghost" mr={3} onClick={orchestrateModal.onClose}>
+              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
+                <Button 
+                  variant="ghost" 
+                  mr={3} 
+                  onClick={orchestrateModal.onClose}
+                  size="lg"
+                >
                   Cancel
                 </Button>
                 <Button
                   colorScheme="brand"
                   onClick={() => setOrchestrateStep(2)}
                   isDisabled={!orchestrateMode}
+                  size="lg"
+                  px={8}
+                  rightIcon={<Iconify icon="solar:arrow-right-bold" width={20} height={20} />}
                 >
                   Continue
                 </Button>
@@ -1570,60 +1678,98 @@ const Dashboard: React.FC = () => {
           {/* STEP 2: Scan Options */}
           {orchestrateStep === 2 && orchestrateMode === 'scan' && (
             <>
-              <ModalHeader>
-                <Flex align="center" gap={2}>
-                  📄 Scan Options
-                </Flex>
+              <ModalHeader 
+                fontSize="2xl" 
+                fontWeight="700" 
+                py={6}
+                display="flex"
+                alignItems="center"
+                gap={3}
+                borderBottom="1px solid"
+                borderColor="whiteAlpha.200"
+              >
+                <Box p={2} bg="brand.500" borderRadius="lg" color="white">
+                  <Iconify icon="solar:document-add-bold-duotone" width={24} height={24} />
+                </Box>
+                Scan Configuration
+                <Badge ml="auto" colorScheme="purple" fontSize="sm" px={3} py={1}>
+                  Step 2 of 3
+                </Badge>
               </ModalHeader>
-              <ModalCloseButton />
-              <ModalBody maxH="70vh" overflowY="auto" css={{
-                '&::-webkit-scrollbar': { width: '8px' },
-                '&::-webkit-scrollbar-track': { background: 'transparent' },
-                '&::-webkit-scrollbar-thumb': { background: 'rgba(121,95,238,0.3)', borderRadius: '4px' },
-              }}>
-                <Grid templateColumns={{ base: '1fr', lg: '1fr 300px' }} gap={6}>
-                  <Stack spacing={6}>
+              <ModalCloseButton 
+                size="lg" 
+                top={6} 
+                right={6}
+                _hover={{ bg: 'red.500', color: 'white' }}
+              />
+              <ModalBody 
+                maxH="65vh" 
+                overflowY="auto" 
+                py={8}
+                px={10}
+                css={{
+                  '&::-webkit-scrollbar': { width: '10px' },
+                  '&::-webkit-scrollbar-track': { background: 'transparent' },
+                  '&::-webkit-scrollbar-thumb': { 
+                    background: 'rgba(121,95,238,0.4)', 
+                    borderRadius: '10px',
+                    border: '2px solid transparent',
+                    backgroundClip: 'padding-box'
+                  },
+                  '&::-webkit-scrollbar-thumb:hover': { 
+                    background: 'rgba(121,95,238,0.6)',
+                    backgroundClip: 'padding-box'
+                  },
+                }}
+              >
+                <Grid templateColumns={{ base: '1fr', lg: '1fr 320px' }} gap={8}>
+                  <Stack spacing={5}>
                   {/* Select Page Scan Mode */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
                     _dark={{ bg: 'whiteAlpha.50' }}
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
-                    <Heading size="sm" mb={3} display="flex" alignItems="center" gap={2}>
-                      📑 Select Page Scan Mode
+                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:document-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                      Page Scan Mode
                     </Heading>
                     <Select
                       value={orchestrateOptions.scanMode}
                       onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanMode: e.target.value as any })}
                       bg="whiteAlpha.50"
                       borderColor="brand.300"
+                      size="lg"
                       _hover={{ borderColor: 'brand.400' }}
-                      _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
+                      _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 3px rgba(121,95,238,0.2)' }}
                     >
-                      <option value="single">Single Page</option>
-                      <option value="multi">Multi-Page</option>
+                      <option value="single">📄 Single Page</option>
+                      <option value="multi">📚 Multi-Page Document</option>
                     </Select>
                   </Box>
 
                   {/* Text Detection */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
+                    borderColor={orchestrateOptions.scanTextMode ? 'brand.400' : 'whiteAlpha.200'}
+                    bg={orchestrateOptions.scanTextMode ? 'rgba(121,95,238,0.08)' : 'whiteAlpha.50'}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
                     <Flex justify="space-between" align="center">
-                      <Box>
-                        <Heading size="sm" mb={1}>🔤 Select Text Mode</Heading>
-                        <Text fontSize="sm" color="text.muted">Extract text from scanned documents</Text>
+                      <Box flex="1">
+                        <Heading size="md" mb={2} display="flex" alignItems="center" gap={2}>
+                          <Iconify icon="solar:text-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                          Text Detection
+                        </Heading>
+                        <Text fontSize="sm" color="text.muted">Extract text from scanned documents using OCR</Text>
                       </Box>
                       <Checkbox
                         size="lg"
@@ -1631,42 +1777,54 @@ const Dashboard: React.FC = () => {
                         isChecked={orchestrateOptions.scanTextMode}
                         onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanTextMode: e.target.checked })}
                       >
-                        Detect & Extract
+                        <Text fontWeight="600">Enable OCR</Text>
                       </Checkbox>
                     </Flex>
                   </Box>
 
                   {/* Page Selection */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
-                    <Heading size="sm" mb={3}>📄 Scan Pages</Heading>
+                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:documents-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                      Page Selection
+                    </Heading>
                     <RadioGroup
                       value={orchestrateOptions.scanPageMode}
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
                     >
-                      <Stack spacing={3}>
-                        <Radio value="all" colorScheme="brand">Scan All Pages</Radio>
-                        <Radio value="odd" colorScheme="brand">Odd Pages Only (1, 3, 5...)</Radio>
-                        <Radio value="even" colorScheme="brand">Even Pages Only (2, 4, 6...)</Radio>
-                        <Radio value="custom" colorScheme="brand">
-                          <Flex direction="column" gap={2} mt={orchestrateOptions.scanPageMode === 'custom' ? 2 : 0}>
-                            <Text>Custom Page Range</Text>
+                      <Stack spacing={4}>
+                        <Radio value="all" colorScheme="brand" size="lg">
+                          <Text fontWeight="500">All Pages</Text>
+                        </Radio>
+                        <Radio value="odd" colorScheme="brand" size="lg">
+                          <Text fontWeight="500">Odd Pages Only</Text>
+                          <Text fontSize="xs" color="text.muted">(1, 3, 5...)</Text>
+                        </Radio>
+                        <Radio value="even" colorScheme="brand" size="lg">
+                          <Text fontWeight="500">Even Pages Only</Text>
+                          <Text fontSize="xs" color="text.muted">(2, 4, 6...)</Text>
+                        </Radio>
+                        <Radio value="custom" colorScheme="brand" size="lg">
+                          <Flex direction="column" gap={2} w="full">
+                            <Text fontWeight="500">Custom Page Range</Text>
                             {orchestrateOptions.scanPageMode === 'custom' && (
                               <Input
-                                size="sm"
-                                placeholder="e.g., 1-5,7,9"
+                                size="md"
+                                placeholder="e.g., 1-5,7,9-12"
                                 value={orchestrateOptions.scanCustomRange}
                                 onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
                                 bg="whiteAlpha.100"
                                 borderColor="brand.300"
                                 _hover={{ borderColor: 'brand.400' }}
+                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 3px rgba(121,95,238,0.2)' }}
                               />
                             )}
                           </Flex>
@@ -1677,44 +1835,53 @@ const Dashboard: React.FC = () => {
 
                   {/* Layout */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
-                    <Heading size="sm" mb={3}>📐 Select Scan Layout</Heading>
-                    <ButtonGroup isAttached width="full">
+                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:tablet-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                      Scan Layout
+                    </Heading>
+                    <ButtonGroup isAttached width="full" size="lg">
                       <Button
                         flex={1}
                         variant={orchestrateOptions.scanLayout === 'portrait' ? 'solid' : 'outline'}
                         colorScheme={orchestrateOptions.scanLayout === 'portrait' ? 'brand' : 'gray'}
                         onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'portrait' })}
+                        leftIcon={<Iconify icon="solar:document-bold" width={20} height={20} />}
+                        _hover={{ transform: 'scale(1.02)' }}
+                        transition="all 0.2s"
                       >
-                        📄 Portrait
+                        Portrait
                       </Button>
                       <Button
                         flex={1}
                         variant={orchestrateOptions.scanLayout === 'landscape' ? 'solid' : 'outline'}
                         colorScheme={orchestrateOptions.scanLayout === 'landscape' ? 'brand' : 'gray'}
                         onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'landscape' })}
+                        leftIcon={<Iconify icon="solar:tablet-bold" width={20} height={20} />}
+                        _hover={{ transform: 'scale(1.02)' }}
+                        transition="all 0.2s"
                       >
-                        📐 Landscape
+                        Landscape
                       </Button>
                     </ButtonGroup>
                   </Box>
 
                   {/* Paper Size */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
                     <FancySelect
                       label="📏 Paper Size"
@@ -1730,20 +1897,25 @@ const Dashboard: React.FC = () => {
 
                   {/* Resolution */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
+                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:magnifer-zoom-in-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                      Scan Resolution (DPI)
+                    </Heading>
                     <FancySelect
-                      label="🔍 Scan Resolution (DPI)"
+                      label=""
                       options={[
                         { value: '150', label: '150 DPI - Draft Quality' },
                         { value: '300', label: '300 DPI - Standard (Recommended)' },
                         { value: '600', label: '600 DPI - High Quality' },
+                        { value: '1200', label: '1200 DPI - Professional' },
                       ]}
                       value={orchestrateOptions.scanResolution}
                       onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })}
@@ -1752,21 +1924,27 @@ const Dashboard: React.FC = () => {
 
                   {/* Color Mode */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
-                    <Heading size="sm" mb={3}>🎨 Select Color Mode</Heading>
-                    <ButtonGroup isAttached width="full" size="sm">
+                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:palette-2-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                      Color Mode
+                    </Heading>
+                    <ButtonGroup isAttached width="full" size="lg">
                       <Button
                         flex={1}
                         variant={orchestrateOptions.scanColorMode === 'color' ? 'solid' : 'outline'}
                         colorScheme={orchestrateOptions.scanColorMode === 'color' ? 'brand' : 'gray'}
                         onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'color' })}
+                        leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
+                        _hover={{ transform: 'scale(1.02)' }}
+                        transition="all 0.2s"
                       >
                         Color
                       </Button>
@@ -1775,6 +1953,9 @@ const Dashboard: React.FC = () => {
                         variant={orchestrateOptions.scanColorMode === 'grayscale' ? 'solid' : 'outline'}
                         colorScheme={orchestrateOptions.scanColorMode === 'grayscale' ? 'brand' : 'gray'}
                         onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'grayscale' })}
+                        leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
+                        _hover={{ transform: 'scale(1.02)' }}
+                        transition="all 0.2s"
                       >
                         Grayscale
                       </Button>
@@ -1783,6 +1964,9 @@ const Dashboard: React.FC = () => {
                         variant={orchestrateOptions.scanColorMode === 'bw' ? 'solid' : 'outline'}
                         colorScheme={orchestrateOptions.scanColorMode === 'bw' ? 'brand' : 'gray'}
                         onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'bw' })}
+                        leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
+                        _hover={{ transform: 'scale(1.02)' }}
+                        transition="all 0.2s"
                       >
                         B&W
                       </Button>
@@ -1791,13 +1975,13 @@ const Dashboard: React.FC = () => {
 
                   {/* Save as Default */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={6} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="brand.400" 
-                    bg="rgba(121,95,238,0.1)"
+                    bg="rgba(121,95,238,0.12)"
                     transition="all 0.3s"
-                    _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500' }}
+                    _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500', boxShadow: '0 8px 20px rgba(121,95,238,0.3)' }}
                   >
                     <Checkbox
                       size="lg"
@@ -1810,78 +1994,123 @@ const Dashboard: React.FC = () => {
                         }
                       }}
                     >
-                      <Text fontWeight="600">💾 Save as Default Settings</Text>
+                      <HStack spacing={2}>
+                        <Iconify icon="solar:save-bold-duotone" width={20} height={20} />
+                        <Text fontWeight="600" fontSize="md">Save as Default Settings</Text>
+                      </HStack>
                     </Checkbox>
+                    <Text fontSize="sm" color="text.muted" mt={2} ml={8}>
+                      Your preferences will be remembered for future scans
+                    </Text>
                   </Box>
                 </Stack>
 
                 {/* Live Preview - Scan Mode */}
                 <Box display={{ base: 'none', lg: 'block' }}>
                   <Box
-                    p={6}
-                    bg="rgba(255, 255, 255, 0.05)"
-                    borderRadius="xl"
-                    border="1px solid"
-                    borderColor="whiteAlpha.200"
+                    p={8}
+                    bg="linear-gradient(145deg, rgba(121,95,238,0.08) 0%, rgba(69,202,255,0.08) 100%)"
+                    borderRadius="2xl"
+                    border="2px solid"
+                    borderColor="brand.300"
                     display="flex"
                     flexDirection="column"
                     alignItems="center"
                     justifyContent="center"
-                    minH="400px"
+                    minH="500px"
                     position="sticky"
                     top="20px"
+                    boxShadow="0 12px 35px rgba(121,95,238,0.25)"
                   >
-                    <VStack spacing={3} mb={4}>
-                      <Text fontSize="sm" fontWeight="600" color="cyan.300">Live Preview</Text>
-                      <Text fontSize="xs" color="whiteAlpha.600">
-                        {orchestrateOptions.scanPaperSize} • {orchestrateOptions.scanLayout} • {orchestrateOptions.scanResolution} DPI
-                      </Text>
+                    <VStack spacing={4} mb={6}>
+                      <HStack spacing={2}>
+                        <Iconify icon="solar:eye-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-400)" />
+                        <Text fontSize="lg" fontWeight="700" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">
+                          Live Preview
+                        </Text>
+                      </HStack>
+                      <VStack spacing={1}>
+                        <Text fontSize="sm" fontWeight="600" color="text.muted">
+                          {orchestrateOptions.scanPaperSize} Paper
+                        </Text>
+                        <Text fontSize="xs" color="whiteAlpha.600">
+                          {orchestrateOptions.scanLayout} • {orchestrateOptions.scanResolution} DPI
+                        </Text>
+                      </VStack>
                     </VStack>
 
                     <Box
                       position="relative"
                       bg="white"
-                      boxShadow="0 8px 32px rgba(0, 0, 0, 0.4)"
-                      borderRadius="md"
-                      transition="all 0.3s ease"
-                      w={orchestrateOptions.scanLayout === 'landscape' ? '250px' : '180px'}
-                      h={orchestrateOptions.scanLayout === 'landscape' ? '180px' : '250px'}
+                      boxShadow="0 15px 45px rgba(0, 0, 0, 0.5)"
+                      borderRadius="lg"
+                      transition="all 0.4s ease"
+                      w={orchestrateOptions.scanLayout === 'landscape' ? '280px' : '200px'}
+                      h={orchestrateOptions.scanLayout === 'landscape' ? '200px' : '280px'}
+                      border="4px solid"
+                      borderColor="whiteAlpha.300"
                     >
                       <Box
                         position="absolute"
-                        top="12px"
-                        left="12px"
-                        right="12px"
-                        bottom="12px"
-                        bg="rgba(100, 150, 255, 0.1)"
-                        borderRadius="sm"
-                        border="1px dashed"
-                        borderColor="rgba(100, 150, 255, 0.3)"
+                        top="16px"
+                        left="16px"
+                        right="16px"
+                        bottom="16px"
+                        bg="linear-gradient(135deg, rgba(121,95,238,0.15), rgba(69,202,255,0.15))"
+                        borderRadius="md"
+                        border="2px dashed"
+                        borderColor="brand.400"
                         display="flex"
+                        flexDirection="column"
                         alignItems="center"
                         justifyContent="center"
+                        gap={2}
                       >
-                        <Text fontSize="xs" color="gray.600" opacity={0.5}>
+                        <Iconify icon="solar:document-add-bold-duotone" width={32} height={32} color="gray.400" />
+                        <Text fontSize="xs" color="gray.600" fontWeight="600">
                           Scan Area
                         </Text>
                       </Box>
                     </Box>
 
-                    <VStack spacing={1} mt={4} fontSize="xs" color="whiteAlpha.500">
-                      <Text>Mode: {orchestrateOptions.scanMode}</Text>
-                      <Text>Color: {orchestrateOptions.scanColorMode}</Text>
-                      {orchestrateOptions.scanTextMode && <Text color="cyan.400">✓ Text Detection</Text>}
+                    <VStack spacing={2} mt={6} fontSize="sm" color="text.muted" w="full" px={4}>
+                      <HStack justify="space-between" w="full" px={3} py={2} bg="whiteAlpha.100" borderRadius="lg">
+                        <Text fontWeight="600">Mode:</Text>
+                        <Badge colorScheme="purple">{orchestrateOptions.scanMode}</Badge>
+                      </HStack>
+                      <HStack justify="space-between" w="full" px={3} py={2} bg="whiteAlpha.100" borderRadius="lg">
+                        <Text fontWeight="600">Color:</Text>
+                        <Badge colorScheme="cyan">{orchestrateOptions.scanColorMode}</Badge>
+                      </HStack>
+                      {orchestrateOptions.scanTextMode && (
+                        <HStack justify="space-between" w="full" px={3} py={2} bg="green.100" borderRadius="lg">
+                          <Iconify icon="solar:check-circle-bold" width={16} height={16} color="green.600" />
+                          <Text fontWeight="600" color="green.700">OCR Enabled</Text>
+                        </HStack>
+                      )}
                     </VStack>
                   </Box>
                 </Box>
               </Grid>
               </ModalBody>
-              <ModalFooter>
-                <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(1)}>
+              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
+                <Button 
+                  variant="ghost" 
+                  mr={3} 
+                  onClick={() => setOrchestrateStep(1)}
+                  size="lg"
+                  leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
+                >
                   Back
                 </Button>
-                <Button colorScheme="brand" onClick={() => setOrchestrateStep(3)}>
-                  Continue →
+                <Button 
+                  colorScheme="brand" 
+                  onClick={() => setOrchestrateStep(3)}
+                  size="lg"
+                  px={8}
+                  rightIcon={<Iconify icon="solar:arrow-right-bold" width={20} height={20} />}
+                >
+                  Review Settings
                 </Button>
               </ModalFooter>
             </>
@@ -1890,30 +2119,66 @@ const Dashboard: React.FC = () => {
           {/* STEP 2: Print Options */}
           {orchestrateStep === 2 && orchestrateMode === 'print' && (
             <>
-              <ModalHeader>
-                <Flex align="center" gap={2}>
-                  🖨️ Print Options
-                </Flex>
+              <ModalHeader 
+                fontSize="2xl" 
+                fontWeight="700" 
+                py={6}
+                display="flex"
+                alignItems="center"
+                gap={3}
+                borderBottom="1px solid"
+                borderColor="whiteAlpha.200"
+              >
+                <Box p={2} bg="nebula.500" borderRadius="lg" color="white">
+                  <Iconify icon="solar:printer-bold-duotone" width={24} height={24} />
+                </Box>
+                Print Configuration
+                <Badge ml="auto" colorScheme="blue" fontSize="sm" px={3} py={1}>
+                  Step 2 of 3
+                </Badge>
               </ModalHeader>
-              <ModalCloseButton />
-              <ModalBody maxH="70vh" overflowY="auto" css={{
-                '&::-webkit-scrollbar': { width: '8px' },
-                '&::-webkit-scrollbar-track': { background: 'transparent' },
-                '&::-webkit-scrollbar-thumb': { background: 'rgba(121,95,238,0.3)', borderRadius: '4px' },
-              }}>
-                <Grid templateColumns={{ base: '1fr', lg: '1fr 300px' }} gap={6}>
-                  <Stack spacing={6}>
+              <ModalCloseButton 
+                size="lg" 
+                top={6} 
+                right={6}
+                _hover={{ bg: 'red.500', color: 'white' }}
+              />
+              <ModalBody 
+                maxH="65vh" 
+                overflowY="auto" 
+                py={8}
+                px={10}
+                css={{
+                  '&::-webkit-scrollbar': { width: '10px' },
+                  '&::-webkit-scrollbar-track': { background: 'transparent' },
+                  '&::-webkit-scrollbar-thumb': { 
+                    background: 'rgba(69,202,255,0.4)', 
+                    borderRadius: '10px',
+                    border: '2px solid transparent',
+                    backgroundClip: 'padding-box'
+                  },
+                  '&::-webkit-scrollbar-thumb:hover': { 
+                    background: 'rgba(69,202,255,0.6)',
+                    backgroundClip: 'padding-box'
+                  },
+                }}
+              >
+                <Grid templateColumns={{ base: '1fr', lg: '1fr 320px' }} gap={8}>
+                  <Stack spacing={5}>
                   {/* Pages to Print */}
                   <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
+                    p={5} 
+                    borderRadius="xl" 
+                    border="2px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: 'nebula.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
                   >
-                    <Heading size="sm" mb={3}>📄 Pages to Print</Heading>
+                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:documents-bold-duotone" width={24} height={24} color="var(--chakra-colors-nebula-500)" />
+                      Pages to Print
+                    </Heading>
                     <RadioGroup
                       value={orchestrateOptions.printPages}
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
@@ -2260,61 +2525,187 @@ const Dashboard: React.FC = () => {
           {/* STEP 3: Confirmation */}
           {orchestrateStep === 3 && (
             <>
-              <ModalHeader>Confirm {orchestrateMode === 'scan' ? 'Scan' : 'Print'} Settings</ModalHeader>
-              <ModalCloseButton />
-              <ModalBody>
-                <Stack spacing={4}>
-                  <Box bg="rgba(121,95,238,0.1)" p={4} borderRadius="lg">
-                    <Heading size="sm" mb={3}>Summary</Heading>
-                    <VStack spacing={2} align="start" fontSize="sm">
+              <ModalHeader 
+                fontSize="2xl" 
+                fontWeight="700" 
+                py={6}
+                display="flex"
+                alignItems="center"
+                gap={3}
+                borderBottom="1px solid"
+                borderColor="whiteAlpha.200"
+              >
+                <Box p={2} bg="green.500" borderRadius="lg" color="white">
+                  <Iconify icon="solar:check-circle-bold-duotone" width={24} height={24} />
+                </Box>
+                Review & Confirm
+                <Badge ml="auto" colorScheme="green" fontSize="sm" px={3} py={1}>
+                  Step 3 of 3
+                </Badge>
+              </ModalHeader>
+              <ModalCloseButton 
+                size="lg" 
+                top={6} 
+                right={6}
+                _hover={{ bg: 'red.500', color: 'white' }}
+              />
+              <ModalBody py={8} px={10}>
+                <Stack spacing={6}>
+                  <Box 
+                    bg="linear-gradient(135deg, rgba(121,95,238,0.15), rgba(69,202,255,0.15))" 
+                    p={8} 
+                    borderRadius="2xl"
+                    border="2px solid"
+                    borderColor={orchestrateMode === 'scan' ? 'brand.300' : 'nebula.300'}
+                    boxShadow="0 8px 25px rgba(121,95,238,0.2)"
+                  >
+                    <Heading size="lg" mb={6} display="flex" alignItems="center" gap={3}>
+                      <Iconify 
+                        icon={orchestrateMode === 'scan' ? 'solar:document-add-bold-duotone' : 'solar:printer-bold-duotone'} 
+                        width={32} 
+                        height={32} 
+                        color={orchestrateMode === 'scan' ? 'var(--chakra-colors-brand-500)' : 'var(--chakra-colors-nebula-500)'}
+                      />
+                      {orchestrateMode === 'scan' ? 'Scan' : 'Print'} Configuration Summary
+                    </Heading>
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                       {orchestrateMode === 'scan' ? (
                         <>
-                          <Text><strong>Mode:</strong> Scan</Text>
-                          <Text><strong>Page Mode:</strong> {orchestrateOptions.scanPageMode}</Text>
-                          <Text><strong>Layout:</strong> {orchestrateOptions.scanLayout}</Text>
-                          <Text><strong>Paper Size:</strong> {orchestrateOptions.scanPaperSize}</Text>
-                          <Text><strong>Resolution:</strong> {orchestrateOptions.scanResolution} DPI</Text>
-                          <Text><strong>Color Mode:</strong> {orchestrateOptions.scanColorMode}</Text>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Operation Mode:</Text>
+                            <Badge colorScheme="purple" fontSize="md" px={3} py={1}>Scan</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Page Mode:</Text>
+                            <Badge colorScheme="blue" fontSize="md" px={3} py={1}>{orchestrateOptions.scanPageMode}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Layout:</Text>
+                            <Badge colorScheme="cyan" fontSize="md" px={3} py={1}>{orchestrateOptions.scanLayout}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Paper Size:</Text>
+                            <Badge colorScheme="teal" fontSize="md" px={3} py={1}>{orchestrateOptions.scanPaperSize}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Resolution:</Text>
+                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>{orchestrateOptions.scanResolution} DPI</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Color Mode:</Text>
+                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>{orchestrateOptions.scanColorMode}</Badge>
+                          </HStack>
+                          {orchestrateOptions.scanTextMode && (
+                            <HStack justify="space-between" p={4} bg="green.100" borderRadius="lg" gridColumn={{ base: 'span 1', md: 'span 2' }}>
+                              <HStack>
+                                <Iconify icon="solar:check-circle-bold" width={20} height={20} color="green.600" />
+                                <Text fontWeight="600" color="green.700">OCR Text Detection:</Text>
+                              </HStack>
+                              <Badge colorScheme="green" fontSize="md" px={3} py={1}>Enabled</Badge>
+                            </HStack>
+                          )}
                         </>
                       ) : (
                         <>
-                          <Text><strong>Mode:</strong> Print</Text>
-                          <Text><strong>Pages:</strong> {orchestrateOptions.printPages}</Text>
-                          <Text><strong>Layout:</strong> {orchestrateOptions.printLayout}</Text>
-                          <Text><strong>Paper Size:</strong> {orchestrateOptions.printPaperSize}</Text>
-                          <Text><strong>Scale:</strong> {orchestrateOptions.printScale}%</Text>
-                          <Text><strong>Pages per Sheet:</strong> {orchestrateOptions.printPagesPerSheet}</Text>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Operation Mode:</Text>
+                            <Badge colorScheme="blue" fontSize="md" px={3} py={1}>Print</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Pages:</Text>
+                            <Badge colorScheme="purple" fontSize="md" px={3} py={1}>{orchestrateOptions.printPages}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Layout:</Text>
+                            <Badge colorScheme="cyan" fontSize="md" px={3} py={1}>{orchestrateOptions.printLayout}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Paper Size:</Text>
+                            <Badge colorScheme="teal" fontSize="md" px={3} py={1}>{orchestrateOptions.printPaperSize}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Scale:</Text>
+                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>{orchestrateOptions.printScale}%</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Pages per Sheet:</Text>
+                            <Badge colorScheme="orange" fontSize="md" px={3} py={1}>{orchestrateOptions.printPagesPerSheet}</Badge>
+                          </HStack>
+                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                            <Text fontWeight="600">Margins:</Text>
+                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>{orchestrateOptions.printMargins}</Badge>
+                          </HStack>
                           {orchestrateOptions.printConvertedFiles.length > 0 && (
-                            <Text><strong>Selected PDFs:</strong> {orchestrateOptions.printConvertedFiles.length} file(s)</Text>
+                            <HStack justify="space-between" p={4} bg="blue.100" borderRadius="lg">
+                              <HStack>
+                                <Iconify icon="solar:document-text-bold" width={20} height={20} color="blue.600" />
+                                <Text fontWeight="600" color="blue.700">Selected PDFs:</Text>
+                              </HStack>
+                              <Badge colorScheme="blue" fontSize="md" px={3} py={1}>{orchestrateOptions.printConvertedFiles.length} file(s)</Badge>
+                            </HStack>
                           )}
                         </>
                       )}
                       {orchestrateOptions.saveAsDefault && (
-                        <Text color="brand.400"><strong>✓</strong> Will save as default settings</Text>
+                        <HStack justify="space-between" p={4} bg="green.100" borderRadius="lg" gridColumn={{ base: 'span 1', md: 'span 2' }}>
+                          <HStack>
+                            <Iconify icon="solar:save-bold-duotone" width={20} height={20} color="green.600" />
+                            <Text fontWeight="600" color="green.700">Save as Default:</Text>
+                          </HStack>
+                          <Badge colorScheme="green" fontSize="md" px={3} py={1}>Yes</Badge>
+                        </HStack>
                       )}
-                    </VStack>
+                    </SimpleGrid>
+                  </Box>
+                  <Box 
+                    p={5} 
+                    bg="yellow.50" 
+                    borderRadius="xl" 
+                    border="2px solid" 
+                    borderColor="yellow.300"
+                    _dark={{ bg: 'rgba(255,193,7,0.15)', borderColor: 'yellow.600' }}
+                  >
+                    <HStack spacing={3} mb={2}>
+                      <Iconify icon="solar:info-circle-bold" width={24} height={24} color="orange.500" />
+                      <Text fontWeight="700" fontSize="lg" color="orange.700" _dark={{ color: 'orange.300' }}>
+                        Ready to Proceed
+                      </Text>
+                    </HStack>
+                    <Text color="text.muted" fontSize="sm">
+                      Review your settings above. Click "Start {orchestrateMode === 'scan' ? 'Scanning' : 'Printing'}" to begin the operation with these configurations.
+                    </Text>
                   </Box>
                 </Stack>
               </ModalBody>
-              <ModalFooter>
-                <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(2)}>
+              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
+                <Button 
+                  variant="ghost" 
+                  mr={3} 
+                  onClick={() => setOrchestrateStep(2)}
+                  size="lg"
+                  leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
+                >
                   Back
                 </Button>
                 <Button
-                  colorScheme="brand"
+                  colorScheme={orchestrateMode === 'scan' ? 'brand' : 'blue'}
                   onClick={() => {
                     toast({
-                      title: 'Operation Started',
+                      title: '✅ Operation Started',
                       description: `${orchestrateMode === 'scan' ? 'Scanning' : 'Printing'} with your selected options...`,
-                      status: 'info',
-                      duration: 3000,
+                      status: 'success',
+                      duration: 4000,
+                      isClosable: true,
                     });
                     orchestrateModal.onClose();
                     setOrchestrateStep(1);
                     setOrchestrateMode(null);
                   }}
+                  size="lg"
+                  px={8}
+                  rightIcon={<Iconify icon="solar:play-circle-bold" width={24} height={24} />}
                 >
-                  Proceed
+                  Start {orchestrateMode === 'scan' ? 'Scanning' : 'Printing'}
                 </Button>
               </ModalFooter>
             </>
