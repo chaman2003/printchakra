@@ -107,7 +107,7 @@ def speak_text(text: str) -> bool:
             elif voices:
                 engine.setProperty('voice', voices[0].id)
             
-            engine.setProperty('rate', 200)
+            engine.setProperty('rate', 220)  # Increased from 200 for faster speech
             engine.setProperty('volume', 0.9)
             
             logger.info(f"🔊 Speaking: {text[:50]}...")
@@ -167,7 +167,7 @@ class WhisperTranscriptionService:
             return False
     
     def _try_load_with_openai_whisper(self):
-        """Fallback to openai-whisper with GPU support"""
+        """Fallback to openai-whisper with GPU support - optimized for speed"""
         try:
             import whisper  # type: ignore
             import torch
@@ -181,22 +181,23 @@ class WhisperTranscriptionService:
                 logger.warning("⚠️ GPU not available, using CPU")
                 device = 'cpu'
             
-            # Use large-v3-turbo model (faster than regular large)
-            logger.info(f"Loading openai-whisper large-v3-turbo model on {device.upper()}")
-            self.model = whisper.load_model("large-v3-turbo", device=device)
+            # Use base model for fastest transcription (244MB, 4x faster than large-v3-turbo)
+            logger.info(f"Loading openai-whisper base model on {device.upper()}")
+            self.model = whisper.load_model("base", device=device)
             self.is_loaded = True
             self.use_whisper_cpp = False
             self.device = device
-            logger.info(f"✅ Whisper large-v3-turbo model loaded successfully on {device.upper()}")
+            logger.info(f"✅ Whisper base model loaded successfully on {device.upper()}")
+            logger.info(f"   Model optimized for speed (244MB, ~4x faster)")
             return True
         except Exception as e:
-            logger.error(f"❌ Failed to load large-v3-turbo model: {str(e)}")
+            logger.error(f"❌ Failed to load base model: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
             
-            # Fallback to small model if large-v3-turbo fails
+            # Fallback to tiny model if base fails (fastest option)
             try:
-                logger.info("Falling back to small model...")
+                logger.info("Falling back to tiny model...")
                 import whisper
                 import torch
                 
@@ -205,11 +206,12 @@ class WhisperTranscriptionService:
                 else:
                     device = 'cpu'
                 
-                self.model = whisper.load_model("small", device=device)
+                self.model = whisper.load_model("tiny", device=device)
                 self.is_loaded = True
                 self.use_whisper_cpp = False
                 self.device = device
-                logger.info(f"✅ Whisper small model loaded successfully on {device.upper()}")
+                logger.info(f"✅ Whisper tiny model loaded successfully on {device.upper()}")
+                logger.info(f"   Model optimized for maximum speed (75MB)")
                 return True
             except Exception as fallback_error:
                 logger.error(f"❌ Failed to load fallback model: {str(fallback_error)}")
@@ -332,12 +334,18 @@ class WhisperTranscriptionService:
                     result = self.model.transcribe(temp_audio_path)
                     text = result["result"]
                 else:
-                    # Use openai-whisper for standard model
+                    # Use openai-whisper with speed optimizations
+                    import torch
                     result = self.model.transcribe(
                         temp_audio_path,
                         language=language,
                         task="transcribe",
-                        fp16=False  # Use FP32 for better accuracy
+                        fp16=torch.cuda.is_available(),  # Use FP16 on GPU for 2x speed
+                        beam_size=1,  # Greedy decoding for speed (no beam search)
+                        best_of=1,  # No sampling, fastest option
+                        temperature=0,  # Deterministic for speed
+                        compression_ratio_threshold=2.4,
+                        no_speech_threshold=0.6
                     )
                     text = result.get('text', '').strip()
             except Exception as transcribe_error:
@@ -412,22 +420,19 @@ class Smollm2ChatService:
         """
         self.model_name = model_name
         self.conversation_history = []
-        self.system_prompt = """You are PrintChakra AI, a concise voice assistant for document scanning and printing.
+        self.system_prompt = """You are PrintChakra AI assistant. ULTRA-CONCISE responses only.
 
-IMPORTANT RULES:
-1. Keep responses VERY SHORT (1-2 sentences maximum)
-2. Be direct and to-the-point
-3. No lengthy explanations unless specifically asked
-4. For greetings, respond briefly
-5. For questions, give the core answer only
-6. Use simple, conversational language
+STRICT RULES:
+1. Maximum 8 words per response
+2. Single short sentence
+3. No fluff or elaboration
 
 Examples:
-- "Hey what time is it?" → "It's 3:45 PM"
-- "Hey how are you?" → "I'm doing great! How can I help you?"
-- "Hey what can you do?" → "I can help you scan documents, manage printing, and answer questions about the app."
+- "what time?" → "It's 3:45 PM"
+- "how are you?" → "Great! Need help?"
+- "what can you do?" → "Scan and print documents"
 
-Keep it short, friendly, and helpful!"""
+Keep it ultra-short!"""
         
     def check_ollama_available(self) -> bool:
         """Check if Ollama is running and model is available"""
@@ -472,7 +477,7 @@ Keep it short, friendly, and helpful!"""
                 {'role': 'system', 'content': self.system_prompt}
             ] + self.conversation_history
             
-            # Call Ollama API
+            # Call Ollama API with aggressive speed optimizations
             logger.info(f"Generating response for: {user_message[:100]}...")
             response = requests.post(
                 'http://localhost:11434/api/chat',
@@ -481,22 +486,33 @@ Keep it short, friendly, and helpful!"""
                     'messages': messages,
                     'stream': False,
                     'options': {
-                        'temperature': 0.7,
-                        'top_p': 0.9,
-                        'num_predict': 50  # Limit response length for conciseness
+                        'temperature': 0.5,  # Lower for faster, more focused responses
+                        'top_p': 0.8,  # Reduced for faster sampling
+                        'top_k': 20,  # Limit token choices for speed
+                        'num_predict': 20,  # Very short responses (reduced from 50)
+                        'num_ctx': 512,  # Smaller context window for speed (reduced from default 2048)
+                        'repeat_penalty': 1.1  # Prevent repetition
                     }
                 },
-                timeout=30
+                timeout=10  # Reduced from 30 to 10 seconds
             )
             
             if response.status_code == 200:
                 result = response.json()
                 ai_response = result.get('message', {}).get('content', '').strip()
                 
-                # Ensure response is concise (max 2 sentences)
+                # Ensure response is ultra-concise (max 1 sentence, 15 words)
                 sentences = ai_response.split('. ')
-                if len(sentences) > 2:
-                    ai_response = '. '.join(sentences[:2]) + '.'
+                ai_response = sentences[0]  # Take only first sentence
+                
+                # Enforce word limit (15 words max)
+                words = ai_response.split()
+                if len(words) > 15:
+                    ai_response = ' '.join(words[:15])
+                
+                # Add punctuation if missing
+                if ai_response and ai_response[-1] not in '.!?':
+                    ai_response += '.'
                 
                 # Add assistant response to history
                 self.conversation_history.append({
@@ -504,11 +520,11 @@ Keep it short, friendly, and helpful!"""
                     'content': ai_response
                 })
                 
-                # Keep only last 10 exchanges (20 messages) to manage memory
-                if len(self.conversation_history) > 20:
-                    self.conversation_history = self.conversation_history[-20:]
+                # Keep only last 6 exchanges (12 messages) for speed
+                if len(self.conversation_history) > 12:
+                    self.conversation_history = self.conversation_history[-12:]
                 
-                logger.info(f"✅ AI Response: {ai_response[:100]}...")
+                logger.info(f"✅ AI Response ({len(words)} words): {ai_response}")
                 
                 # Return response FIRST (so frontend displays it immediately)
                 # TTS will be triggered separately by frontend
