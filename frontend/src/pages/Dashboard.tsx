@@ -18,6 +18,7 @@ import {
   DrawerHeader,
   DrawerOverlay,
   Flex,
+  Grid,
   Heading,
   IconButton,
   Input,
@@ -254,6 +255,52 @@ const Dashboard: React.FC = () => {
   const convertedDrawer = useDisclosure();
   const orchestrateModal = useDisclosure();
   const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
+
+  // Load saved defaults from localStorage on mount
+  useEffect(() => {
+    const savedDefaults = localStorage.getItem('printchakra_orchestrate_defaults');
+    if (savedDefaults) {
+      try {
+        const parsed = JSON.parse(savedDefaults);
+        setOrchestrateOptions(prev => ({
+          ...prev,
+          ...parsed,
+          // Don't restore files and saveAsDefault flag
+          printFiles: [],
+          printConvertedFiles: [],
+          saveAsDefault: false,
+        }));
+      } catch (e) {
+        console.error('Failed to parse saved defaults:', e);
+      }
+    }
+  }, []);
+
+  // Save defaults to localStorage when saveAsDefault is checked
+  const saveDefaultSettings = () => {
+    const settingsToSave = {
+      scanMode: orchestrateOptions.scanMode,
+      scanTextMode: orchestrateOptions.scanTextMode,
+      scanPageMode: orchestrateOptions.scanPageMode,
+      scanLayout: orchestrateOptions.scanLayout,
+      scanPaperSize: orchestrateOptions.scanPaperSize,
+      scanResolution: orchestrateOptions.scanResolution,
+      scanColorMode: orchestrateOptions.scanColorMode,
+      printPages: orchestrateOptions.printPages,
+      printLayout: orchestrateOptions.printLayout,
+      printPaperSize: orchestrateOptions.printPaperSize,
+      printScale: orchestrateOptions.printScale,
+      printMargins: orchestrateOptions.printMargins,
+    };
+    localStorage.setItem('printchakra_orchestrate_defaults', JSON.stringify(settingsToSave));
+    toast({
+      title: '💾 Settings Saved',
+      description: 'Your default settings have been saved locally',
+      status: 'success',
+      duration: 3000,
+      isClosable: true,
+    });
+  };
   
   // File cache system - stores file metadata and counts
   const [filesCacheRef, setFilesCacheRef] = useState<{
@@ -276,26 +323,13 @@ const Dashboard: React.FC = () => {
     timestamp: 0,
   });
   
-  // Theme values with insane visual enhancements
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
-  // const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
-  // const borderColor = useColorModeValue('brand.200', 'nebula.700');
-  // const borderSubtle = useColorModeValue('brand.100', 'whiteAlpha.200');
-  // const accentPrimary = useColorModeValue('brand.500', 'nebula.400');
-  // const accentSecondary = useColorModeValue('nebula.500', 'cyber.400');
-  // const textMuted = useColorModeValue('gray.600', 'whiteAlpha.700');
-  // const textInverse = useColorModeValue('gray.800', 'whiteAlpha.900');
-  // const hoverBg = useColorModeValue('brand.50', 'whiteAlpha.100');
-  // const glowColor = useColorModeValue('brand.500', 'nebula.400');
-  
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
 
-  // Use shared Socket from context instead of creating new connections
   const { socket, connected: socketConnected } = useSocket();
 
   useEffect(() => {
-    // Sync local connected state with socket context
     setConnected(socketConnected);
   }, [socketConnected]);
 
@@ -307,7 +341,6 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    // Event listeners for file changes
     socket.on('new_file', (data: any) => {
       console.log('New file uploaded:', data);
       loadFiles(false); // Background refresh, no loading spinner
@@ -336,45 +369,35 @@ const Dashboard: React.FC = () => {
 
     loadFiles();
 
-    // SMART CACHING MODE: Polling disabled for network efficiency
-    // Files are cached and only updated when:
-    // 1. Socket.IO events indicate new_file, file_deleted, or processing_complete
-    // 2. User clicks the manual Reload button
-    // 3. Page visibility changes (user switches tabs)
-    
-    let pollInterval = 60000; // Long interval (1 minute) - mostly for safety net
-    const maxInterval = 300000; // Max 5 minutes between polls
+    let pollInterval = 60000;
+    const maxInterval = 300000;
     let timeoutId: NodeJS.Timeout;
 
-    // Recursive polling with long intervals (safety net only)
     const startPolling = () => {
       timeoutId = setTimeout(async () => {
         console.log('📋 Safety net polling for new files...');
         try {
           await loadFiles(false);
-          // On success, reset to normal interval
           if (pollInterval > 60000) {
             console.log('✅ Connection restored, resetting poll interval');
             pollInterval = 60000;
             setConnectionRetries(0);
           }
         } catch (err) {
-          // On error, increase poll interval (exponential backoff)
           pollInterval = Math.min(pollInterval * 1.5, maxInterval);
           setConnectionRetries(prev => prev + 1);
           console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
         }
-        startPolling(); // Schedule next poll
+        startPolling();
       }, pollInterval);
     };
 
     startPolling();
 
-    // Also refresh when the page becomes visible (user switches tabs/apps)
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         console.log('📋 Page became visible - refreshing files');
-        loadFiles(false); // Don't show loading spinner
+        loadFiles(false);
       }
     };
 
@@ -489,31 +512,7 @@ const Dashboard: React.FC = () => {
     orchestrateModal.onOpen();
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleOrchestrateNext = () => {
-    if (orchestrateStep === 1 && orchestrateMode) {
-      setOrchestrateStep(2);
-    } else if (orchestrateStep === 2) {
-      // Execute the action
-      if (orchestrateMode === 'print') {
-        executePrintJob();
-      } else {
-        executeScanJob();
-      }
-    }
-  };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleOrchestrateBack = () => {
-    if (orchestrateStep === 2) {
-      if (selectedFiles.length > 0) {
-        // If came from dashboard selection, close modal
-        orchestrateModal.onClose();
-      } else {
-        setOrchestrateStep(1);
-      }
-    }
-  };
 
   const executePrintJob = async () => {
     try {
@@ -633,13 +632,7 @@ const Dashboard: React.FC = () => {
         });
       }
 
-      // Store diagnostics output for display
       setSelectedFile(null);
-      
-      // Show detailed output in a modal-like way using alert for now
-      // Better: you could add a Modal component to show the full output
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const shortOutput = response.data.output.split('\n').slice(0, 10).join('\n');
       console.log('Full Diagnostics Output:', response.data.output);
       console.log('Printer Status:', response.data);
       
@@ -1588,7 +1581,8 @@ const Dashboard: React.FC = () => {
                 '&::-webkit-scrollbar-track': { background: 'transparent' },
                 '&::-webkit-scrollbar-thumb': { background: 'rgba(121,95,238,0.3)', borderRadius: '4px' },
               }}>
-                <Stack spacing={6}>
+                <Grid templateColumns={{ base: '1fr', lg: '1fr 300px' }} gap={6}>
+                  <Stack spacing={6}>
                   {/* Select Page Scan Mode */}
                   <Box 
                     p={4} 
@@ -1809,12 +1803,78 @@ const Dashboard: React.FC = () => {
                       size="lg"
                       colorScheme="brand"
                       isChecked={orchestrateOptions.saveAsDefault}
-                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                      onChange={(e) => {
+                        setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked });
+                        if (e.target.checked) {
+                          saveDefaultSettings();
+                        }
+                      }}
                     >
                       <Text fontWeight="600">💾 Save as Default Settings</Text>
                     </Checkbox>
                   </Box>
                 </Stack>
+
+                {/* Live Preview - Scan Mode */}
+                <Box display={{ base: 'none', lg: 'block' }}>
+                  <Box
+                    p={6}
+                    bg="rgba(255, 255, 255, 0.05)"
+                    borderRadius="xl"
+                    border="1px solid"
+                    borderColor="whiteAlpha.200"
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    minH="400px"
+                    position="sticky"
+                    top="20px"
+                  >
+                    <VStack spacing={3} mb={4}>
+                      <Text fontSize="sm" fontWeight="600" color="cyan.300">Live Preview</Text>
+                      <Text fontSize="xs" color="whiteAlpha.600">
+                        {orchestrateOptions.scanPaperSize} • {orchestrateOptions.scanLayout} • {orchestrateOptions.scanResolution} DPI
+                      </Text>
+                    </VStack>
+
+                    <Box
+                      position="relative"
+                      bg="white"
+                      boxShadow="0 8px 32px rgba(0, 0, 0, 0.4)"
+                      borderRadius="md"
+                      transition="all 0.3s ease"
+                      w={orchestrateOptions.scanLayout === 'landscape' ? '250px' : '180px'}
+                      h={orchestrateOptions.scanLayout === 'landscape' ? '180px' : '250px'}
+                    >
+                      <Box
+                        position="absolute"
+                        top="12px"
+                        left="12px"
+                        right="12px"
+                        bottom="12px"
+                        bg="rgba(100, 150, 255, 0.1)"
+                        borderRadius="sm"
+                        border="1px dashed"
+                        borderColor="rgba(100, 150, 255, 0.3)"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                      >
+                        <Text fontSize="xs" color="gray.600" opacity={0.5}>
+                          Scan Area
+                        </Text>
+                      </Box>
+                    </Box>
+
+                    <VStack spacing={1} mt={4} fontSize="xs" color="whiteAlpha.500">
+                      <Text>Mode: {orchestrateOptions.scanMode}</Text>
+                      <Text>Color: {orchestrateOptions.scanColorMode}</Text>
+                      {orchestrateOptions.scanTextMode && <Text color="cyan.400">✓ Text Detection</Text>}
+                    </VStack>
+                  </Box>
+                </Box>
+              </Grid>
               </ModalBody>
               <ModalFooter>
                 <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(1)}>
@@ -1841,7 +1901,8 @@ const Dashboard: React.FC = () => {
                 '&::-webkit-scrollbar-track': { background: 'transparent' },
                 '&::-webkit-scrollbar-thumb': { background: 'rgba(121,95,238,0.3)', borderRadius: '4px' },
               }}>
-                <Stack spacing={6}>
+                <Grid templateColumns={{ base: '1fr', lg: '1fr 300px' }} gap={6}>
+                  <Stack spacing={6}>
                   {/* Pages to Print */}
                   <Box 
                     p={4} 
@@ -2076,6 +2137,114 @@ const Dashboard: React.FC = () => {
                     </Checkbox>
                   </Box>
                 </Stack>
+
+                {/* Live Preview - Print Mode */}
+                <Box display={{ base: 'none', lg: 'block' }}>
+                  <Box
+                    p={6}
+                    bg="rgba(255, 255, 255, 0.05)"
+                    borderRadius="xl"
+                    border="1px solid"
+                    borderColor="whiteAlpha.200"
+                    display="flex"
+                    flexDirection="column"
+                    alignItems="center"
+                    justifyContent="center"
+                    minH="400px"
+                    position="sticky"
+                    top="20px"
+                  >
+                    <VStack spacing={3} mb={4}>
+                      <Text fontSize="sm" fontWeight="600" color="cyan.300">Live Preview</Text>
+                      <Text fontSize="xs" color="whiteAlpha.600">
+                        {orchestrateOptions.printPaperSize} • {orchestrateOptions.printLayout} • {orchestrateOptions.printScale}% Scale
+                      </Text>
+                    </VStack>
+
+                    {(() => {
+                      const getPreviewDimensions = () => {
+                        const paperSizes: { [key: string]: { width: number; height: number } } = {
+                          'A4': { width: 210, height: 297 },
+                          'Letter': { width: 216, height: 279 },
+                          'Legal': { width: 216, height: 356 },
+                        };
+
+                        const size = paperSizes[orchestrateOptions.printPaperSize] || paperSizes['A4'];
+                        const isLandscape = orchestrateOptions.printLayout === 'landscape';
+                        const scale = parseInt(orchestrateOptions.printScale) / 100;
+
+                        const baseWidth = 200;
+                        const aspectRatio = isLandscape ? size.width / size.height : size.height / size.width;
+
+                        return {
+                          width: baseWidth * scale,
+                          height: baseWidth * aspectRatio * scale,
+                          isLandscape,
+                        };
+                      };
+
+                      const getMarginValues = (margins: string) => {
+                        switch (margins) {
+                          case 'narrow': return '8px';
+                          case 'none': return '0px';
+                          default: return '16px';
+                        }
+                      };
+
+                      const preview = getPreviewDimensions();
+                      const marginValue = getMarginValues(orchestrateOptions.printMargins);
+
+                      return (
+                        <Box
+                          position="relative"
+                          bg="white"
+                          boxShadow="0 8px 32px rgba(0, 0, 0, 0.4)"
+                          borderRadius="md"
+                          transition="all 0.3s ease"
+                          style={{
+                            width: `${preview.width}px`,
+                            height: `${preview.height}px`,
+                          }}
+                        >
+                          <Box
+                            position="absolute"
+                            top={marginValue}
+                            left={marginValue}
+                            right={marginValue}
+                            bottom={marginValue}
+                            bg="rgba(100, 150, 255, 0.1)"
+                            borderRadius="sm"
+                            border="1px dashed"
+                            borderColor="rgba(100, 150, 255, 0.3)"
+                            display="flex"
+                            alignItems="center"
+                            justifyContent="center"
+                          >
+                            <Text fontSize="xs" color="gray.600" opacity={0.5}>
+                              Content Area
+                            </Text>
+                          </Box>
+
+                          {orchestrateOptions.printMargins !== 'none' && (
+                            <>
+                              <Box position="absolute" top="2px" left="2px" fontSize="xs" color="red.400" opacity={0.6}>↘</Box>
+                              <Box position="absolute" top="2px" right="2px" fontSize="xs" color="red.400" opacity={0.6}>↙</Box>
+                              <Box position="absolute" bottom="2px" left="2px" fontSize="xs" color="red.400" opacity={0.6}>↗</Box>
+                              <Box position="absolute" bottom="2px" right="2px" fontSize="xs" color="red.400" opacity={0.6}>↖</Box>
+                            </>
+                          )}
+                        </Box>
+                      );
+                    })()}
+
+                    <VStack spacing={1} mt={4} fontSize="xs" color="whiteAlpha.500">
+                      <Text>Pages: {orchestrateOptions.printPages}</Text>
+                      <Text>Margins: {orchestrateOptions.printMargins}</Text>
+                      <Text>Per Sheet: {orchestrateOptions.printPagesPerSheet}</Text>
+                    </VStack>
+                  </Box>
+                </Box>
+              </Grid>
               </ModalBody>
               <ModalFooter>
                 <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(1)}>
