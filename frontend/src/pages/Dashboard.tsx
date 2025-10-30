@@ -220,6 +220,8 @@ const Dashboard: React.FC = () => {
   const [orchestrateMode, setOrchestrateMode] = useState<'scan' | 'print' | null>(null);
   const [orchestrateOptions, setOrchestrateOptions] = useState({
     // Scan options
+    scanMode: 'single' as 'single' | 'multi',
+    scanTextMode: false,
     scanPageMode: 'all' as 'all' | 'odd' | 'even' | 'custom',
     scanCustomRange: '',
     scanLayout: 'portrait' as 'portrait' | 'landscape',
@@ -227,7 +229,7 @@ const Dashboard: React.FC = () => {
     scanPaperSizeCustom: '',
     scanResolution: '300' as string,
     scanResolutionCustom: '',
-    scanColorMode: 'color' as 'color' | 'bw',
+    scanColorMode: 'color' as 'color' | 'grayscale' | 'bw',
     // Print options
     printPages: 'all' as 'all' | 'odd' | 'even' | 'custom',
     printCustomRange: '',
@@ -236,7 +238,7 @@ const Dashboard: React.FC = () => {
     printPaperSizeCustom: '',
     printScale: '100' as string,
     printScaleCustom: '',
-    printMargins: 'default' as 'default' | 'custom',
+    printMargins: 'default' as 'default' | 'narrow' | 'none',
     printMarginsCustom: '',
     printPagesPerSheet: '1' as string,
     printPagesPerSheetCustom: '',
@@ -1575,112 +1577,243 @@ const Dashboard: React.FC = () => {
           {/* STEP 2: Scan Options */}
           {orchestrateStep === 2 && orchestrateMode === 'scan' && (
             <>
-              <ModalHeader>Scan Options</ModalHeader>
+              <ModalHeader>
+                <Flex align="center" gap={2}>
+                  📄 Scan Options
+                </Flex>
+              </ModalHeader>
               <ModalCloseButton />
-              <ModalBody>
+              <ModalBody maxH="70vh" overflowY="auto" css={{
+                '&::-webkit-scrollbar': { width: '8px' },
+                '&::-webkit-scrollbar-track': { background: 'transparent' },
+                '&::-webkit-scrollbar-thumb': { background: 'rgba(121,95,238,0.3)', borderRadius: '4px' },
+              }}>
                 <Stack spacing={6}>
-                  {/* Page Scan Mode */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Select Page Scan Mode</Heading>
+                  {/* Select Page Scan Mode */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    _dark={{ bg: 'whiteAlpha.50' }}
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3} display="flex" alignItems="center" gap={2}>
+                      📑 Select Page Scan Mode
+                    </Heading>
+                    <Select
+                      value={orchestrateOptions.scanMode}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanMode: e.target.value as any })}
+                      bg="whiteAlpha.50"
+                      borderColor="brand.300"
+                      _hover={{ borderColor: 'brand.400' }}
+                      _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)' }}
+                    >
+                      <option value="single">Single Page</option>
+                      <option value="multi">Multi-Page</option>
+                    </Select>
+                  </Box>
+
+                  {/* Text Detection */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Flex justify="space-between" align="center">
+                      <Box>
+                        <Heading size="sm" mb={1}>🔤 Select Text Mode</Heading>
+                        <Text fontSize="sm" color="text.muted">Extract text from scanned documents</Text>
+                      </Box>
+                      <Checkbox
+                        size="lg"
+                        colorScheme="brand"
+                        isChecked={orchestrateOptions.scanTextMode}
+                        onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanTextMode: e.target.checked })}
+                      >
+                        Detect & Extract
+                      </Checkbox>
+                    </Flex>
+                  </Box>
+
+                  {/* Page Selection */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>📄 Scan Pages</Heading>
                     <RadioGroup
                       value={orchestrateOptions.scanPageMode}
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
                     >
-                      <Stack spacing={2}>
-                        <Radio value="all">📄 Scan All Pages</Radio>
-                        <Radio value="odd">🔢 Odd Pages Only (1, 3, 5...)</Radio>
-                        <Radio value="even">🔢 Even Pages Only (2, 4, 6...)</Radio>
-                        <Radio value="custom">
-                          Custom Page Range:
-                          <Input
-                            size="sm"
-                            ml={3}
-                            width="200px"
-                            placeholder="e.g., 1-5,7,9"
-                            isDisabled={orchestrateOptions.scanPageMode !== 'custom'}
-                            value={orchestrateOptions.scanCustomRange}
-                            onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
-                            mt={2}
-                          />
+                      <Stack spacing={3}>
+                        <Radio value="all" colorScheme="brand">Scan All Pages</Radio>
+                        <Radio value="odd" colorScheme="brand">Odd Pages Only (1, 3, 5...)</Radio>
+                        <Radio value="even" colorScheme="brand">Even Pages Only (2, 4, 6...)</Radio>
+                        <Radio value="custom" colorScheme="brand">
+                          <Flex direction="column" gap={2} mt={orchestrateOptions.scanPageMode === 'custom' ? 2 : 0}>
+                            <Text>Custom Page Range</Text>
+                            {orchestrateOptions.scanPageMode === 'custom' && (
+                              <Input
+                                size="sm"
+                                placeholder="e.g., 1-5,7,9"
+                                value={orchestrateOptions.scanCustomRange}
+                                onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
+                                bg="whiteAlpha.100"
+                                borderColor="brand.300"
+                                _hover={{ borderColor: 'brand.400' }}
+                              />
+                            )}
+                          </Flex>
                         </Radio>
                       </Stack>
                     </RadioGroup>
                   </Box>
 
-                  {/* Scan Layout */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Select Scan Layout</Heading>
-                    <RadioGroup
-                      value={orchestrateOptions.scanLayout}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: value as any })}
-                    >
-                      <Stack spacing={2}>
-                        <Radio value="portrait">📄 Portrait (Vertical)</Radio>
-                        <Radio value="landscape">📐 Landscape (Horizontal)</Radio>
-                      </Stack>
-                    </RadioGroup>
+                  {/* Layout */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>📐 Select Scan Layout</Heading>
+                    <ButtonGroup isAttached width="full">
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.scanLayout === 'portrait' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.scanLayout === 'portrait' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'portrait' })}
+                      >
+                        📄 Portrait
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.scanLayout === 'landscape' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.scanLayout === 'landscape' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'landscape' })}
+                      >
+                        📐 Landscape
+                      </Button>
+                    </ButtonGroup>
                   </Box>
 
-                  {/* Paper Size - Fancy Select */}
-                  <Box>
+                  {/* Paper Size */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
                     <FancySelect
-                      label="Paper Size"
+                      label="📏 Paper Size"
                       options={[
                         { value: 'A4', label: 'A4 (210×297 mm)' },
                         { value: 'Letter', label: 'Letter (8.5×11 in)' },
                         { value: 'Legal', label: 'Legal (8.5×14 in)' },
-                        { value: 'A3', label: 'A3 (297×420 mm)' },
-                        { value: 'custom', label: '✏️ Custom Size' },
                       ]}
                       value={orchestrateOptions.scanPaperSize}
                       onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: value })}
-                      allowCustom={true}
-                      customValue={orchestrateOptions.scanPaperSizeCustom}
-                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSizeCustom: value })}
                     />
                   </Box>
 
-                  {/* Resolution - Fancy Select */}
-                  <Box>
+                  {/* Resolution */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
                     <FancySelect
-                      label="Scan Resolution (DPI)"
+                      label="🔍 Scan Resolution (DPI)"
                       options={[
-                        { value: '150', label: '150 DPI - Draft (Fast, Small File)' },
-                        { value: '200', label: '200 DPI - Good Quality' },
+                        { value: '150', label: '150 DPI - Draft Quality' },
                         { value: '300', label: '300 DPI - Standard (Recommended)' },
                         { value: '600', label: '600 DPI - High Quality' },
-                        { value: '1200', label: '1200 DPI - Maximum Quality' },
-                        { value: 'custom', label: '✏️ Custom DPI' },
                       ]}
                       value={orchestrateOptions.scanResolution}
                       onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })}
-                      allowCustom={true}
-                      customValue={orchestrateOptions.scanResolutionCustom}
-                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, scanResolutionCustom: value })}
                     />
                   </Box>
 
                   {/* Color Mode */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Select Color Mode</Heading>
-                    <RadioGroup
-                      value={orchestrateOptions.scanColorMode}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: value as any })}
-                    >
-                      <Stack spacing={2}>
-                        <Radio value="color">🎨 Color (Full RGB)</Radio>
-                        <Radio value="bw">⬛ Black & White (Grayscale)</Radio>
-                      </Stack>
-                    </RadioGroup>
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>🎨 Select Color Mode</Heading>
+                    <ButtonGroup isAttached width="full" size="sm">
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.scanColorMode === 'color' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.scanColorMode === 'color' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'color' })}
+                      >
+                        Color
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.scanColorMode === 'grayscale' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.scanColorMode === 'grayscale' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'grayscale' })}
+                      >
+                        Grayscale
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.scanColorMode === 'bw' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.scanColorMode === 'bw' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'bw' })}
+                      >
+                        B&W
+                      </Button>
+                    </ButtonGroup>
                   </Box>
 
                   {/* Save as Default */}
-                  <Checkbox
-                    isChecked={orchestrateOptions.saveAsDefault}
-                    onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="brand.400" 
+                    bg="rgba(121,95,238,0.1)"
+                    transition="all 0.3s"
+                    _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500' }}
                   >
-                    Save as Default Settings
-                  </Checkbox>
+                    <Checkbox
+                      size="lg"
+                      colorScheme="brand"
+                      isChecked={orchestrateOptions.saveAsDefault}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                    >
+                      <Text fontWeight="600">💾 Save as Default Settings</Text>
+                    </Checkbox>
+                  </Box>
                 </Stack>
               </ModalBody>
               <ModalFooter>
@@ -1688,7 +1821,7 @@ const Dashboard: React.FC = () => {
                   Back
                 </Button>
                 <Button colorScheme="brand" onClick={() => setOrchestrateStep(3)}>
-                  Proceed
+                  Continue →
                 </Button>
               </ModalFooter>
             </>
@@ -1697,107 +1830,174 @@ const Dashboard: React.FC = () => {
           {/* STEP 2: Print Options */}
           {orchestrateStep === 2 && orchestrateMode === 'print' && (
             <>
-              <ModalHeader>Print Options</ModalHeader>
+              <ModalHeader>
+                <Flex align="center" gap={2}>
+                  🖨️ Print Options
+                </Flex>
+              </ModalHeader>
               <ModalCloseButton />
-              <ModalBody maxH="60vh" overflowY="auto">
+              <ModalBody maxH="70vh" overflowY="auto" css={{
+                '&::-webkit-scrollbar': { width: '8px' },
+                '&::-webkit-scrollbar-track': { background: 'transparent' },
+                '&::-webkit-scrollbar-thumb': { background: 'rgba(121,95,238,0.3)', borderRadius: '4px' },
+              }}>
                 <Stack spacing={6}>
-                  {/* Pages */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Pages to Print</Heading>
+                  {/* Pages to Print */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>📄 Pages to Print</Heading>
                     <RadioGroup
                       value={orchestrateOptions.printPages}
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
                     >
-                      <Stack spacing={2}>
-                        <Radio value="all">All Pages (Default)</Radio>
-                        <Radio value="odd">Odd Pages Only</Radio>
-                        <Radio value="even">Even Pages Only</Radio>
-                        <Radio value="custom">
-                          Custom Pages:
-                          <Input
-                            size="sm"
-                            ml={3}
-                            width="200px"
-                            placeholder="e.g., 1-5,7,9"
-                            isDisabled={orchestrateOptions.printPages !== 'custom'}
-                            value={orchestrateOptions.printCustomRange}
-                            onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printCustomRange: e.target.value })}
-                            mt={2}
-                          />
+                      <Stack spacing={3}>
+                        <Radio value="all" colorScheme="brand">All Pages</Radio>
+                        <Radio value="odd" colorScheme="brand">Odd Pages Only (1, 3, 5...)</Radio>
+                        <Radio value="even" colorScheme="brand">Even Pages Only (2, 4, 6...)</Radio>
+                        <Radio value="custom" colorScheme="brand">
+                          <Flex direction="column" gap={2} mt={orchestrateOptions.printPages === 'custom' ? 2 : 0}>
+                            <Text>Custom Pages</Text>
+                            {orchestrateOptions.printPages === 'custom' && (
+                              <Input
+                                size="sm"
+                                placeholder="e.g., 1-5,7,9"
+                                value={orchestrateOptions.printCustomRange}
+                                onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printCustomRange: e.target.value })}
+                                bg="whiteAlpha.100"
+                                borderColor="brand.300"
+                                _hover={{ borderColor: 'brand.400' }}
+                              />
+                            )}
+                          </Flex>
                         </Radio>
                       </Stack>
                     </RadioGroup>
                   </Box>
 
                   {/* Layout */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Layout</Heading>
-                    <RadioGroup
-                      value={orchestrateOptions.printLayout}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printLayout: value as any })}
-                    >
-                      <Stack spacing={2}>
-                        <Radio value="portrait">📄 Portrait</Radio>
-                        <Radio value="landscape">📐 Landscape</Radio>
-                      </Stack>
-                    </RadioGroup>
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>📐 Layout</Heading>
+                    <ButtonGroup isAttached width="full">
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printLayout === 'portrait' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printLayout === 'portrait' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printLayout: 'portrait' })}
+                      >
+                        📄 Portrait
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printLayout === 'landscape' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printLayout === 'landscape' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printLayout: 'landscape' })}
+                      >
+                        📐 Landscape
+                      </Button>
+                    </ButtonGroup>
                   </Box>
 
-                  {/* Paper Size - Fancy Select */}
-                  <Box>
+                  {/* Paper Size */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
                     <FancySelect
-                      label="Paper Size"
+                      label="📏 Paper Size"
                       options={[
                         { value: 'A4', label: 'A4 (210×297 mm)' },
                         { value: 'Letter', label: 'Letter (8.5×11 in)' },
                         { value: 'Legal', label: 'Legal (8.5×14 in)' },
-                        { value: 'A3', label: 'A3 (297×420 mm)' },
-                        { value: 'custom', label: '✏️ Custom Size' },
                       ]}
                       value={orchestrateOptions.printPaperSize}
                       onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })}
-                      allowCustom={true}
-                      customValue={orchestrateOptions.printPaperSizeCustom}
-                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSizeCustom: value })}
                     />
                   </Box>
 
-                  {/* Scale - Fancy Select */}
-                  <Box>
-                    <FancySelect
-                      label="Print Scale (%)"
-                      options={[
-                        { value: '50', label: '50% - Reduced' },
-                        { value: '75', label: '75% - Smaller' },
-                        { value: '100', label: '100% - Actual Size' },
-                        { value: '125', label: '125% - Larger' },
-                        { value: '150', label: '150% - Extra Large' },
-                        { value: 'custom', label: '✏️ Custom Scale' },
-                      ]}
-                      value={orchestrateOptions.printScale}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printScale: value })}
-                      allowCustom={true}
-                      customValue={orchestrateOptions.printScaleCustom}
-                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printScaleCustom: value })}
-                    />
+                  {/* Print Scale */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>🔍 Print Scale (%)</Heading>
+                    <Flex align="center" gap={3}>
+                      <Input
+                        type="number"
+                        min="25"
+                        max="400"
+                        value={orchestrateOptions.printScale}
+                        onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
+                        bg="whiteAlpha.100"
+                        borderColor="brand.300"
+                        _hover={{ borderColor: 'brand.400' }}
+                      />
+                      <Text minW="40px">%</Text>
+                    </Flex>
+                    <Text fontSize="xs" color="text.muted" mt={2}>Default: 100% (Actual Size)</Text>
                   </Box>
 
-                  {/* Margins - Fancy Select */}
-                  <Box>
-                    <FancySelect
-                      label="Margins"
-                      options={[
-                        { value: 'default', label: 'Default (1 inch)' },
-                        { value: 'narrow', label: 'Narrow (0.5 inch)' },
-                        { value: 'wide', label: 'Wide (1.5 inch)' },
-                        { value: 'custom', label: '✏️ Custom Margins' },
-                      ]}
-                      value={orchestrateOptions.printMargins}
-                      onChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printMargins: value as any })}
-                      allowCustom={true}
-                      customValue={orchestrateOptions.printMarginsCustom}
-                      onCustomChange={(value) => setOrchestrateOptions({ ...orchestrateOptions, printMarginsCustom: value })}
-                    />
+                  {/* Margins */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>📏 Margins</Heading>
+                    <ButtonGroup isAttached width="full" size="sm">
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printMargins === 'default' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printMargins === 'default' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'default' })}
+                      >
+                        Default (1")
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printMargins === 'narrow' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printMargins === 'narrow' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'narrow' })}
+                      >
+                        Narrow
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printMargins === 'none' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printMargins === 'none' ? 'brand' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'none' })}
+                      >
+                        None
+                      </Button>
+                    </ButtonGroup>
                   </Box>
 
                   {/* Pages per Sheet - Fancy Select */}
@@ -1857,12 +2057,24 @@ const Dashboard: React.FC = () => {
                   </Box>
 
                   {/* Save as Default */}
-                  <Checkbox
-                    isChecked={orchestrateOptions.saveAsDefault}
-                    onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="brand.400" 
+                    bg="rgba(121,95,238,0.1)"
+                    transition="all 0.3s"
+                    _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500' }}
                   >
-                    Save as Default Settings
-                  </Checkbox>
+                    <Checkbox
+                      size="lg"
+                      colorScheme="brand"
+                      isChecked={orchestrateOptions.saveAsDefault}
+                      onChange={(e) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                    >
+                      <Text fontWeight="600">💾 Save as Default Settings</Text>
+                    </Checkbox>
+                  </Box>
                 </Stack>
               </ModalBody>
               <ModalFooter>
@@ -1870,7 +2082,7 @@ const Dashboard: React.FC = () => {
                   Back
                 </Button>
                 <Button colorScheme="brand" onClick={() => setOrchestrateStep(3)}>
-                  Proceed
+                  Continue →
                 </Button>
               </ModalFooter>
             </>
