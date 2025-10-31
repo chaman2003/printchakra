@@ -92,7 +92,7 @@ def _init_tts_engine():
 def speak_text(text: str) -> bool:
     """
     Speak text using TTS (blocking call)
-    Uses lock to prevent concurrent calls and completely reinitializes engine
+    Tries Windows OneCore voices first (for Ravi), then falls back to SAPI5
     
     Args:
         text: Text to speak
@@ -104,21 +104,71 @@ def speak_text(text: str) -> bool:
     
     # Ensure only one TTS call at a time
     with _tts_lock:
+        # Method 1: Try C# PowerShell for OneCore Ravi
         try:
-            # Force garbage collection of any existing engines
+            temp_wav = os.path.join(tempfile.gettempdir(), f'ravi_tts_{int(time.time()*1000)}.wav')
+            
+            # Escape for PowerShell
+            safe_text = text.replace("'", "''")
+            safe_path = temp_wav.replace('\\', '/')
+            
+            ps_code = f"""
+$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
+[Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] > $null
+$synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
+
+$ravi = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
+if (-not $ravi) {{ Write-Output 'NO_RAVI'; exit 1 }}
+
+$synth.Voice = $ravi
+$task = $synth.SynthesizeTextToStreamAsync('{safe_text}')
+
+$task.AsTask().Wait()
+$stream = $task.GetResults()
+
+$fs = [IO.File]::Create('{safe_path}')
+$stream.AsStreamForRead().CopyTo($fs)
+$fs.Close()
+$stream.Dispose()
+$synth.Dispose()
+
+Write-Output 'SUCCESS'
+"""
+            
+            result = subprocess.run(
+                ['powershell', '-NoProfile', '-Command', ps_code],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            )
+            
+            if 'SUCCESS' in result.stdout and os.path.exists(temp_wav) and os.path.getsize(temp_wav) > 0:
+                try:
+                    import winsound
+                    winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
+                    return True
+                finally:
+                    try:
+                        os.remove(temp_wav)
+                    except:
+                        pass
+            
+        except Exception as e:
+            pass  # Silently fail to fallback
+        
+        # Method 2 Fallback: pyttsx3 with SAPI5 (David/Zira)
+        try:
             import gc
             gc.collect()
             
-            # Create a completely new engine with explicit driver
             import pyttsx3
-            # Use 'sapi5' driver explicitly for Windows
             engine = pyttsx3.init('sapi5', debug=False)
             
-            # Configure voice - Try Ravi first, fallback to David, then any available
             voices = engine.getProperty('voices')
             selected_voice = None
             
-            # Priority order: Ravi > David > Zira > Any available
             voice_preferences = ['ravi', 'david', 'zira']
             
             for preference in voice_preferences:
@@ -129,31 +179,26 @@ def speak_text(text: str) -> bool:
                 if selected_voice:
                     break
             
-            # If no preferred voice found, use first available
             if not selected_voice and voices:
                 selected_voice = voices[0]
             
             if selected_voice:
                 engine.setProperty('voice', selected_voice.id)
             
-            engine.setProperty('rate', 220)  # Increased from 200 for faster speech
+            engine.setProperty('rate', 220)
             engine.setProperty('volume', 0.9)
             
-            # Don't log every speech operation - only for debugging if needed
-            # logger.info(f"🔊 Speaking: {text[:50]}...")
             engine.say(text)
             engine.runAndWait()
             
-            # Critical: Stop and delete engine completely
             try:
                 engine.stop()
             except:
                 pass
             
             del engine
-            gc.collect()  # Force cleanup
+            gc.collect()
             
-            # logger.info("✅ Speech completed")
             return True
             
         except Exception as e:
