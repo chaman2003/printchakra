@@ -65,13 +65,13 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   
   // Calculate responsive paper dimensions
   const getPaperDimensions = () => {
-    const baseWidth = isLandscape ? 600 : 450;
-    const baseHeight = isLandscape ? 450 : 600;
+    const baseWidth = isLandscape ? 420 : 320;
+    const baseHeight = isLandscape ? 320 : 440;
     const scale = (zoomLevel / 100) * (previewSettings?.scale || 100) / 100;
     
     return {
-      width: Math.min(baseWidth * scale, 800),
-      height: Math.min(baseHeight * scale, 1000),
+      width: Math.min(baseWidth * scale, 500),
+      height: Math.min(baseHeight * scale, 650),
     };
   };
 
@@ -107,17 +107,17 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         align="center" 
         justify="center" 
         h="100%" 
-        minH={{ base: '400px', md: '500px', lg: '600px' }}
+        minH={{ base: '350px', md: '450px', lg: '500px' }}
         bg={bgColor} 
         borderRadius="lg" 
         border="1px solid" 
         borderColor={borderColor}
-        p={{ base: 4, md: 8 }}
+        p={{ base: 4, md: 6 }}
         position="relative"
       >
         <Box
-          width={{ base: '280px', md: '350px', lg: '400px' }}
-          height={{ base: '380px', md: '480px', lg: '550px' }}
+          width={{ base: '220px', md: '280px', lg: '320px' }}
+          height={{ base: '300px', md: '380px', lg: '440px' }}
           bg={paperBg}
           borderRadius="sm"
           boxShadow="0 4px 16px rgba(0,0,0,0.1)"
@@ -127,18 +127,18 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           border="1px solid"
           borderColor="gray.200"
         >
-          <VStack spacing={4}>
-            <Iconify icon="solar:document-bold" width={64} height={64} color="gray.300" />
-            <Text fontSize={{ base: 'md', md: 'lg' }} fontWeight="500" color="gray.500">
+          <VStack spacing={3}>
+            <Iconify icon="solar:document-bold" width={48} height={48} color="gray.300" />
+            <Text fontSize={{ base: 'sm', md: 'md' }} fontWeight="500" color="gray.500">
               No Document Selected
             </Text>
-            <Text fontSize="sm" color="gray.400" textAlign="center" maxW="260px">
+            <Text fontSize="xs" color="gray.400" textAlign="center" maxW="220px">
               Select a document to see preview
             </Text>
           </VStack>
         </Box>
         
-        <Text mt={6} fontSize="sm" color="text.muted" fontWeight="500">
+        <Text mt={4} fontSize="xs" color="text.muted" fontWeight="500">
           Ready to preview
         </Text>
       </Flex>

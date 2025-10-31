@@ -1515,7 +1515,7 @@ const Dashboard: React.FC = () => {
       <Modal 
         isOpen={orchestrateModal.isOpen} 
         onClose={orchestrateModal.onClose} 
-        size="full" 
+        size="6xl" 
         isCentered
         scrollBehavior="inside"
       >
@@ -1529,8 +1529,7 @@ const Dashboard: React.FC = () => {
           border="1px solid" 
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
-          maxH={{ base: '96vh', md: '95vh' }}
-          maxW={{ base: '98vw', md: '96vw', lg: '95vw' }}
+          maxH="90vh"
           mx={{ base: 2, md: 4 }}
           my={{ base: 2, md: 4 }}
         >
@@ -1713,13 +1712,13 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                py={{ base: 4, md: 6 }}
-                px={{ base: 4, md: 6, lg: 8 }}
+                py={{ base: 4, md: 5 }}
+                px={{ base: 4, md: 6 }}
                 overflow="hidden"
               >
                 <Grid 
-                  templateColumns={{ base: '1fr', lg: '1fr minmax(340px, 420px)' }} 
-                  gap={{ base: 4, lg: 6 }} 
+                  templateColumns={{ base: '1fr', lg: '480px 1fr' }} 
+                  gap={{ base: 4, md: 5 }} 
                   h="full" 
                   alignItems="start"
                 >
@@ -1729,8 +1728,8 @@ const Dashboard: React.FC = () => {
                     flexDirection="column"
                     position="sticky" 
                     top="0" 
-                    h="calc(95vh - 200px)"
-                    minH="500px"
+                    h="calc(90vh - 180px)"
+                    maxH="650px"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -1749,9 +1748,9 @@ const Dashboard: React.FC = () => {
 
                   {/* Options Panel (RIGHT SIDE) */}
                   <Stack 
-                    spacing={4} 
+                    spacing={3} 
                     overflowY="auto" 
-                    maxH="calc(95vh - 200px)"
+                    maxH="calc(90vh - 180px)"
                     pr={{ base: 0, md: 2 }}
                     order={{ base: 1, lg: 2 }}
                     css={{
@@ -2121,13 +2120,13 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                py={{ base: 4, md: 6 }}
-                px={{ base: 4, md: 6, lg: 8 }}
+                py={{ base: 4, md: 5 }}
+                px={{ base: 4, md: 6 }}
                 overflow="hidden"
               >
                 <Grid 
-                  templateColumns={{ base: '1fr', lg: '1fr minmax(340px, 420px)' }} 
-                  gap={{ base: 4, lg: 6 }} 
+                  templateColumns={{ base: '1fr', lg: '480px 1fr' }} 
+                  gap={{ base: 4, md: 5 }} 
                   h="full" 
                   alignItems="start"
                 >
@@ -2137,8 +2136,8 @@ const Dashboard: React.FC = () => {
                     flexDirection="column"
                     position="sticky" 
                     top="0" 
-                    h="calc(95vh - 200px)"
-                    minH="500px"
+                    h="calc(90vh - 180px)"
+                    maxH="650px"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -2157,9 +2156,9 @@ const Dashboard: React.FC = () => {
 
                   {/* Options Panel (RIGHT SIDE) */}
                   <Stack 
-                    spacing={4}
+                    spacing={3}
                     overflowY="auto" 
-                    maxH="calc(95vh - 200px)"
+                    maxH="calc(90vh - 180px)"
                     pr={{ base: 0, md: 2 }}
                     order={{ base: 1, lg: 2 }}
                     css={{
