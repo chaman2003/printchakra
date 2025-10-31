@@ -1713,22 +1713,22 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                py={{ base: 4, md: 5 }}
+                py={{ base: 3, md: 4 }}
                 px={{ base: 4, md: 6 }}
-                maxH="calc(85vh - 200px)"
-                overflowY="auto"
+                h="calc(85vh - 160px)"
+                overflow="hidden"
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
-                  gap={{ base: 4, md: 6 }} 
+                  gap={{ base: 4, md: 5 }} 
+                  h="100%"
                   alignItems="start"
                 >
                   {/* Live Preview - Scan Mode (LEFT SIDE) */}
                   <Box 
                     display={{ base: 'none', lg: 'flex' }} 
                     flexDirection="column"
-                    h="calc(85vh - 240px)"
-                    minH="450px"
+                    h="100%"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -2106,22 +2106,22 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                py={{ base: 4, md: 5 }}
+                py={{ base: 3, md: 4 }}
                 px={{ base: 4, md: 6 }}
-                maxH="calc(85vh - 200px)"
-                overflowY="auto"
+                h="calc(85vh - 160px)"
+                overflow="hidden"
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
-                  gap={{ base: 4, md: 6 }} 
+                  gap={{ base: 4, md: 5 }} 
+                  h="100%"
                   alignItems="start"
                 >
                   {/* Live Preview - Print Mode (LEFT SIDE) */}
                   <Box 
                     display={{ base: 'none', lg: 'flex' }} 
                     flexDirection="column"
-                    h="calc(85vh - 240px)"
-                    minH="450px"
+                    h="100%"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
