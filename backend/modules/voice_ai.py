@@ -23,9 +23,11 @@ _tts_engine = None
 _tts_lock = threading.Lock()  # Prevent concurrent TTS calls
 TTS_AVAILABLE = False
 
+_tts_initialized_once = False  # Track if we've logged TTS init
+
 def _init_tts_engine():
     """Initialize TTS engine (called lazily on first use)"""
-    global _tts_engine, TTS_AVAILABLE
+    global _tts_engine, TTS_AVAILABLE, _tts_initialized_once
     
     if _tts_engine is not None:
         return True
@@ -41,23 +43,30 @@ def _init_tts_engine():
         for voice in voices:
             if 'david' in voice.name.lower() and 'desktop' in voice.name.lower():
                 david_voice = voice
-                logger.info(f"✅ Found preferred voice: {voice.name}")
+                if not _tts_initialized_once:
+                    logger.info(f"✅ Found preferred voice: {voice.name}")
                 break
         
         if david_voice:
             engine.setProperty('voice', david_voice.id)
         elif voices:
             engine.setProperty('voice', voices[0].id)
-            logger.info(f"✅ Using available voice: {voices[0].name}")
+            if not _tts_initialized_once:
+                logger.info(f"✅ Using available voice: {voices[0].name}")
         
         engine.setProperty('rate', 200)
         engine.setProperty('volume', 0.9)
         
         _tts_engine = engine
         TTS_AVAILABLE = True
-        logger.info("✅ Text-to-Speech initialized successfully")
-        logger.info(f"   Engine: Windows SAPI (pyttsx3)")
-        logger.info(f"   Mode: Offline & Lightweight")
+        
+        # Only log initialization details once at startup
+        if not _tts_initialized_once:
+            logger.info("✅ Text-to-Speech initialized successfully")
+            logger.info(f"   Engine: Windows SAPI (pyttsx3)")
+            logger.info(f"   Mode: Offline & Lightweight")
+            _tts_initialized_once = True
+        
         return True
         
     except Exception as e:
@@ -110,7 +119,8 @@ def speak_text(text: str) -> bool:
             engine.setProperty('rate', 220)  # Increased from 200 for faster speech
             engine.setProperty('volume', 0.9)
             
-            logger.info(f"🔊 Speaking: {text[:50]}...")
+            # Don't log every speech operation - only for debugging if needed
+            # logger.info(f"🔊 Speaking: {text[:50]}...")
             engine.say(text)
             engine.runAndWait()
             
@@ -123,7 +133,7 @@ def speak_text(text: str) -> bool:
             del engine
             gc.collect()  # Force cleanup
             
-            logger.info("✅ Speech completed")
+            # logger.info("✅ Speech completed")
             return True
             
         except Exception as e:
@@ -156,11 +166,14 @@ class WhisperTranscriptionService:
         """Try to load using whisper.cpp (if available)"""
         try:
             import whisper_cpp_python  # type: ignore
-            logger.info(f"Loading GGML model with whisper.cpp: {self.model_path}")
+            if not self.is_loaded:  # Only log on first load
+                logger.info(f"Loading GGML model with whisper.cpp: {self.model_path}")
             self.model = whisper_cpp_python.Whisper(self.model_path)
             self.is_loaded = True
             self.use_whisper_cpp = True
-            logger.info("✅ Whisper GGML model loaded successfully with whisper.cpp")
+            if not hasattr(self, '_logged_load'):  # Only log once
+                logger.info("✅ Whisper GGML model loaded successfully with whisper.cpp")
+                self._logged_load = True
             return True
         except Exception as e:
             logger.debug(f"whisper.cpp not available: {e}")
@@ -174,21 +187,26 @@ class WhisperTranscriptionService:
             
             # Check GPU availability
             if torch.cuda.is_available():
-                logger.info(f"✅ GPU detected: {torch.cuda.get_device_name(0)}")
-                logger.info(f"   CUDA Version: {torch.version.cuda}")
+                if not hasattr(self, '_logged_load'):  # Only log once
+                    logger.info(f"✅ GPU detected: {torch.cuda.get_device_name(0)}")
+                    logger.info(f"   CUDA Version: {torch.version.cuda}")
                 device = 'cuda'
             else:
-                logger.warning("⚠️ GPU not available, using CPU")
+                if not hasattr(self, '_logged_load'):  # Only log once
+                    logger.warning("⚠️ GPU not available, using CPU")
                 device = 'cpu'
             
             # Use base model for fastest transcription (244MB, 4x faster than large-v3-turbo)
-            logger.info(f"Loading openai-whisper base model on {device.upper()}")
+            if not hasattr(self, '_logged_load'):  # Only log once
+                logger.info(f"Loading openai-whisper base model on {device.upper()}")
             self.model = whisper.load_model("base", device=device)
             self.is_loaded = True
             self.use_whisper_cpp = False
             self.device = device
-            logger.info(f"✅ Whisper base model loaded successfully on {device.upper()}")
-            logger.info(f"   Model optimized for speed (244MB, ~4x faster)")
+            if not hasattr(self, '_logged_load'):  # Only log once
+                logger.info(f"✅ Whisper base model loaded successfully on {device.upper()}")
+                logger.info(f"   Model optimized for speed (244MB, ~4x faster)")
+                self._logged_load = True
             return True
         except Exception as e:
             logger.error(f"❌ Failed to load base model: {str(e)}")
@@ -210,8 +228,10 @@ class WhisperTranscriptionService:
                 self.is_loaded = True
                 self.use_whisper_cpp = False
                 self.device = device
-                logger.info(f"✅ Whisper tiny model loaded successfully on {device.upper()}")
-                logger.info(f"   Model optimized for maximum speed (75MB)")
+                if not hasattr(self, '_logged_load'):  # Only log once
+                    logger.info(f"✅ Whisper tiny model loaded successfully on {device.upper()}")
+                    logger.info(f"   Model optimized for maximum speed (75MB)")
+                    self._logged_load = True
                 return True
             except Exception as fallback_error:
                 logger.error(f"❌ Failed to load fallback model: {str(fallback_error)}")
@@ -299,7 +319,7 @@ class WhisperTranscriptionService:
                 temp_audio.write(audio_data)
                 temp_audio_path = temp_audio.name
             
-            logger.info(f"Created temp audio file: {temp_audio_path}")
+            # logger.info(f"Created temp audio file: {temp_audio_path}")
             
             # Verify file was created and has content
             if not os.path.exists(temp_audio_path):
@@ -310,7 +330,7 @@ class WhisperTranscriptionService:
                 }
             
             file_size = os.path.getsize(temp_audio_path)
-            logger.info(f"Temporary audio file size: {file_size} bytes")
+            # logger.info(f"Temporary audio file size: {file_size} bytes")
             
             # Verify file is not corrupted by checking RIFF structure
             with open(temp_audio_path, 'rb') as f:
@@ -326,7 +346,7 @@ class WhisperTranscriptionService:
                     }
             
             # Transcribe based on model type
-            logger.info(f"Transcribing audio file: {temp_audio_path} with {'whisper.cpp' if self.use_whisper_cpp else 'openai-whisper'}")
+            # logger.info(f"Transcribing audio file: {temp_audio_path} with {'whisper.cpp' if self.use_whisper_cpp else 'openai-whisper'}")
             
             try:
                 if self.use_whisper_cpp:
@@ -372,7 +392,7 @@ class WhisperTranscriptionService:
                 except:
                     logger.debug(f"Could not delete temp file: {temp_audio_path}")
             
-            logger.info(f"✅ Transcription: {text[:100]}...")
+            # logger.info(f"✅ Transcription: {text[:100]}...")
             
             return {
                 'success': True,
@@ -447,12 +467,17 @@ Be natural and conversational!"""
                 model_names = [m.get('name', '') for m in models]
                 # Check if smollm2 or any smollm2 variant is available
                 has_model = any('smollm2' in name.lower() for name in model_names)
-                logger.info(f"Ollama available: {has_model}")
-                logger.info(f"Available models: {model_names}")
+                # Only log once at startup
+                if not hasattr(self, '_logged_ollama_check'):
+                    logger.info(f"Ollama available: {has_model}")
+                    logger.info(f"Available models: {model_names}")
+                    self._logged_ollama_check = True
                 return has_model
             return False
         except Exception as e:
-            logger.error(f"Ollama check failed: {str(e)}")
+            if not hasattr(self, '_logged_ollama_error'):
+                logger.error(f"Ollama check failed: {str(e)}")
+                self._logged_ollama_error = True
             return False
     
     def generate_response(self, user_message: str) -> Dict[str, Any]:
@@ -481,7 +506,7 @@ Be natural and conversational!"""
             ] + self.conversation_history
             
             # Call Ollama API with speed optimizations
-            logger.info(f"Generating response for: {user_message[:100]}...")
+            # logger.info(f"Generating response for: {user_message[:100]}...")
             response = requests.post(
                 'http://localhost:11434/api/chat',
                 json={
@@ -544,7 +569,7 @@ Be natural and conversational!"""
                 if len(self.conversation_history) > 16:
                     self.conversation_history = self.conversation_history[-16:]
                 
-                logger.info(f"✅ AI Response ({len(words)} words): {ai_response}")
+                # logger.info(f"✅ AI Response ({len(words)} words): {ai_response}")
                 
                 # Return response FIRST (so frontend displays it immediately)
                 # TTS will be triggered separately by frontend
@@ -617,7 +642,7 @@ class VoiceAIOrchestrator:
             self.chat_service.reset_conversation()
             self.session_active = True
             
-            logger.info("✅ Voice AI session started")
+            # logger.info("✅ Voice AI session started")
             return {
                 'success': True,
                 'message': 'Voice AI session started',
@@ -671,7 +696,7 @@ class VoiceAIOrchestrator:
                     'requires_keyword': True
                 }
             
-            logger.info(f"📝 Transcribed text: {user_text}")
+            # logger.info(f"📝 Transcribed text: {user_text}")
             
             # Check for exit keyword
             if 'bye printchakra' in user_text.lower():
@@ -684,45 +709,14 @@ class VoiceAIOrchestrator:
                     'requires_keyword': False
                 }
             
-            # Step 2: Check for "hey" keyword to trigger AI processing
-            user_text_lower = user_text.lower()
-            if 'hey' not in user_text_lower:
-                logger.info(f"⏭️ Skipping processing - 'hey' keyword not detected in: {user_text}")
-                return {
-                    'success': False,
-                    'user_text': user_text,
-                    'stage': 'keyword_detection',
-                    'requires_keyword': True,
-                    'skipped': True,
-                    'silent': True  # Don't show error message to user
-                }
-            
-            # Extract text after "hey" keyword
-            hey_index = user_text_lower.find('hey')
-            # Get text after "hey" and any following word (usually the command starts after)
-            remaining_text = user_text[hey_index + 3:].strip()
-            
-            if not remaining_text:
-                logger.info(f"⏭️ Only 'hey' keyword found, no command following")
-                return {
-                    'success': False,
-                    'user_text': user_text,
-                    'stage': 'keyword_detection',
-                    'requires_keyword': True,
-                    'skipped': True,
-                    'silent': True  # Don't show error message to user
-                }
-            
-            logger.info(f"✅ 'hey' keyword detected! Processing command: {remaining_text}")
-            
-            # Step 3: Generate AI response for the command after "hey"
-            chat_response = self.chat_service.generate_response(remaining_text)
+            # Step 2: Generate AI response directly (no keyword required)
+            chat_response = self.chat_service.generate_response(user_text)
             
             if not chat_response.get('success'):
                 return {
                     'success': False,
                     'error': f"Chat generation failed: {chat_response.get('error')}",
-                    'user_text': remaining_text,
+                    'user_text': user_text,
                     'stage': 'chat',
                     'requires_keyword': False
                 }
@@ -731,14 +725,12 @@ class VoiceAIOrchestrator:
             
             return {
                 'success': True,
-                'user_text': remaining_text,  # Only the command part
-                'full_text': user_text,  # Full text including "hey"
+                'user_text': user_text,
                 'ai_response': ai_response,
                 'transcription_language': transcription.get('language'),
                 'model': chat_response.get('model'),
                 'session_ended': False,
-                'requires_keyword': False,
-                'keyword_detected': True
+                'requires_keyword': False
             }
             
         except Exception as e:
@@ -774,11 +766,11 @@ class VoiceAIOrchestrator:
                     'error': 'TTS not available'
                 }
             
-            logger.info("🔊 Starting TTS (blocking)...")
+            # logger.info("🔊 Starting TTS (blocking)...")
             speak_success = speak_text(text)
             
             if speak_success:
-                logger.info("✅ TTS completed successfully")
+                # logger.info("✅ TTS completed successfully")
                 return {
                     'success': True,
                     'spoken': True

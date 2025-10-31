@@ -51,6 +51,8 @@ import Iconify from '../components/Iconify';
 import FancySelect from '../components/FancySelect';
 import VoiceAIChat from '../components/VoiceAIChat';
 import ConnectionValidator from '../components/ConnectionValidator';
+import DocumentSelector from '../components/DocumentSelector';
+import DocumentPreview from '../components/DocumentPreview';
 
 interface FileInfo {
   filename: string;
@@ -258,6 +260,10 @@ const Dashboard: React.FC = () => {
   const convertedDrawer = useDisclosure();
   const orchestrateModal = useDisclosure();
   const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
+  const documentSelectorModal = useDisclosure(); // Document selector modal
+  
+  // Selected documents for orchestrate modal
+  const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
 
   // Load saved defaults from localStorage on mount
   useEffect(() => {
@@ -1509,7 +1515,7 @@ const Dashboard: React.FC = () => {
       <Modal 
         isOpen={orchestrateModal.isOpen} 
         onClose={orchestrateModal.onClose} 
-        size="6xl" 
+        size="full" 
         isCentered
         scrollBehavior="inside"
       >
@@ -1519,12 +1525,14 @@ const Dashboard: React.FC = () => {
         />
         <ModalContent 
           bg={surfaceCard} 
-          borderRadius="3xl" 
+          borderRadius={{ base: 'xl', md: '2xl', lg: '3xl' }}
           border="1px solid" 
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
-          maxH="90vh"
-          mx={4}
+          maxH={{ base: '96vh', md: '95vh' }}
+          maxW={{ base: '98vw', md: '96vw', lg: '95vw' }}
+          mx={{ base: 2, md: 4 }}
+          my={{ base: 2, md: 4 }}
         >
           {/* STEP 1: Choose Mode */}
           {orchestrateStep === 1 && (
@@ -1705,27 +1713,81 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                maxH="65vh" 
-                overflowY="auto" 
-                py={8}
-                px={10}
-                css={{
-                  '&::-webkit-scrollbar': { width: '10px' },
-                  '&::-webkit-scrollbar-track': { background: 'transparent' },
-                  '&::-webkit-scrollbar-thumb': { 
-                    background: 'rgba(121,95,238,0.4)', 
-                    borderRadius: '10px',
-                    border: '2px solid transparent',
-                    backgroundClip: 'padding-box'
-                  },
-                  '&::-webkit-scrollbar-thumb:hover': { 
-                    background: 'rgba(121,95,238,0.6)',
-                    backgroundClip: 'padding-box'
-                  },
-                }}
+                py={{ base: 4, md: 6 }}
+                px={{ base: 4, md: 6, lg: 8 }}
+                overflow="hidden"
               >
-                <Grid templateColumns={{ base: '1fr', lg: '1fr 320px' }} gap={8}>
-                  <Stack spacing={5}>
+                <Grid 
+                  templateColumns={{ base: '1fr', lg: '1fr minmax(340px, 420px)' }} 
+                  gap={{ base: 4, lg: 6 }} 
+                  h="full" 
+                  alignItems="start"
+                >
+                  {/* Live Preview - Scan Mode (LEFT SIDE) */}
+                  <Box 
+                    display={{ base: 'none', lg: 'flex' }} 
+                    flexDirection="column"
+                    position="sticky" 
+                    top="0" 
+                    h="calc(95vh - 200px)"
+                    minH="500px"
+                    overflow="hidden"
+                    order={{ base: 2, lg: 1 }}
+                  >
+                    <DocumentPreview
+                      documents={selectedDocuments.length > 0 ? selectedDocuments.map(doc => ({
+                        filename: doc.filename,
+                        thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                      })) : []}
+                      previewSettings={{
+                        layout: orchestrateOptions.scanLayout,
+                        paperSize: orchestrateOptions.scanPaperSize,
+                        colorMode: orchestrateOptions.scanColorMode,
+                      }}
+                    />
+                  </Box>
+
+                  {/* Options Panel (RIGHT SIDE) */}
+                  <Stack 
+                    spacing={4} 
+                    overflowY="auto" 
+                    maxH="calc(95vh - 200px)"
+                    pr={{ base: 0, md: 2 }}
+                    order={{ base: 1, lg: 2 }}
+                    css={{
+                      '&::-webkit-scrollbar': { width: '6px' },
+                      '&::-webkit-scrollbar-track': { background: 'transparent' },
+                      '&::-webkit-scrollbar-thumb': { 
+                        background: 'rgba(121,95,238,0.4)', 
+                        borderRadius: '10px',
+                      },
+                      '&::-webkit-scrollbar-thumb:hover': { 
+                        background: 'rgba(121,95,238,0.6)',
+                      },
+                    }}
+                  >
+                  {/* Select Document Button */}
+                  <Button
+                    size="lg"
+                    colorScheme="brand"
+                    variant="solid"
+                    leftIcon={<Iconify icon="solar:document-add-bold-duotone" width={20} height={20} />}
+                    onClick={documentSelectorModal.onOpen}
+                    w="full"
+                    py={6}
+                    fontSize="md"
+                    fontWeight="600"
+                    _hover={{
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
+                    }}
+                    transition="all 0.3s"
+                  >
+                    {selectedDocuments.length > 0
+                      ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected`
+                      : 'Select Document to Scan'}
+                  </Button>
+
                   {/* Select Page Scan Mode */}
                   <Box 
                     p={5} 
@@ -1786,16 +1848,16 @@ const Dashboard: React.FC = () => {
 
                   {/* Page Selection */}
                   <Box 
-                    p={5} 
-                    borderRadius="xl" 
-                    border="2px solid" 
+                    p={{ base: 4, md: 4 }}
+                    borderRadius="lg" 
+                    border="1px solid" 
                     borderColor="whiteAlpha.200" 
                     bg="whiteAlpha.50"
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400', boxShadow: 'md' }}
                   >
-                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:documents-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
+                    <Heading size="sm" mb={3} display="flex" alignItems="center" gap={2}>
+                      <Iconify icon="solar:documents-bold-duotone" width={20} height={20} color="var(--chakra-colors-brand-500)" />
                       Page Selection
                     </Heading>
                     <RadioGroup
@@ -2006,93 +2068,6 @@ const Dashboard: React.FC = () => {
                     </Text>
                   </Box>
                 </Stack>
-
-                {/* Live Preview - Scan Mode */}
-                <Box display={{ base: 'none', lg: 'block' }}>
-                  <Box
-                    p={8}
-                    bg="linear-gradient(145deg, rgba(121,95,238,0.08) 0%, rgba(69,202,255,0.08) 100%)"
-                    borderRadius="2xl"
-                    border="2px solid"
-                    borderColor="brand.300"
-                    display="flex"
-                    flexDirection="column"
-                    alignItems="center"
-                    justifyContent="center"
-                    minH="500px"
-                    position="sticky"
-                    top="20px"
-                    boxShadow="0 12px 35px rgba(121,95,238,0.25)"
-                  >
-                    <VStack spacing={4} mb={6}>
-                      <HStack spacing={2}>
-                        <Iconify icon="solar:eye-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-400)" />
-                        <Text fontSize="lg" fontWeight="700" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">
-                          Live Preview
-                        </Text>
-                      </HStack>
-                      <VStack spacing={1}>
-                        <Text fontSize="sm" fontWeight="600" color="text.muted">
-                          {orchestrateOptions.scanPaperSize} Paper
-                        </Text>
-                        <Text fontSize="xs" color="whiteAlpha.600">
-                          {orchestrateOptions.scanLayout} • {orchestrateOptions.scanResolution} DPI
-                        </Text>
-                      </VStack>
-                    </VStack>
-
-                    <Box
-                      position="relative"
-                      bg="white"
-                      boxShadow="0 15px 45px rgba(0, 0, 0, 0.5)"
-                      borderRadius="lg"
-                      transition="all 0.4s ease"
-                      w={orchestrateOptions.scanLayout === 'landscape' ? '280px' : '200px'}
-                      h={orchestrateOptions.scanLayout === 'landscape' ? '200px' : '280px'}
-                      border="4px solid"
-                      borderColor="whiteAlpha.300"
-                    >
-                      <Box
-                        position="absolute"
-                        top="16px"
-                        left="16px"
-                        right="16px"
-                        bottom="16px"
-                        bg="linear-gradient(135deg, rgba(121,95,238,0.15), rgba(69,202,255,0.15))"
-                        borderRadius="md"
-                        border="2px dashed"
-                        borderColor="brand.400"
-                        display="flex"
-                        flexDirection="column"
-                        alignItems="center"
-                        justifyContent="center"
-                        gap={2}
-                      >
-                        <Iconify icon="solar:document-add-bold-duotone" width={32} height={32} color="gray.400" />
-                        <Text fontSize="xs" color="gray.600" fontWeight="600">
-                          Scan Area
-                        </Text>
-                      </Box>
-                    </Box>
-
-                    <VStack spacing={2} mt={6} fontSize="sm" color="text.muted" w="full" px={4}>
-                      <HStack justify="space-between" w="full" px={3} py={2} bg="whiteAlpha.100" borderRadius="lg">
-                        <Text fontWeight="600">Mode:</Text>
-                        <Badge colorScheme="purple">{orchestrateOptions.scanMode}</Badge>
-                      </HStack>
-                      <HStack justify="space-between" w="full" px={3} py={2} bg="whiteAlpha.100" borderRadius="lg">
-                        <Text fontWeight="600">Color:</Text>
-                        <Badge colorScheme="cyan">{orchestrateOptions.scanColorMode}</Badge>
-                      </HStack>
-                      {orchestrateOptions.scanTextMode && (
-                        <HStack justify="space-between" w="full" px={3} py={2} bg="green.100" borderRadius="lg">
-                          <Iconify icon="solar:check-circle-bold" width={16} height={16} color="green.600" />
-                          <Text fontWeight="600" color="green.700">OCR Enabled</Text>
-                        </HStack>
-                      )}
-                    </VStack>
-                  </Box>
-                </Box>
               </Grid>
               </ModalBody>
               <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
@@ -2146,27 +2121,81 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                maxH="65vh" 
-                overflowY="auto" 
-                py={8}
-                px={10}
-                css={{
-                  '&::-webkit-scrollbar': { width: '10px' },
-                  '&::-webkit-scrollbar-track': { background: 'transparent' },
-                  '&::-webkit-scrollbar-thumb': { 
-                    background: 'rgba(69,202,255,0.4)', 
-                    borderRadius: '10px',
-                    border: '2px solid transparent',
-                    backgroundClip: 'padding-box'
-                  },
-                  '&::-webkit-scrollbar-thumb:hover': { 
-                    background: 'rgba(69,202,255,0.6)',
-                    backgroundClip: 'padding-box'
-                  },
-                }}
+                py={{ base: 4, md: 6 }}
+                px={{ base: 4, md: 6, lg: 8 }}
+                overflow="hidden"
               >
-                <Grid templateColumns={{ base: '1fr', lg: '1fr 320px' }} gap={8}>
-                  <Stack spacing={5}>
+                <Grid 
+                  templateColumns={{ base: '1fr', lg: '1fr minmax(340px, 420px)' }} 
+                  gap={{ base: 4, lg: 6 }} 
+                  h="full" 
+                  alignItems="start"
+                >
+                  {/* Live Preview - Print Mode (LEFT SIDE) */}
+                  <Box 
+                    display={{ base: 'none', lg: 'flex' }} 
+                    flexDirection="column"
+                    position="sticky" 
+                    top="0" 
+                    h="calc(95vh - 200px)"
+                    minH="500px"
+                    overflow="hidden"
+                    order={{ base: 2, lg: 1 }}
+                  >
+                    <DocumentPreview
+                      documents={selectedDocuments.length > 0 ? selectedDocuments.map(doc => ({
+                        filename: doc.filename,
+                        thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                      })) : []}
+                      previewSettings={{
+                        layout: orchestrateOptions.printLayout,
+                        scale: parseInt(orchestrateOptions.printScale),
+                        paperSize: orchestrateOptions.printPaperSize,
+                      }}
+                    />
+                  </Box>
+
+                  {/* Options Panel (RIGHT SIDE) */}
+                  <Stack 
+                    spacing={4}
+                    overflowY="auto" 
+                    maxH="calc(95vh - 200px)"
+                    pr={{ base: 0, md: 2 }}
+                    order={{ base: 1, lg: 2 }}
+                    css={{
+                      '&::-webkit-scrollbar': { width: '6px' },
+                      '&::-webkit-scrollbar-track': { background: 'transparent' },
+                      '&::-webkit-scrollbar-thumb': { 
+                        background: 'rgba(69,202,255,0.4)', 
+                        borderRadius: '10px',
+                      },
+                      '&::-webkit-scrollbar-thumb:hover': { 
+                        background: 'rgba(69,202,255,0.6)',
+                      },
+                    }}
+                  >
+                  {/* Select Document Button */}
+                  <Button
+                    size="lg"
+                    colorScheme="nebula"
+                    variant="solid"
+                    leftIcon={<Iconify icon="solar:printer-bold-duotone" width={20} height={20} />}
+                    onClick={documentSelectorModal.onOpen}
+                    w="full"
+                    py={6}
+                    fontSize="md"
+                    fontWeight="600"
+                    _hover={{
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 8px 20px rgba(69,202,255,0.3)',
+                    }}
+                    transition="all 0.3s"
+                  >
+                    {selectedDocuments.length > 0
+                      ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected for Print`
+                      : 'Select Documents to Print'}
+                  </Button>
+
                   {/* Pages to Print */}
                   <Box 
                     p={5} 
@@ -2404,113 +2433,6 @@ const Dashboard: React.FC = () => {
                     </Checkbox>
                   </Box>
                 </Stack>
-
-                {/* Live Preview - Print Mode */}
-                <Box display={{ base: 'none', lg: 'block' }}>
-                  <Box
-                    p={6}
-                    bg="rgba(255, 255, 255, 0.05)"
-                    borderRadius="xl"
-                    border="1px solid"
-                    borderColor="whiteAlpha.200"
-                    display="flex"
-                    flexDirection="column"
-                    alignItems="center"
-                    justifyContent="center"
-                    minH="400px"
-                    position="sticky"
-                    top="20px"
-                  >
-                    <VStack spacing={3} mb={4}>
-                      <Text fontSize="sm" fontWeight="600" color="cyan.300">Live Preview</Text>
-                      <Text fontSize="xs" color="whiteAlpha.600">
-                        {orchestrateOptions.printPaperSize} • {orchestrateOptions.printLayout} • {orchestrateOptions.printScale}% Scale
-                      </Text>
-                    </VStack>
-
-                    {(() => {
-                      const getPreviewDimensions = () => {
-                        const paperSizes: { [key: string]: { width: number; height: number } } = {
-                          'A4': { width: 210, height: 297 },
-                          'Letter': { width: 216, height: 279 },
-                          'Legal': { width: 216, height: 356 },
-                        };
-
-                        const size = paperSizes[orchestrateOptions.printPaperSize] || paperSizes['A4'];
-                        const isLandscape = orchestrateOptions.printLayout === 'landscape';
-                        const scale = parseInt(orchestrateOptions.printScale) / 100;
-
-                        const baseWidth = 200;
-                        const aspectRatio = isLandscape ? size.width / size.height : size.height / size.width;
-
-                        return {
-                          width: baseWidth * scale,
-                          height: baseWidth * aspectRatio * scale,
-                          isLandscape,
-                        };
-                      };
-
-                      const getMarginValues = (margins: string) => {
-                        switch (margins) {
-                          case 'narrow': return '8px';
-                          case 'none': return '0px';
-                          default: return '16px';
-                        }
-                      };
-
-                      const preview = getPreviewDimensions();
-                      const marginValue = getMarginValues(orchestrateOptions.printMargins);
-
-                      return (
-                        <Box
-                          position="relative"
-                          bg="white"
-                          boxShadow="0 8px 32px rgba(0, 0, 0, 0.4)"
-                          borderRadius="md"
-                          transition="all 0.3s ease"
-                          style={{
-                            width: `${preview.width}px`,
-                            height: `${preview.height}px`,
-                          }}
-                        >
-                          <Box
-                            position="absolute"
-                            top={marginValue}
-                            left={marginValue}
-                            right={marginValue}
-                            bottom={marginValue}
-                            bg="rgba(100, 150, 255, 0.1)"
-                            borderRadius="sm"
-                            border="1px dashed"
-                            borderColor="rgba(100, 150, 255, 0.3)"
-                            display="flex"
-                            alignItems="center"
-                            justifyContent="center"
-                          >
-                            <Text fontSize="xs" color="gray.600" opacity={0.5}>
-                              Content Area
-                            </Text>
-                          </Box>
-
-                          {orchestrateOptions.printMargins !== 'none' && (
-                            <>
-                              <Box position="absolute" top="2px" left="2px" fontSize="xs" color="red.400" opacity={0.6}>↘</Box>
-                              <Box position="absolute" top="2px" right="2px" fontSize="xs" color="red.400" opacity={0.6}>↙</Box>
-                              <Box position="absolute" bottom="2px" left="2px" fontSize="xs" color="red.400" opacity={0.6}>↗</Box>
-                              <Box position="absolute" bottom="2px" right="2px" fontSize="xs" color="red.400" opacity={0.6}>↖</Box>
-                            </>
-                          )}
-                        </Box>
-                      );
-                    })()}
-
-                    <VStack spacing={1} mt={4} fontSize="xs" color="whiteAlpha.500">
-                      <Text>Pages: {orchestrateOptions.printPages}</Text>
-                      <Text>Margins: {orchestrateOptions.printMargins}</Text>
-                      <Text>Per Sheet: {orchestrateOptions.printPagesPerSheet}</Text>
-                    </VStack>
-                  </Box>
-                </Box>
               </Grid>
               </ModalBody>
               <ModalFooter>
@@ -2717,6 +2639,32 @@ const Dashboard: React.FC = () => {
       
       {/* Voice AI Chat Drawer */}
       <VoiceAIChat isOpen={voiceAIDrawer.isOpen} onClose={voiceAIDrawer.onClose} />
+      
+      {/* Document Selector Modal */}
+      <DocumentSelector
+        isOpen={documentSelectorModal.isOpen}
+        onClose={documentSelectorModal.onClose}
+        onSelect={(docs) => {
+          setSelectedDocuments(docs);
+          documentSelectorModal.onClose();
+        }}
+        currentDocuments={files.map(file => ({
+          filename: file.filename,
+          size: file.size,
+          type: 'image',
+          thumbnailUrl: `${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`,
+          isProcessed: file.has_text,
+        }))}
+        convertedDocuments={convertedFiles.map((file: any) => ({
+          filename: file.filename,
+          size: file.size,
+          type: 'pdf',
+          thumbnailUrl: `${API_BASE_URL}/converted/${file.filename}`,
+          isProcessed: true,
+        }))}
+        allowMultiple={true}
+        mode={orchestrateMode || 'print'}
+      />
     </VStack>
   );
 };
