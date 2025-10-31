@@ -725,7 +725,7 @@ class VoiceAIOrchestrator:
     def process_voice_input(self, audio_data: bytes) -> Dict[str, Any]:
         """
         Process voice input through complete pipeline
-        Requires "hey" keyword to trigger AI processing
+        Requires "hey" wake word to trigger AI processing
         
         Args:
             audio_data: Audio bytes (WAV format)
@@ -761,10 +761,37 @@ class VoiceAIOrchestrator:
                     'requires_keyword': True
                 }
             
-            # logger.info(f"📝 Transcribed text: {user_text}")
+            logger.info(f"📝 Transcribed text: {user_text}")
+            
+            # Check for wake words (must start with these)
+            wake_words = ['hey', 'hi', 'hello', 'okay']
+            user_text_lower = user_text.lower()
+            
+            has_wake_word = False
+            for wake_word in wake_words:
+                if user_text_lower.startswith(wake_word):
+                    has_wake_word = True
+                    # Remove wake word from beginning
+                    user_text = user_text[len(wake_word):].strip()
+                    break
+            
+            # If no wake word detected, prompt user
+            if not has_wake_word:
+                logger.warning(f"⚠️ No wake word detected in: {user_text}")
+                return {
+                    'success': False,
+                    'user_text': transcription.get('text', ''),
+                    'ai_response': 'Please say "Hey" first to talk with PrintChakra AI.',
+                    'error': 'Wake word not detected',
+                    'stage': 'wake_word',
+                    'requires_keyword': True,
+                    'wake_word_missing': True
+                }
+            
+            logger.info(f"✅ Wake word detected! Processing: {user_text}")
             
             # Check for exit keyword
-            if 'bye printchakra' in user_text.lower():
+            if 'bye printchakra' in user_text_lower or 'goodbye' in user_text_lower:
                 self.session_active = False
                 return {
                     'success': True,
@@ -774,7 +801,7 @@ class VoiceAIOrchestrator:
                     'requires_keyword': False
                 }
             
-            # Step 2: Generate AI response directly (no keyword required)
+            # Step 2: Generate AI response (wake word validated)
             chat_response = self.chat_service.generate_response(user_text)
             
             if not chat_response.get('success'):

@@ -143,14 +143,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       
       if (response.data.success) {
         setIsSessionActive(true);
-        setSessionStatus('Ready - Say "hey" to trigger AI');
-        addMessage('system', '🎙️ Voice AI Ready! Say "hey" to trigger processing. Commands like "hey what time is it" will work. Say "bye printchakra" to end.');
+        setSessionStatus('Ready - Say wake word first!');
+        addMessage('system', '🎙️ Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.');
         
         toast({
           title: 'Voice AI Ready',
-          description: 'Say "hey" followed by your command',
+          description: 'Start with: Hey, Hi, Hello, or Okay',
           status: 'success',
-          duration: 3000,
+          duration: 4000,
         });
         
         // Auto-start recording after session starts
@@ -351,6 +351,22 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       });
       
       console.log('✅ Backend response:', response.data);
+      
+      // Check for wake word missing first
+      if (response.data.wake_word_missing) {
+        console.log('⏭️ Wake word missing - prompting user');
+        
+        const transcribedText = response.data.user_text || response.data.full_text || 'your command';
+        addMessage('system', `🎤 Heard: "${transcribedText}"`);
+        addMessage('system', '⚠️ Please say "Hey", "Hi", "Hello", or "Okay" first to talk with PrintChakra AI');
+        
+        setSessionStatus('Waiting for wake word...');
+        setIsProcessing(false);
+        
+        // Continue recording
+        setTimeout(() => startRecording(), 1000);
+        return;
+      }
       
       if (response.data.success) {
         const { user_text, full_text, ai_response, session_ended, keyword_detected } = response.data;
@@ -679,7 +695,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
                         bg="white"
                         animation="pulse 1.5s infinite"
                       />
-                      <Text>Recording</Text>
+                      <Text>Recording - Say: Hey, Hi, Hello, or Okay</Text>
                     </HStack>
                   </Badge>
                 )}
