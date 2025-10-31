@@ -65,9 +65,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   
   // Calculate responsive paper dimensions - fit to container
   const getPaperDimensions = () => {
-    // Fixed size that works at all zoom levels
-    const baseWidth = isLandscape ? 420 : 300;
-    const baseHeight = isLandscape ? 300 : 400;
+    // Larger size for better visibility
+    const baseWidth = isLandscape ? 520 : 380;
+    const baseHeight = isLandscape ? 380 : 520;
     const scale = (zoomLevel / 100) * (previewSettings?.scale || 100) / 100;
     
     return {
@@ -117,8 +117,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         position="relative"
       >
         <Box
-          width="300px"
-          height="400px"
+          width="380px"
+          height="520px"
           bg={paperBg}
           borderRadius="sm"
           boxShadow="0 4px 16px rgba(0,0,0,0.1)"
@@ -305,8 +305,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           flex={1} 
           align="center" 
           justify="center" 
-          p={6}
-          minH="500px"
+          p={4}
+          minH="580px"
           overflow="hidden"
           bg={bgColor}
         >
