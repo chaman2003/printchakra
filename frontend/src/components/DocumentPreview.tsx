@@ -63,15 +63,15 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   const layout = previewSettings?.layout || 'portrait';
   const isLandscape = layout === 'landscape';
   
-  // Calculate responsive paper dimensions
+  // Calculate responsive paper dimensions - fit to container
   const getPaperDimensions = () => {
-    const baseWidth = isLandscape ? 420 : 320;
-    const baseHeight = isLandscape ? 320 : 440;
+    const baseWidth = isLandscape ? 300 : 240;
+    const baseHeight = isLandscape ? 200 : 320;
     const scale = (zoomLevel / 100) * (previewSettings?.scale || 100) / 100;
     
     return {
-      width: Math.min(baseWidth * scale, 500),
-      height: Math.min(baseHeight * scale, 650),
+      width: baseWidth * scale,
+      height: baseHeight * scale,
     };
   };
 
@@ -298,16 +298,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           flex={1} 
           align="center" 
           justify="center" 
-          p={{ base: 4, md: 6, lg: 8 }}
-          overflowY="auto" 
+          p={{ base: 3, md: 4 }}
+          overflow="hidden"
           bg={bgColor}
-          css={{
-            '&::-webkit-scrollbar': { width: '8px' },
-            '&::-webkit-scrollbar-thumb': { 
-              background: 'rgba(121,95,238,0.3)', 
-              borderRadius: '10px',
-            },
-          }}
         >
           {isLoading ? (
             <VStack spacing={4}>
@@ -317,7 +310,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           ) : (
             <Box 
               width={`${paperDimensions.width}px`}
+              height={`${paperDimensions.height}px`}
               maxW="100%"
+              maxH="100%"
               transition="all 0.3s ease"
               borderRadius="sm"
               overflow="hidden"
@@ -326,6 +321,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
               border="1px solid"
               borderColor="gray.200"
               position="relative"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
             >
               {currentDoc?.thumbnailUrl ? (
                 <img 
@@ -333,28 +331,21 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                   alt={currentDoc.filename} 
                   style={{
                     width: '100%',
-                    height: 'auto',
+                    height: '100%',
                     display: 'block',
+                    objectFit: 'contain',
                     filter: previewSettings?.colorMode === 'grayscale' 
                       ? 'grayscale(100%)' 
                       : previewSettings?.colorMode === 'bw' 
                       ? 'grayscale(100%) contrast(2)' 
                       : 'none',
-                    transform: isLandscape ? 'none' : 'none',
                   }} 
                 />
               ) : (
-                <Flex 
-                  align="center" 
-                  justify="center" 
-                  minH={`${paperDimensions.height}px`}
-                  p={8}
-                >
-                  <VStack spacing={3}>
-                    <Iconify icon="solar:document-bold" width={48} height={48} color="gray.300" />
-                    <Text color="gray.500" fontSize="sm">Preview not available</Text>
-                  </VStack>
-                </Flex>
+                <VStack spacing={3}>
+                  <Iconify icon="solar:document-bold" width={48} height={48} color="gray.300" />
+                  <Text color="gray.500" fontSize="sm">Preview not available</Text>
+                </VStack>
               )}
             </Box>
           )}
