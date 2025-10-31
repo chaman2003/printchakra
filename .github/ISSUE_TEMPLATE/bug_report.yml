@@ -1,0 +1,143 @@
+name: 🐛 Bug Report
+description: Report a bug or issue with PrintChakra
+title: "[Bug]: "
+labels: ["bug", "triage"]
+assignees:
+  - chaman2003
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+      placeholder: I expected...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+      placeholder: Instead...
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: If applicable, add screenshots to help explain your problem
+      placeholder: Drag and drop images here
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which component is affected?
+      options:
+        - Backend (Flask/Python)
+        - Frontend (React/TypeScript)
+        - Voice AI
+        - OCR Processing
+        - Document Detection
+        - File Upload/Download
+        - Socket.IO/WebSocket
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you using?
+      placeholder: e.g. Windows 11, macOS 13, Ubuntu 22.04
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser
+      description: What browser are you using? (if frontend issue)
+      placeholder: e.g. Chrome 120, Firefox 121, Safari 17
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: What Python version? (if backend issue)
+      placeholder: e.g. 3.11.0
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js Version
+      description: What Node.js version? (if frontend issue)
+      placeholder: e.g. 20.10.0
+
+  - type: input
+    id: version
+    attributes:
+      label: PrintChakra Version
+      description: What version of PrintChakra are you using?
+      placeholder: e.g. 2.1.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Please copy and paste any relevant error logs
+      render: shell
+      placeholder: |
+        Paste error logs here...
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here
+      placeholder: Any additional information...
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have provided all the information requested above
+          required: true
+        - label: I am willing to help test a fix for this issue
+          required: false
