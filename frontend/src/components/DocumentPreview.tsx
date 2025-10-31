@@ -50,11 +50,11 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const bgColor = useColorModeValue('#f0f0f0', 'rgba(20, 24, 45, 0.95)');
-  const borderColor = useColorModeValue('gray.300', 'whiteAlpha.300');
-  const thumbnailBg = useColorModeValue('white', 'rgba(30, 34, 50, 0.9)');
+  const bgColor = useColorModeValue('rgba(20, 24, 45, 0.3)', 'rgba(20, 24, 45, 0.5)');
+  const borderColor = useColorModeValue('whiteAlpha.400', 'whiteAlpha.300');
+  const thumbnailBg = useColorModeValue('rgba(30, 34, 50, 0.5)', 'rgba(30, 34, 50, 0.9)');
   const paperBg = useColorModeValue('white', '#ffffff');
-  const toolbarBg = useColorModeValue('#fafafa', 'rgba(12,16,35,0.95)');
+  const toolbarBg = useColorModeValue('rgba(12,16,35,0.7)', 'rgba(12,16,35,0.95)');
 
   const currentDoc = documents[currentDocIndex];
   const totalPages = currentDoc?.pages?.length || 1;
@@ -148,7 +148,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   return (
     <Box 
       ref={containerRef} 
-      bg={useColorModeValue('white', 'rgba(12,16,35,0.95)')} 
+      bg="transparent"
       borderRadius="lg" 
       border="1px solid" 
       borderColor={borderColor} 
@@ -165,7 +165,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         py={2.5}
         borderBottom="1px solid" 
         borderColor={borderColor} 
-        bg={toolbarBg}
+        bg="rgba(12,16,35,0.4)"
+        backdropFilter="blur(10px)"
         justify="space-between" 
         align="center"
         flexShrink={0}
@@ -177,7 +178,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
             fontSize={{ base: 'xs', md: 'sm' }} 
             fontWeight="600" 
             noOfLines={1} 
-            color="gray.700"
+            color="whiteAlpha.900"
             flex={1}
             minW={0}
           >
@@ -198,15 +199,19 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 icon={<Iconify icon="solar:magnifer-zoom-out-bold" width={14} height={14} />}
                 onClick={handleZoomOut} 
                 isDisabled={zoomLevel <= 50}
-                bg="white"
+                bg="whiteAlpha.200"
+                color="white"
+                _hover={{ bg: 'whiteAlpha.300' }}
                 _dark={{ bg: 'whiteAlpha.100' }}
               />
             </Tooltip>
             <Button 
               minW={{ base: '50px', md: '60px' }}
               fontSize="xs"
-              bg="white"
+              bg="whiteAlpha.200"
+              color="white"
               fontWeight="500"
+              _hover={{ bg: 'whiteAlpha.300' }}
               _dark={{ bg: 'whiteAlpha.100' }}
             >
               {zoomLevel}%
@@ -217,7 +222,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 icon={<Iconify icon="solar:magnifer-zoom-in-bold" width={14} height={14} />}
                 onClick={handleZoomIn} 
                 isDisabled={zoomLevel >= 200}
-                bg="white"
+                bg="whiteAlpha.200"
+                color="white"
+                _hover={{ bg: 'whiteAlpha.300' }}
                 _dark={{ bg: 'whiteAlpha.100' }}
               />
             </Tooltip>
@@ -227,8 +234,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           <Text 
             fontSize="sm" 
             fontWeight="medium"
-            color="gray.600"
-            _dark={{ color: 'gray.400' }}
+            color="whiteAlpha.800"
             px={2}
           >
             {currentPage}/{totalPages}
@@ -359,7 +365,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           py={2}
           borderTop="1px solid" 
           borderColor={borderColor}
-          bg={toolbarBg}
+          bg="rgba(12,16,35,0.4)"
+          backdropFilter="blur(10px)"
           justify="space-between"
           align="center"
           flexShrink={0}
@@ -367,8 +374,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           flexWrap="wrap"
         >
           <HStack spacing={2} fontSize={{ base: 'xs', md: 'sm' }}>
-            <Iconify icon="solar:document-bold" width={14} height={14} color="gray.500" />
-            <Text color="gray.600" fontWeight="500">
+            <Iconify icon="solar:document-bold" width={14} height={14} color="whiteAlpha.700" />
+            <Text color="whiteAlpha.800" fontWeight="500">
               {documents.length} {documents.length === 1 ? 'sheet' : 'sheets'}
             </Text>
           </HStack>
