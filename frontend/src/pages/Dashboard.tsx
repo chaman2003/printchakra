@@ -1,3 +1,25 @@
+// ==================== MODAL & PREVIEW CONFIGURATION ====================
+// 📐 ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
+// 
+// If the preview is cut off or you want to change the modal size:
+// 1. Adjust modal.maxHeight/maxWidth to change the overall modal size
+// 2. Adjust modalBody.maxHeight to change scrollable content area
+// 3. Adjust previewBox.maxHeight to change the sticky preview container height
+// 
+const MODAL_CONFIG = {
+  modal: {
+    maxHeight: '90vh',      // Maximum modal height (increase to make modal taller)
+    maxWidth: '95vw',       // Maximum modal width (increase to make modal wider)
+  },
+  modalBody: {
+    maxHeight: '90vh - 10rem',  // Modal body max height (leave room for header/footer)
+  },
+  previewBox: {
+    maxHeight: '90vh - 12rem',  // Preview box max height (sticky container - increase if preview is cut off)
+  },
+};
+// =======================================================================
+
 import React, { useEffect, useState, useCallback } from 'react';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
@@ -46,6 +68,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers, FiMic } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import Iconify from '../components/Iconify';
 import FancySelect from '../components/FancySelect';
@@ -53,6 +76,14 @@ import VoiceAIChat from '../components/VoiceAIChat';
 import ConnectionValidator from '../components/ConnectionValidator';
 import DocumentSelector from '../components/DocumentSelector';
 import DocumentPreview from '../components/DocumentPreview';
+import OrchestrationOverlay from '../components/OrchestrationOverlay';
+
+// Motion components
+const MotionBox = motion(Box);
+const MotionCard = motion(Card);
+const MotionModalContent = motion(ModalContent);
+const MotionButton = motion(Button);
+const MotionFlex = motion(Flex);
 
 interface FileInfo {
   filename: string;
@@ -242,6 +273,8 @@ const Dashboard: React.FC = () => {
     printLayout: 'portrait' as 'portrait' | 'landscape',
     printPaperSize: 'A4' as string,
     printPaperSizeCustom: '',
+    printResolution: '300' as string,
+    printColorMode: 'color' as 'color' | 'grayscale' | 'bw',
     printScale: '100' as string,
     printScaleCustom: '',
     printMargins: 'default' as 'default' | 'narrow' | 'none',
@@ -261,6 +294,7 @@ const Dashboard: React.FC = () => {
   const orchestrateModal = useDisclosure();
   const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
   const documentSelectorModal = useDisclosure(); // Document selector modal
+  const orchestrationOverlay = useDisclosure(); // AI orchestration overlay
   
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
@@ -934,38 +968,105 @@ const Dashboard: React.FC = () => {
       />
 
   <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
-        <Button size="lg" colorScheme="brand" variant="solid" onClick={triggerPrint} leftIcon={<Iconify icon={FiLayers} boxSize={5} />}>
-          Orchestrate Print Capture
-        </Button>
-        <Button 
-          size="lg" 
-          colorScheme="purple" 
-          variant="solid" 
-          onClick={voiceAIDrawer.onOpen} 
-          leftIcon={<Iconify icon={FiMic} boxSize={5} />}
+        <MotionBox
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
-          Talk with PrintChakra AI
-        </Button>
-        <Button size="lg" variant={selectionMode ? 'solid' : 'ghost'} colorScheme={selectionMode ? 'orange' : 'brand'} onClick={toggleSelectionMode}>
-          {selectionMode ? 'Cancel Selection' : 'Select Files'}
-        </Button>
-        {selectionMode && selectedFiles.length > 0 && (
-          <Button size="lg" colorScheme="brand" variant="outline" onClick={openConversionModal}>
-            Convert {selectedFiles.length} Selected
+          <Button 
+            size="lg" 
+            colorScheme="brand" 
+            variant="solid" 
+            onClick={triggerPrint} 
+            leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
+            boxShadow="0 4px 14px rgba(121,95,238,0.4)"
+            _hover={{ boxShadow: '0 6px 20px rgba(121,95,238,0.6)' }}
+            transition="all 0.3s"
+          >
+            Orchestrate Print Capture
           </Button>
-        )}
-        <Button
-          size="lg"
-          variant="ghost"
-          onClick={() => {
-            if (!convertedDrawer.isOpen) {
-              loadConvertedFiles();
-            }
-            convertedDrawer.onToggle();
-          }}
+        </MotionBox>
+        <MotionBox
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
-          {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
-        </Button>
+          <Button 
+            size="lg" 
+            colorScheme="purple" 
+            variant="solid" 
+            onClick={voiceAIDrawer.onOpen} 
+            leftIcon={<Iconify icon={FiMic} boxSize={5} />}
+            boxShadow="0 4px 14px rgba(147,51,234,0.4)"
+            _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
+            transition="all 0.3s"
+          >
+            Talk with PrintChakra AI
+          </Button>
+        </MotionBox>
+        <MotionBox
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        >
+          <Button 
+            size="lg" 
+            colorScheme="cyan" 
+            variant="solid" 
+            onClick={orchestrationOverlay.onOpen} 
+            leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
+            boxShadow="0 4px 14px rgba(69,202,255,0.4)"
+            _hover={{ boxShadow: '0 6px 20px rgba(69,202,255,0.6)' }}
+            transition="all 0.3s"
+          >
+            AI Orchestration
+          </Button>
+        </MotionBox>
+        <MotionBox
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        >
+          <Button 
+            size="lg" 
+            variant={selectionMode ? 'solid' : 'ghost'} 
+            colorScheme={selectionMode ? 'orange' : 'brand'} 
+            onClick={toggleSelectionMode}
+          >
+            {selectionMode ? 'Cancel Selection' : 'Select Files'}
+          </Button>
+        </MotionBox>
+        {selectionMode && selectedFiles.length > 0 && (
+          <MotionBox
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Button size="lg" colorScheme="brand" variant="outline" onClick={openConversionModal}>
+              Convert {selectedFiles.length} Selected
+            </Button>
+          </MotionBox>
+        )}
+        <MotionBox
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        >
+          <Button
+            size="lg"
+            variant="ghost"
+            onClick={() => {
+              if (!convertedDrawer.isOpen) {
+                loadConvertedFiles();
+              }
+              convertedDrawer.onToggle();
+            }}
+          >
+            {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
+          </Button>
+        </MotionBox>
       </Stack>
 
       {error && (
@@ -1088,8 +1189,16 @@ const Dashboard: React.FC = () => {
                 {files.map((file: FileInfo, index: number) => {
                   const isSelected = selectedFiles.includes(file.filename);
                   return (
-                    <Card
+                    <MotionCard
                       key={file.filename}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      whileHover={{ 
+                        y: -8, 
+                        scale: 1.02,
+                        transition: { duration: 0.2 }
+                      }}
                       borderRadius="2xl"
                       border={`2px solid ${isSelected ? 'rgba(72, 187, 120, 0.6)' : 'rgba(121,95,238,0.18)'}`}
                       boxShadow={isSelected ? '0 0 20px rgba(72, 187, 120, 0.4)' : 'subtle'}
@@ -1102,11 +1211,6 @@ const Dashboard: React.FC = () => {
                           handleFileClick(index, file.filename);
                         }
                       }}
-                      _hover={selectionMode && !file.processing ? {
-                        borderColor: isSelected ? 'rgba(72, 187, 120, 0.8)' : 'rgba(69,202,255,0.35)',
-                        transform: 'translateY(-2px)',
-                        transition: 'all 0.2s ease'
-                      } : {}}
                     >
                       {selectionMode && !file.processing && (
                         <Checkbox
@@ -1211,7 +1315,7 @@ const Dashboard: React.FC = () => {
                           </ButtonGroup>
                         </Flex>
                       </CardFooter>
-                    </Card>
+                    </MotionCard>
                   );
                 })}
               </SimpleGrid>
@@ -1523,16 +1627,22 @@ const Dashboard: React.FC = () => {
           backdropFilter="blur(16px)" 
           bg="blackAlpha.700"
         />
-        <ModalContent 
+        <MotionModalContent 
           bg={surfaceCard} 
           borderRadius={{ base: 'xl', md: '2xl', lg: '3xl' }}
           border="1px solid" 
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
-          maxH="85vh"
+          maxH={MODAL_CONFIG.modal.maxHeight}
+          maxW={MODAL_CONFIG.modal.maxWidth}
+          w="auto"
           h="auto"
-          mx={{ base: 2, md: 4 }}
-          my={{ base: 2, md: 4 }}
+          mx="auto"
+          my="auto"
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
         >
           {/* STEP 1: Choose Mode */}
           {orchestrateStep === 1 && (
@@ -1540,7 +1650,7 @@ const Dashboard: React.FC = () => {
               <ModalHeader 
                 fontSize="3xl" 
                 fontWeight="700" 
-                py={6}
+                py="1.5rem"
                 bgGradient="linear(to-r, brand.500, nebula.500)"
                 bgClip="text"
                 display="flex"
@@ -1567,7 +1677,7 @@ const Dashboard: React.FC = () => {
                     Choose your operation to get started
                   </Text>
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                    <Box
+                    <MotionBox
                       p={8}
                       borderRadius="2xl"
                       border="3px solid"
@@ -1575,15 +1685,19 @@ const Dashboard: React.FC = () => {
                       bg={orchestrateMode === 'scan' ? 'rgba(121,95,238,0.12)' : 'whiteAlpha.50'}
                       cursor="pointer"
                       onClick={() => setOrchestrateMode('scan')}
-                      _hover={{ 
-                        borderColor: 'brand.400', 
-                        bg: 'rgba(121,95,238,0.08)',
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 12px 30px rgba(121,95,238,0.25)'
-                      }}
-                      transition="all 0.3s ease"
                       position="relative"
                       overflow="hidden"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: 0.1 }}
+                      whileHover={{ 
+                        borderColor: 'brand.400', 
+                        y: -8,
+                        scale: 1.02,
+                        boxShadow: '0 12px 30px rgba(121,95,238,0.35)',
+                        transition: { duration: 0.2 }
+                      }}
+                      whileTap={{ scale: 0.98 }}
                     >
                       {orchestrateMode === 'scan' && (
                         <Box
@@ -1612,8 +1726,8 @@ const Dashboard: React.FC = () => {
                           Capture physical documents from your scanner with advanced options for quality, layout, and text detection
                         </Text>
                       </VStack>
-                    </Box>
-                    <Box
+                    </MotionBox>
+                    <MotionBox
                       p={8}
                       borderRadius="2xl"
                       border="3px solid"
@@ -1621,15 +1735,19 @@ const Dashboard: React.FC = () => {
                       bg={orchestrateMode === 'print' ? 'rgba(121,95,238,0.12)' : 'whiteAlpha.50'}
                       cursor="pointer"
                       onClick={() => setOrchestrateMode('print')}
-                      _hover={{ 
-                        borderColor: 'brand.400', 
-                        bg: 'rgba(121,95,238,0.08)',
-                        transform: 'translateY(-4px)',
-                        boxShadow: '0 12px 30px rgba(121,95,238,0.25)'
-                      }}
-                      transition="all 0.3s ease"
                       position="relative"
                       overflow="hidden"
+                      initial={{ opacity: 0, x: 20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.3, delay: 0.2 }}
+                      whileHover={{ 
+                        borderColor: 'brand.400', 
+                        y: -8,
+                        scale: 1.02,
+                        boxShadow: '0 12px 30px rgba(121,95,238,0.35)',
+                        transition: { duration: 0.2 }
+                      }}
+                      whileTap={{ scale: 0.98 }}
                     >
                       {orchestrateMode === 'print' && (
                         <Box
@@ -1658,11 +1776,11 @@ const Dashboard: React.FC = () => {
                           Print documents from your collection with precise control over layout, margins, scaling, and page selection
                         </Text>
                       </VStack>
-                    </Box>
+                    </MotionBox>
                   </SimpleGrid>
                 </Stack>
               </ModalBody>
-              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
+              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200">
                 <Button 
                   variant="ghost" 
                   mr={3} 
@@ -1691,7 +1809,7 @@ const Dashboard: React.FC = () => {
               <ModalHeader 
                 fontSize="2xl" 
                 fontWeight="700" 
-                py={6}
+                py="1.5rem"
                 display="flex"
                 alignItems="center"
                 gap={3}
@@ -1713,9 +1831,9 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody 
-                py={4}
-                px={6}
-                maxH="calc(85vh - 140px)"
+                py="1rem"
+                px="1.5rem"
+                maxH={`calc(${MODAL_CONFIG.modalBody.maxHeight})`}
                 overflowY="auto"
                 overflowX="hidden"
                 css={{
@@ -1732,7 +1850,7 @@ const Dashboard: React.FC = () => {
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
-                  gap={6} 
+                  gap="1.5rem" 
                   alignItems="start"
                 >
                   {/* Live Preview - Scan Mode (LEFT SIDE) */}
@@ -1742,7 +1860,7 @@ const Dashboard: React.FC = () => {
                     position="sticky"
                     top={0}
                     alignSelf="start"
-                    maxH="calc(85vh - 160px)"
+                    maxH={`calc(${MODAL_CONFIG.previewBox.maxHeight})`}
                     order={{ base: 2, lg: 1 }}
                   >
                     <DocumentPreview
@@ -1771,7 +1889,7 @@ const Dashboard: React.FC = () => {
                     leftIcon={<Iconify icon="solar:document-add-bold-duotone" width={20} height={20} />}
                     onClick={documentSelectorModal.onOpen}
                     w="full"
-                    py={6}
+                    py="1.5rem"
                     fontSize="md"
                     fontWeight="600"
                     _hover={{
@@ -1787,7 +1905,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Select Page Scan Mode */}
                   <Box 
-                    p={5} 
+                    p="1.25rem" 
                     borderRadius="xl" 
                     border="2px solid" 
                     borderColor="whiteAlpha.200" 
@@ -1816,7 +1934,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Text Detection */}
                   <Box 
-                    p={5} 
+                    p="1.25rem" 
                     borderRadius="xl" 
                     border="2px solid" 
                     borderColor={orchestrateOptions.scanTextMode ? 'brand.400' : 'whiteAlpha.200'}
@@ -1845,7 +1963,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Page Selection */}
                   <Box 
-                    p={{ base: 4, md: 4 }}
+                    p="1rem"
                     borderRadius="lg" 
                     border="1px solid" 
                     borderColor="whiteAlpha.200" 
@@ -1896,7 +2014,7 @@ const Dashboard: React.FC = () => {
 
                   {/* Layout */}
                   <Box 
-                    p={5} 
+                    p="1.25rem" 
                     borderRadius="xl" 
                     border="2px solid" 
                     borderColor="whiteAlpha.200" 
@@ -2067,7 +2185,7 @@ const Dashboard: React.FC = () => {
                 </Stack>
               </Grid>
               </ModalBody>
-              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
+              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
                 <HStack spacing={4}>
                   {selectedDocuments.length > 0 && (
                     <>
@@ -2122,7 +2240,7 @@ const Dashboard: React.FC = () => {
               <ModalHeader 
                 fontSize="2xl" 
                 fontWeight="700" 
-                py={6}
+                py="1.5rem"
                 display="flex"
                 alignItems="center"
                 gap={3}
@@ -2173,7 +2291,7 @@ const Dashboard: React.FC = () => {
                     position="sticky"
                     top={0}
                     alignSelf="start"
-                    maxH="calc(85vh - 160px)"
+                    maxH={`calc(${MODAL_CONFIG.previewBox.maxHeight})`}
                     order={{ base: 2, lg: 1 }}
                   >
                     <DocumentPreview
@@ -2185,6 +2303,7 @@ const Dashboard: React.FC = () => {
                         layout: orchestrateOptions.printLayout,
                         scale: parseInt(orchestrateOptions.printScale),
                         paperSize: orchestrateOptions.printPaperSize,
+                        colorMode: orchestrateOptions.printColorMode,
                       }}
                     />
                   </Box>
@@ -2202,7 +2321,7 @@ const Dashboard: React.FC = () => {
                     leftIcon={<Iconify icon="solar:printer-bold-duotone" width={20} height={20} />}
                     onClick={documentSelectorModal.onOpen}
                     w="full"
-                    py={6}
+                    py="1.5rem"
                     fontSize="md"
                     fontWeight="600"
                     _hover={{
@@ -2309,6 +2428,71 @@ const Dashboard: React.FC = () => {
                       value={orchestrateOptions.printPaperSize}
                       onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })}
                     />
+                  </Box>
+
+                  {/* Print Resolution (DPI) */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <FancySelect
+                      label="🔍 Scan Resolution (DPI)"
+                      options={[
+                        { value: '150', label: '150 DPI - Draft Quality' },
+                        { value: '300', label: '300 DPI - Standard (Recommended)' },
+                        { value: '600', label: '600 DPI - High Quality' },
+                        { value: '1200', label: '1200 DPI - Professional' },
+                      ]}
+                      value={orchestrateOptions.printResolution}
+                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printResolution: value })}
+                    />
+                  </Box>
+
+                  {/* Color Mode */}
+                  <Box 
+                    p={4} 
+                    borderRadius="lg" 
+                    border="1px solid" 
+                    borderColor="whiteAlpha.200" 
+                    bg="whiteAlpha.50"
+                    transition="all 0.2s"
+                    _hover={{ borderColor: 'brand.400' }}
+                  >
+                    <Heading size="sm" mb={3}>Color Mode</Heading>
+                    <ButtonGroup isAttached width="full" size="md">
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printColorMode === 'color' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printColorMode === 'color' ? 'nebula' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'color' })}
+                        leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
+                      >
+                        Color
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printColorMode === 'grayscale' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printColorMode === 'grayscale' ? 'nebula' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'grayscale' })}
+                        leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
+                      >
+                        Grayscale
+                      </Button>
+                      <Button
+                        flex={1}
+                        variant={orchestrateOptions.printColorMode === 'bw' ? 'solid' : 'outline'}
+                        colorScheme={orchestrateOptions.printColorMode === 'bw' ? 'nebula' : 'gray'}
+                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'bw' })}
+                        leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
+                      >
+                        B&W
+                      </Button>
+                    </ButtonGroup>
                   </Box>
 
                   {/* Print Scale */}
@@ -2455,7 +2639,7 @@ const Dashboard: React.FC = () => {
                 </Stack>
               </Grid>
               </ModalBody>
-              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
+              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
                 <HStack spacing={4}>
                   {selectedDocuments.length > 0 && (
                     <>
@@ -2505,7 +2689,7 @@ const Dashboard: React.FC = () => {
               <ModalHeader 
                 fontSize="2xl" 
                 fontWeight="700" 
-                py={6}
+                py="1.5rem"
                 display="flex"
                 alignItems="center"
                 gap={3}
@@ -2654,7 +2838,7 @@ const Dashboard: React.FC = () => {
                   </Box>
                 </Stack>
               </ModalBody>
-              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
+              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200">
                 <Button 
                   variant="ghost" 
                   mr={3} 
@@ -2687,11 +2871,14 @@ const Dashboard: React.FC = () => {
               </ModalFooter>
             </>
           )}
-        </ModalContent>
+        </MotionModalContent>
       </Modal>
       
       {/* Voice AI Chat Drawer */}
       <VoiceAIChat isOpen={voiceAIDrawer.isOpen} onClose={voiceAIDrawer.onClose} />
+      
+      {/* AI Orchestration Overlay */}
+      <OrchestrationOverlay isOpen={orchestrationOverlay.isOpen} onClose={orchestrationOverlay.onClose} />
       
       {/* Document Selector Modal */}
       <DocumentSelector

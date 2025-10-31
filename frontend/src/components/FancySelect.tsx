@@ -12,7 +12,6 @@ import {
   HStack,
   useColorModeValue,
 } from '@chakra-ui/react';
-import { FiChevronDown } from 'react-icons/fi';
 import Iconify from './Iconify';
 
 interface FancySelectOption {
@@ -69,7 +68,7 @@ const FancySelect: React.FC<FancySelectProps> = ({
       <Menu>
         <MenuButton
           as={Button}
-          rightIcon={<Iconify icon={FiChevronDown} />}
+          rightIcon={<Iconify icon="solar:alt-arrow-down-bold" width={16} height={16} />}
           width="full"
           justifyContent="space-between"
           variant="outline"

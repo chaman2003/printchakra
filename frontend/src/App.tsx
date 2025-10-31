@@ -16,6 +16,7 @@ import { motion } from 'framer-motion';
 import Dashboard from './pages/Dashboard';
 import Phone from './pages/Phone';
 import Iconify from './components/Iconify';
+import AnimatedBackground from './components/AnimatedBackground';
 import { SocketProvider } from './context/SocketContext';
 
 const MotionBox = motion(Box);
@@ -29,7 +30,8 @@ function App() {
   return (
     <SocketProvider>
       <Router>
-        <Box minH="100vh" bg="transparent">
+        <Box minH="100vh" bg="transparent" position="relative">
+          <AnimatedBackground />
           <Box position="sticky" top={0} zIndex={999} backdropFilter="blur(18px)" bg={navBg} borderBottom={`1px solid ${navBorder}`} boxShadow={navShadow}>
             <Container maxW="7xl" py={4}>
               <Flex align="center" justify="space-between">
@@ -62,46 +64,63 @@ function App() {
                 </HStack>
 
                 <HStack spacing={2}>
-                  <Button
-                    as={RouterLink}
-                    to="/"
-                    variant="ghost"
-                    leftIcon={<Iconify icon={FiLayout} boxSize={5} />}
-                    fontWeight="600"
-                    _hover={{ bg: 'brand.50', color: 'brand.600' }}
+                  <MotionBox whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      as={RouterLink}
+                      to="/"
+                      variant="ghost"
+                      leftIcon={<Iconify icon={FiLayout} boxSize={5} />}
+                      fontWeight="600"
+                      _hover={{ bg: 'brand.50', color: 'brand.600', transform: 'translateY(-2px)' }}
+                      transition="all 0.3s ease"
+                    >
+                      Dashboard
+                    </Button>
+                  </MotionBox>
+                  <MotionBox whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      as={RouterLink}
+                      to="/phone"
+                      variant="ghost"
+                      leftIcon={<Iconify icon={FiSmartphone} boxSize={5} />}
+                      fontWeight="600"
+                      _hover={{ bg: 'brand.50', color: 'brand.600', transform: 'translateY(-2px)' }}
+                      transition="all 0.3s ease"
+                    >
+                      Phone Capture
+                    </Button>
+                  </MotionBox>
+                  <MotionBox 
+                    whileHover={{ rotate: 180, scale: 1.1 }} 
+                    whileTap={{ scale: 0.9 }}
+                    transition={{ type: "spring", stiffness: 300 }}
                   >
-                    Dashboard
-                  </Button>
-                  <Button
-                    as={RouterLink}
-                    to="/phone"
-                    variant="ghost"
-                    leftIcon={<Iconify icon={FiSmartphone} boxSize={5} />}
-                    fontWeight="600"
-                    _hover={{ bg: 'brand.50', color: 'brand.600' }}
-                  >
-                    Phone Capture
-                  </Button>
-                  <IconButton
-                    aria-label="Toggle color mode"
-                    icon={<Iconify icon={colorMode === 'light' ? FiMoon : FiSun} boxSize={5} />}
-                    onClick={toggleColorMode}
-                    variant="ghost"
-                    borderRadius="full"
-                  />
+                    <IconButton
+                      aria-label="Toggle color mode"
+                      icon={<Iconify icon={colorMode === 'light' ? FiMoon : FiSun} boxSize={5} />}
+                      onClick={toggleColorMode}
+                      variant="ghost"
+                      borderRadius="full"
+                    />
+                  </MotionBox>
                 </HStack>
               </Flex>
             </Container>
           </Box>
 
-          <Box py={10}>
+          <MotionBox 
+            py={10}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          >
             <Container maxW="7xl">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/phone" element={<Phone />} />
               </Routes>
             </Container>
-          </Box>
+          </MotionBox>
         </Box>
       </Router>
     </SocketProvider>

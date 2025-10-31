@@ -2651,11 +2651,43 @@ def process_voice_complete():
             logger.info(f"   User: {result.get('user_text')}")
             logger.info(f"   AI: {result.get('ai_response')}")
             
+            # Check if user text contains orchestration commands
+            user_text = result.get('user_text', '')
+            if ORCHESTRATION_AVAILABLE and orchestrator and user_text:
+                # Try to detect orchestration intent
+                from services.orchestration_service import IntentType
+                intent, params = orchestrator.detect_intent(user_text)
+                
+                # If valid orchestration intent detected, process it
+                if intent in [IntentType.PRINT, IntentType.SCAN]:
+                    logger.info(f"🎯 Orchestration intent detected: {intent.value}")
+                    orchestration_result = orchestrator.process_command(user_text)
+                    
+                    # Add orchestration result to response
+                    result['orchestration'] = orchestration_result
+                    result['orchestration_detected'] = True
+                    
+                    # Override AI response with orchestration message
+                    if orchestration_result.get('message'):
+                        result['ai_response'] = orchestration_result['message']
+                    
+                    # Emit orchestration update
+                    try:
+                        socketio.emit('orchestration_update', {
+                            'type': 'voice_command_detected',
+                            'intent': intent.value,
+                            'result': orchestration_result,
+                            'timestamp': datetime.now().isoformat()
+                        })
+                    except Exception as socket_error:
+                        logger.warning(f"Orchestration socket emit failed: {socket_error}")
+            
             # Emit to frontend via Socket.IO
             try:
                 socketio.emit('voice_message', {
                     'user_text': result.get('user_text'),
                     'ai_response': result.get('ai_response'),
+                    'orchestration': result.get('orchestration'),
                     'timestamp': datetime.now().isoformat(),
                     'session_ended': result.get('session_ended', False)
                 })
@@ -2893,6 +2925,305 @@ def validate_printer():
         return jsonify({
             'success': False,
             'printer_connected': False,
+            'error': str(e)
+        }), 500
+
+# ============================================================================
+# AI ORCHESTRATION ENDPOINTS
+# ============================================================================
+
+# Import orchestration service
+try:
+    from services.orchestration_service import get_orchestrator
+    ORCHESTRATION_AVAILABLE = True
+    orchestrator = get_orchestrator(DATA_DIR)
+    logger.info("✅ AI Orchestration service initialized")
+except ImportError as e:
+    ORCHESTRATION_AVAILABLE = False
+    orchestrator = None
+    logger.warning(f"⚠️ AI Orchestration not available: {e}")
+
+@app.route('/orchestrate/command', methods=['POST'])
+def orchestrate_command():
+    """
+    Process natural language orchestration command
+    Expects: JSON with { "command": "print this document" }
+    """
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        data = request.get_json()
+        command = data.get('command', '')
+        
+        if not command:
+            return jsonify({
+                'success': False,
+                'error': 'No command provided'
+            }), 400
+        
+        logger.info(f"🎯 Orchestration command: {command}")
+        
+        # Process command
+        result = orchestrator.process_command(command)
+        
+        # Emit Socket.IO event for UI updates
+        if result.get('success'):
+            socketio.emit('orchestration_update', {
+                'type': 'command_processed',
+                'result': result,
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration command error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/confirm', methods=['POST'])
+def orchestrate_confirm():
+    """Confirm pending orchestration action"""
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        result = orchestrator.confirm_action()
+        
+        # Emit Socket.IO event
+        socketio.emit('orchestration_update', {
+            'type': 'action_confirmed',
+            'result': result,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        # If action was to open phone interface, emit redirect event
+        if result.get('success') and result.get('redirect_to'):
+            socketio.emit('orchestration_redirect', {
+                'path': result['redirect_to'],
+                'message': result.get('message', '')
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration confirm error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/cancel', methods=['POST'])
+def orchestrate_cancel():
+    """Cancel pending orchestration action"""
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        result = orchestrator.cancel_action()
+        
+        # Emit Socket.IO event
+        socketio.emit('orchestration_update', {
+            'type': 'action_cancelled',
+            'result': result,
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration cancel error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/status', methods=['GET'])
+def orchestrate_status():
+    """Get current orchestration status"""
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        result = orchestrator._handle_status_inquiry()
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration status error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/documents', methods=['GET'])
+def orchestrate_documents():
+    """Get available documents for orchestration"""
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        result = orchestrator._handle_list_documents()
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration documents error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/select', methods=['POST'])
+def orchestrate_select():
+    """
+    Select a document for orchestration
+    Expects: JSON with { "filename": "doc.jpg" }
+    """
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        data = request.get_json()
+        filename = data.get('filename', '')
+        
+        if not filename:
+            return jsonify({
+                'success': False,
+                'error': 'No filename provided'
+            }), 400
+        
+        result = orchestrator.select_document(filename)
+        
+        # Emit Socket.IO event
+        if result.get('success'):
+            socketio.emit('orchestration_update', {
+                'type': 'document_selected',
+                'document': result.get('document'),
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration select error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/configure', methods=['POST'])
+def orchestrate_configure():
+    """
+    Update orchestration configuration
+    Expects: JSON with { "type": "print|scan", "settings": {...} }
+    """
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        data = request.get_json()
+        action_type = data.get('type', '')
+        settings = data.get('settings', {})
+        
+        if not action_type or not settings:
+            return jsonify({
+                'success': False,
+                'error': 'Missing type or settings'
+            }), 400
+        
+        result = orchestrator.update_configuration(action_type, settings)
+        
+        # Emit Socket.IO event
+        if result.get('success'):
+            socketio.emit('orchestration_update', {
+                'type': 'configuration_updated',
+                'action_type': action_type,
+                'configuration': result.get('configuration'),
+                'timestamp': datetime.now().isoformat()
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration configure error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/reset', methods=['POST'])
+def orchestrate_reset():
+    """Reset orchestrator to idle state"""
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        result = orchestrator.reset_state()
+        
+        # Emit Socket.IO event
+        socketio.emit('orchestration_update', {
+            'type': 'state_reset',
+            'timestamp': datetime.now().isoformat()
+        })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration reset error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/history', methods=['GET'])
+def orchestrate_history():
+    """Get workflow history"""
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        history = orchestrator.get_workflow_history(limit)
+        
+        return jsonify({
+            'success': True,
+            'history': history,
+            'count': len(history)
+        })
+        
+    except Exception as e:
+        logger.error(f"❌ Orchestration history error: {e}")
+        return jsonify({
+            'success': False,
             'error': str(e)
         }), 500
 

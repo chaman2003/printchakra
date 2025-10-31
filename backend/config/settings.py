@@ -147,3 +147,50 @@ FEATURES = {
 
 # Version
 VERSION = '2.1.0'
+
+
+# Flask Configuration Class
+class Config:
+    """Flask configuration"""
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    
+    # Directory paths
+    UPLOAD_FOLDER = str(UPLOAD_DIR)
+    PROCESSED_FOLDER = str(PROCESSED_DIR)
+    CONVERTED_FOLDER = str(CONVERTED_DIR)
+    TEXT_FOLDER = str(TEXT_DIR)
+    PDF_FOLDER = str(PDF_DIR)
+    
+    # File upload settings
+    MAX_CONTENT_LENGTH = API_CONFIG['max_file_size']
+    ALLOWED_EXTENSIONS = API_CONFIG['allowed_extensions']
+    
+    # CORS settings
+    CORS_ORIGINS = API_CONFIG['cors_origins']
+
+
+class DevelopmentConfig(Config):
+    """Development configuration"""
+    DEBUG = True
+    TESTING = False
+
+
+class ProductionConfig(Config):
+    """Production configuration"""
+    DEBUG = False
+    TESTING = False
+
+
+class TestingConfig(Config):
+    """Testing configuration"""
+    DEBUG = True
+    TESTING = True
+
+
+# Configuration dictionary
+config = {
+    'development': DevelopmentConfig,
+    'production': ProductionConfig,
+    'testing': TestingConfig,
+    'default': DevelopmentConfig
+}
