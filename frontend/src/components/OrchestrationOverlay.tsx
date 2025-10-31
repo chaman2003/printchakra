@@ -51,6 +51,9 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
   const [state, setState] = useState<OrchestrationState | null>(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [skipModeSelection, setSkipModeSelection] = useState(false);
+  const { isOpen: isModalOpen, onOpen: onModalOpen, onClose: onModalClose } = useDisclosure();
   const { socket } = useSocket();
   
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
@@ -75,6 +78,15 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
 
     const handleUpdate = (data: any) => {
       console.log('🔄 Orchestration update received:', data);
+      
+      // Check if this is a voice-triggered orchestration
+      if (data.open_ui) {
+        console.log('🎤 Voice-triggered orchestration detected');
+        setVoiceMode(true);
+        setSkipModeSelection(data.skip_mode_selection || false);
+        onModalOpen(); // Open the modal automatically
+      }
+      
       fetchStatus(); // Refresh status when updates occur
     };
 
@@ -83,7 +95,7 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
     return () => {
       socket.off('orchestration_update', handleUpdate);
     };
-  }, [socket, fetchStatus]);
+  }, [socket, fetchStatus, onModalOpen]);
 
   // Fetch status on mount
   useEffect(() => {
@@ -154,7 +166,7 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size={expanded ? 'full' : 'xl'} isCentered>
+    <Modal isOpen={isOpen || isModalOpen} onClose={() => { onClose(); onModalClose(); setVoiceMode(false); }} size={expanded ? 'full' : 'xl'} isCentered>
       <ModalOverlay backdropFilter="blur(10px)" bg="blackAlpha.600" />
       <ModalContent
         bg={panelBg}
@@ -182,10 +194,10 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
             </Box>
             <VStack align="start" spacing={0}>
               <Text fontSize="xl" fontWeight="bold">
-                AI Orchestration
+                AI Orchestration {voiceMode && '🎤'}
               </Text>
               <Text fontSize="sm" color="gray.500" fontWeight="normal">
-                Intelligent print & scan control
+                {voiceMode ? 'Voice-assisted workflow' : 'Intelligent print & scan control'}
               </Text>
             </VStack>
           </Flex>
@@ -216,9 +228,26 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
                   </Badge>
                 </Flex>
                 {state.message && (
-                  <Text color="gray.600" fontSize="md">
-                    {state.message}
-                  </Text>
+                  <Box>
+                    <Text color="gray.600" fontSize="md" mb={2}>
+                      {state.message}
+                    </Text>
+                    {voiceMode && state.current_state === 'configuring' && (
+                      <Box mt={3} p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.200">
+                        <Text fontSize="sm" fontWeight="600" color="blue.700" mb={2}>
+                          💡 Voice Mode Tips:
+                        </Text>
+                        <Stack spacing={1} fontSize="xs" color="blue.600">
+                          <Text>• "Set to landscape" or "Change orientation to landscape"</Text>
+                          <Text>• "Print 3 copies" or "Change copies to 3"</Text>
+                          <Text>• "Use color mode" or "Switch to color"</Text>
+                          <Text>• "Double sided" or "Enable duplex"</Text>
+                          <Text>• "Scan at 600 DPI" or "Set resolution to 600"</Text>
+                          <Text>• Say "That's all" or "No changes" when ready to proceed</Text>
+                        </Stack>
+                      </Box>
+                    )}
+                  </Box>
                 )}
               </Box>
 

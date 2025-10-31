@@ -27,6 +27,7 @@
 
 **AI Orchestration System** 🤖
 - [AI Orchestration Overview](#-ai-orchestration-system)
+- [Voice-Assisted Workflow](#-voice-assisted-orchestration-new)
 - [Quick Start (5 Minutes)](#-ai-orchestration-quick-start)
 - [Voice Commands](#-voice-command-examples)
 - [Orchestration Architecture](#-orchestration-architecture)
@@ -133,6 +134,103 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 ## 🤖 AI Orchestration System
 
 PrintChakra features a **complete hands-free AI orchestration system** that enables autonomous print and scan operations through natural language and voice commands.
+
+---
+
+## 🎤 Voice-Assisted Orchestration **[NEW]**
+
+**Intelligent voice-triggered workflow with automatic UI orchestration and natural language configuration.**
+
+### ✨ Revolutionary Features
+
+#### 🚀 **Automatic UI Triggering**
+- Say "Let's print a document" or "Let's scan a document"
+- Orchestration UI opens automatically - no manual clicks needed
+- Skips mode selection and goes directly to configuration
+- Voice mode indicator (🎤) shows you're in hands-free mode
+
+#### 🧠 **Natural Language Configuration**
+- **Print Settings**: "landscape", "3 copies", "color mode", "double sided", "A4 paper"
+- **Scan Settings**: "600 DPI", "color scan", "PDF format", "grayscale"
+- **Multiple Changes**: "Set to landscape and print 3 copies in color"
+- **Smart Parsing**: Understands variations like "use color" or "switch to color mode"
+
+#### 🔄 **Autonomous Workflow**
+- No button clicks during voice mode
+- Real-time configuration updates
+- AI confirms each change: "Updated orientation, copies. Any other changes?"
+- Say "That's all" or "No changes" when ready to proceed
+
+### 🎯 Quick Example
+
+```
+You: "Let's print a document"
+   → UI opens automatically in voice mode 🎤
+   
+AI: "What options would you like to change or edit?"
+   → Voice tips displayed in UI
+   
+You: "Set to landscape and 3 copies"
+   → Configuration updates instantly
+   
+AI: "Updated orientation: landscape, copies: 3. Any other changes?"
+   → Changes reflected in real-time
+   
+You: "That's all"
+   → Ready to confirm and execute
+   
+AI: "Perfect! Your settings are ready. Shall we proceed?"
+```
+
+### 📋 Voice Command Reference
+
+#### Print Configuration Commands
+| Say This | Result |
+|----------|--------|
+| "landscape" or "portrait" | Changes orientation |
+| "3 copies" or "print 5 copies" | Sets number of copies |
+| "color mode" or "use color" | Switches to color printing |
+| "black and white" or "grayscale" | Switches to B&W |
+| "double sided" or "duplex" | Enables duplex printing |
+| "A4 paper" or "letter size" | Changes paper size |
+| "high quality" or "draft mode" | Adjusts print quality |
+
+#### Scan Configuration Commands
+| Say This | Result |
+|----------|--------|
+| "600 DPI" or "scan at 1200 DPI" | Sets resolution |
+| "color scan" | Color scanning mode |
+| "grayscale" or "black and white" | Grayscale mode |
+| "save as PDF" or "PNG format" | Sets output format |
+| "A4 size" or "letter size" | Sets page size |
+
+#### Control Commands
+| Say This | Result |
+|----------|--------|
+| "that's all" or "no changes" | Finish configuration |
+| "done" or "proceed" | Ready to execute |
+| "continue" or "I'm good" | Complete settings |
+
+### 🔧 Technical Implementation
+
+**Backend Components:**
+- `orchestration_service.py`: Voice-triggered intent handling with `parse_voice_configuration()`
+- `app.py`: Enhanced `/voice/process` endpoint with configuration state detection
+- New endpoint: `/orchestrate/voice-config` for voice-based configuration parsing
+
+**Frontend Components:**
+- `OrchestrationOverlay.tsx`: Voice mode detection and automatic UI opening
+- Real-time Socket.IO synchronization
+- Contextual voice tips display
+
+**Voice Processing Flow:**
+```
+Voice Input → Whisper Transcription → Intent Detection → 
+  ├─ New Intent (Print/Scan): Open UI with voice mode
+  └─ In CONFIGURING State: Parse configuration changes
+```
+
+---
 
 ### 🎯 Key Capabilities
 

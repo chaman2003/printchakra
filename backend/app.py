@@ -2654,33 +2654,88 @@ def process_voice_complete():
             # Check if user text contains orchestration commands
             user_text = result.get('user_text', '')
             if ORCHESTRATION_AVAILABLE and orchestrator and user_text:
-                # Try to detect orchestration intent
-                from services.orchestration_service import IntentType
-                intent, params = orchestrator.detect_intent(user_text)
+                # Check current orchestration state
+                current_state = orchestrator.current_state.value
                 
-                # If valid orchestration intent detected, process it
-                if intent in [IntentType.PRINT, IntentType.SCAN]:
-                    logger.info(f"🎯 Orchestration intent detected: {intent.value}")
-                    orchestration_result = orchestrator.process_command(user_text)
+                # If in CONFIGURING state, parse voice for configuration changes
+                if current_state == 'configuring' and orchestrator.pending_action:
+                    action_type = orchestrator.pending_action.get('type')
+                    if action_type:
+                        logger.info(f"🎤 Parsing voice configuration for {action_type}")
+                        parsed_config = orchestrator.parse_voice_configuration(user_text, action_type)
+                        
+                        if parsed_config.get('no_changes'):
+                            # User indicated they're done with configuration
+                            result['orchestration'] = {
+                                'no_changes': True,
+                                'message': 'Configuration complete. Ready to proceed.',
+                                'ready_to_confirm': True
+                            }
+                            result['ai_response'] = 'Perfect! Your settings are ready. Shall we proceed?'
+                            
+                            socketio.emit('orchestration_update', {
+                                'type': 'configuration_complete',
+                                'ready_to_confirm': True,
+                                'timestamp': datetime.now().isoformat()
+                            })
+                        elif parsed_config:
+                            # Apply configuration updates
+                            update_result = orchestrator.update_configuration(action_type, parsed_config)
+                            result['orchestration'] = {
+                                'configuration_updated': True,
+                                'updates': parsed_config,
+                                'configuration': update_result.get('configuration')
+                            }
+                            
+                            update_summary = ', '.join([f"{k}: {v}" for k, v in parsed_config.items()])
+                            result['ai_response'] = f"Updated {update_summary}. Any other changes?"
+                            
+                            socketio.emit('orchestration_update', {
+                                'type': 'voice_configuration_updated',
+                                'action_type': action_type,
+                                'updates': parsed_config,
+                                'configuration': update_result.get('configuration'),
+                                'timestamp': datetime.now().isoformat()
+                            })
+                        else:
+                            result['ai_response'] = "I didn't catch any configuration changes. Try saying things like 'landscape', '3 copies', or 'color mode'."
+                else:
+                    # Try to detect orchestration intent
+                    from services.orchestration_service import IntentType
+                    intent, params = orchestrator.detect_intent(user_text)
                     
-                    # Add orchestration result to response
-                    result['orchestration'] = orchestration_result
-                    result['orchestration_detected'] = True
-                    
-                    # Override AI response with orchestration message
-                    if orchestration_result.get('message'):
-                        result['ai_response'] = orchestration_result['message']
-                    
-                    # Emit orchestration update
-                    try:
-                        socketio.emit('orchestration_update', {
-                            'type': 'voice_command_detected',
-                            'intent': intent.value,
-                            'result': orchestration_result,
-                            'timestamp': datetime.now().isoformat()
-                        })
-                    except Exception as socket_error:
-                        logger.warning(f"Orchestration socket emit failed: {socket_error}")
+                    # If valid orchestration intent detected, process it
+                    if intent in [IntentType.PRINT, IntentType.SCAN]:
+                        logger.info(f"🎯 Orchestration intent detected: {intent.value}")
+                        
+                        # Add voice_triggered flag to parameters
+                        if params is None:
+                            params = {}
+                        params['voice_triggered'] = True
+                        
+                        # Process command with voice_triggered flag
+                        orchestration_result = orchestrator.process_command(user_text)
+                        
+                        # Add orchestration result to response
+                        result['orchestration'] = orchestration_result
+                        result['orchestration_detected'] = True
+                        
+                        # Override AI response with orchestration message
+                        if orchestration_result.get('message'):
+                            result['ai_response'] = orchestration_result['message']
+                        
+                        # Emit orchestration update
+                        try:
+                            socketio.emit('orchestration_update', {
+                                'type': 'voice_command_detected',
+                                'intent': intent.value,
+                                'result': orchestration_result,
+                                'timestamp': datetime.now().isoformat(),
+                                'open_ui': orchestration_result.get('open_ui', False),
+                                'skip_mode_selection': orchestration_result.get('skip_mode_selection', False)
+                            })
+                        except Exception as socket_error:
+                            logger.warning(f"Orchestration socket emit failed: {socket_error}")
             
             # Emit to frontend via Socket.IO
             try:
@@ -3169,6 +3224,75 @@ def orchestrate_configure():
         
     except Exception as e:
         logger.error(f"❌ Orchestration configure error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/orchestrate/voice-config', methods=['POST'])
+def orchestrate_voice_config():
+    """
+    Parse voice command for configuration changes
+    Expects: JSON with { "voice_text": "...", "action_type": "print|scan" }
+    """
+    if not ORCHESTRATION_AVAILABLE or not orchestrator:
+        return jsonify({
+            'success': False,
+            'error': 'Orchestration service not available'
+        }), 503
+    
+    try:
+        data = request.get_json()
+        voice_text = data.get('voice_text', '')
+        action_type = data.get('action_type', '')
+        
+        if not voice_text or not action_type:
+            return jsonify({
+                'success': False,
+                'error': 'Missing voice_text or action_type'
+            }), 400
+        
+        # Parse voice command
+        parsed_config = orchestrator.parse_voice_configuration(voice_text, action_type)
+        
+        # Check if user indicated no more changes
+        if parsed_config.get('no_changes'):
+            return jsonify({
+                'success': True,
+                'no_changes': True,
+                'message': 'Ready to proceed',
+                'action': 'ready_to_confirm'
+            })
+        
+        # Apply configuration updates if any were parsed
+        if parsed_config:
+            result = orchestrator.update_configuration(action_type, parsed_config)
+            
+            # Emit Socket.IO event
+            if result.get('success'):
+                socketio.emit('orchestration_update', {
+                    'type': 'voice_configuration_updated',
+                    'action_type': action_type,
+                    'updates': parsed_config,
+                    'configuration': result.get('configuration'),
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            return jsonify({
+                'success': True,
+                'updates': parsed_config,
+                'configuration': result.get('configuration'),
+                'message': f"Updated: {', '.join(parsed_config.keys())}"
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'updates': {},
+                'message': 'No configuration changes detected. Try saying specific options like "landscape" or "3 copies"'
+            })
+        
+    except Exception as e:
+        logger.error(f"❌ Voice configuration parsing error: {e}")
         return jsonify({
             'success': False,
             'error': str(e)

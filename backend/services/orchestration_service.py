@@ -215,6 +215,9 @@ class PrintScanOrchestrator:
         Returns:
             Response dictionary
         """
+        # Check if this is a voice-triggered orchestration request
+        voice_triggered = parameters.pop('voice_triggered', False)
+        
         # Get available documents
         documents = self._get_available_documents()
         
@@ -246,22 +249,33 @@ class PrintScanOrchestrator:
         if config['paper_size']:
             config_summary += f", {config['paper_size']}"
         
-        self.current_state = WorkflowState.AWAITING_CONFIRMATION
+        # Set state based on trigger type
+        if voice_triggered:
+            self.current_state = WorkflowState.CONFIGURING
+            message = "What options would you like to change or edit?"
+        else:
+            self.current_state = WorkflowState.AWAITING_CONFIRMATION
+            message = f'Ready to print {doc_name} ({config_summary}). Shall we proceed?'
+        
         self.pending_action = {
             'type': 'print',
             'document': self.selected_document,
-            'configuration': self.configuration['print'].copy()
+            'configuration': self.configuration['print'].copy(),
+            'voice_triggered': voice_triggered
         }
         
         return {
             'success': True,
             'intent': 'print',
-            'requires_confirmation': True,
-            'message': f'Ready to print {doc_name} ({config_summary}). Shall we proceed?',
+            'requires_confirmation': not voice_triggered,
+            'requires_options': voice_triggered,
+            'message': message,
             'document': self.selected_document,
             'configuration': self.configuration['print'],
             'available_documents': documents if not self.selected_document else None,
-            'workflow_state': self.current_state.value
+            'workflow_state': self.current_state.value,
+            'open_ui': voice_triggered,
+            'skip_mode_selection': voice_triggered
         }
     
     def _handle_scan_intent(self, parameters: Dict[str, Any]) -> Dict[str, Any]:
@@ -274,6 +288,9 @@ class PrintScanOrchestrator:
         Returns:
             Response dictionary
         """
+        # Check if this is a voice-triggered orchestration request
+        voice_triggered = parameters.pop('voice_triggered', False)
+        
         # Update configuration with parameters
         if parameters:
             self.configuration['scan'].update(parameters)
@@ -281,20 +298,31 @@ class PrintScanOrchestrator:
         config = self.configuration['scan']
         config_summary = f"{config['resolution']} DPI, {config['color_mode']}, {config['format'].upper()}"
         
-        self.current_state = WorkflowState.AWAITING_CONFIRMATION
+        # Set state based on trigger type
+        if voice_triggered:
+            self.current_state = WorkflowState.CONFIGURING
+            message = "What options would you like to change or edit?"
+        else:
+            self.current_state = WorkflowState.AWAITING_CONFIRMATION
+            message = f'Ready to scan document ({config_summary}). Shall we proceed?'
+        
         self.pending_action = {
             'type': 'scan',
-            'configuration': self.configuration['scan'].copy()
+            'configuration': self.configuration['scan'].copy(),
+            'voice_triggered': voice_triggered
         }
         
         return {
             'success': True,
             'intent': 'scan',
-            'requires_confirmation': True,
-            'message': f'Ready to scan document ({config_summary}). Shall we proceed?',
+            'requires_confirmation': not voice_triggered,
+            'requires_options': voice_triggered,
+            'message': message,
             'configuration': self.configuration['scan'],
             'workflow_state': self.current_state.value,
-            'next_step': 'Open phone capture interface or use connected scanner'
+            'next_step': 'Open phone capture interface or use connected scanner' if not voice_triggered else None,
+            'open_ui': voice_triggered,
+            'skip_mode_selection': voice_triggered
         }
     
     def _handle_status_inquiry(self) -> Dict[str, Any]:
@@ -539,6 +567,102 @@ class PrintScanOrchestrator:
             'message': f'Selected document: {filename}',
             'document': document
         }
+    
+    def parse_voice_configuration(self, voice_text: str, action_type: str) -> Dict[str, Any]:
+        """
+        Parse voice commands for configuration changes
+        
+        Args:
+            voice_text: User's voice command text
+            action_type: 'print' or 'scan'
+            
+        Returns:
+            Parsed configuration updates
+        """
+        updates = {}
+        text_lower = voice_text.lower()
+        
+        # Common stop phrases indicating no more changes
+        stop_phrases = ['no changes', "that's all", 'nothing else', 'done', 'proceed', 
+                       'continue', "i'm good", 'all set', 'looks good']
+        
+        if any(phrase in text_lower for phrase in stop_phrases):
+            return {'no_changes': True}
+        
+        if action_type == 'print':
+            # Orientation
+            if 'landscape' in text_lower:
+                updates['orientation'] = 'landscape'
+            elif 'portrait' in text_lower:
+                updates['orientation'] = 'portrait'
+            
+            # Copies
+            import re
+            copies_match = re.search(r'(\d+)\s*cop(?:y|ies)', text_lower)
+            if copies_match:
+                updates['copies'] = int(copies_match.group(1))
+            
+            # Color mode
+            if 'color' in text_lower and 'black' not in text_lower:
+                updates['color_mode'] = 'color'
+            elif 'black and white' in text_lower or 'grayscale' in text_lower or 'monochrome' in text_lower:
+                updates['color_mode'] = 'bw'
+            
+            # Duplex
+            if 'double sided' in text_lower or 'duplex' in text_lower or 'both sides' in text_lower:
+                updates['duplex'] = True
+            elif 'single sided' in text_lower or 'one side' in text_lower:
+                updates['duplex'] = False
+            
+            # Paper size
+            paper_sizes = ['a4', 'letter', 'legal', 'a3']
+            for size in paper_sizes:
+                if size in text_lower:
+                    updates['paper_size'] = size
+                    break
+            
+            # Quality
+            if 'high quality' in text_lower or 'best quality' in text_lower:
+                updates['quality'] = 'high'
+            elif 'draft' in text_lower or 'low quality' in text_lower:
+                updates['quality'] = 'draft'
+            elif 'normal quality' in text_lower:
+                updates['quality'] = 'normal'
+        
+        elif action_type == 'scan':
+            # Resolution
+            import re
+            dpi_match = re.search(r'(\d+)\s*dpi', text_lower)
+            if dpi_match:
+                updates['resolution'] = int(dpi_match.group(1))
+            elif '300' in text_lower:
+                updates['resolution'] = 300
+            elif '600' in text_lower:
+                updates['resolution'] = 600
+            elif '1200' in text_lower:
+                updates['resolution'] = 1200
+            
+            # Color mode
+            if 'color' in text_lower and 'black' not in text_lower:
+                updates['color_mode'] = 'color'
+            elif 'black and white' in text_lower or 'grayscale' in text_lower:
+                updates['color_mode'] = 'grayscale'
+            
+            # Format
+            formats = ['pdf', 'png', 'jpg', 'jpeg', 'tiff']
+            for fmt in formats:
+                if fmt in text_lower:
+                    updates['format'] = fmt
+                    break
+            
+            # Page size
+            page_sizes = ['a4', 'letter', 'legal']
+            for size in page_sizes:
+                if size in text_lower:
+                    updates['page_size'] = size
+                    break
+        
+        return updates
     
     def update_configuration(self, action_type: str, settings: Dict[str, Any]) -> Dict[str, Any]:
         """
