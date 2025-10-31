@@ -45,17 +45,28 @@ module.exports = {
         (plugin) => plugin.constructor.name === 'ESLintWebpackPlugin'
       );
 
-      if (eslintPluginIndex >= 0) {
+      // If DISABLE_ESLINT_PLUGIN is set, remove the plugin entirely
+      if (process.env.DISABLE_ESLINT_PLUGIN === 'true') {
+        if (eslintPluginIndex >= 0) {
+          webpackConfig.plugins.splice(eslintPluginIndex, 1);
+        }
+      } else if (eslintPluginIndex >= 0) {
         // Properly initialize the plugin with updated ESLint path
-        webpackConfig.plugins[eslintPluginIndex] = new ESLintPlugin({
-          extensions: ['js', 'mjs', 'jsx', 'ts', 'tsx'],
-          formatter: require.resolve('react-dev-utils/eslintFormatter'),
-          eslintPath: require.resolve('eslint/use-at-your-own-risk'),
-          failOnError: false, // Don't fail on ESLint errors during build
-          cache: true,
-          cacheLocation: paths.appNodeModules + '/.cache/eslint-webpack-plugin',
-          context: paths.appSrc,
-        });
+        try {
+          webpackConfig.plugins[eslintPluginIndex] = new ESLintPlugin({
+            extensions: ['js', 'mjs', 'jsx', 'ts', 'tsx'],
+            formatter: require.resolve('react-dev-utils/eslintFormatter'),
+            eslintPath: require.resolve('eslint/use-at-your-own-risk'),
+            failOnError: false, // Don't fail on ESLint errors during build
+            cache: true,
+            cacheLocation: paths.appNodeModules + '/.cache/eslint-webpack-plugin',
+            context: paths.appSrc,
+          });
+        } catch (error) {
+          // If ESLint setup fails, just remove the plugin
+          console.warn('ESLint plugin setup failed, removing plugin:', error.message);
+          webpackConfig.plugins.splice(eslintPluginIndex, 1);
+        }
       }
 
       return webpackConfig;
