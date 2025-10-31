@@ -36,23 +36,35 @@ def _init_tts_engine():
         import pyttsx3
         engine = pyttsx3.init()
         
-        # Configure voice
+        # Configure voice - Try Ravi first, fallback to David, then any available
         voices = engine.getProperty('voices')
-        david_voice = None
+        selected_voice = None
         
-        for voice in voices:
-            if 'david' in voice.name.lower() and 'desktop' in voice.name.lower():
-                david_voice = voice
-                if not _tts_initialized_once:
-                    logger.info(f"✅ Found preferred voice: {voice.name}")
+        # Priority order: Ravi > David > Zira > Any available
+        voice_preferences = ['ravi', 'david', 'zira']
+        
+        for preference in voice_preferences:
+            for voice in voices:
+                if preference in voice.name.lower():
+                    selected_voice = voice
+                    if not _tts_initialized_once:
+                        logger.info(f"✅ Found preferred voice: {voice.name}")
+                    break
+            if selected_voice:
                 break
         
-        if david_voice:
-            engine.setProperty('voice', david_voice.id)
-        elif voices:
-            engine.setProperty('voice', voices[0].id)
+        # If no preferred voice found, use first available
+        if not selected_voice and voices:
+            selected_voice = voices[0]
             if not _tts_initialized_once:
-                logger.info(f"✅ Using available voice: {voices[0].name}")
+                logger.warning(f"⚠️ Preferred voices not found. Using: {voices[0].name}")
+                logger.warning(f"   To install Microsoft Ravi: Settings > Time & Language > Speech > Add voices")
+        
+        if selected_voice:
+            engine.setProperty('voice', selected_voice.id)
+        else:
+            if not _tts_initialized_once:
+                logger.error("❌ No TTS voices available on system!")
         
         engine.setProperty('rate', 200)
         engine.setProperty('volume', 0.9)
@@ -102,19 +114,27 @@ def speak_text(text: str) -> bool:
             # Use 'sapi5' driver explicitly for Windows
             engine = pyttsx3.init('sapi5', debug=False)
             
-            # Configure voice
+            # Configure voice - Try Ravi first, fallback to David, then any available
             voices = engine.getProperty('voices')
-            david_voice = None
+            selected_voice = None
             
-            for voice in voices:
-                if 'david' in voice.name.lower() and 'desktop' in voice.name.lower():
-                    david_voice = voice
+            # Priority order: Ravi > David > Zira > Any available
+            voice_preferences = ['ravi', 'david', 'zira']
+            
+            for preference in voice_preferences:
+                for voice in voices:
+                    if preference in voice.name.lower():
+                        selected_voice = voice
+                        break
+                if selected_voice:
                     break
             
-            if david_voice:
-                engine.setProperty('voice', david_voice.id)
-            elif voices:
-                engine.setProperty('voice', voices[0].id)
+            # If no preferred voice found, use first available
+            if not selected_voice and voices:
+                selected_voice = voices[0]
+            
+            if selected_voice:
+                engine.setProperty('voice', selected_voice.id)
             
             engine.setProperty('rate', 220)  # Increased from 200 for faster speech
             engine.setProperty('volume', 0.9)
