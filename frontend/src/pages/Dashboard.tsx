@@ -1717,8 +1717,8 @@ const Dashboard: React.FC = () => {
                 overflow="hidden"
               >
                 <Grid 
-                  templateColumns={{ base: '1fr', lg: '480px 1fr' }} 
-                  gap={{ base: 4, md: 5 }} 
+                  templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
+                  gap={{ base: 4, md: 6 }} 
                   h="full" 
                   alignItems="start"
                 >
@@ -1729,7 +1729,7 @@ const Dashboard: React.FC = () => {
                     position="sticky" 
                     top="0" 
                     h="calc(90vh - 180px)"
-                    maxH="650px"
+                    maxH="600px"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -2125,8 +2125,8 @@ const Dashboard: React.FC = () => {
                 overflow="hidden"
               >
                 <Grid 
-                  templateColumns={{ base: '1fr', lg: '480px 1fr' }} 
-                  gap={{ base: 4, md: 5 }} 
+                  templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
+                  gap={{ base: 4, md: 6 }} 
                   h="full" 
                   alignItems="start"
                 >
@@ -2137,7 +2137,7 @@ const Dashboard: React.FC = () => {
                     position="sticky" 
                     top="0" 
                     h="calc(90vh - 180px)"
-                    maxH="650px"
+                    maxH="600px"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
