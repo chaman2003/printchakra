@@ -208,7 +208,7 @@ processed/*
 processed_text/*
 uploads/*
 
-#
+#extras
 prompt.txt
 error.txt
 log.txt
