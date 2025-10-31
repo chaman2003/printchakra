@@ -223,31 +223,16 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
             </Tooltip>
           </ButtonGroup>
 
-          <Tooltip label={showThumbnails ? 'Hide Thumbnails' : 'Show Thumbnails'}>
-            <IconButton 
-              aria-label="Toggle thumbnails" 
-              icon={<Iconify icon="solar:sidebar-bold" width={14} height={14} />}
-              size="sm" 
-              variant={showThumbnails ? 'solid' : 'outline'} 
-              colorScheme={showThumbnails ? 'brand' : 'gray'}
-              onClick={() => setShowThumbnails(s => !s)}
-              bg={showThumbnails ? undefined : 'white'}
-              _dark={{ bg: showThumbnails ? undefined : 'whiteAlpha.100' }}
-              display={{ base: 'none', lg: 'flex' }}
-            />
-          </Tooltip>
-
-          <Tooltip label={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
-            <IconButton 
-              aria-label="Toggle fullscreen" 
-              icon={<Iconify icon={isFullscreen ? "solar:minimize-bold" : "solar:maximize-bold"} width={14} height={14} />}
-              size="sm" 
-              onClick={handleFullscreen}
-              bg="white"
-              _dark={{ bg: 'whiteAlpha.100' }}
-              display={{ base: 'none', md: 'flex' }}
-            />
-          </Tooltip>
+          {/* Page Number Display */}
+          <Text 
+            fontSize="sm" 
+            fontWeight="medium"
+            color="gray.600"
+            _dark={{ color: 'gray.400' }}
+            px={2}
+          >
+            {currentPage}/{totalPages}
+          </Text>
         </HStack>
       </Flex>
 
