@@ -1715,20 +1715,21 @@ const Dashboard: React.FC = () => {
               <ModalBody 
                 py={{ base: 3, md: 4 }}
                 px={{ base: 4, md: 6 }}
-                h="calc(85vh - 160px)"
-                overflow="hidden"
+                maxH="calc(85vh - 160px)"
+                minH="500px"
+                overflow="auto"
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
                   gap={{ base: 4, md: 5 }} 
-                  h="100%"
-                  alignItems="start"
+                  alignItems="stretch"
                 >
                   {/* Live Preview - Scan Mode (LEFT SIDE) */}
                   <Box 
                     display={{ base: 'none', lg: 'flex' }} 
                     flexDirection="column"
-                    h="100%"
+                    minH="500px"
+                    h="fit-content"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -2108,20 +2109,21 @@ const Dashboard: React.FC = () => {
               <ModalBody 
                 py={{ base: 3, md: 4 }}
                 px={{ base: 4, md: 6 }}
-                h="calc(85vh - 160px)"
-                overflow="hidden"
+                maxH="calc(85vh - 160px)"
+                minH="500px"
+                overflow="auto"
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
                   gap={{ base: 4, md: 5 }} 
-                  h="100%"
-                  alignItems="start"
+                  alignItems="stretch"
                 >
                   {/* Live Preview - Print Mode (LEFT SIDE) */}
                   <Box 
                     display={{ base: 'none', lg: 'flex' }} 
                     flexDirection="column"
-                    h="100%"
+                    minH="500px"
+                    h="fit-content"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
