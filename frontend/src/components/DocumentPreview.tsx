@@ -47,6 +47,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   const [zoomLevel, setZoomLevel] = useState(100);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showThumbnails, setShowThumbnails] = useState(false);
+  const [rotation, setRotation] = useState(0);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -96,9 +97,14 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
     }
   }, []);
 
-  // Reset zoom when documents change
+  const handleRotate = useCallback(() => {
+    setRotation((prev) => (prev + 90) % 360);
+  }, []);
+
+  // Reset zoom and rotation when documents change
   useEffect(() => {
     setZoomLevel(100);
+    setRotation(0);
   }, [documents]);
 
   if (documents.length === 0) {
@@ -231,6 +237,20 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
             </Tooltip>
           </ButtonGroup>
 
+          {/* Rotate Button */}
+          <Tooltip label="Rotate 90°">
+            <IconButton 
+              aria-label="Rotate" 
+              icon={<Iconify icon="solar:refresh-bold" width={14} height={14} />}
+              size="sm" 
+              onClick={handleRotate}
+              bg="whiteAlpha.200"
+              color="white"
+              _hover={{ bg: 'whiteAlpha.300' }}
+              _dark={{ bg: 'whiteAlpha.100' }}
+            />
+          </Tooltip>
+
           {/* Page Number Display */}
           <Text 
             fontSize="sm" 
@@ -342,6 +362,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                     height: '100%',
                     display: 'block',
                     objectFit: 'contain',
+                    transform: `rotate(${rotation}deg)`,
+                    transition: 'transform 0.3s ease',
                     filter: previewSettings?.colorMode === 'grayscale' 
                       ? 'grayscale(100%)' 
                       : previewSettings?.colorMode === 'bw' 

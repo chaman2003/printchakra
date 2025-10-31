@@ -1702,8 +1702,8 @@ const Dashboard: React.FC = () => {
                   <Iconify icon="solar:document-add-bold-duotone" width={24} height={24} />
                 </Box>
                 Scan Configuration
-                <Badge ml="auto" colorScheme="purple" fontSize="sm" px={3} py={1}>
-                  Step 2 of 3
+                <Badge  colorScheme="purple" fontSize="sm" px={3} py={1}>
+                 Step 2 of 3
                 </Badge>
               </ModalHeader>
               <ModalCloseButton 
@@ -2133,7 +2133,7 @@ const Dashboard: React.FC = () => {
                   <Iconify icon="solar:printer-bold-duotone" width={24} height={24} />
                 </Box>
                 Print Configuration
-                <Badge ml="auto" colorScheme="blue" fontSize="sm" px={3} py={1}>
+                <Badge colorScheme="blue" fontSize="sm" px={3} py={1}>
                   Step 2 of 3
                 </Badge>
               </ModalHeader>
