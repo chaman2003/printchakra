@@ -1529,7 +1529,8 @@ const Dashboard: React.FC = () => {
           border="1px solid" 
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
-          maxH="90vh"
+          maxH="85vh"
+          h="auto"
           mx={{ base: 2, md: 4 }}
           my={{ base: 2, md: 4 }}
         >
@@ -1714,22 +1715,20 @@ const Dashboard: React.FC = () => {
               <ModalBody 
                 py={{ base: 4, md: 5 }}
                 px={{ base: 4, md: 6 }}
-                overflow="hidden"
+                maxH="calc(85vh - 200px)"
+                overflowY="auto"
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
                   gap={{ base: 4, md: 6 }} 
-                  h="full" 
                   alignItems="start"
                 >
                   {/* Live Preview - Scan Mode (LEFT SIDE) */}
                   <Box 
                     display={{ base: 'none', lg: 'flex' }} 
                     flexDirection="column"
-                    position="sticky" 
-                    top="0" 
-                    h="calc(90vh - 180px)"
-                    maxH="600px"
+                    h="calc(85vh - 240px)"
+                    minH="450px"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -1748,22 +1747,9 @@ const Dashboard: React.FC = () => {
 
                   {/* Options Panel (RIGHT SIDE) */}
                   <Stack 
-                    spacing={3} 
-                    overflowY="auto" 
-                    maxH="calc(90vh - 180px)"
+                    spacing={3}
                     pr={{ base: 0, md: 2 }}
                     order={{ base: 1, lg: 2 }}
-                    css={{
-                      '&::-webkit-scrollbar': { width: '6px' },
-                      '&::-webkit-scrollbar-track': { background: 'transparent' },
-                      '&::-webkit-scrollbar-thumb': { 
-                        background: 'rgba(121,95,238,0.4)', 
-                        borderRadius: '10px',
-                      },
-                      '&::-webkit-scrollbar-thumb:hover': { 
-                        background: 'rgba(121,95,238,0.6)',
-                      },
-                    }}
                   >
                   {/* Select Document Button */}
                   <Button
@@ -2122,22 +2108,20 @@ const Dashboard: React.FC = () => {
               <ModalBody 
                 py={{ base: 4, md: 5 }}
                 px={{ base: 4, md: 6 }}
-                overflow="hidden"
+                maxH="calc(85vh - 200px)"
+                overflowY="auto"
               >
                 <Grid 
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
                   gap={{ base: 4, md: 6 }} 
-                  h="full" 
                   alignItems="start"
                 >
                   {/* Live Preview - Print Mode (LEFT SIDE) */}
                   <Box 
                     display={{ base: 'none', lg: 'flex' }} 
                     flexDirection="column"
-                    position="sticky" 
-                    top="0" 
-                    h="calc(90vh - 180px)"
-                    maxH="600px"
+                    h="calc(85vh - 240px)"
+                    minH="450px"
                     overflow="hidden"
                     order={{ base: 2, lg: 1 }}
                   >
@@ -2157,21 +2141,8 @@ const Dashboard: React.FC = () => {
                   {/* Options Panel (RIGHT SIDE) */}
                   <Stack 
                     spacing={3}
-                    overflowY="auto" 
-                    maxH="calc(90vh - 180px)"
                     pr={{ base: 0, md: 2 }}
                     order={{ base: 1, lg: 2 }}
-                    css={{
-                      '&::-webkit-scrollbar': { width: '6px' },
-                      '&::-webkit-scrollbar-track': { background: 'transparent' },
-                      '&::-webkit-scrollbar-thumb': { 
-                        background: 'rgba(69,202,255,0.4)', 
-                        borderRadius: '10px',
-                      },
-                      '&::-webkit-scrollbar-thumb:hover': { 
-                        background: 'rgba(69,202,255,0.6)',
-                      },
-                    }}
                   >
                   {/* Select Document Button */}
                   <Button
