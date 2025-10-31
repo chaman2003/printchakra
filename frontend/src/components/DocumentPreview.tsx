@@ -65,8 +65,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   
   // Calculate responsive paper dimensions - fit to container
   const getPaperDimensions = () => {
-    const baseWidth = isLandscape ? 480 : 360;
-    const baseHeight = isLandscape ? 340 : 480;
+    // Reduced by ~67% to match 33% zoom appearance
+    const baseWidth = isLandscape ? 320 : 240;
+    const baseHeight = isLandscape ? 220 : 320;
     const scale = (zoomLevel / 100) * (previewSettings?.scale || 100) / 100;
     
     return {
