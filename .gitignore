@@ -207,6 +207,8 @@ pdfs/*
 processed/*
 processed_text/*
 uploads/*
+
+#
 prompt.txt
 error.txt
 log.txt
