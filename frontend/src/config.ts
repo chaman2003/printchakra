@@ -110,6 +110,17 @@ export const API_ENDPOINTS = {
   converted: '/converted',
   getConvertedFiles: '/get-converted-files',
   deleteConverted: '/delete-converted',
+  
+  // AI Orchestration endpoints
+  orchestrateCommand: '/orchestrate/command',
+  orchestrateConfirm: '/orchestrate/confirm',
+  orchestrateCancel: '/orchestrate/cancel',
+  orchestrateStatus: '/orchestrate/status',
+  orchestrateDocuments: '/orchestrate/documents',
+  orchestrateSelect: '/orchestrate/select',
+  orchestrateConfigure: '/orchestrate/configure',
+  orchestrateReset: '/orchestrate/reset',
+  orchestrateHistory: '/orchestrate/history',
 };
 
 console.log('🔧 API Configuration:', { 

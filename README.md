@@ -1,8 +1,8 @@
-1113339987122<div align="center">
+<div align="center">
 
 # 🪷 PrintChakra
 
-### *AI-Powered Smart Print & Capture Solution*
+### *AI-Powered Smart Print & Scan Solution with Complete Hands-Free Orchestration*
 
 [![Version](https://img.shields.io/badge/version-2.1.0-blue.svg?style=for-the-badge)](https://github.com/chaman2003/printchakra)
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
@@ -11,19 +11,61 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-**Transform your documents with intelligent OCR processing and real-time automation**
+**Transform your documents with intelligent OCR processing, real-time automation, and complete hands-free voice control**
 
-[Features](#-key-features) • [Quick Start](#-quick-start) • [Architecture](#️-architecture) • [Documentation](#-documentation) • [API](#-api-reference)
+---
+
+## 📑 Table of Contents
+
+**Core Documentation**
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Quick Start Guide](#-quick-start-guide)
+- [Architecture](#️-architecture)
+- [Technology Stack](#-technology-stack)
+- [API Reference](#-api-reference)
+
+**AI Orchestration System** 🤖
+- [AI Orchestration Overview](#-ai-orchestration-system)
+- [Quick Start (5 Minutes)](#-ai-orchestration-quick-start)
+- [Voice Commands](#-voice-command-examples)
+- [Orchestration Architecture](#-orchestration-architecture)
+
+**Modularization & Structure**
+- [Modular Architecture](#-modular-architecture)
+- [Project Structure](#-project-structure)
+- [Backend Architecture](#-backend-architecture-modular)
+- [Frontend Architecture](#-frontend-architecture-modular)
+
+**Configuration & Setup**
+- [AI Models Setup](#-ai-models-setup)
+- [Environment Configuration](#-environment-configuration)
+- [Preview Size Adjustment](#-preview-size-adjustment)
+
+**Additional Resources**
+- [Troubleshooting](#-troubleshooting)
+- [Roadmap](#-roadmap)
+- [Contributing](#-contributing)
+- [License & Author](#-license)
 
 ---
 
 </div>
 
-## 💡 What is PrintChakra?
+## 💡 Overview
 
-PrintChakra is a **complete automated document scanning system** that combines advanced OCR technology with seamless web and mobile interfaces. Print a blank page, and watch your phone automatically capture and process documents with AI-powered enhancement and intelligent text extraction.
+PrintChakra is a **complete automated document processing system** with **AI-powered hands-free orchestration** that combines advanced OCR technology, voice control, and seamless web/mobile interfaces. Simply speak commands like "print this document" or "scan in high quality" and watch the AI intelligently handle the entire workflow.
 
-Perfect for digitizing physical documents, extracting text from images, and building automated document workflows with real-time synchronization between desktop and mobile devices.
+### What Makes PrintChakra Unique?
+
+- 🎤 **Voice-Controlled Operations** - Complete hands-free print and scan control
+- 🤖 **AI Orchestration** - Intelligent workflow management with natural language understanding
+- 📱 **Mobile-First Design** - Auto-triggered phone capture with real-time processing
+- 🔍 **Advanced OCR Pipeline** - 12-stage sequential processing with multi-strategy document detection
+- ⚡ **Real-Time Synchronization** - Socket.IO WebSocket communication for instant updates
+- 🏗️ **Modular Architecture** - Clean, maintainable codebase with separation of concerns
+
+Perfect for digitizing physical documents, extracting text from images, and building automated document workflows with complete voice control and real-time synchronization.
 
 ---
 
@@ -85,6 +127,190 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 </td>
 </tr>
 </table>
+
+---
+
+## 🤖 AI Orchestration System
+
+PrintChakra features a **complete hands-free AI orchestration system** that enables autonomous print and scan operations through natural language and voice commands.
+
+### 🎯 Key Capabilities
+
+#### Natural Language Understanding
+- Detects user intent from text or voice commands
+- Automatically extracts parameters (copies, color mode, paper size, duplex, resolution)
+- Understands contextual commands like "print this in color" or "scan in high quality"
+
+#### Intelligent Workflow Management
+- **State Machine**: Tracks workflow state (idle → awaiting confirmation → executing → completed)
+- **Confirmation Flow**: Always asks "Shall we proceed?" before executing actions for safety
+- **Auto-Selection**: Automatically selects document if only one is available
+- **Configuration Memory**: Remembers and applies user preferences
+
+#### Voice Integration
+- Seamlessly integrates with Voice AI (Whisper + Smollm2)
+- Hands-free operation via voice commands
+- Real-time feedback via TTS (Text-to-Speech)
+- Automatic intent detection from transcribed speech
+
+#### Real-Time UI Synchronization
+- Socket.IO events keep frontend in sync with backend state
+- Live status updates with color-coded indicators
+- Visual feedback for all operations
+- Animated overlays and notifications
+
+### 🎤 Voice Command Examples
+
+```bash
+# Print Operations
+"Print this document"
+"Print in color"
+"Print 3 copies"
+"Print double-sided on A4"
+"Print both sides in grayscale"
+
+# Scan Operations
+"Scan a document"
+"Scan in high quality"
+"Scan as PDF"
+"Capture a document"
+
+# Status & Help
+"What's happening?"
+"Show status"
+"List documents"
+"What can you do?"
+"Help"
+```
+
+### 🎬 Example Workflow
+
+```
+1. User says: "Print the latest document in color"
+   ↓
+2. AI transcribes: "print the latest document in color"
+   ↓
+3. Orchestration detects: PRINT intent + color_mode=color
+   ↓
+4. System responds: "Ready to print doc_20251031.jpg (1 copy, color, A4). Shall we proceed?"
+   ↓
+5. User says: "Yes"
+   ↓
+6. Orchestration executes print job
+   ↓
+7. System responds: "Print job sent successfully"
+```
+
+### 🏛️ Orchestration Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    USER INTERFACE                        │
+│                  (Voice AI + Overlay UI)                 │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              ORCHESTRATION SERVICE                       │
+│  • Intent Detection (Print, Scan, Status, etc.)         │
+│  • Parameter Extraction (copies, color, duplex, etc.)   │
+│  • State Machine (Idle → Awaiting → Executing)          │
+│  • Workflow Management                                   │
+└────────────────────┬────────────────────────────────────┘
+                     │
+                     ▼
+┌─────────────────────────────────────────────────────────┐
+│              ACTION EXECUTION                            │
+│  • Print Service                                         │
+│  • Scan Service                                          │
+│  • Document Selection                                    │
+│  • Configuration Management                              │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 📊 Orchestration State Machine
+
+```
+IDLE
+  ↓ (user command)
+AWAITING_CONFIRMATION
+  ↓ (user confirms)
+EXECUTING
+  ↓ (completes)
+COMPLETED
+  ↓ (auto-reset)
+IDLE
+```
+
+### 🔧 API Endpoints
+
+```
+POST /orchestrate/command      - Process natural language command
+POST /orchestrate/confirm      - Confirm pending action
+POST /orchestrate/cancel       - Cancel pending action
+GET  /orchestrate/status       - Get current status
+GET  /orchestrate/documents    - List available documents
+POST /orchestrate/select       - Select specific document
+POST /orchestrate/configure    - Update configuration
+POST /orchestrate/reset        - Reset to idle state
+GET  /orchestrate/history      - Get workflow history
+```
+
+### 🎯 Default Configuration
+
+**Print Settings**:
+- Copies: 1
+- Paper Size: A4
+- Color Mode: Color
+- Duplex: Off
+- Quality: High
+
+**Scan Settings**:
+- Resolution: 300 DPI
+- Format: PDF
+- Color Mode: Color
+- Quality: High
+
+---
+
+## 🚀 AI Orchestration Quick Start
+
+### Step 1: Start the System
+
+```bash
+# Terminal 1: Start Backend
+cd backend
+python app.py
+
+# Terminal 2: Start Frontend
+cd frontend
+npm start
+```
+
+### Step 2: Test Voice Commands
+
+1. Click **"Talk with PrintChakra AI"** button
+2. Click **"Start Talking"**
+3. Say: **"Print this document in color"**
+4. System asks: "Shall we proceed?"
+5. Say: **"Yes"**
+6. ✅ Print job executes
+
+### Step 3: Use Manual Orchestration
+
+1. Click **"AI Orchestration"** button
+2. View current system status
+3. Type command: **"scan a document in high quality"**
+4. Click **"Confirm & Execute"**
+5. ✅ Phone interface opens for capture
+
+### Pro Tips
+
+- **Auto-Selection**: If only one document exists, it's selected automatically
+- **Parameter Extraction**: System extracts settings from your commands automatically
+- **Confirmation Safety**: System always asks before executing actions
+- **Real-Time Updates**: UI updates instantly via WebSocket
+- **Configuration Memory**: Default settings persist across sessions
 
 ---
 
@@ -532,6 +758,306 @@ printchakra/
 
 ---
 
+## 🏛️ Modular Architecture
+
+PrintChakra features a **clean, modular architecture** with complete separation of concerns for both backend and frontend.
+
+### Backend Modular Structure
+
+```
+backend/
+├── app_modular.py              # ⭐ NEW modular entry point
+├── models/                     # Data models & schemas
+│   ├── document.py
+│   ├── file_info.py
+│   ├── scan_config.py
+│   └── print_config.py
+├── routes/                     # API route blueprints
+│   ├── file_routes.py
+│   ├── scan_routes.py
+│   ├── print_routes.py
+│   ├── ocr_routes.py
+│   └── conversion_routes.py
+├── services/                   # Business logic layer
+│   ├── file_service.py
+│   ├── scan_service.py
+│   ├── print_service.py
+│   ├── ocr_service.py
+│   ├── conversion_service.py
+│   └── orchestration_service.py  # 🤖 AI Orchestration
+├── middleware/                 # Request/response middleware
+│   ├── error_handler.py
+│   ├── cors_config.py
+│   └── request_logger.py
+├── utils/                      # Utility functions
+│   ├── logger.py
+│   ├── file_utils.py
+│   └── image_utils.py
+├── models_ai/                  # 🤖 AI Models storage
+│   ├── whisper/               # Speech-to-text models
+│   ├── ollama/                # Language models cache
+│   └── tts/                   # Text-to-speech configs
+└── config/                    # Configuration management
+    └── settings.py
+```
+
+### Frontend Modular Structure
+
+```
+frontend/src/
+├── features/                   # Feature-based modules
+│   └── dashboard/
+│       ├── components/        # Feature-specific components
+│       ├── hooks/            # Custom React hooks
+│       └── types/            # TypeScript definitions
+├── shared/                    # Shared across features
+│   ├── components/           # Reusable components
+│   └── ui/                   # UI primitives
+├── services/                  # API service classes
+│   ├── index.ts             # FileService, ScanService, etc.
+│   └── orchestration.ts     # 🤖 Orchestration API
+├── components/               # Global components
+│   └── OrchestrationOverlay.tsx  # 🤖 Orchestration UI
+└── lib/                      # Utilities & helpers
+    └── utils.ts
+```
+
+### Benefits of Modular Architecture
+
+| ✨ **Aspect** | 🎯 **Benefit** |
+|---------------|---------------|
+| **Separation of Concerns** | Routes handle HTTP, Services handle logic, Models define data |
+| **Maintainability** | Smaller focused files, clear organization |
+| **Reusability** | Services shared across routes, utilities everywhere |
+| **Scalability** | Add features independently without breaking existing code |
+| **Testability** | Test components in isolation, mock dependencies easily |
+| **Type Safety** | Full TypeScript coverage with strong typing |
+
+### Using Modular Services
+
+**Backend**:
+```python
+# Run modular backend
+python backend/app_modular.py
+
+# Or legacy backend (both work)
+python backend/app.py
+```
+
+**Frontend**:
+```typescript
+import { FileService, ScanService } from '@/services';
+import { formatFileSize, debounce } from '@/lib/utils';
+
+// List files with type safety
+const files = await FileService.listFiles();
+
+// Format file size
+const size = formatFileSize(1024); // "1 KB"
+
+// Debounce function
+const debouncedSearch = debounce(searchFunction, 300);
+```
+
+### Available Services
+
+**Backend**:
+- `FileService` - File operations
+- `ScanService` - Scanner operations
+- `PrintService` - Printer operations
+- `OCRService` - OCR processing
+- `ConversionService` - File conversions
+- `OrchestrationService` - 🤖 AI workflow management
+
+**Frontend**:
+- `FileService` - File API calls
+- `ScanService` - Scanner API calls
+- `PrintService` - Printer API calls
+- `OCRService` - OCR API calls
+- `ConversionService` - Conversion API calls
+
+### Migration Timeline
+
+✅ **Phase 1: Setup** - COMPLETE
+- Modular structure created
+- Services implemented
+- Both apps working side-by-side
+
+⏳ **Phase 2: Adoption** - Gradual
+- Start using new services
+- Add type definitions
+- Test thoroughly
+
+⏳ **Phase 3: Complete** - Future
+- Full migration to modular architecture
+- Legacy code archived
+
+---
+
+## 🤖 AI Models Setup
+
+PrintChakra uses multiple AI models for voice, language, and document processing. All models are organized in the `backend/models_ai/` directory.
+
+### Directory Structure
+
+```
+backend/models_ai/
+├── whisper/          # Speech-to-text models
+│   ├── base/         # Base model (244MB) - Default
+│   ├── tiny/         # Tiny model (75MB) - Fastest
+│   └── ggml/         # Quantized models (optional)
+├── ollama/           # Language model cache
+│   └── smollm2/      # Smollm2:135m cache
+└── tts/              # Text-to-speech configs
+    └── voices/       # Voice configurations
+```
+
+### Model Downloads
+
+#### 1. Whisper Models (Automatic)
+
+Whisper models download automatically on first use.
+
+**Recommended**: `base` model (244MB, best speed/quality balance)
+
+```python
+# Models auto-download when first used
+# No manual setup required
+```
+
+Available models:
+- `tiny` - 75MB - Fastest, lower accuracy
+- `base` - 244MB - **Recommended** ⭐
+- `small` - 466MB - Better accuracy
+- `medium` - 1.5GB - High accuracy
+- `large-v3` - 3.1GB - Best accuracy
+
+#### 2. Ollama Models (Manual Setup)
+
+```bash
+# Install Ollama from https://ollama.ai
+
+# Pull Smollm2 model (135M parameters - very fast)
+ollama pull smollm2:135m
+
+# Verify installation
+ollama list
+```
+
+#### 3. TTS (No Download Required)
+
+PrintChakra uses system TTS (pyttsx3) - no downloads needed:
+- **Windows**: Microsoft SAPI voices (built-in)
+- **macOS**: NSSpeechSynthesizer
+- **Linux**: espeak
+
+### Configuration
+
+**Change Whisper Model** (`modules/voice_ai.py`):
+```python
+self.model = whisper.load_model("base")  # Change to "tiny", "small", etc.
+```
+
+**Change Ollama Model** (`modules/voice_ai.py`):
+```python
+def __init__(self, model_name: str = "smollm2:135m"):  # Change model name
+```
+
+### Model Storage Locations
+
+- **Whisper**: `~/.cache/whisper/` or `C:\Users\<username>\.cache\whisper\`
+- **Ollama**: `~/.ollama/models/`
+- **TTS**: System voices (no storage)
+
+### GPU Acceleration
+
+For 2-3x faster transcription:
+
+```bash
+# Install CUDA Toolkit
+# Install PyTorch with CUDA
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+Models automatically use GPU if available.
+
+### Disk Space Requirements
+
+| Component | Size | Notes |
+|-----------|------|-------|
+| Whisper base | 244 MB | Recommended |
+| Smollm2:135m | ~100 MB | Via Ollama |
+| **Total** | **~350 MB** | Minimal setup |
+
+### Performance Tips
+
+- **Fast transcription**: Use `tiny` model + GPU
+- **High accuracy**: Use `base` or `small` model
+- **Low memory**: Use `tiny` model, close other apps
+- **GPU**: 2-3x faster than CPU
+
+---
+
+## 📐 Preview Size Adjustment
+
+Customize document preview and modal dimensions to fit your screen.
+
+### Document Preview Size
+
+**File**: `frontend/src/components/DocumentPreview.tsx` (Lines 22-32)
+
+```typescript
+const PREVIEW_SIZE = {
+  portrait: {
+    width: 28,   // vw units - increase for wider preview
+    height: 48,  // vh units - increase for taller preview
+  },
+  landscape: {
+    width: 42,   // vw units
+    height: 32,  // vh units
+  },
+  containerMinHeight: '50vh',  // Increase if cut off
+};
+```
+
+### Modal & Container Size
+
+**File**: `frontend/src/pages/Dashboard.tsx` (Lines 1-20)
+
+```typescript
+const MODAL_CONFIG = {
+  modal: {
+    maxHeight: '90vh',      // Maximum modal height
+    maxWidth: '95vw',       // Maximum modal width
+  },
+  previewBox: {
+    maxHeight: '90vh - 12rem',  // Preview box max height
+  },
+};
+```
+
+### Common Adjustments
+
+**Preview too small?**
+- Increase `portrait.height` from `48` to `55` or `60`
+- Increase `portrait.width` from `28` to `32` or `35`
+
+**Preview cut off at bottom?**
+- Increase `containerMinHeight` from `'50vh'` to `'60vh'`
+- Increase `previewBox.maxHeight` from `'90vh - 12rem'` to `'90vh - 10rem'`
+
+**Modal too cramped?**
+- Change `modal.maxHeight` from `'90vh'` to `'95vh'`
+- Change `modal.maxWidth` from `'95vw'` to `'98vw'`
+
+### Units Explained
+
+- **vh** = Viewport Height (1vh = 1% of screen height)
+- **vw** = Viewport Width (1vw = 1% of screen width)
+- **rem** = Relative to root font size (usually 16px)
+
+---
+
 ## 🛠️ Technology Stack
 
 ### Backend Technologies
@@ -880,15 +1406,123 @@ Special thanks to:
 
 ---
 
+## 📚 Complete Documentation Index
+
+### Core Documentation
+- **README.md** (This file) - Complete comprehensive guide
+- **QUICK_START.md** - Quick setup and basic usage
+- **ARCHITECTURE_DIAGRAMS.md** - Visual system diagrams
+
+### AI Orchestration
+- **ORCHESTRATION_GUIDE.md** - Technical orchestration documentation
+- **ORCHESTRATION_QUICKSTART.md** - 5-minute orchestration setup
+- **ORCHESTRATION_SUMMARY.md** - Implementation overview
+- **ARCHITECTURE_ORCHESTRATION.md** - Orchestration system architecture
+
+### Modularization
+- **MODULARIZATION_COMPLETE.md** - Modular architecture summary
+- **backend/ARCHITECTURE.md** - Backend modular architecture guide
+- **frontend/ARCHITECTURE.md** - Frontend modular architecture guide
+
+### Configuration
+- **PREVIEW_SIZE_GUIDE.md** - UI sizing customization
+- **backend/models_ai/README.md** - AI models setup guide
+- **backend/config/settings.py** - Backend configuration
+- **frontend/src/config.ts** - Frontend API configuration
+
+### Testing
+- **backend/tests/README.md** - Backend testing guide
+- **backend/tests/test_orchestration.py** - Orchestration tests
+
+---
+
+## 🎓 Getting Started Paths
+
+### 🚀 For Quick Setup
+1. Read [Quick Start](#-quick-start-guide)
+2. Try [AI Orchestration Quick Start](#-ai-orchestration-quick-start)
+3. Review [Voice Command Examples](#-voice-command-examples)
+
+### 🏗️ For Developers
+1. Study [Modular Architecture](#-modular-architecture)
+2. Review `backend/ARCHITECTURE.md`
+3. Check `frontend/ARCHITECTURE.md`
+4. Explore service classes in `backend/services/`
+
+### 🤖 For AI Features
+1. Setup [AI Models](#-ai-models-setup)
+2. Read [Orchestration Guide](ORCHESTRATION_GUIDE.md)
+3. Test voice commands
+4. Customize workflows
+
+### 🎨 For UI Customization
+1. Read [Preview Size Guide](#-preview-size-adjustment)
+2. Modify `PREVIEW_SIZE` constants
+3. Adjust `MODAL_CONFIG` settings
+4. Test at different screen sizes
+
+---
+
+## 🆘 Support & Resources
+
+### Documentation
+- 📖 Full Documentation: See [Documentation Index](#-complete-documentation-index)
+- 🤖 AI Orchestration: [ORCHESTRATION_GUIDE.md](ORCHESTRATION_GUIDE.md)
+- 🏗️ Architecture: [ARCHITECTURE_DIAGRAMS.md](ARCHITECTURE_DIAGRAMS.md)
+- 🧪 Testing: [backend/tests/README.md](backend/tests/README.md)
+
+### Community
+- 💬 Issues: [GitHub Issues](https://github.com/chaman2003/printchakra/issues)
+- 📧 Email: [chamans7952@gmail.com](mailto:chamans7952@gmail.com)
+- 💼 LinkedIn: [chaman2003](https://www.linkedin.com/in/chaman2003/)
+
+### Quick Links
+- 🔧 [Troubleshooting](#-troubleshooting)
+- 📊 [API Reference](#-api-reference)
+- 🗺️ [Roadmap](#-roadmap)
+- 🤝 [Contributing](#-contributing)
+
+---
+
+## 🎯 Version Information
+
+**Current Version**: 2.1.0  
+**Release Date**: October 31, 2025  
+**Status**: ✅ Production Ready
+
+### Latest Features
+- ✅ Complete AI Orchestration System with voice control
+- ✅ Hands-free print and scan operations
+- ✅ Modular backend and frontend architecture
+- ✅ Real-time WebSocket synchronization
+- ✅ Natural language command processing
+- ✅ Intelligent workflow management
+- ✅ Comprehensive documentation suite
+
+### System Requirements
+- Python 3.8+ with virtual environment
+- Node.js 16+ with npm
+- Tesseract OCR
+- Ollama (for AI features)
+- 350MB+ disk space for AI models
+- 4GB+ RAM (8GB recommended)
+
+---
+
 <div align="center">
 
 ### 💫 Made with ❤️ for intelligent document processing
 
-**PrintChakra v2.1.0** • October 2025
+**PrintChakra v2.1.0** • Complete AI-Powered Document Processing Solution
 
 [⬆ Back to Top](#-printchakra)
 
-</div>
+---
 
-2. **Click "Print Blank"** → Triggers phone capture
-3. **Upload/Capture Image** → Automatic processing
+**Key Highlights**:  
+🤖 AI Orchestration • 🎤 Voice Control • 📱 Mobile-First • 🔍 Advanced OCR  
+⚡ Real-Time Sync • 🏗️ Modular Architecture • 📚 Complete Documentation
+
+---
+
+</div>
