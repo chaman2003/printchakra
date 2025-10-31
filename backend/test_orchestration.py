@@ -3,35 +3,41 @@ AI Orchestration System Test Suite
 Quick verification that all components are working
 """
 
-import requests
 import json
 import sys
 from datetime import datetime
+
+import requests
 
 # Configuration
 BASE_URL = "http://localhost:5000"
 TIMEOUT = 5
 
 # Color codes for terminal output
-GREEN = '\033[92m'
-RED = '\033[91m'
-YELLOW = '\033[93m'
-BLUE = '\033[94m'
-RESET = '\033[0m'
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+BLUE = "\033[94m"
+RESET = "\033[0m"
+
 
 def print_header(text):
     print(f"\n{BLUE}{'='*60}{RESET}")
     print(f"{BLUE}{text}{RESET}")
     print(f"{BLUE}{'='*60}{RESET}\n")
 
+
 def print_success(text):
     print(f"{GREEN}✅ {text}{RESET}")
+
 
 def print_error(text):
     print(f"{RED}❌ {text}{RESET}")
 
+
 def print_info(text):
     print(f"{YELLOW}ℹ️  {text}{RESET}")
+
 
 def test_health():
     """Test basic health endpoint"""
@@ -49,6 +55,7 @@ def test_health():
     except requests.exceptions.RequestException as e:
         print_error(f"Cannot connect to backend: {e}")
         return False
+
 
 def test_orchestration_status():
     """Test orchestration status endpoint"""
@@ -68,6 +75,7 @@ def test_orchestration_status():
         print_error(f"Status check error: {e}")
         return False
 
+
 def test_orchestration_command(command):
     """Test orchestration command processing"""
     print_info(f"Testing command: '{command}'")
@@ -76,11 +84,11 @@ def test_orchestration_command(command):
             f"{BASE_URL}/orchestrate/command",
             json={"command": command},
             headers={"Content-Type": "application/json"},
-            timeout=TIMEOUT
+            timeout=TIMEOUT,
         )
         if response.status_code == 200:
             data = response.json()
-            if data.get('success'):
+            if data.get("success"):
                 print_success(f"Command processed successfully")
                 print_info(f"   Intent: {data.get('intent', 'unknown')}")
                 print_info(f"   Message: {data.get('message', 'N/A')}")
@@ -96,6 +104,7 @@ def test_orchestration_command(command):
         print_error(f"Command error: {e}")
         return False, None
 
+
 def test_orchestration_cancel():
     """Test orchestration cancellation"""
     print_info("Testing action cancellation...")
@@ -103,7 +112,7 @@ def test_orchestration_cancel():
         response = requests.post(f"{BASE_URL}/orchestrate/cancel", timeout=TIMEOUT)
         if response.status_code == 200:
             data = response.json()
-            if data.get('success'):
+            if data.get("success"):
                 print_success("Cancellation successful")
                 return True
             else:
@@ -116,6 +125,7 @@ def test_orchestration_cancel():
         print_error(f"Cancel error: {e}")
         return False
 
+
 def test_orchestration_reset():
     """Test orchestration reset"""
     print_info("Resetting orchestrator state...")
@@ -123,7 +133,7 @@ def test_orchestration_reset():
         response = requests.post(f"{BASE_URL}/orchestrate/reset", timeout=TIMEOUT)
         if response.status_code == 200:
             data = response.json()
-            if data.get('success'):
+            if data.get("success"):
                 print_success("Reset successful")
                 return True
             else:
@@ -136,6 +146,7 @@ def test_orchestration_reset():
         print_error(f"Reset error: {e}")
         return False
 
+
 def test_orchestration_documents():
     """Test document listing"""
     print_info("Testing document listing...")
@@ -143,8 +154,8 @@ def test_orchestration_documents():
         response = requests.get(f"{BASE_URL}/orchestrate/documents", timeout=TIMEOUT)
         if response.status_code == 200:
             data = response.json()
-            if data.get('success'):
-                count = data.get('count', 0)
+            if data.get("success"):
+                count = data.get("count", 0)
                 print_success(f"Document listing successful: {count} documents")
                 if count > 0:
                     print_info(f"   First document: {data['documents'][0]['filename']}")
@@ -158,6 +169,7 @@ def test_orchestration_documents():
     except Exception as e:
         print_error(f"Listing error: {e}")
         return False
+
 
 def test_voice_status():
     """Test voice AI status"""
@@ -177,71 +189,72 @@ def test_voice_status():
         print_info("Voice AI not available (optional)")
         return True  # Non-critical
 
+
 def run_all_tests():
     """Run complete test suite"""
     print_header("🤖 AI ORCHESTRATION SYSTEM TEST SUITE")
     print(f"Testing backend at: {BASE_URL}")
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-    
+
     results = []
-    
+
     # Test 1: Health check
     print_header("Test 1: Backend Health")
     results.append(("Health Check", test_health()))
-    
+
     if not results[-1][1]:
         print_error("\n❌ Backend is not running!")
         print_info("Please start the backend with: cd backend && python app.py")
         return False
-    
+
     # Test 2: Orchestration status
     print_header("Test 2: Orchestration Status")
     results.append(("Orchestration Status", test_orchestration_status()))
-    
+
     # Test 3: Document listing
     print_header("Test 3: Document Listing")
     results.append(("Document Listing", test_orchestration_documents()))
-    
+
     # Test 4: Command - Help
     print_header("Test 4: Help Command")
     success, data = test_orchestration_command("help")
     results.append(("Help Command", success))
-    
+
     # Test 5: Command - List Documents
     print_header("Test 5: List Documents Command")
     success, data = test_orchestration_command("list documents")
     results.append(("List Command", success))
-    
+
     # Test 6: Command - Print Intent (will require confirmation)
     print_header("Test 6: Print Command")
     success, data = test_orchestration_command("print this document")
     results.append(("Print Command", success))
-    
+
     # Test 7: Cancel pending action
     print_header("Test 7: Cancel Action")
     results.append(("Cancel Action", test_orchestration_cancel()))
-    
+
     # Test 8: Reset orchestrator
     print_header("Test 8: Reset State")
     results.append(("Reset State", test_orchestration_reset()))
-    
+
     # Test 9: Voice AI status (optional)
     print_header("Test 9: Voice AI System")
     results.append(("Voice AI Status", test_voice_status()))
-    
+
     # Print summary
     print_header("📊 TEST RESULTS SUMMARY")
-    
+
     passed = sum(1 for _, result in results if result)
     total = len(results)
-    
+
     for name, result in results:
         status = f"{GREEN}PASS{RESET}" if result else f"{RED}FAIL{RESET}"
         print(f"   {name:30} {status}")
-    
+
     print(f"\n{BLUE}{'='*60}{RESET}")
     print(f"Total: {passed}/{total} tests passed")
-    
+
     if passed == total:
         print(f"{GREEN}✅ ALL TESTS PASSED - System is fully operational!{RESET}")
         print(f"\n{BLUE}Next steps:{RESET}")
@@ -252,6 +265,7 @@ def run_all_tests():
     else:
         print(f"{YELLOW}⚠️  Some tests failed - check errors above{RESET}")
         return False
+
 
 if __name__ == "__main__":
     try:

@@ -46,11 +46,11 @@ const AnimatedBackground: React.FC = () => {
           transition={{
             duration: particle.duration,
             repeat: Infinity,
-            ease: "easeInOut",
+            ease: 'easeInOut',
           }}
         />
       ))}
-      
+
       {/* Animated gradient overlay */}
       <MotionBox
         position="absolute"
@@ -67,7 +67,7 @@ const AnimatedBackground: React.FC = () => {
         transition={{
           duration: 30,
           repeat: Infinity,
-          ease: "linear",
+          ease: 'linear',
         }}
       />
     </Box>

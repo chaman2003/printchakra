@@ -5,13 +5,13 @@ Data models and schemas for the application
 
 from .document import Document, DocumentPage
 from .file_info import FileInfo
-from .scan_config import ScanConfig
 from .print_config import PrintConfig
+from .scan_config import ScanConfig
 
 __all__ = [
-    'Document',
-    'DocumentPage',
-    'FileInfo',
-    'ScanConfig',
-    'PrintConfig',
+    "Document",
+    "DocumentPage",
+    "FileInfo",
+    "ScanConfig",
+    "PrintConfig",
 ]

@@ -36,7 +36,13 @@ import {
   FiUpload,
   FiWifi,
 } from 'react-icons/fi';
-import { API_BASE_URL, API_ENDPOINTS, SOCKET_CONFIG, SOCKET_IO_ENABLED, getDefaultHeaders } from '../config';
+import {
+  API_BASE_URL,
+  API_ENDPOINTS,
+  SOCKET_CONFIG,
+  SOCKET_IO_ENABLED,
+  getDefaultHeaders,
+} from '../config';
 import Iconify from '../components/Iconify';
 import ConnectionValidator from '../components/ConnectionValidator';
 
@@ -83,7 +89,7 @@ const Phone: React.FC = () => {
   const autoTriggerCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const toast = useToast();
-  
+
   // Theme values with insane visual enhancements
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
   // const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
@@ -137,7 +143,7 @@ const Phone: React.FC = () => {
     setAutoCapture(true);
     setAutoCaptureCountdown(3);
     setAutoTriggerReady(false);
-    
+
     autoCaptureIntervalRef.current = setInterval(() => {
       setAutoCaptureCountdown((prev: number) => {
         if (prev <= 1) {
@@ -156,7 +162,7 @@ const Phone: React.FC = () => {
         return prev - 1;
       });
     }, 1000);
-    
+
     // Start real-time detection for smart auto-capture
     if (!detectionActive) {
       startRealTimeDetection();
@@ -179,81 +185,90 @@ const Phone: React.FC = () => {
 
   const startRealTimeDetection = () => {
     if (!videoRef.current || !canvasOverlayRef.current) return;
-    
+
     setDetectionActive(true);
-    
+
     detectionIntervalRef.current = setInterval(async () => {
       if (!videoRef.current || !canvasOverlayRef.current) return;
-      
+
       const video = videoRef.current;
       const canvas = canvasOverlayRef.current;
       const context = canvas.getContext('2d');
-      
+
       if (!context || !video.videoWidth) return;
-      
+
       // Resize canvas to match video
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
-      
+
       // Draw current frame
       context.drawImage(video, 0, 0);
-      
+
       // Get frame as blob
-      canvas.toBlob(async (blob: Blob | null) => {
-        if (!blob) return;
-        
-        try {
-          // Send for detection
-          const formData = new FormData();
-          formData.append('file', blob, 'frame.jpg');
-          
-          const response = await apiClient.post(
-            '/detect/document',
-            formData,
-            { headers: { 'Content-Type': 'multipart/form-data' } }
-          );
-          
-          if (response.data.success && response.data.corners && response.data.corners.length > 0) {
-            setDocumentDetection(response.data);
-            // Draw detection overlay
-            drawDetectionOverlay(response.data);
-            
-            // Smart auto-trigger: if document is fully detected and autoCapture is enabled
-            if (autoCapture && response.data.coverage && response.data.coverage >= 75) {
-              // Document is well-positioned (at least 75% of screen)
-              if (!autoTriggerReady) {
-                console.log('📸 Document detected! Ready to auto-capture...');
-                setAutoTriggerReady(true);
-                
-                // Auto-trigger capture after 1 second if still aligned
-                autoTriggerCountdownRef.current = setTimeout(() => {
-                  if (autoCapture && documentDetection && documentDetection.coverage >= 75) {
-                    console.log('📷 Auto-capturing document...');
-                    captureFromCamera();
-                    setAutoCapture(false);
-                    setAutoTriggerReady(false);
-                  }
-                }, 1000);
+      canvas.toBlob(
+        async (blob: Blob | null) => {
+          if (!blob) return;
+
+          try {
+            // Send for detection
+            const formData = new FormData();
+            formData.append('file', blob, 'frame.jpg');
+
+            const response = await apiClient.post('/detect/document', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            if (
+              response.data.success &&
+              response.data.corners &&
+              response.data.corners.length > 0
+            ) {
+              setDocumentDetection(response.data);
+              // Draw detection overlay
+              drawDetectionOverlay(response.data);
+
+              // Smart auto-trigger: if document is fully detected and autoCapture is enabled
+              if (autoCapture && response.data.coverage && response.data.coverage >= 75) {
+                // Document is well-positioned (at least 75% of screen)
+                if (!autoTriggerReady) {
+                  console.log('📸 Document detected! Ready to auto-capture...');
+                  setAutoTriggerReady(true);
+
+                  // Auto-trigger capture after 1 second if still aligned
+                  autoTriggerCountdownRef.current = setTimeout(() => {
+                    if (autoCapture && documentDetection && documentDetection.coverage >= 75) {
+                      console.log('📷 Auto-capturing document...');
+                      captureFromCamera();
+                      setAutoCapture(false);
+                      setAutoTriggerReady(false);
+                    }
+                  }, 1000);
+                }
+              } else if (
+                autoTriggerReady &&
+                (!response.data.coverage || response.data.coverage < 75)
+              ) {
+                // Document moved out of position
+                setAutoTriggerReady(false);
+                if (autoTriggerCountdownRef.current) {
+                  clearInterval(autoTriggerCountdownRef.current);
+                }
               }
-            } else if (autoTriggerReady && (!response.data.coverage || response.data.coverage < 75)) {
-              // Document moved out of position
+            } else {
+              // No document detected
               setAutoTriggerReady(false);
               if (autoTriggerCountdownRef.current) {
                 clearInterval(autoTriggerCountdownRef.current);
               }
             }
-          } else {
-            // No document detected
-            setAutoTriggerReady(false);
-            if (autoTriggerCountdownRef.current) {
-              clearInterval(autoTriggerCountdownRef.current);
-            }
+          } catch (err) {
+            // Silently fail for real-time detection
+            console.error('Detection error:', err);
           }
-        } catch (err) {
-          // Silently fail for real-time detection
-          console.error('Detection error:', err);
-        }
-      }, 'image/jpeg', 0.7);
+        },
+        'image/jpeg',
+        0.7
+      );
     }, 500); // Run detection every 500ms
   };
 
@@ -268,67 +283,67 @@ const Phone: React.FC = () => {
 
   const drawDetectionOverlay = (detection: any) => {
     if (!canvasOverlayRef.current) return;
-    
+
     const canvas = canvasOverlayRef.current;
     const context = canvas.getContext('2d');
     if (!context) return;
-    
+
     const width = canvas.width;
     const height = canvas.height;
-    
+
     // Clear and redraw frame
     context.clearRect(0, 0, width, height);
-    
+
     if (videoRef.current && videoRef.current.videoWidth) {
       context.drawImage(videoRef.current, 0, 0);
     }
-    
+
     // Draw border (green)
     if (detection.corners && detection.corners.length === 4) {
       context.strokeStyle = '#00FF00';
       context.lineWidth = 3;
       context.beginPath();
-      
+
       for (let i = 0; i < detection.corners.length; i++) {
         const corner = detection.corners[i];
         const x = (corner.x / 100) * width;
         const y = (corner.y / 100) * height;
-        
+
         if (i === 0) {
           context.moveTo(x, y);
         } else {
           context.lineTo(x, y);
         }
       }
-      
+
       // Close the path
       const firstCorner = detection.corners[0];
       const firstX = (firstCorner.x / 100) * width;
       const firstY = (firstCorner.y / 100) * height;
       context.lineTo(firstX, firstY);
       context.stroke();
-      
+
       // Draw corner points
       context.fillStyle = '#00FF00';
       context.strokeStyle = '#FFFFFF';
       context.lineWidth = 2;
-      
+
       for (const corner of detection.corners) {
         const x = (corner.x / 100) * width;
         const y = (corner.y / 100) * height;
-        
+
         // Draw circle
         context.beginPath();
         context.arc(x, y, 8, 0, 2 * Math.PI);
         context.fill();
         context.stroke();
-        
+
         // Draw label
         context.fillStyle = '#00FF00';
         context.font = 'bold 12px Arial';
         context.fillText(corner.name, x + 15, y - 15);
       }
-      
+
       // Draw coverage info
       if (detection.coverage !== undefined) {
         context.fillStyle = '#00FF00';
@@ -341,10 +356,10 @@ const Phone: React.FC = () => {
   const startCamera = async () => {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { 
+        video: {
           facingMode: 'environment',
           width: { ideal: 1920 },
-          height: { ideal: 1080 }
+          height: { ideal: 1080 },
         },
       });
       setStream(mediaStream);
@@ -378,100 +393,108 @@ const Phone: React.FC = () => {
     }
   };
 
-  const checkImageQuality = useCallback(async (file: Blob): Promise<QualityCheck | null> => {
-    if (!validateQuality) return null;
+  const checkImageQuality = useCallback(
+    async (file: Blob): Promise<QualityCheck | null> => {
+      if (!validateQuality) return null;
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file, 'temp.jpg');
+      try {
+        const formData = new FormData();
+        formData.append('file', file, 'temp.jpg');
 
-      const response = await apiClient.post(
-        API_ENDPOINTS.validateQuality,
-        formData,
-        {
+        const response = await apiClient.post(API_ENDPOINTS.validateQuality, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        const quality: QualityCheck = response.data;
+        setQualityCheck(quality);
+
+        // Show warnings if quality issues detected
+        if (!quality.quality.overall_acceptable) {
+          const warnings = quality.quality.issues.join('\n');
+          const confirm = window.confirm(
+            `⚠️ Quality Issues Detected:\n\n${warnings}\n\nRecommendations:\n${quality.quality.recommendations.join('\n')}\n\nDo you want to upload anyway?`
+          );
+          if (!confirm) {
+            return null;
+          }
+        } else {
+          showMessage(
+            `✓ Quality: Blur ${quality.blur_score.toFixed(1)}, Focus ${quality.focus_score.toFixed(1)}`
+          );
         }
-      );
 
-      const quality: QualityCheck = response.data;
-      setQualityCheck(quality);
-
-      // Show warnings if quality issues detected
-      if (!quality.quality.overall_acceptable) {
-        const warnings = quality.quality.issues.join('\n');
-        const confirm = window.confirm(
-          `⚠️ Quality Issues Detected:\n\n${warnings}\n\nRecommendations:\n${quality.quality.recommendations.join('\n')}\n\nDo you want to upload anyway?`
-        );
-        if (!confirm) {
-          return null;
+        return quality;
+      } catch (err: any) {
+        console.error('Quality check failed:', err);
+        // Handle service unavailable error gracefully
+        if (err.response?.status === 503) {
+          showMessage('⚠️ Quality check service unavailable - uploading without validation');
+          console.warn('Quality validation service is unavailable (503)');
+        } else {
+          showMessage('⚠️ Quality check failed - uploading without validation');
         }
-      } else {
-        showMessage(`✓ Quality: Blur ${quality.blur_score.toFixed(1)}, Focus ${quality.focus_score.toFixed(1)}`);
+        return null; // Continue without quality check on error
       }
+    },
+    [showMessage, validateQuality]
+  );
 
-      return quality;
-    } catch (err: any) {
-      console.error('Quality check failed:', err);
-      // Handle service unavailable error gracefully
-      if (err.response?.status === 503) {
-        showMessage('⚠️ Quality check service unavailable - uploading without validation');
-        console.warn('Quality validation service is unavailable (503)');
-      } else {
-        showMessage('⚠️ Quality check failed - uploading without validation');
-      }
-      return null; // Continue without quality check on error
-    }
-  }, [showMessage, validateQuality]);
+  const uploadImage = useCallback(
+    async (file: Blob, filename: string) => {
+      try {
+        setUploading(true);
+        const formData = new FormData();
+        formData.append('file', file, filename);
 
-  const uploadImage = useCallback(async (file: Blob, filename: string) => {
-    try {
-      setUploading(true);
-      const formData = new FormData();
-      formData.append('file', file, filename);
-      
-      // Add processing options
-      formData.append('auto_crop', processingOptions.autoCrop.toString());
-      formData.append('ai_enhance', processingOptions.aiEnhance.toString());
-      formData.append('strict_quality', processingOptions.strictQuality.toString());
+        // Add processing options
+        formData.append('auto_crop', processingOptions.autoCrop.toString());
+        formData.append('ai_enhance', processingOptions.aiEnhance.toString());
+        formData.append('strict_quality', processingOptions.strictQuality.toString());
 
-      const response = await apiClient.post(
-        API_ENDPOINTS.upload,
-        formData,
-        {
+        const response = await apiClient.post(API_ENDPOINTS.upload, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
-        }
-      );
+        });
 
-      showMessage(`✅ ${response.data.message || 'Upload successful'}`);
-      toast({
-        title: 'Upload successful',
-        description: 'Document dispatched to the processing pipeline.',
-        status: 'success',
-        duration: 4000,
-      });
-      console.log('Upload response:', response.data);
-      
-      // Show additional message about checking dashboard
-      setTimeout(() => {
-        showMessage('📊 Image is processing... Check the Dashboard in ~5-10 seconds to see the result!');
-      }, 1500);
-      
-      // Clear quality check after successful upload
-      setQualityCheck(null);
-    } catch (err: any) {
-      console.error('Upload error:', err);
-      const errorMsg = err.response?.data?.error || err.message || 'Upload failed';
-      showMessage(`❌ ${errorMsg}`);
-      toast({
-        title: 'Upload failed',
-        description: errorMsg,
-        status: 'error',
-        duration: 4000,
-      });
-    } finally {
-      setUploading(false);
-    }
-  }, [processingOptions.aiEnhance, processingOptions.autoCrop, processingOptions.strictQuality, showMessage, toast]);
+        showMessage(`✅ ${response.data.message || 'Upload successful'}`);
+        toast({
+          title: 'Upload successful',
+          description: 'Document dispatched to the processing pipeline.',
+          status: 'success',
+          duration: 4000,
+        });
+        console.log('Upload response:', response.data);
+
+        // Show additional message about checking dashboard
+        setTimeout(() => {
+          showMessage(
+            '📊 Image is processing... Check the Dashboard in ~5-10 seconds to see the result!'
+          );
+        }, 1500);
+
+        // Clear quality check after successful upload
+        setQualityCheck(null);
+      } catch (err: any) {
+        console.error('Upload error:', err);
+        const errorMsg = err.response?.data?.error || err.message || 'Upload failed';
+        showMessage(`❌ ${errorMsg}`);
+        toast({
+          title: 'Upload failed',
+          description: errorMsg,
+          status: 'error',
+          duration: 4000,
+        });
+      } finally {
+        setUploading(false);
+      }
+    },
+    [
+      processingOptions.aiEnhance,
+      processingOptions.autoCrop,
+      processingOptions.strictQuality,
+      showMessage,
+      toast,
+    ]
+  );
 
   const captureFromCamera = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
@@ -486,21 +509,30 @@ const Phone: React.FC = () => {
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0);
 
-    canvas.toBlob(async (blob: Blob | null) => {
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        setPreviewImage(url);
-        
-        // Check quality before uploading
-        const quality = await checkImageQuality(blob);
-        if (quality === null && validateQuality && qualityCheck && !qualityCheck.quality.overall_acceptable) {
-          setPreviewImage(null);
-          return;
+    canvas.toBlob(
+      async (blob: Blob | null) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          setPreviewImage(url);
+
+          // Check quality before uploading
+          const quality = await checkImageQuality(blob);
+          if (
+            quality === null &&
+            validateQuality &&
+            qualityCheck &&
+            !qualityCheck.quality.overall_acceptable
+          ) {
+            setPreviewImage(null);
+            return;
+          }
+
+          uploadImage(blob, `capture_${Date.now()}.jpg`);
         }
-        
-        uploadImage(blob, `capture_${Date.now()}.jpg`);
-      }
-    }, 'image/jpeg', 0.9);
+      },
+      'image/jpeg',
+      0.9
+    );
   }, [checkImageQuality, qualityCheck, uploadImage, validateQuality]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -514,14 +546,19 @@ const Phone: React.FC = () => {
 
     const url = URL.createObjectURL(file);
     setPreviewImage(url);
-    
+
     // Check quality before uploading
     const quality = await checkImageQuality(file);
-    if (quality === null && validateQuality && qualityCheck && !qualityCheck.quality.overall_acceptable) {
+    if (
+      quality === null &&
+      validateQuality &&
+      qualityCheck &&
+      !qualityCheck.quality.overall_acceptable
+    ) {
       setPreviewImage(null);
       return;
     }
-    
+
     uploadImage(file, file.name);
   };
 
@@ -535,7 +572,7 @@ const Phone: React.FC = () => {
 
   useEffect(() => {
     console.log('🔌 Phone: Setting up Socket.IO event listeners');
-    
+
     if (!socket) {
       console.log('⚠️ Socket not available yet');
       return;
@@ -559,7 +596,16 @@ const Phone: React.FC = () => {
       stopAutoCapture();
       stopRealTimeDetection();
     };
-  }, [socket, captureFromCamera, captureMode, showMessage, stopAutoCapture, stopCamera, stopRealTimeDetection, stream]);
+  }, [
+    socket,
+    captureFromCamera,
+    captureMode,
+    showMessage,
+    stopAutoCapture,
+    stopCamera,
+    stopRealTimeDetection,
+    stream,
+  ]);
 
   return (
     <VStack align="stretch" spacing={10} pb={16}>
@@ -572,8 +618,22 @@ const Phone: React.FC = () => {
             Deploy the mobile capture cockpit to ingest pristine documents with AI guidance.
           </Text>
         </Stack>
-        <Flex align="center" gap={3} bg="surface.blur" borderRadius="full" border="1px solid rgba(121,95,238,0.22)" px={5} py={2}>
-          <Box w={3} h={3} borderRadius="full" bg={connected ? 'green.400' : 'red.400'} boxShadow={`0 0 12px ${connected ? 'rgba(72,187,120,0.6)' : 'rgba(245,101,101,0.6)'}`} />
+        <Flex
+          align="center"
+          gap={3}
+          bg="surface.blur"
+          borderRadius="full"
+          border="1px solid rgba(121,95,238,0.22)"
+          px={5}
+          py={2}
+        >
+          <Box
+            w={3}
+            h={3}
+            borderRadius="full"
+            bg={connected ? 'green.400' : 'red.400'}
+            boxShadow={`0 0 12px ${connected ? 'rgba(72,187,120,0.6)' : 'rgba(245,101,101,0.6)'}`}
+          />
           <Text fontWeight="600" color={muted} display="flex" alignItems="center" gap={2}>
             <Iconify icon={FiWifi} boxSize={5} />
             {connected ? 'Connected to processing hub' : 'Link offline'}
@@ -582,7 +642,12 @@ const Phone: React.FC = () => {
       </Flex>
 
       {message && (
-        <Alert status="info" borderRadius="xl" bg="rgba(69,202,255,0.1)" border="1px solid rgba(69,202,255,0.25)">
+        <Alert
+          status="info"
+          borderRadius="xl"
+          bg="rgba(69,202,255,0.1)"
+          border="1px solid rgba(69,202,255,0.25)"
+        >
           <AlertIcon />
           <AlertDescription>{message}</AlertDescription>
         </Alert>
@@ -594,55 +659,129 @@ const Phone: React.FC = () => {
         </CardHeader>
         <CardBody>
           <Grid templateColumns={{ base: '1fr', md: 'repeat(3, 1fr)' }} gap={4}>
-            <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
+            <Flex
+              align="center"
+              justify="space-between"
+              bg="surface.blur"
+              borderRadius="lg"
+              px={4}
+              py={3}
+              border="1px solid rgba(69,202,255,0.18)"
+            >
               <Stack spacing={1}>
                 <Text fontWeight="600">Quality validation</Text>
-                <Text fontSize="sm" color={muted}>Detect blur and focus issues before upload.</Text>
+                <Text fontSize="sm" color={muted}>
+                  Detect blur and focus issues before upload.
+                </Text>
               </Stack>
-              <Switch colorScheme="brand" isChecked={validateQuality} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setValidateQuality(e.target.checked)} />
+              <Switch
+                colorScheme="brand"
+                isChecked={validateQuality}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setValidateQuality(e.target.checked)
+                }
+              />
             </Flex>
 
-            <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
+            <Flex
+              align="center"
+              justify="space-between"
+              bg="surface.blur"
+              borderRadius="lg"
+              px={4}
+              py={3}
+              border="1px solid rgba(69,202,255,0.18)"
+            >
               <Stack spacing={1}>
                 <Text fontWeight="600">Auto crop</Text>
-                <Text fontSize="sm" color={muted}>Automatically align document edges.</Text>
+                <Text fontSize="sm" color={muted}>
+                  Automatically align document edges.
+                </Text>
               </Stack>
-              <Switch colorScheme="brand" isChecked={processingOptions.autoCrop} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingOptions({ ...processingOptions, autoCrop: e.target.checked })} />
+              <Switch
+                colorScheme="brand"
+                isChecked={processingOptions.autoCrop}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setProcessingOptions({ ...processingOptions, autoCrop: e.target.checked })
+                }
+              />
             </Flex>
 
-            <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" px={4} py={3} border="1px solid rgba(69,202,255,0.18)">
+            <Flex
+              align="center"
+              justify="space-between"
+              bg="surface.blur"
+              borderRadius="lg"
+              px={4}
+              py={3}
+              border="1px solid rgba(69,202,255,0.18)"
+            >
               <Stack spacing={1}>
                 <Text fontWeight="600">AI enhancement</Text>
-                <Text fontSize="sm" color={muted}>Boost clarity with AI-driven retouching.</Text>
+                <Text fontSize="sm" color={muted}>
+                  Boost clarity with AI-driven retouching.
+                </Text>
               </Stack>
-              <Switch colorScheme="brand" isChecked={processingOptions.aiEnhance} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setProcessingOptions({ ...processingOptions, aiEnhance: e.target.checked })} />
+              <Switch
+                colorScheme="brand"
+                isChecked={processingOptions.aiEnhance}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setProcessingOptions({ ...processingOptions, aiEnhance: e.target.checked })
+                }
+              />
             </Flex>
           </Grid>
         </CardBody>
       </Card>
 
       {qualityCheck && (
-        <Card bg={panelBg} border={`1px solid ${qualityCheck.quality.overall_acceptable ? 'rgba(72,187,120,0.25)' : 'rgba(246,173,85,0.35)'}`} boxShadow="subtle">
+        <Card
+          bg={panelBg}
+          border={`1px solid ${qualityCheck.quality.overall_acceptable ? 'rgba(72,187,120,0.25)' : 'rgba(246,173,85,0.35)'}`}
+          boxShadow="subtle"
+        >
           <CardHeader display="flex" alignItems="center" justifyContent="space-between">
-              <Heading size="sm" display="flex" alignItems="center" gap={2}>
-              <Iconify icon={qualityCheck.quality.overall_acceptable ? FiCheckCircle : FiAlertTriangle} boxSize={5} />
+            <Heading size="sm" display="flex" alignItems="center" gap={2}>
+              <Iconify
+                icon={qualityCheck.quality.overall_acceptable ? FiCheckCircle : FiAlertTriangle}
+                boxSize={5}
+              />
               Quality Analysis
             </Heading>
-            <Tag colorScheme={qualityCheck.quality.overall_acceptable ? 'green' : 'orange'} borderRadius="full">
+            <Tag
+              colorScheme={qualityCheck.quality.overall_acceptable ? 'green' : 'orange'}
+              borderRadius="full"
+            >
               {qualityCheck.quality.overall_acceptable ? 'Ready to upload' : 'Review suggested'}
             </Tag>
           </CardHeader>
           <CardBody>
             <Grid templateColumns={{ base: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }} gap={4} mb={4}>
-              <Flex direction="column" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.22)">
-                <Text fontSize="xs" textTransform="uppercase" color={muted}>Blur score</Text>
+              <Flex
+                direction="column"
+                bg="surface.blur"
+                borderRadius="lg"
+                p={3}
+                border="1px solid rgba(69,202,255,0.22)"
+              >
+                <Text fontSize="xs" textTransform="uppercase" color={muted}>
+                  Blur score
+                </Text>
                 <Text fontWeight="700">{qualityCheck.blur_score.toFixed(1)}</Text>
                 <Text fontSize="sm" color={qualityCheck.is_blurry ? 'orange.300' : 'green.300'}>
                   {qualityCheck.is_blurry ? 'Requires attention' : 'Crystal clear'}
                 </Text>
               </Flex>
-              <Flex direction="column" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.22)">
-                <Text fontSize="xs" textTransform="uppercase" color={muted}>Focus score</Text>
+              <Flex
+                direction="column"
+                bg="surface.blur"
+                borderRadius="lg"
+                p={3}
+                border="1px solid rgba(69,202,255,0.22)"
+              >
+                <Text fontSize="xs" textTransform="uppercase" color={muted}>
+                  Focus score
+                </Text>
                 <Text fontWeight="700">{qualityCheck.focus_score.toFixed(1)}</Text>
                 <Text fontSize="sm" color={qualityCheck.is_focused ? 'green.300' : 'orange.300'}>
                   {qualityCheck.is_focused ? 'Focused' : 'Adjust focus'}
@@ -654,7 +793,15 @@ const Phone: React.FC = () => {
               <Stack spacing={2}>
                 <Text fontWeight="600">Detected issues</Text>
                 {qualityCheck.quality.issues.map((issue: string, index: number) => (
-                  <Flex key={index} align="center" gap={2} bg="rgba(246,173,85,0.1)" borderRadius="md" px={3} py={2}>
+                  <Flex
+                    key={index}
+                    align="center"
+                    gap={2}
+                    bg="rgba(246,173,85,0.1)"
+                    borderRadius="md"
+                    px={3}
+                    py={2}
+                  >
                     <Iconify icon={FiAlertTriangle} color="orange.300" />
                     <Text color={muted}>{issue}</Text>
                   </Flex>
@@ -736,10 +883,21 @@ const Phone: React.FC = () => {
                       }}
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
-                    <Box position="absolute" left="50%" top="10%" transform="translateX(-50%)" h="80%" borderLeft="1px dashed rgba(255,255,255,0.35)" />
+                    <Box
+                      position="absolute"
+                      left="50%"
+                      top="10%"
+                      transform="translateX(-50%)"
+                      h="80%"
+                      borderLeft="1px dashed rgba(255,255,255,0.35)"
+                    />
 
                     {/* Eye Toggle Button - Top Right */}
-                    <Tooltip label={showControls ? 'Hide controls' : 'Show controls'} hasArrow placement="left">
+                    <Tooltip
+                      label={showControls ? 'Hide controls' : 'Show controls'}
+                      hasArrow
+                      placement="left"
+                    >
                       <Button
                         position="absolute"
                         top={4}
@@ -792,7 +950,14 @@ const Phone: React.FC = () => {
                         zIndex={5}
                         animation="slideUp 0.3s ease-out"
                       >
-                        <Tooltip label={autoCapture ? `Auto capture in ${autoCaptureCountdown}s` : 'Auto capture on document detection'} hasArrow>
+                        <Tooltip
+                          label={
+                            autoCapture
+                              ? `Auto capture in ${autoCaptureCountdown}s`
+                              : 'Auto capture on document detection'
+                          }
+                          hasArrow
+                        >
                           <Button
                             colorScheme={autoCapture ? 'orange' : 'brand'}
                             size="lg"
@@ -823,7 +988,13 @@ const Phone: React.FC = () => {
 
                     {/* Non-fullscreen controls info */}
                     {!isFullScreen && autoCapture && (
-                      <Tag position="absolute" top={4} left={4} colorScheme="brand" borderRadius="full">
+                      <Tag
+                        position="absolute"
+                        top={4}
+                        left={4}
+                        colorScheme="brand"
+                        borderRadius="full"
+                      >
                         Auto capture in {autoCaptureCountdown}s
                       </Tag>
                     )}
@@ -873,15 +1044,20 @@ const Phone: React.FC = () => {
                         {detectionActive ? 'Detection ON' : 'Detection OFF'}
                       </Button>
                     </Tooltip>
-                    <Tooltip label={isFullScreen ? 'Exit fullscreen' : 'Fullscreen capture mode'} hasArrow>
+                    <Tooltip
+                      label={isFullScreen ? 'Exit fullscreen' : 'Fullscreen capture mode'}
+                      hasArrow
+                    >
                       <Button
                         variant="outline"
                         colorScheme="brand"
                         onClick={toggleFullScreen}
                         isDisabled={!stream}
-                        leftIcon={<Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />}
+                        leftIcon={
+                          <Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />
+                        }
                       >
-                        {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen' }
+                        {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
                       </Button>
                     </Tooltip>
                   </Flex>
@@ -902,7 +1078,8 @@ const Phone: React.FC = () => {
                     <Stack spacing={0}>
                       <Text fontWeight="600">Document geometry locked</Text>
                       <Text fontSize="sm" color={muted}>
-                        Coverage {documentDetection.coverage?.toFixed(1) ?? 0}% • Corners detected {documentDetection.corners?.length ?? 0}
+                        Coverage {documentDetection.coverage?.toFixed(1) ?? 0}% • Corners detected{' '}
+                        {documentDetection.corners?.length ?? 0}
                       </Text>
                     </Stack>
                   </Flex>
@@ -913,8 +1090,17 @@ const Phone: React.FC = () => {
             {previewImage && (
               <Stack spacing={3}>
                 <Heading size="sm">Preview</Heading>
-                <Box borderRadius="2xl" overflow="hidden" border="1px solid rgba(69,202,255,0.25)" boxShadow="subtle">
-                  <img src={previewImage} alt="Preview" style={{ width: '100%', display: 'block' }} />
+                <Box
+                  borderRadius="2xl"
+                  overflow="hidden"
+                  border="1px solid rgba(69,202,255,0.25)"
+                  boxShadow="subtle"
+                >
+                  <img
+                    src={previewImage}
+                    alt="Preview"
+                    style={{ width: '100%', display: 'block' }}
+                  />
                 </Box>
               </Stack>
             )}

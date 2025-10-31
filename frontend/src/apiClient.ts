@@ -5,27 +5,27 @@ import { API_BASE_URL, getDefaultHeaders } from './config';
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
-  headers: getDefaultHeaders()
+  headers: getDefaultHeaders(),
 });
 
 // Request interceptor to ensure headers are always present
 apiClient.interceptors.request.use(
-  (config) => {
+  config => {
     // Merge with default headers
     const defaultHeaders = getDefaultHeaders();
-    
+
     // Safely merge headers
     Object.keys(defaultHeaders).forEach(key => {
       config.headers.set(key, defaultHeaders[key]);
     });
-    
+
     console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-      headers: config.headers
+      headers: config.headers,
     });
-    
+
     return config;
   },
-  (error) => {
+  error => {
     console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
@@ -33,22 +33,25 @@ apiClient.interceptors.request.use(
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
-  (response) => {
-    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, {
-      status: response.status
-    });
+  response => {
+    console.log(
+      `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
+      {
+        status: response.status,
+      }
+    );
     return response;
   },
-  (error) => {
+  error => {
     if (error.response) {
       console.error(`❌ API Error Response: ${error.response.status}`, {
         url: error.config?.url,
-        data: error.response.data
+        data: error.response.data,
       });
     } else if (error.request) {
       console.error('❌ API No Response:', {
         url: error.config?.url,
-        message: error.message
+        message: error.message,
       });
     } else {
       console.error('❌ API Request Setup Error:', error.message);

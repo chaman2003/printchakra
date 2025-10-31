@@ -12,10 +12,10 @@ const Iconify: React.FC<IconifyProps> = ({ icon, color, ...props }) => {
   if (typeof icon === 'string') {
     const size = (props.width || props.height || props.boxSize || '1em').toString();
     return (
-      <Box 
-        as="span" 
-        display="inline-flex" 
-        alignItems="center" 
+      <Box
+        as="span"
+        display="inline-flex"
+        alignItems="center"
         justifyContent="center"
         color={color}
       >
@@ -23,7 +23,7 @@ const Iconify: React.FC<IconifyProps> = ({ icon, color, ...props }) => {
       </Box>
     );
   }
-  
+
   // Otherwise, treat as react-icons IconType
   const elementType = icon as unknown as React.ElementType;
   return <Icon as={elementType} color={color} {...props} />;

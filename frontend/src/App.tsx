@@ -25,14 +25,25 @@ function App() {
   const { colorMode, toggleColorMode } = useColorMode();
   const navBg = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(8,11,25,0.85)');
   const navBorder = useColorModeValue('rgba(121,95,238,0.16)', 'rgba(69,202,255,0.16)');
-  const navShadow = useColorModeValue('0 16px 40px rgba(121,95,238,0.12)', '0 16px 40px rgba(21,29,53,0.55)');
+  const navShadow = useColorModeValue(
+    '0 16px 40px rgba(121,95,238,0.12)',
+    '0 16px 40px rgba(21,29,53,0.55)'
+  );
 
   return (
     <SocketProvider>
       <Router>
         <Box minH="100vh" bg="transparent" position="relative">
           <AnimatedBackground />
-          <Box position="sticky" top={0} zIndex={999} backdropFilter="blur(18px)" bg={navBg} borderBottom={`1px solid ${navBorder}`} boxShadow={navShadow}>
+          <Box
+            position="sticky"
+            top={0}
+            zIndex={999}
+            backdropFilter="blur(18px)"
+            bg={navBg}
+            borderBottom={`1px solid ${navBorder}`}
+            boxShadow={navShadow}
+          >
             <Container maxW="7xl" py={4}>
               <Flex align="center" justify="space-between">
                 <HStack spacing={3}>
@@ -90,10 +101,10 @@ function App() {
                       Phone Capture
                     </Button>
                   </MotionBox>
-                  <MotionBox 
-                    whileHover={{ rotate: 180, scale: 1.1 }} 
+                  <MotionBox
+                    whileHover={{ rotate: 180, scale: 1.1 }}
                     whileTap={{ scale: 0.9 }}
-                    transition={{ type: "spring", stiffness: 300 }}
+                    transition={{ type: 'spring', stiffness: 300 }}
                   >
                     <IconButton
                       aria-label="Toggle color mode"
@@ -108,11 +119,11 @@ function App() {
             </Container>
           </Box>
 
-          <MotionBox 
+          <MotionBox
             py={10}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
           >
             <Container maxW="7xl">
               <Routes>

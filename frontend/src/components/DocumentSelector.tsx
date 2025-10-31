@@ -74,67 +74,75 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
   const selectedBg = useColorModeValue('brand.50', 'rgba(121,95,238,0.15)');
   const borderColor = useColorModeValue('brand.200', 'rgba(121,95,238,0.3)');
 
-  const handleDocumentClick = useCallback((filename: string, index: number, shiftKey: boolean, docs: Document[]) => {
-    if (!allowMultiple) {
-      setSelectedDocs(new Set([filename]));
-      setLastClickedIndex(index);
-      return;
-    }
+  const handleDocumentClick = useCallback(
+    (filename: string, index: number, shiftKey: boolean, docs: Document[]) => {
+      if (!allowMultiple) {
+        setSelectedDocs(new Set([filename]));
+        setLastClickedIndex(index);
+        return;
+      }
 
-    if (shiftKey && lastClickedIndex !== null) {
-      // Range select
-      const start = Math.min(lastClickedIndex, index);
-      const end = Math.max(lastClickedIndex, index);
-      const newSelected = new Set(selectedDocs);
-      
-      for (let i = start; i <= end; i++) {
-        if (docs[i]) {
-          newSelected.add(docs[i].filename);
+      if (shiftKey && lastClickedIndex !== null) {
+        // Range select
+        const start = Math.min(lastClickedIndex, index);
+        const end = Math.max(lastClickedIndex, index);
+        const newSelected = new Set(selectedDocs);
+
+        for (let i = start; i <= end; i++) {
+          if (docs[i]) {
+            newSelected.add(docs[i].filename);
+          }
         }
-      }
-      
-      setSelectedDocs(newSelected);
-    } else {
-      // Single toggle
-      const newSelected = new Set(selectedDocs);
-      if (newSelected.has(filename)) {
-        newSelected.delete(filename);
+
+        setSelectedDocs(newSelected);
       } else {
-        newSelected.add(filename);
+        // Single toggle
+        const newSelected = new Set(selectedDocs);
+        if (newSelected.has(filename)) {
+          newSelected.delete(filename);
+        } else {
+          newSelected.add(filename);
+        }
+        setSelectedDocs(newSelected);
+        setLastClickedIndex(index);
       }
-      setSelectedDocs(newSelected);
-      setLastClickedIndex(index);
-    }
-  }, [allowMultiple, lastClickedIndex, selectedDocs]);
+    },
+    [allowMultiple, lastClickedIndex, selectedDocs]
+  );
 
-  const handleFileUpload = useCallback((files: FileList | null) => {
-    if (!files) return;
+  const handleFileUpload = useCallback(
+    (files: FileList | null) => {
+      if (!files) return;
 
-    const validFiles: Document[] = [];
-    const validExtensions = mode === 'print' 
-      ? ['pdf', 'jpg', 'jpeg', 'png']
-      : ['jpg', 'jpeg', 'png'];
+      const validFiles: Document[] = [];
+      const validExtensions =
+        mode === 'print' ? ['pdf', 'jpg', 'jpeg', 'png'] : ['jpg', 'jpeg', 'png'];
 
-    Array.from(files).forEach((file) => {
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (ext && validExtensions.includes(ext)) {
-        validFiles.push({
-          filename: file.name,
-          size: file.size,
-          type: file.type,
-          thumbnailUrl: URL.createObjectURL(file),
-        });
-      }
-    });
+      Array.from(files).forEach(file => {
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (ext && validExtensions.includes(ext)) {
+          validFiles.push({
+            filename: file.name,
+            size: file.size,
+            type: file.type,
+            thumbnailUrl: URL.createObjectURL(file),
+          });
+        }
+      });
 
-    setUploadedFiles((prev) => [...prev, ...validFiles]);
-  }, [mode]);
+      setUploadedFiles(prev => [...prev, ...validFiles]);
+    },
+    [mode]
+  );
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handleFileUpload(e.dataTransfer.files);
-  }, [handleFileUpload]);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      handleFileUpload(e.dataTransfer.files);
+    },
+    [handleFileUpload]
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -147,14 +155,14 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
 
   const handleConfirm = () => {
     const allDocs = [...currentDocuments, ...convertedDocuments, ...uploadedFiles];
-    const selected = allDocs.filter((doc) => selectedDocs.has(doc.filename));
+    const selected = allDocs.filter(doc => selectedDocs.has(doc.filename));
     onSelect(selected);
     onClose();
   };
 
   const renderDocumentCard = (doc: Document, index: number, allDocs: Document[]) => {
     const isSelected = selectedDocs.has(doc.filename);
-    
+
     return (
       <Box
         key={doc.filename}
@@ -171,7 +179,7 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
           boxShadow: 'xl',
           borderColor: 'brand.400',
         }}
-        onClick={(e) => handleDocumentClick(doc.filename, index, e.shiftKey, allDocs)}
+        onClick={e => handleDocumentClick(doc.filename, index, e.shiftKey, allDocs)}
       >
         {isSelected && (
           <Box
@@ -187,23 +195,17 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
             <Iconify icon="solar:check-circle-bold" width={16} height={16} />
           </Box>
         )}
-        
-  <Box position="relative" h={{ base: '120px', md: '150px' }} bg="gray.800" overflow="hidden">
+
+        <Box position="relative" h={{ base: '120px', md: '150px' }} bg="gray.800" overflow="hidden">
           {doc.thumbnailUrl ? (
-            <Image
-              src={doc.thumbnailUrl}
-              alt={doc.filename}
-              objectFit="cover"
-              w="100%"
-              h="100%"
-            />
+            <Image src={doc.thumbnailUrl} alt={doc.filename} objectFit="cover" w="100%" h="100%" />
           ) : (
             <Flex align="center" justify="center" h="100%">
               <Iconify icon={FiFile} boxSize={12} color="whiteAlpha.500" />
             </Flex>
           )}
         </Box>
-        
+
         <VStack align="start" spacing={1} p={3}>
           <Text fontSize="sm" fontWeight="600" noOfLines={1} w="100%">
             {doc.filename}
@@ -219,7 +221,7 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
             )}
           </HStack>
         </VStack>
-        
+
         {isSelected && (
           <Box
             position="absolute"
@@ -257,7 +259,7 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
           </HStack>
         </ModalHeader>
         <ModalCloseButton size="lg" />
-        
+
         <ModalBody py={6}>
           <Tabs colorScheme="brand" variant="enclosed">
             <TabList>
@@ -352,13 +354,7 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
                     cursor="pointer"
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <Flex
-                      direction="column"
-                      align="center"
-                      justify="center"
-                      h="100%"
-                      p={6}
-                    >
+                    <Flex direction="column" align="center" justify="center" h="100%" p={6}>
                       <Iconify
                         icon={FiUpload}
                         boxSize={16}
@@ -387,7 +383,7 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
                     multiple={allowMultiple}
                     accept={mode === 'print' ? '.pdf,.jpg,.jpeg,.png' : '.jpg,.jpeg,.png'}
                     style={{ display: 'none' }}
-                    onChange={(e) => handleFileUpload(e.target.files)}
+                    onChange={e => handleFileUpload(e.target.files)}
                   />
 
                   {uploadedFiles.length > 0 && (

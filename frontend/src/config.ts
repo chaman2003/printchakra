@@ -6,13 +6,13 @@ const getApiBaseUrl = () => {
     console.log('✅ Using REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     return process.env.REACT_APP_API_URL;
   }
-  
+
   // 2. Check if running locally (development)
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     console.log('✅ Using local development URL: http://localhost:5000');
     return 'http://localhost:5000';
   }
-  
+
   // 3. Production fallback - using ngrok tunnel
   // Update this URL when your ngrok tunnel changes
   const prodUrl = 'https://ostensible-unvibrant-clarisa.ngrok-free.dev';
@@ -39,12 +39,12 @@ const isUsingNgrok = () => {
 // Get default headers for axios requests
 export const getDefaultHeaders = () => {
   const headers: Record<string, string> = {};
-  
+
   // Add ngrok bypass header if using ngrok
   if (isUsingNgrok()) {
     headers['ngrok-skip-browser-warning'] = 'true';
   }
-  
+
   return headers;
 };
 
@@ -52,11 +52,11 @@ export const getDefaultHeaders = () => {
 export const getImageUrl = (endpoint: string, filename: string) => {
   // Use direct HTTP for images to bypass WebSocket issues
   const baseUrl = API_BASE_URL;
-  
+
   // For ngrok, we need to add the bypass header as a query parameter approach won't work
   // Instead, images will need to be loaded through a proxy or with proper headers
   const fullUrl = `${baseUrl}${endpoint}/${filename}`;
-  
+
   // Add timestamp to bypass cache
   const separator = fullUrl.includes('?') ? '&' : '?';
   return `${fullUrl}${separator}_t=${Date.now()}`;
@@ -76,11 +76,13 @@ export const SOCKET_CONFIG = {
   withCredentials: false,
   secure: API_BASE_URL.startsWith('https'),
   rejectUnauthorized: false,
-  ...(isUsingNgrok() ? {
-    extraHeaders: {
-      'ngrok-skip-browser-warning': 'true'
-    }
-  } : {})
+  ...(isUsingNgrok()
+    ? {
+        extraHeaders: {
+          'ngrok-skip-browser-warning': 'true',
+        },
+      }
+    : {}),
 };
 
 export const API_ENDPOINTS = {
@@ -94,7 +96,7 @@ export const API_ENDPOINTS = {
   ocr: '/ocr',
   print: '/print',
   processingStatus: '/processing-status',
-  
+
   // Advanced processing endpoints
   processAdvanced: '/process/advanced',
   validateQuality: '/validate/quality',
@@ -104,13 +106,13 @@ export const API_ENDPOINTS = {
   pipelineInfo: '/pipeline/info',
   classifyDocument: '/classify/document',
   batchProcess: '/batch/process',
-  
+
   // File conversion endpoints
   convert: '/convert',
   converted: '/converted',
   getConvertedFiles: '/get-converted-files',
   deleteConverted: '/delete-converted',
-  
+
   // AI Orchestration endpoints
   orchestrateCommand: '/orchestrate/command',
   orchestrateConfirm: '/orchestrate/confirm',
@@ -123,9 +125,9 @@ export const API_ENDPOINTS = {
   orchestrateHistory: '/orchestrate/history',
 };
 
-console.log('🔧 API Configuration:', { 
-  API_BASE_URL, 
+console.log('🔧 API Configuration:', {
+  API_BASE_URL,
   hostname: window.location.hostname,
   SOCKET_IO_ENABLED,
-  endpoints: Object.keys(API_ENDPOINTS).length + ' endpoints configured'
+  endpoints: Object.keys(API_ENDPOINTS).length + ' endpoints configured',
 });

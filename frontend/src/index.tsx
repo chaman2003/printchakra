@@ -11,7 +11,7 @@ import './index.css';
 // Suppress webpack dev server deprecation warnings (non-critical)
 if (process.env.NODE_ENV === 'development') {
   const originalWarn = console.warn;
-  console.warn = function(...args: any[]) {
+  console.warn = function (...args: any[]) {
     const message = args[0]?.toString?.() || '';
     if (
       message.includes('DEP_WEBPACK_DEV_SERVER') ||
@@ -25,9 +25,7 @@ if (process.env.NODE_ENV === 'development') {
   };
 }
 
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
 root.render(
   <React.StrictMode>
     <ChakraProvider theme={theme}>

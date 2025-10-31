@@ -36,11 +36,11 @@ interface ConnectionValidatorProps {
   onStatusComplete?: (allConnected: boolean) => void;
 }
 
-const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({ 
-  isOpen, 
-  onClose, 
+const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
+  isOpen,
+  onClose,
   videoRef,
-  onStatusComplete 
+  onStatusComplete,
 }) => {
   const toast = useToast();
   const [steps, setSteps] = useState<ValidationStep[]>([
@@ -81,11 +81,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
     status: 'pending' | 'loading' | 'success' | 'error',
     error?: string
   ) => {
-    setSteps((prev) =>
-      prev.map((step) =>
-        step.id === stepId ? { ...step, status, error } : step
-      )
-    );
+    setSteps(prev => prev.map(step => (step.id === stepId ? { ...step, status, error } : step)));
   };
 
   const validateConnection = async (): Promise<boolean> => {
@@ -100,24 +96,20 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
         return false;
       }
     } catch (error: any) {
-      updateStepStatus(
-        'connection',
-        'error',
-        error.response?.data?.error || 'Network error'
-      );
+      updateStepStatus('connection', 'error', error.response?.data?.error || 'Network error');
       return false;
     }
   };
 
   const validateCamera = async (): Promise<boolean> => {
     updateStepStatus('camera', 'loading');
-    
+
     // Skip camera validation if no videoRef provided (Dashboard page)
     if (!videoRef) {
       updateStepStatus('camera', 'success', undefined);
       return true;
     }
-    
+
     try {
       // Capture a frame from the video element
       if (!videoRef.current) {
@@ -139,7 +131,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
       ctx.drawImage(video, 0, 0);
 
       // Convert canvas to blob
-      const blob = await new Promise<Blob | null>((resolve) => {
+      const blob = await new Promise<Blob | null>(resolve => {
         canvas.toBlob(resolve, 'image/jpeg', 0.8);
       });
 
@@ -161,11 +153,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
         return false;
       }
     } catch (error: any) {
-      updateStepStatus(
-        'camera',
-        'error',
-        error.response?.data?.error || 'Camera validation error'
-      );
+      updateStepStatus('camera', 'error', error.response?.data?.error || 'Camera validation error');
       return false;
     }
   };
@@ -178,11 +166,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
         updateStepStatus('printer', 'success');
         return true;
       } else {
-        updateStepStatus(
-          'printer',
-          'error',
-          response.data.error || 'Printer not connected'
-        );
+        updateStepStatus('printer', 'error', response.data.error || 'Printer not connected');
         return false;
       }
     } catch (error: any) {
@@ -203,7 +187,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
     // Step 1: Connection
     setCurrentStep(0);
     const connectionOk = await validateConnection();
-    await new Promise((resolve) => setTimeout(resolve, 500)); // Delay for UX
+    await new Promise(resolve => setTimeout(resolve, 500)); // Delay for UX
 
     if (!connectionOk) {
       if (onStatusComplete) onStatusComplete(false);
@@ -213,7 +197,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
     // Step 2: Camera
     setCurrentStep(1);
     const cameraOk = await validateCamera();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     if (!cameraOk) {
       if (onStatusComplete) onStatusComplete(false);
@@ -223,17 +207,17 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
     // Step 3: Printer
     setCurrentStep(2);
     const printerOk = await validatePrinter();
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Mark complete
     const allSuccess = connectionOk && cameraOk && printerOk;
     setAllComplete(allSuccess);
-    
+
     // Notify parent and show toast
     if (onStatusComplete) {
       onStatusComplete(allSuccess);
     }
-    
+
     if (allSuccess) {
       toast({
         title: '✅ System Ready',
@@ -265,7 +249,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
   };
 
   const getProgressValue = () => {
-    const completedSteps = steps.filter((s) => s.status === 'success').length;
+    const completedSteps = steps.filter(s => s.status === 'success').length;
     return (completedSteps / steps.length) * 100;
   };
 
@@ -308,20 +292,20 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
                   step.status === 'loading'
                     ? 'blue.50'
                     : step.status === 'success'
-                    ? 'green.50'
-                    : step.status === 'error'
-                    ? 'red.50'
-                    : 'gray.50'
+                      ? 'green.50'
+                      : step.status === 'error'
+                        ? 'red.50'
+                        : 'gray.50'
                 }
                 _dark={{
                   bg:
                     step.status === 'loading'
                       ? 'blue.900'
                       : step.status === 'success'
-                      ? 'green.900'
-                      : step.status === 'error'
-                      ? 'red.900'
-                      : 'gray.700',
+                        ? 'green.900'
+                        : step.status === 'error'
+                          ? 'red.900'
+                          : 'gray.700',
                 }}
                 transition="all 0.3s"
               >
@@ -332,9 +316,7 @@ const ConnectionValidator: React.FC<ConnectionValidatorProps> = ({
                       {step.label}
                     </Text>
                     <Text fontSize="xs" color="gray.600" _dark={{ color: 'gray.400' }}>
-                      {step.status === 'error' && step.error
-                        ? step.error
-                        : step.description}
+                      {step.status === 'error' && step.error ? step.error : step.description}
                     </Text>
                   </VStack>
                 </HStack>

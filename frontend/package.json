@@ -57,6 +57,7 @@
     "@types/react-dom": "^19.2.2",
     "cross-env": "^10.1.0",
     "eslint": "^8.57.1",
-    "eslint-webpack-plugin": "^5.0.2"
+    "eslint-webpack-plugin": "^5.0.2",
+    "prettier": "^3.6.2"
   }
 }

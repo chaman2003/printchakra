@@ -4,7 +4,12 @@
  */
 
 import apiClient from '../apiClient';
-import type { FileInfo, ScanConfig, PrintConfig, ConversionOptions } from '../features/dashboard/types';
+import type {
+  FileInfo,
+  ScanConfig,
+  PrintConfig,
+  ConversionOptions,
+} from '../features/dashboard/types';
 
 /**
  * File Service
@@ -30,7 +35,7 @@ export class FileService {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      onUploadProgress: (progressEvent) => {
+      onUploadProgress: progressEvent => {
         if (onProgress && progressEvent.total) {
           const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           onProgress(progress);

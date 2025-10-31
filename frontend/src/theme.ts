@@ -7,7 +7,8 @@ const config: ThemeConfig = {
 };
 
 const fonts = {
-  heading: '"Plus Jakarta Sans Variable", "Space Grotesk Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  heading:
+    '"Plus Jakarta Sans Variable", "Space Grotesk Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   body: '"Plus Jakarta Sans Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   mono: '"Space Grotesk Variable", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
 };
@@ -71,7 +72,7 @@ const shadows = {
   subtleDark: '0 14px 30px rgba(0, 0, 0, 0.55)',
   neon: '0 0 20px rgba(29, 214, 255, 0.6), 0 0 40px rgba(121, 95, 238, 0.4)',
   glow: '0 0 30px rgba(255, 77, 175, 0.5)',
-  'xl': '0 20px 50px -12px rgba(0, 0, 0, 0.35)',
+  xl: '0 20px 50px -12px rgba(0, 0, 0, 0.35)',
   '2xl': '0 25px 60px -15px rgba(0, 0, 0, 0.45)',
 };
 
@@ -147,15 +148,24 @@ const components = {
       solid: (props: StyleFunctionProps) => ({
         bg: mode('brand.500', 'nebula.500')(props),
         color: 'white',
-        boxShadow: mode('0 4px 14px rgba(121, 95, 238, 0.4)', '0 4px 20px rgba(69, 202, 255, 0.5)')(props),
+        boxShadow: mode(
+          '0 4px 14px rgba(121, 95, 238, 0.4)',
+          '0 4px 20px rgba(69, 202, 255, 0.5)'
+        )(props),
         _hover: {
           bg: mode('brand.600', 'nebula.600')(props),
           transform: 'translateY(-2px)',
-          boxShadow: mode('0 8px 20px rgba(121, 95, 238, 0.5)', '0 8px 30px rgba(69, 202, 255, 0.6)')(props),
+          boxShadow: mode(
+            '0 8px 20px rgba(121, 95, 238, 0.5)',
+            '0 8px 30px rgba(69, 202, 255, 0.6)'
+          )(props),
         },
         _active: {
           transform: 'translateY(0)',
-          boxShadow: mode('0 2px 8px rgba(121, 95, 238, 0.3)', '0 2px 12px rgba(69, 202, 255, 0.4)')(props),
+          boxShadow: mode(
+            '0 2px 8px rgba(121, 95, 238, 0.3)',
+            '0 2px 12px rgba(69, 202, 255, 0.4)'
+          )(props),
         },
       }),
       outline: (props: StyleFunctionProps) => ({
@@ -165,7 +175,10 @@ const components = {
         _hover: {
           bg: mode('brand.50', 'whiteAlpha.100')(props),
           transform: 'translateY(-2px)',
-          boxShadow: mode('0 4px 12px rgba(121, 95, 238, 0.2)', '0 4px 16px rgba(69, 202, 255, 0.3)')(props),
+          boxShadow: mode(
+            '0 4px 12px rgba(121, 95, 238, 0.2)',
+            '0 4px 16px rgba(69, 202, 255, 0.3)'
+          )(props),
         },
       }),
       ghost: (props: StyleFunctionProps) => ({
@@ -185,12 +198,21 @@ const components = {
         bg: mode('rgba(255, 255, 255, 0.95)', 'rgba(12, 16, 35, 0.92)')(props),
         borderRadius: '24px',
         backdropFilter: 'blur(18px)',
-        boxShadow: mode('0 14px 30px rgba(12, 20, 56, 0.12)', '0 14px 30px rgba(0, 0, 0, 0.55)')(props),
-        border: mode('1px solid rgba(121, 95, 238, 0.12)', '1px solid rgba(69, 202, 255, 0.18)')(props),
+        boxShadow: mode(
+          '0 14px 30px rgba(12, 20, 56, 0.12)',
+          '0 14px 30px rgba(0, 0, 0, 0.55)'
+        )(props),
+        border: mode(
+          '1px solid rgba(121, 95, 238, 0.12)',
+          '1px solid rgba(69, 202, 255, 0.18)'
+        )(props),
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         _hover: {
           transform: 'translateY(-4px)',
-          boxShadow: mode('0 18px 40px rgba(121, 95, 238, 0.2)', '0 18px 45px rgba(69, 202, 255, 0.35)')(props),
+          boxShadow: mode(
+            '0 18px 40px rgba(121, 95, 238, 0.2)',
+            '0 18px 45px rgba(69, 202, 255, 0.35)'
+          )(props),
         },
       },
     }),
@@ -207,10 +229,16 @@ const components = {
       filled: (props: StyleFunctionProps) => ({
         field: {
           bg: mode('rgba(255, 255, 255, 0.8)', 'rgba(20, 24, 45, 0.7)')(props),
-          border: mode('1px solid rgba(121, 95, 238, 0.08)', '1px solid rgba(69, 202, 255, 0.15)')(props),
+          border: mode(
+            '1px solid rgba(121, 95, 238, 0.08)',
+            '1px solid rgba(69, 202, 255, 0.15)'
+          )(props),
           _focus: {
             borderColor: mode('brand.500', 'nebula.400')(props),
-            boxShadow: mode('0 0 0 3px rgba(121, 95, 238, 0.15)', '0 0 0 3px rgba(69, 202, 255, 0.25)')(props),
+            boxShadow: mode(
+              '0 0 0 3px rgba(121, 95, 238, 0.15)',
+              '0 0 0 3px rgba(69, 202, 255, 0.25)'
+            )(props),
             bg: mode('rgba(255, 255, 255, 0.95)', 'rgba(26, 32, 55, 0.85)')(props),
           },
           _hover: {
@@ -238,7 +266,10 @@ const components = {
       list: {
         borderRadius: '16px',
         boxShadow: mode('lg', '0 20px 50px rgba(0, 0, 0, 0.6)')(props),
-        border: mode('1px solid rgba(121, 95, 238, 0.18)', '1px solid rgba(69, 202, 255, 0.25)')(props),
+        border: mode(
+          '1px solid rgba(121, 95, 238, 0.18)',
+          '1px solid rgba(69, 202, 255, 0.25)'
+        )(props),
         backdropFilter: 'blur(12px)',
         bg: mode('rgba(255, 255, 255, 0.95)', 'rgba(12, 16, 35, 0.95)')(props),
       },
@@ -258,7 +289,10 @@ const components = {
       dialog: {
         bg: mode('rgba(255, 255, 255, 0.98)', 'rgba(12, 16, 35, 0.98)')(props),
         backdropFilter: 'blur(20px)',
-        boxShadow: mode('0 25px 60px rgba(121, 95, 238, 0.3)', '0 25px 60px rgba(0, 0, 0, 0.7)')(props),
+        boxShadow: mode(
+          '0 25px 60px rgba(121, 95, 238, 0.3)',
+          '0 25px 60px rgba(0, 0, 0, 0.7)'
+        )(props),
       },
       overlay: {
         backdropFilter: 'blur(8px)',
