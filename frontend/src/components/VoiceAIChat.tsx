@@ -57,27 +57,27 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
   const [sessionStatus, setSessionStatus] = useState<string>('');
   const [chatInput, setChatInput] = useState<string>('');
   const [isTextSending, setIsTextSending] = useState(false);
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageCounterRef = useRef<{ [key: string]: number }>({});
   const chatInputRef = useRef<HTMLInputElement>(null);
-  
+
   const toast = useToast();
-  
+
   // Color mode values
   const bgColor = useColorModeValue('white', 'gray.800');
   const userMessageBg = useColorModeValue('blue.50', 'blue.900');
   const aiMessageBg = useColorModeValue('gray.50', 'gray.700');
   const systemMessageBg = useColorModeValue('yellow.50', 'yellow.900');
   const chatBoxBg = useColorModeValue('gray.50', 'gray.700');
-  
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-  
+
   // Cleanup on unmount - stop recording and end session
   useEffect(() => {
     return () => {
@@ -90,7 +90,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       }
     };
   }, []);
-  
+
   // Start voice AI session when drawer opens
   useEffect(() => {
     if (isOpen && !isSessionActive) {
@@ -104,22 +104,27 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isSessionActive]);
-  
+
   const addMessage = useCallback((type: 'user' | 'ai' | 'system', text: string) => {
     setMessages(prev => {
       // Get the last message
       const lastMessage = prev[prev.length - 1];
-      
+
       // Check if this is a duplicate of the last system message
-      if (lastMessage && lastMessage.type === type && lastMessage.text === text && type === 'system') {
+      if (
+        lastMessage &&
+        lastMessage.type === type &&
+        lastMessage.text === text &&
+        type === 'system'
+      ) {
         // Increment the counter for this duplicate message
         const newCount = (lastMessage.count || 1) + 1;
         const updatedMessage = { ...lastMessage, count: newCount };
-        
+
         // Replace the last message with the updated count
         return [...prev.slice(0, -1), updatedMessage];
       }
-      
+
       // Otherwise, add a new message
       const message: VoiceMessage = {
         id: `${Date.now()}-${Math.random()}`,
@@ -131,28 +136,35 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       return [...prev, message];
     });
   }, []);
-  
+
   const startSession = async () => {
     try {
       setSessionStatus('Loading Whisper AI model (smaller model, faster loading)...');
-      
+
       // Use longer timeout for session start (Whisper model loading)
-      const response = await apiClient.post('/voice/start', {}, {
-        timeout: 120000, // 2 minutes for model loading
-      });
-      
+      const response = await apiClient.post(
+        '/voice/start',
+        {},
+        {
+          timeout: 120000, // 2 minutes for model loading
+        }
+      );
+
       if (response.data.success) {
         setIsSessionActive(true);
         setSessionStatus('Ready - Say wake word first!');
-        addMessage('system', '🎙️ Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.');
-        
+        addMessage(
+          'system',
+          '🎙️ Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.'
+        );
+
         toast({
           title: 'Voice AI Ready',
           description: 'Start with: Hey, Hi, Hello, or Okay',
           status: 'success',
           duration: 4000,
         });
-        
+
         // Auto-start recording after session starts
         setTimeout(() => startRecording(), 500);
       } else {
@@ -161,46 +173,42 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
     } catch (error: any) {
       console.error('Session start error:', error);
       setSessionStatus('Failed');
-      
+
       toast({
         title: 'Session Start Failed',
-        description: error.response?.data?.error || error.message || 'Could not start voice AI session',
+        description:
+          error.response?.data?.error || error.message || 'Could not start voice AI session',
         status: 'error',
         duration: 5000,
       });
     }
   };
-  
+
   const startRecording = async () => {
     // Block recording if TTS is currently speaking
     if (isSpeaking) {
       console.log('🔊 TTS is speaking - blocking recording');
       return;
     }
-    
+
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Microphone access not supported in this browser');
       }
-      
-      const stream = await navigator.mediaDevices.getUserMedia({ 
+
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
           sampleRate: 16000, // Optimal for Whisper
-          channelCount: 1,   // Mono audio
-        }
+          channelCount: 1, // Mono audio
+        },
       });
-      
+
       // Use WAV format if supported, fallback to WebM
-      const mimeTypes = [
-        'audio/wav',
-        'audio/webm',
-        'audio/webm;codecs=opus',
-        'audio/mp4'
-      ];
-      
+      const mimeTypes = ['audio/wav', 'audio/webm', 'audio/webm;codecs=opus', 'audio/mp4'];
+
       let selectedMimeType = 'audio/webm';
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
@@ -209,60 +217,60 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           break;
         }
       }
-      
+
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: selectedMimeType,
-        audioBitsPerSecond: 128000
+        audioBitsPerSecond: 128000,
       });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      
-      mediaRecorder.ondataavailable = (event) => {
+
+      mediaRecorder.ondataavailable = event => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
-      
+
       mediaRecorder.onstop = async () => {
         try {
           let audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
-          
+
           // Validate audio blob
           if (!isValidAudioBlob(audioBlob)) {
             console.error('Invalid audio blob generated');
             throw new Error('Audio blob is invalid');
           }
-          
+
           console.log(`Raw audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
-          
+
           // Convert to WAV if needed
           if (audioBlob.type !== 'audio/wav' && !audioBlob.type.includes('wav')) {
             console.log('Converting audio to WAV format...');
             audioBlob = await convertToWAV(audioBlob);
             console.log(`Converted to WAV: ${audioBlob.size} bytes`);
           }
-          
+
           console.log(`Final audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
-          
+
           // Get duration for diagnostics
           const duration = await getAudioDuration(audioBlob);
           console.log(`Audio duration: ${duration.toFixed(2)}s`);
-          
+
           // Check for voice activity before processing
           const { hasVoiceActivity } = await import('../utils/audioUtils');
           const hasVoice = await hasVoiceActivity(audioBlob, 0.015);
-          
+
           if (!hasVoice) {
             console.log('⏭️ No voice detected in audio - skipping processing');
             // Don't show annoying "no voice" message - just silently retry
-            
+
             // Auto-restart recording for continuous listening
             if (isSessionActive) {
               setTimeout(() => startRecording(), 300);
             }
             return;
           }
-          
+
           await processAudio(audioBlob);
         } catch (error: any) {
           console.error('Error in onstop handler:', error);
@@ -272,7 +280,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
             status: 'error',
             duration: 5000,
           });
-          
+
           // Auto-restart recording on error
           if (isSessionActive) {
             setTimeout(() => startRecording(), 1000);
@@ -282,7 +290,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           stream.getTracks().forEach(track => track.stop());
         }
       };
-      
+
       mediaRecorder.onerror = (event: any) => {
         console.error('MediaRecorder error:', event.error);
         toast({
@@ -292,17 +300,16 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           duration: 5000,
         });
       };
-      
+
       mediaRecorder.start();
       setIsRecording(true);
-      
+
       // Auto-stop after 5 seconds (configurable)
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           stopRecording();
         }
       }, 5000);
-      
     } catch (error: any) {
       console.error('Recording error:', error);
       toast({
@@ -313,14 +320,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       });
     }
   };
-  
+
   const stopRecording = () => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
     }
   };
-  
+
   const processAudio = async (audioBlob: Blob) => {
     // Block processing if TTS is currently speaking
     if (isSpeaking) {
@@ -328,19 +335,19 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       // Auto-restart recording after TTS finishes
       return;
     }
-    
+
     try {
       setIsProcessing(true);
       setSessionStatus('Transcribing audio (checking for "hey" keyword)...');
-      
+
       console.log(`📝 Processing audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
-      
+
       // Create form data
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.wav');
-      
+
       console.log('📤 Sending to backend...');
-      
+
       // Send to backend for processing (Whisper → Smollm2)
       // Use longer timeout for voice processing (model loading can take time)
       const response = await apiClient.post('/voice/process', formData, {
@@ -349,49 +356,58 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
         },
         timeout: 120000, // 2 minutes for voice processing
       });
-      
+
       console.log('✅ Backend response:', response.data);
-      
+
       // Check for wake word missing first
       if (response.data.wake_word_missing) {
         console.log('⏭️ Wake word missing - prompting user');
-        
-        const transcribedText = response.data.user_text || response.data.full_text || 'your command';
+
+        const transcribedText =
+          response.data.user_text || response.data.full_text || 'your command';
         addMessage('system', `🎤 Heard: "${transcribedText}"`);
-        addMessage('system', '⚠️ Please say "Hey", "Hi", "Hello", or "Okay" first to talk with PrintChakra AI');
-        
+        addMessage(
+          'system',
+          '⚠️ Please say "Hey", "Hi", "Hello", or "Okay" first to talk with PrintChakra AI'
+        );
+
         setSessionStatus('Waiting for wake word...');
         setIsProcessing(false);
-        
+
         // Continue recording
         setTimeout(() => startRecording(), 1000);
         return;
       }
-      
+
       if (response.data.success) {
-        const { user_text, full_text, ai_response, session_ended, keyword_detected } = response.data;
-        
+        const { user_text, full_text, ai_response, session_ended, keyword_detected } =
+          response.data;
+
         // Add full transcription as system message
         addMessage('system', `🎤 Heard: "${full_text || user_text}"`);
-        
+
         // Add user message (command part only)
         addMessage('user', user_text);
-        
+
         // 1. Display AI response FIRST
         addMessage('ai', ai_response);
-        
+
         setIsProcessing(false);
-        
+
         // 2. THEN play TTS (blocking - no input allowed)
         setIsSpeaking(true);
         setSessionStatus('🔊 Speaking response...');
-        
+
         try {
-          await apiClient.post('/voice/speak', {
-            text: ai_response
-          }, {
-            timeout: 60000
-          });
+          await apiClient.post(
+            '/voice/speak',
+            {
+              text: ai_response,
+            },
+            {
+              timeout: 60000,
+            }
+          );
         } catch (ttsError) {
           console.error('TTS error:', ttsError);
           // Continue even if TTS fails
@@ -403,12 +419,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
             chatInputRef.current?.focus();
           }, 100);
         }
-        
+
         // Check if session should end
         if (session_ended) {
           setIsSessionActive(false);
           addMessage('system', 'Voice session ended. Thank you!');
-          
+
           toast({
             title: 'Session Ended',
             description: 'Goodbye!',
@@ -422,17 +438,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       } else if (response.data.skipped) {
         // Audio was transcribed but "hey" keyword was not found
         const transcribedText = response.data.user_text;
-        
+
         console.log(`⏭️ Audio skipped - no "hey" keyword detected`);
         console.log(`   Transcribed: "${transcribedText}"`);
-        
+
         // Only show message if not silent
         if (!response.data.silent) {
           addMessage('system', `🎤 Heard: "${transcribedText}" (no "hey" - skipped)`);
         }
-        
+
         setSessionStatus('Ready - Say "hey" to trigger AI');
-        
+
         // Continue recording
         setTimeout(() => startRecording(), 500);
       } else {
@@ -440,7 +456,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       }
     } catch (error: any) {
       console.error('❌ Audio processing error:', error);
-      
+
       // Provide detailed error information
       let errorMessage = error.message || 'Could not process audio';
       if (error.response?.data?.error) {
@@ -449,24 +465,24 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           console.error('Backend details:', error.response.data.details);
         }
       }
-      
+
       // Check if it's a keyword-related error
       if (error.response?.data?.requires_keyword) {
         // Silent retry for keyword errors - don't spam user
         console.log(`⏭️ Keyword detection error, retrying...`);
         setSessionStatus('Ready - Say "hey" to trigger AI');
-        
+
         // Auto-restart recording after keyword error
         setTimeout(() => startRecording(), 300);
       } else {
         // Only show non-retryable errors
         console.error('Transcription error:', errorMessage);
-        
+
         // Don't show file access errors - just retry silently
         if (errorMessage.includes('process cannot access') || errorMessage.includes('being used')) {
           console.log('⏭️ File access error, retrying...');
           setSessionStatus('Ready - Say "hey" to trigger AI');
-          
+
           setTimeout(() => {
             if (isSessionActive) {
               startRecording();
@@ -480,9 +496,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
             status: 'error',
             duration: 3000,
           });
-          
+
           setSessionStatus('Ready - Say "hey" to trigger AI');
-          
+
           // Auto-restart recording after error
           setTimeout(() => {
             if (isSessionActive) {
@@ -495,7 +511,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       setIsProcessing(false);
     }
   };
-  
+
   const endSession = async () => {
     try {
       // Stop recording if active
@@ -504,18 +520,18 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           mediaRecorderRef.current.stop();
         }
         setIsRecording(false);
-        
+
         // Stop all media tracks
         if (mediaRecorderRef.current.stream) {
           mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         }
       }
-      
+
       await apiClient.post('/voice/end');
-      
+
       setIsSessionActive(false);
       addMessage('system', '🛑 Session ended manually.');
-      
+
       toast({
         title: 'Session Ended',
         description: 'Recording stopped and session closed',
@@ -532,43 +548,51 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       }
     }
   };
-  
+
   const sendTextMessage = async (text: string) => {
     if (!text.trim() || !isSessionActive || isSpeaking) return; // Block if TTS is speaking
-    
+
     try {
       setIsTextSending(true);
       setChatInput('');
-      
+
       // Add user message to chat immediately
       addMessage('user', text);
-      
+
       // Get AI response (text only, no TTS yet)
       setIsProcessing(true);
-      
-      const response = await apiClient.post('/voice/chat', {
-        message: text
-      }, {
-        timeout: 30000
-      });
-      
+
+      const response = await apiClient.post(
+        '/voice/chat',
+        {
+          message: text,
+        },
+        {
+          timeout: 30000,
+        }
+      );
+
       if (response.data.success) {
         const aiResponse = response.data.response;
-        
+
         // 1. Display AI message FIRST
         addMessage('ai', aiResponse);
         setIsProcessing(false);
-        
+
         // 2. THEN play TTS (blocking - no input allowed until complete)
         setIsSpeaking(true);
         setSessionStatus('🔊 Speaking response...');
-        
+
         try {
-          await apiClient.post('/voice/speak', {
-            text: aiResponse
-          }, {
-            timeout: 60000 // TTS can take time for long responses
-          });
+          await apiClient.post(
+            '/voice/speak',
+            {
+              text: aiResponse,
+            },
+            {
+              timeout: 60000, // TTS can take time for long responses
+            }
+          );
         } catch (ttsError) {
           console.error('TTS error:', ttsError);
           // Don't show error to user, TTS failure is non-critical
@@ -590,7 +614,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           duration: 5000,
         });
       }
-      
     } catch (error: any) {
       console.error('Text message error:', error);
       setIsProcessing(false);
@@ -606,14 +629,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       setIsTextSending(false);
     }
   };
-  
+
   const handleChatInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendTextMessage(chatInput);
     }
   };
-  
+
   const handleClose = async () => {
     try {
       // Stop recording if active
@@ -622,13 +645,13 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
           mediaRecorderRef.current.stop();
         }
         setIsRecording(false);
-        
+
         // Stop all media tracks
         if (mediaRecorderRef.current.stream) {
           mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         }
       }
-      
+
       // End session if active
       if (isSessionActive) {
         try {
@@ -638,12 +661,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
         }
         setIsSessionActive(false);
       }
-      
+
       // Clear messages and close
       setMessages([]);
       setSessionStatus('');
       onClose();
-      
+
       toast({
         title: 'Voice AI Closed',
         description: 'Recording stopped and session ended',
@@ -657,16 +680,16 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       setSessionStatus('');
       setIsRecording(false);
       setIsSessionActive(false);
-      
+
       // Force stop media tracks
       if (mediaRecorderRef.current?.stream) {
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
-      
+
       onClose();
     }
   };
-  
+
   return (
     <Drawer isOpen={isOpen} placement="right" onClose={handleClose} size="md">
       <DrawerOverlay />
@@ -674,17 +697,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
         <DrawerCloseButton />
         <DrawerHeader borderBottomWidth="1px">
           <Flex align="center" gap={3}>
-            <Avatar
-              size="sm"
-              name="PrintChakra AI"
-              bg="blue.500"
-            />
+            <Avatar size="sm" name="PrintChakra AI" bg="blue.500" />
             <Box>
               <Heading size="md">PrintChakra AI</Heading>
               <HStack spacing={2} mt={1}>
-                <Badge colorScheme={isSessionActive ? 'green' : 'gray'}>
-                  {sessionStatus}
-                </Badge>
+                <Badge colorScheme={isSessionActive ? 'green' : 'gray'}>{sessionStatus}</Badge>
                 {isRecording && (
                   <Badge colorScheme="red" variant="solid">
                     <HStack spacing={1}>
@@ -719,15 +736,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
             </Box>
           </Flex>
         </DrawerHeader>
-        
+
         <DrawerBody p={0}>
-          <VStack
-            spacing={3}
-            align="stretch"
-            p={4}
-            height="100%"
-            overflowY="auto"
-          >
+          <VStack spacing={3} align="stretch" p={4} height="100%" overflowY="auto">
             {messages.length === 0 && (
               <Flex
                 direction="column"
@@ -745,21 +756,15 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
                 </Text>
               </Flex>
             )}
-            
-            {messages.map((message) => (
+
+            {messages.map(message => (
               <Box
                 key={message.id}
                 alignSelf={message.type === 'user' ? 'flex-end' : 'flex-start'}
                 maxW="80%"
               >
                 {message.type === 'system' ? (
-                  <Box
-                    bg={systemMessageBg}
-                    px={3}
-                    py={2}
-                    borderRadius="md"
-                    textAlign="center"
-                  >
+                  <Box bg={systemMessageBg} px={3} py={2} borderRadius="md" textAlign="center">
                     <Text fontSize="sm" fontStyle="italic">
                       {message.text}
                       {message.count && message.count > 1 && (
@@ -795,11 +800,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
                 )}
               </Box>
             ))}
-            
+
             <div ref={messagesEndRef} />
           </VStack>
         </DrawerBody>
-        
+
         {isSessionActive && (
           <Box borderTopWidth="1px" p={3} bg={chatBoxBg}>
             <InputGroup size="sm" mb={3}>
@@ -807,7 +812,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
                 ref={chatInputRef}
                 placeholder="Type your message..."
                 value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
+                onChange={e => setChatInput(e.target.value)}
                 onKeyPress={handleChatInputKeyPress}
                 isDisabled={isTextSending || isProcessing}
                 borderRadius="md"
@@ -830,7 +835,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
             </Text>
           </Box>
         )}
-        
+
         <Box borderTopWidth="1px" p={4}>
           <Flex gap={2} justify="center">
             {isSessionActive ? (
@@ -863,7 +868,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
               </Button>
             )}
           </Flex>
-          
+
           <VStack spacing={1} mt={2}>
             <Text fontSize="xs" color="gray.500" textAlign="center">
               Powered by Whisper & Smollm2 + Indian English TTS

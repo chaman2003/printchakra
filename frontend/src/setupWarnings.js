@@ -6,11 +6,8 @@
 
 const originalEmit = process.emit;
 
-process.emit = function(name, ...args) {
-  if (
-    name === 'warning' &&
-    args[0]?.code?.includes?.('DEP_WEBPACK_DEV_SERVER')
-  ) {
+process.emit = function (name, ...args) {
+  if (name === 'warning' && args[0]?.code?.includes?.('DEP_WEBPACK_DEV_SERVER')) {
     return;
   }
   return originalEmit.apply(process, [name, ...args]);

@@ -1,7 +1,7 @@
 /**
  * DocumentPreview Component
  * Responsive document preview with real-time settings updates
- * 
+ *
  * 📐 TO ADJUST PREVIEW SIZE: See PREVIEW_SIZE configuration below (lines 22-32)
  */
 
@@ -35,16 +35,16 @@ const MotionImage = motion.img;
 const PREVIEW_SIZE = {
   // Portrait mode dimensions (A4 ratio: 210 x 297)
   portrait: {
-    width: 28,   // vw units
-    height: 39.6,  // vh units (28 * 1.414 for A4 ratio)
+    width: 28, // vw units
+    height: 39.6, // vh units (28 * 1.414 for A4 ratio)
   },
   // Landscape mode dimensions (A4 rotated: 297 x 210)
   landscape: {
-    width: 39.6,   // vw units (28 * 1.414)
-    height: 28,    // vh units (matches portrait width for proper A4 landscape)
+    width: 39.6, // vw units (28 * 1.414)
+    height: 28, // vh units (matches portrait width for proper A4 landscape)
   },
   // Container minimum height
-  containerMinHeight: '50vh',  // Increase if preview gets cut off
+  containerMinHeight: '50vh', // Increase if preview gets cut off
 };
 // ===================================================================
 
@@ -69,7 +69,11 @@ interface DocumentPreviewProps {
   isLoading?: boolean;
 }
 
-const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSettings, isLoading = false }) => {
+const DocumentPreview: React.FC<DocumentPreviewProps> = ({
+  documents,
+  previewSettings,
+  isLoading = false,
+}) => {
   const [currentDocIndex, setCurrentDocIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -87,7 +91,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
 
   const currentDoc = documents[currentDocIndex];
   const totalPages = currentDoc?.pages?.length || 1;
-  
+
   // Get current page URL (if pages exist, use page-specific URL, otherwise use document thumbnail)
   const getCurrentPageUrl = () => {
     if (currentDoc?.pages && currentDoc.pages.length > 0) {
@@ -96,18 +100,18 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
     }
     return currentDoc?.thumbnailUrl;
   };
-  
+
   const currentPageUrl = getCurrentPageUrl();
 
   // Determine paper orientation and size based on settings
   const layout = previewSettings?.layout || 'portrait';
   const isLandscape = layout === 'landscape';
-  
+
   // Calculate responsive paper dimensions using configurable values
   const getPaperDimensions = () => {
     const config = isLandscape ? PREVIEW_SIZE.landscape : PREVIEW_SIZE.portrait;
-    const scale = (zoomLevel / 100) * (previewSettings?.scale || 100) / 100;
-    
+    const scale = ((zoomLevel / 100) * (previewSettings?.scale || 100)) / 100;
+
     return {
       width: `${config.width * scale}vw`,
       height: `${config.height * scale}vh`,
@@ -115,16 +119,16 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   };
 
   const paperDimensions = getPaperDimensions();
-  
+
   // Check if rotated sideways (90° or 270°)
   const isRotatedSideways = rotation === 90 || rotation === 270;
 
   const handleZoomIn = useCallback(() => {
-    setZoomLevel((v) => Math.min(v + 10, 200));
+    setZoomLevel(v => Math.min(v + 10, 200));
   }, []);
 
   const handleZoomOut = useCallback(() => {
-    setZoomLevel((v) => Math.max(v - 10, 50));
+    setZoomLevel(v => Math.max(v - 10, 50));
   }, []);
 
   const handleFullscreen = useCallback(() => {
@@ -138,7 +142,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   }, []);
 
   const handleRotate = useCallback(() => {
-    setRotation((prev) => (prev + 90) % 360);
+    setRotation(prev => (prev + 90) % 360);
   }, []);
 
   // Reset zoom and rotation when documents change
@@ -158,15 +162,19 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
     const handleKeyDown = (e: KeyboardEvent) => {
       // Arrow keys for page navigation
       if (e.key === 'ArrowLeft' && currentPage > 1) {
-        setCurrentPage((prev) => prev - 1);
+        setCurrentPage(prev => prev - 1);
       } else if (e.key === 'ArrowRight' && currentPage < totalPages) {
-        setCurrentPage((prev) => prev + 1);
+        setCurrentPage(prev => prev + 1);
       }
       // Ctrl/Cmd + Arrow keys for document navigation
       else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowLeft' && currentDocIndex > 0) {
-        setCurrentDocIndex((prev) => prev - 1);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowRight' && currentDocIndex < documents.length - 1) {
-        setCurrentDocIndex((prev) => prev + 1);
+        setCurrentDocIndex(prev => prev - 1);
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key === 'ArrowRight' &&
+        currentDocIndex < documents.length - 1
+      ) {
+        setCurrentDocIndex(prev => prev + 1);
       }
     };
 
@@ -176,15 +184,15 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
 
   if (documents.length === 0) {
     return (
-      <Flex 
-        direction="column" 
-        align="center" 
-        justify="center" 
-        h="100%" 
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        h="100%"
         minH="500px"
-        bg={bgColor} 
-        borderRadius="lg" 
-        border="1px solid" 
+        bg={bgColor}
+        borderRadius="lg"
+        border="1px solid"
         borderColor={borderColor}
         p={6}
         position="relative"
@@ -211,7 +219,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
             </Text>
           </VStack>
         </Box>
-        
+
         <Text mt={4} fontSize="xs" color="text.muted" fontWeight="500">
           Ready to preview
         </Text>
@@ -220,38 +228,38 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   }
 
   return (
-    <Box 
-      ref={containerRef} 
+    <Box
+      ref={containerRef}
       bg="transparent"
-      borderRadius="lg" 
-      border="1px solid" 
-      borderColor={borderColor} 
-      overflow="hidden" 
-      position="relative" 
+      borderRadius="lg"
+      border="1px solid"
+      borderColor={borderColor}
+      overflow="hidden"
+      position="relative"
       h="100%"
       display="flex"
       flexDirection="column"
       boxShadow="sm"
     >
       {/* Top Toolbar */}
-      <Flex 
-        px={{ base: '0.75rem', md: '1rem' }} 
+      <Flex
+        px={{ base: '0.75rem', md: '1rem' }}
         py="0.625rem"
-        borderBottom="1px solid" 
-        borderColor={borderColor} 
+        borderBottom="1px solid"
+        borderColor={borderColor}
         bg="rgba(12,16,35,0.4)"
         backdropFilter="blur(10px)"
-        justify="space-between" 
+        justify="space-between"
         align="center"
         flexShrink={0}
         gap={2}
         flexWrap="wrap"
       >
         <HStack spacing={2} minW={0} flex={1}>
-          <Text 
-            fontSize={{ base: 'xs', md: 'sm' }} 
-            fontWeight="600" 
-            noOfLines={1} 
+          <Text
+            fontSize={{ base: 'xs', md: 'sm' }}
+            fontWeight="600"
+            noOfLines={1}
             color="whiteAlpha.900"
             flex={1}
             minW={0}
@@ -268,10 +276,10 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         <HStack spacing={1} flexShrink={0}>
           <ButtonGroup size="sm" isAttached variant="outline">
             <Tooltip label="Zoom Out">
-              <MotionIconButton 
-                aria-label="Zoom out" 
+              <MotionIconButton
+                aria-label="Zoom out"
                 icon={<Iconify icon="solar:magnifer-zoom-out-bold" width={14} height={14} />}
-                onClick={handleZoomOut} 
+                onClick={handleZoomOut}
                 isDisabled={zoomLevel <= 50}
                 bg="whiteAlpha.200"
                 color="white"
@@ -281,7 +289,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 whileTap={{ scale: 0.95 }}
               />
             </Tooltip>
-            <Button 
+            <Button
               minW={{ base: '50px', md: '60px' }}
               fontSize="xs"
               bg="whiteAlpha.200"
@@ -293,10 +301,10 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
               {zoomLevel}%
             </Button>
             <Tooltip label="Zoom In">
-              <MotionIconButton 
-                aria-label="Zoom in" 
+              <MotionIconButton
+                aria-label="Zoom in"
                 icon={<Iconify icon="solar:magnifer-zoom-in-bold" width={14} height={14} />}
-                onClick={handleZoomIn} 
+                onClick={handleZoomIn}
                 isDisabled={zoomLevel >= 200}
                 bg="whiteAlpha.200"
                 color="white"
@@ -310,10 +318,10 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
 
           {/* Rotate Button */}
           <Tooltip label="Rotate 90°">
-            <MotionIconButton 
-              aria-label="Rotate" 
+            <MotionIconButton
+              aria-label="Rotate"
               icon={<Iconify icon="solar:refresh-bold" width={14} height={14} />}
-              size="sm" 
+              size="sm"
               onClick={handleRotate}
               bg="whiteAlpha.200"
               color="white"
@@ -331,7 +339,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 <IconButton
                   aria-label="Previous document"
                   icon={<Iconify icon="solar:alt-arrow-left-bold" width={14} height={14} />}
-                  onClick={() => setCurrentDocIndex((prev) => Math.max(0, prev - 1))}
+                  onClick={() => setCurrentDocIndex(prev => Math.max(0, prev - 1))}
                   isDisabled={currentDocIndex === 0}
                   bg="whiteAlpha.200"
                   color="white"
@@ -355,7 +363,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 <IconButton
                   aria-label="Next document"
                   icon={<Iconify icon="solar:alt-arrow-right-bold" width={14} height={14} />}
-                  onClick={() => setCurrentDocIndex((prev) => Math.min(documents.length - 1, prev + 1))}
+                  onClick={() =>
+                    setCurrentDocIndex(prev => Math.min(documents.length - 1, prev + 1))
+                  }
                   isDisabled={currentDocIndex === documents.length - 1}
                   bg="whiteAlpha.200"
                   color="white"
@@ -373,7 +383,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 <IconButton
                   aria-label="Previous page"
                   icon={<Iconify icon="solar:alt-arrow-left-bold" width={14} height={14} />}
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                   isDisabled={currentPage === 1}
                   bg="whiteAlpha.200"
                   color="white"
@@ -397,7 +407,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                 <IconButton
                   aria-label="Next page"
                   icon={<Iconify icon="solar:alt-arrow-right-bold" width={14} height={14} />}
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                   isDisabled={currentPage === totalPages}
                   bg="whiteAlpha.200"
                   color="white"
@@ -426,13 +436,13 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
             display={{ base: 'none', lg: 'flex' }}
             css={{
               '&::-webkit-scrollbar': { width: '6px' },
-              '&::-webkit-scrollbar-thumb': { 
-                background: 'rgba(121,95,238,0.4)', 
+              '&::-webkit-scrollbar-thumb': {
+                background: 'rgba(121,95,238,0.4)',
                 borderRadius: '10px',
               },
             }}
           >
-            {currentDoc?.pages?.map((page) => (
+            {currentDoc?.pages?.map(page => (
               <Box
                 key={page.pageNumber}
                 w="100%"
@@ -455,11 +465,18 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                     />
                   ) : (
                     <Flex align="center" justify="center" h="100%">
-                      <Text fontSize="lg" color="gray.400">{page.pageNumber}</Text>
+                      <Text fontSize="lg" color="gray.400">
+                        {page.pageNumber}
+                      </Text>
                     </Flex>
                   )}
                 </Box>
-                <Text fontSize="xs" textAlign="center" py={1} fontWeight={currentPage === page.pageNumber ? '600' : '400'}>
+                <Text
+                  fontSize="xs"
+                  textAlign="center"
+                  py={1}
+                  fontWeight={currentPage === page.pageNumber ? '600' : '400'}
+                >
                   {page.pageNumber}
                 </Text>
               </Box>
@@ -468,10 +485,10 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         )}
 
         {/* Main Preview */}
-        <Flex 
-          flex={1} 
-          align="center" 
-          justify="center" 
+        <Flex
+          flex={1}
+          align="center"
+          justify="center"
           p="1rem"
           minH={PREVIEW_SIZE.containerMinHeight}
           overflow="hidden"
@@ -483,7 +500,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
               <Text color="text.muted">Loading preview...</Text>
             </VStack>
           ) : (
-            <Box 
+            <Box
               width={paperDimensions.width}
               height={paperDimensions.height}
               maxW="100%"
@@ -519,24 +536,26 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
                     display: 'block',
                     objectFit: 'contain',
                     transformOrigin: 'center center',
-                    filter: previewSettings?.colorMode === 'grayscale' 
-                      ? 'grayscale(100%)' 
-                      : previewSettings?.colorMode === 'bw' 
-                      ? 'grayscale(100%) contrast(2)' 
-                      : 'none',
+                    filter:
+                      previewSettings?.colorMode === 'grayscale'
+                        ? 'grayscale(100%)'
+                        : previewSettings?.colorMode === 'bw'
+                          ? 'grayscale(100%) contrast(2)'
+                          : 'none',
                   }}
                 />
               ) : (
                 <VStack spacing={3}>
                   <Iconify icon="solar:document-bold" width={48} height={48} color="gray.300" />
-                  <Text color="gray.500" fontSize="sm">Preview not available</Text>
+                  <Text color="gray.500" fontSize="sm">
+                    Preview not available
+                  </Text>
                 </VStack>
               )}
             </Box>
           )}
         </Flex>
       </Flex>
-
     </Box>
   );
 };

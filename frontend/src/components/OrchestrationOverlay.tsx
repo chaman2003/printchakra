@@ -55,7 +55,7 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
   const [skipModeSelection, setSkipModeSelection] = useState(false);
   const { isOpen: isModalOpen, onOpen: onModalOpen, onClose: onModalClose } = useDisclosure();
   const { socket } = useSocket();
-  
+
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
   const borderColor = useColorModeValue('brand.200', 'nebula.700');
   const accentBg = useColorModeValue('brand.50', 'whiteAlpha.100');
@@ -78,7 +78,7 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
 
     const handleUpdate = (data: any) => {
       console.log('🔄 Orchestration update received:', data);
-      
+
       // Check if this is a voice-triggered orchestration
       if (data.open_ui) {
         console.log('🎤 Voice-triggered orchestration detected');
@@ -86,7 +86,7 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
         setSkipModeSelection(data.skip_mode_selection || false);
         onModalOpen(); // Open the modal automatically
       }
-      
+
       fetchStatus(); // Refresh status when updates occur
     };
 
@@ -166,7 +166,16 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
   };
 
   return (
-    <Modal isOpen={isOpen || isModalOpen} onClose={() => { onClose(); onModalClose(); setVoiceMode(false); }} size={expanded ? 'full' : 'xl'} isCentered>
+    <Modal
+      isOpen={isOpen || isModalOpen}
+      onClose={() => {
+        onClose();
+        onModalClose();
+        setVoiceMode(false);
+      }}
+      size={expanded ? 'full' : 'xl'}
+      isCentered
+    >
       <ModalOverlay backdropFilter="blur(10px)" bg="blackAlpha.600" />
       <ModalContent
         bg={panelBg}
@@ -218,12 +227,23 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
           {state ? (
             <Stack spacing={6}>
               {/* Current Status */}
-              <Box bg={accentBg} borderRadius="xl" p={4} border="1px solid" borderColor={borderColor}>
+              <Box
+                bg={accentBg}
+                borderRadius="xl"
+                p={4}
+                border="1px solid"
+                borderColor={borderColor}
+              >
                 <Flex align="center" justify="space-between" mb={3}>
                   <Text fontWeight="bold" fontSize="lg">
                     Current Status
                   </Text>
-                  <Badge colorScheme={getStateColor(state.current_state)} px={3} py={1} borderRadius="full">
+                  <Badge
+                    colorScheme={getStateColor(state.current_state)}
+                    px={3}
+                    py={1}
+                    borderRadius="full"
+                  >
                     {state.current_state.replace('_', ' ').toUpperCase()}
                   </Badge>
                 </Flex>
@@ -233,7 +253,14 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
                       {state.message}
                     </Text>
                     {voiceMode && state.current_state === 'configuring' && (
-                      <Box mt={3} p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.200">
+                      <Box
+                        mt={3}
+                        p={3}
+                        bg="blue.50"
+                        borderRadius="lg"
+                        border="1px solid"
+                        borderColor="blue.200"
+                      >
                         <Text fontSize="sm" fontWeight="600" color="blue.700" mb={2}>
                           💡 Voice Mode Tips:
                         </Text>
@@ -286,7 +313,13 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
                           <Text fontWeight="600" mb={2}>
                             Document:
                           </Text>
-                          <Box bg="white" borderRadius="lg" p={3} border="1px solid" borderColor="gray.200">
+                          <Box
+                            bg="white"
+                            borderRadius="lg"
+                            p={3}
+                            border="1px solid"
+                            borderColor="gray.200"
+                          >
                             <Text fontSize="sm" fontWeight="600">
                               {state.pending_action.document.filename}
                             </Text>
@@ -303,16 +336,25 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
                             Configuration:
                           </Text>
                           <Grid templateColumns="repeat(2, 1fr)" gap={3}>
-                            {Object.entries(state.pending_action.configuration).map(([key, value]) => (
-                              <Box key={key} bg="white" borderRadius="lg" p={3} border="1px solid" borderColor="gray.200">
-                                <Text fontSize="xs" color="gray.500" textTransform="uppercase">
-                                  {key.replace('_', ' ')}
-                                </Text>
-                                <Text fontSize="sm" fontWeight="600">
-                                  {String(value)}
-                                </Text>
-                              </Box>
-                            ))}
+                            {Object.entries(state.pending_action.configuration).map(
+                              ([key, value]) => (
+                                <Box
+                                  key={key}
+                                  bg="white"
+                                  borderRadius="lg"
+                                  p={3}
+                                  border="1px solid"
+                                  borderColor="gray.200"
+                                >
+                                  <Text fontSize="xs" color="gray.500" textTransform="uppercase">
+                                    {key.replace('_', ' ')}
+                                  </Text>
+                                  <Text fontSize="sm" fontWeight="600">
+                                    {String(value)}
+                                  </Text>
+                                </Box>
+                              )
+                            )}
                           </Grid>
                         </Box>
                       )}
@@ -348,7 +390,13 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
 
               {/* Selected Document */}
               {state.selected_document && !state.pending_action && (
-                <Box bg={accentBg} borderRadius="xl" p={4} border="1px solid" borderColor={borderColor}>
+                <Box
+                  bg={accentBg}
+                  borderRadius="xl"
+                  p={4}
+                  border="1px solid"
+                  borderColor={borderColor}
+                >
                   <Text fontWeight="bold" fontSize="md" mb={3}>
                     Selected Document
                   </Text>
@@ -364,7 +412,13 @@ const OrchestrationOverlay: React.FC<OrchestrationOverlayProps> = ({ isOpen, onC
               )}
 
               {/* Configuration */}
-              <Box bg={accentBg} borderRadius="xl" p={4} border="1px solid" borderColor={borderColor}>
+              <Box
+                bg={accentBg}
+                borderRadius="xl"
+                p={4}
+                border="1px solid"
+                borderColor={borderColor}
+              >
                 <Text fontWeight="bold" fontSize="md" mb={3}>
                   Default Configuration
                 </Text>

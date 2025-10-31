@@ -26,7 +26,7 @@
   margin-bottom: 0;
 }
 
-.option-label input[type="checkbox"] {
+.option-label input[type='checkbox'] {
   width: 20px;
   height: 20px;
   cursor: pointer;
@@ -259,7 +259,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 rgba(255, 87, 34, 0.7);
   }
   50% {
@@ -271,20 +272,20 @@
   width: 100%;
   font-size: 1rem;
   padding: 0.75rem;
-  background-color: #2196F3;
+  background-color: #2196f3;
   color: white;
-  border: 2px solid #2196F3;
+  border: 2px solid #2196f3;
 }
 
 .detection-toggle-btn:hover:not(:disabled) {
-  background-color: #1976D2;
-  border-color: #1976D2;
+  background-color: #1976d2;
+  border-color: #1976d2;
   transform: translateY(-2px);
 }
 
 .detection-toggle-btn.active {
-  background-color: #00BCD4;
-  border-color: #00BCD4;
+  background-color: #00bcd4;
+  border-color: #00bcd4;
   box-shadow: 0 0 10px rgba(0, 188, 212, 0.5);
 }
 
@@ -380,7 +381,7 @@
   max-width: 100vw;
 }
 
-.camera-section:fullscreen [style*="borderLeft"][style*="dashed"] {
+.camera-section:fullscreen [style*='borderLeft'][style*='dashed'] {
   display: none !important;
 }
 
@@ -484,15 +485,15 @@
     height: 100px;
     bottom: 4rem;
   }
-  
+
   .fullscreen-capture-btn .capture-icon {
     font-size: 2rem;
   }
-  
+
   .camera-section:fullscreen .camera-controls {
     padding: 0.75rem 0.5rem;
   }
-  
+
   .camera-section:fullscreen .capture-btn,
   .camera-section:fullscreen .auto-capture-btn,
   .camera-section:fullscreen .detection-toggle-btn,

@@ -1,21 +1,21 @@
 // ==================== MODAL & PREVIEW CONFIGURATION ====================
 // 📐 ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
-// 
+//
 // If the preview is cut off or you want to change the modal size:
 // 1. Adjust modal.maxHeight/maxWidth to change the overall modal size
 // 2. Adjust modalBody.maxHeight to change scrollable content area
 // 3. Adjust previewBox.maxHeight to change the sticky preview container height
-// 
+//
 const MODAL_CONFIG = {
   modal: {
-    maxHeight: '90vh',      // Maximum modal height (increase to make modal taller)
-    maxWidth: '95vw',       // Maximum modal width (increase to make modal wider)
+    maxHeight: '90vh', // Maximum modal height (increase to make modal taller)
+    maxWidth: '95vw', // Maximum modal width (increase to make modal wider)
   },
   modalBody: {
-    maxHeight: '90vh - 10rem',  // Modal body max height (leave room for header/footer)
+    maxHeight: '90vh - 10rem', // Modal body max height (leave room for header/footer)
   },
   previewBox: {
-    maxHeight: '90vh - 12rem',  // Preview box max height (sticky container - increase if preview is cut off)
+    maxHeight: '90vh - 12rem', // Preview box max height (sticky container - increase if preview is cut off)
   },
 };
 // =======================================================================
@@ -67,7 +67,15 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiDownload, FiFileText, FiRefreshCw, FiTrash2, FiZoomIn, FiLayers, FiMic } from 'react-icons/fi';
+import {
+  FiDownload,
+  FiFileText,
+  FiRefreshCw,
+  FiTrash2,
+  FiZoomIn,
+  FiLayers,
+  FiMic,
+} from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import Iconify from '../components/Iconify';
@@ -117,10 +125,10 @@ const useImageWithHeaders = (imageUrl: string) => {
       try {
         setLoading(true);
         setError(false);
-        
+
         const response = await apiClient.get(imageUrl.replace(API_BASE_URL, ''), {
           responseType: 'blob',
-          timeout: 10000
+          timeout: 10000,
         });
 
         if (isMounted) {
@@ -243,15 +251,15 @@ const Dashboard: React.FC = () => {
   const [conversionProgress, setConversionProgress] = useState<string>('');
   const [mergePdf, setMergePdf] = useState<boolean>(true); // New: merge PDF option
   const [customFilename, setCustomFilename] = useState<string>(''); // New: custom filename for merged PDF
-  
+
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
-  
+
   // Smart selection state - simple multi-select
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [rangeStart, setRangeStart] = useState<number | null>(null);
   const [rangeEnd, setRangeEnd] = useState<number | null>(null);
-  
+
   // Orchestrate Print & Capture state
   const [orchestrateStep, setOrchestrateStep] = useState<number>(1); // 1=mode, 2=options, 3=confirm
   const [orchestrateMode, setOrchestrateMode] = useState<'scan' | 'print' | null>(null);
@@ -286,7 +294,7 @@ const Dashboard: React.FC = () => {
     // Default settings
     saveAsDefault: false,
   });
-  
+
   const toast = useToast();
   const imageModal = useDisclosure();
   const conversionModal = useDisclosure();
@@ -295,7 +303,7 @@ const Dashboard: React.FC = () => {
   const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
   const documentSelectorModal = useDisclosure(); // Document selector modal
   const orchestrationOverlay = useDisclosure(); // AI orchestration overlay
-  
+
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
 
@@ -344,7 +352,7 @@ const Dashboard: React.FC = () => {
       isClosable: true,
     });
   };
-  
+
   // File cache system - stores file metadata and counts
   const [filesCacheRef, setFilesCacheRef] = useState<{
     data: any[] | null;
@@ -355,7 +363,7 @@ const Dashboard: React.FC = () => {
     lastCount: 0,
     timestamp: 0,
   });
-  
+
   const [convertedFilesCacheRef, setConvertedFilesCacheRef] = useState<{
     data: any[] | null;
     lastCount: number;
@@ -365,7 +373,7 @@ const Dashboard: React.FC = () => {
     lastCount: 0,
     timestamp: 0,
   });
-  
+
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
@@ -378,7 +386,7 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     console.log('🔌 Dashboard: Setting up Socket.IO event listeners');
-    
+
     if (!socket) {
       console.log('⚠️ Socket not available yet');
       return;
@@ -464,14 +472,16 @@ const Dashboard: React.FC = () => {
         setLoading(true);
       }
       const response = await apiClient.get(API_ENDPOINTS.files, {
-        timeout: 10000 // 10 second timeout
+        timeout: 10000, // 10 second timeout
       });
-      const filesData = Array.isArray(response.data) ? response.data : (response.data.files || []);
-      
+      const filesData = Array.isArray(response.data) ? response.data : response.data.files || [];
+
       // Smart cache: only update if file count changed
       const newCount = filesData.length;
       if (newCount !== filesCacheRef.lastCount) {
-        console.log(`📁 File count changed: ${filesCacheRef.lastCount} → ${newCount}, updating cache`);
+        console.log(
+          `📁 File count changed: ${filesCacheRef.lastCount} → ${newCount}, updating cache`
+        );
         setFiles(filesData);
         setFilesCacheRef({
           data: filesData,
@@ -490,11 +500,12 @@ const Dashboard: React.FC = () => {
       setError(null);
     } catch (err: any) {
       console.error('Failed to load files:', err);
-      const errorMsg = err.code === 'ERR_NETWORK' || err.code === 'ERR_CONNECTION_CLOSED'
-        ? '⚠️ Backend connection lost. Retrying...'
-        : (err.message || 'Failed to load files');
+      const errorMsg =
+        err.code === 'ERR_NETWORK' || err.code === 'ERR_CONNECTION_CLOSED'
+          ? '⚠️ Backend connection lost. Retrying...'
+          : err.message || 'Failed to load files';
       setError(errorMsg);
-      
+
       // Don't show persistent error on background polls
       if (!showLoading) {
         setTimeout(() => setError(null), 5000); // Clear error after 5s
@@ -545,45 +556,46 @@ const Dashboard: React.FC = () => {
     // Reset state
     setOrchestrateStep(1);
     setOrchestrateMode(null);
-    
+
     // If files are selected, auto-select print mode
     if (selectedFiles.length > 0) {
       setOrchestrateMode('print');
       setOrchestrateStep(2);
     }
-    
+
     orchestrateModal.onOpen();
   };
-
-
 
   const executePrintJob = async () => {
     try {
       const formData = new FormData();
-      
+
       // Add uploaded files
       orchestrateOptions.printFiles.forEach((file: File, index: number) => {
         formData.append('files', file);
       });
-      
+
       // Add converted PDFs
       formData.append('convertedFiles', JSON.stringify(orchestrateOptions.printConvertedFiles));
-      
+
       // Add selected dashboard files if any
       if (selectedFiles.length > 0) {
         formData.append('dashboardFiles', JSON.stringify(selectedFiles));
       }
-      
+
       // Add print options
-      formData.append('options', JSON.stringify({
-        pages: orchestrateOptions.printPages,
-        layout: orchestrateOptions.printLayout,
-        paperSize: orchestrateOptions.printPaperSize,
-        scale: orchestrateOptions.printScale,
-        margins: orchestrateOptions.printMargins,
-        pagesPerSheet: orchestrateOptions.printPagesPerSheet,
-        saveAsDefault: orchestrateOptions.saveAsDefault,
-      }));
+      formData.append(
+        'options',
+        JSON.stringify({
+          pages: orchestrateOptions.printPages,
+          layout: orchestrateOptions.printLayout,
+          paperSize: orchestrateOptions.printPaperSize,
+          scale: orchestrateOptions.printScale,
+          margins: orchestrateOptions.printMargins,
+          pagesPerSheet: orchestrateOptions.printPagesPerSheet,
+          saveAsDefault: orchestrateOptions.saveAsDefault,
+        })
+      );
 
       const response = await apiClient.post('/orchestrate/print', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -596,7 +608,6 @@ const Dashboard: React.FC = () => {
       });
 
       orchestrateModal.onClose();
-      
     } catch (err: any) {
       toast({
         title: 'Print Failed',
@@ -625,7 +636,6 @@ const Dashboard: React.FC = () => {
       });
 
       orchestrateModal.onClose();
-      
     } catch (err: any) {
       toast({
         title: 'Scan Failed',
@@ -654,7 +664,7 @@ const Dashboard: React.FC = () => {
 
       // Call the diagnostics endpoint
       const response = await apiClient.get('/printer/diagnostics');
-      
+
       // Close loading toast
       toast.close(loadingToast);
 
@@ -678,7 +688,6 @@ const Dashboard: React.FC = () => {
       setSelectedFile(null);
       console.log('Full Diagnostics Output:', response.data.output);
       console.log('Printer Status:', response.data);
-      
     } catch (err: any) {
       toast({
         title: 'Diagnostics Failed',
@@ -705,10 +714,13 @@ const Dashboard: React.FC = () => {
     loadFiles(true);
   };
 
-  const openImageModal = useCallback((filename: string) => {
-    setSelectedImageFile(filename);
-    imageModal.onOpen();
-  }, [imageModal]);
+  const openImageModal = useCallback(
+    (filename: string) => {
+      setSelectedImageFile(filename);
+      imageModal.onOpen();
+    },
+    [imageModal]
+  );
 
   const closeImageModal = useCallback(() => {
     setSelectedImageFile(null);
@@ -733,7 +745,7 @@ const Dashboard: React.FC = () => {
       const newSelected = isSelected
         ? prev.filter((f: string) => f !== filename)
         : [...prev, filename];
-      
+
       // Update range based on selected files
       if (newSelected.length >= 2) {
         const selectedIndices = files
@@ -741,17 +753,17 @@ const Dashboard: React.FC = () => {
           .filter((f: { filename: string; index: number }) => newSelected.includes(f.filename))
           .map((f: { filename: string; index: number }) => f.index)
           .sort((a: number, b: number) => a - b);
-        
+
         setRangeStart(selectedIndices[0]);
         setRangeEnd(selectedIndices[selectedIndices.length - 1]);
       } else {
         setRangeStart(null);
         setRangeEnd(null);
       }
-      
+
       return newSelected;
     });
-    
+
     setLastClickedIndex(index);
   };
 
@@ -837,19 +849,16 @@ const Dashboard: React.FC = () => {
       setConverting(true);
       setConversionProgress('Starting conversion...');
 
-      const response = await apiClient.post(
-        '/convert',
-        {
-          files: selectedFiles,
-          format: targetFormat,
-          merge_pdf: mergePdf && targetFormat === 'pdf', // Only merge if format is PDF
-          filename: customFilename.trim() || undefined // Pass custom filename if provided
-        }
-      );
+      const response = await apiClient.post('/convert', {
+        files: selectedFiles,
+        format: targetFormat,
+        merge_pdf: mergePdf && targetFormat === 'pdf', // Only merge if format is PDF
+        filename: customFilename.trim() || undefined, // Pass custom filename if provided
+      });
 
       if (response.data.success) {
         const { success_count, fail_count, results, merged } = response.data;
-        
+
         if (merged) {
           setConversionProgress(
             `✅ Merged into single PDF!\n${selectedFiles.length} files combined`
@@ -866,7 +875,9 @@ const Dashboard: React.FC = () => {
           setTimeout(() => {
             toast({
               title: merged ? 'Merged PDF ready' : 'Conversion complete',
-              description: merged ? `${selectedFiles.length} files combined successfully.` : `${successFiles.length} files available in converted folder.`,
+              description: merged
+                ? `${selectedFiles.length} files combined successfully.`
+                : `${successFiles.length} files available in converted folder.`,
               status: 'success',
               duration: 6000,
             });
@@ -886,7 +897,7 @@ const Dashboard: React.FC = () => {
       setConverting(false);
     }
   };
-  
+
   // Load converted files
   const loadConvertedFiles = async () => {
     try {
@@ -895,7 +906,9 @@ const Dashboard: React.FC = () => {
         // Smart cache: only update if file count changed
         const newCount = response.data.files.length;
         if (newCount !== convertedFilesCacheRef.lastCount) {
-          console.log(`📄 Converted file count changed: ${convertedFilesCacheRef.lastCount} → ${newCount}, updating cache`);
+          console.log(
+            `📄 Converted file count changed: ${convertedFilesCacheRef.lastCount} → ${newCount}, updating cache`
+          );
           setConvertedFiles(response.data.files);
           setConvertedFilesCacheRef({
             data: response.data.files,
@@ -927,15 +940,35 @@ const Dashboard: React.FC = () => {
             📊 Dashboard
           </Heading>
           <Text color="text.muted" maxW="lg">
-            Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in real time.
+            Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in
+            real time.
           </Text>
         </Stack>
 
         <Stack direction="row" spacing={3} align="center">
-          <Flex align="center" gap={2} px={4} py={2} borderRadius="full" bg="surface.blur" border="1px solid" borderColor="rgba(121,95,238,0.2)">
-            <Box w={3} h={3} borderRadius="full" bg={error ? 'orange.400' : statusDotColor} boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`} />
+          <Flex
+            align="center"
+            gap={2}
+            px={4}
+            py={2}
+            borderRadius="full"
+            bg="surface.blur"
+            border="1px solid"
+            borderColor="rgba(121,95,238,0.2)"
+          >
+            <Box
+              w={3}
+              h={3}
+              borderRadius="full"
+              bg={error ? 'orange.400' : statusDotColor}
+              boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`}
+            />
             <Text fontWeight="600" color={statusTextColor}>
-              {error ? `Connection issues (retry ${connectionRetries})` : connected ? 'Live link established' : 'Disconnected'}
+              {error
+                ? `Connection issues (retry ${connectionRetries})`
+                : connected
+                  ? 'Live link established'
+                  : 'Disconnected'}
             </Text>
           </Flex>
           <IconButton
@@ -948,7 +981,6 @@ const Dashboard: React.FC = () => {
           />
         </Stack>
       </Flex>
-
 
       {/* Smart Connection Status - only show when button is clicked */}
       <Button
@@ -967,17 +999,17 @@ const Dashboard: React.FC = () => {
         onClose={() => setShowConnectionStatus(false)}
       />
 
-  <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
+      <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
         <MotionBox
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button 
-            size="lg" 
-            colorScheme="brand" 
-            variant="solid" 
-            onClick={triggerPrint} 
+          <Button
+            size="lg"
+            colorScheme="brand"
+            variant="solid"
+            onClick={triggerPrint}
             leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
             boxShadow="0 4px 14px rgba(121,95,238,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(121,95,238,0.6)' }}
@@ -989,13 +1021,13 @@ const Dashboard: React.FC = () => {
         <MotionBox
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button 
-            size="lg" 
-            colorScheme="purple" 
-            variant="solid" 
-            onClick={voiceAIDrawer.onOpen} 
+          <Button
+            size="lg"
+            colorScheme="purple"
+            variant="solid"
+            onClick={voiceAIDrawer.onOpen}
             leftIcon={<Iconify icon={FiMic} boxSize={5} />}
             boxShadow="0 4px 14px rgba(147,51,234,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
@@ -1007,13 +1039,13 @@ const Dashboard: React.FC = () => {
         <MotionBox
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button 
-            size="lg" 
-            colorScheme="cyan" 
-            variant="solid" 
-            onClick={orchestrationOverlay.onOpen} 
+          <Button
+            size="lg"
+            colorScheme="cyan"
+            variant="solid"
+            onClick={orchestrationOverlay.onOpen}
             leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
             boxShadow="0 4px 14px rgba(69,202,255,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(69,202,255,0.6)' }}
@@ -1025,12 +1057,12 @@ const Dashboard: React.FC = () => {
         <MotionBox
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button 
-            size="lg" 
-            variant={selectionMode ? 'solid' : 'ghost'} 
-            colorScheme={selectionMode ? 'orange' : 'brand'} 
+          <Button
+            size="lg"
+            variant={selectionMode ? 'solid' : 'ghost'}
+            colorScheme={selectionMode ? 'orange' : 'brand'}
             onClick={toggleSelectionMode}
           >
             {selectionMode ? 'Cancel Selection' : 'Select Files'}
@@ -1052,7 +1084,7 @@ const Dashboard: React.FC = () => {
         <MotionBox
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
-          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
           <Button
             size="lg"
@@ -1070,8 +1102,15 @@ const Dashboard: React.FC = () => {
       </Stack>
 
       {error && (
-        <Box borderRadius="xl" bg="rgba(255, 170, 0, 0.08)" border="1px solid rgba(255,170,0,0.2)" p={4}>
-          <Text color="orange.300" fontWeight="600">{error}</Text>
+        <Box
+          borderRadius="xl"
+          bg="rgba(255, 170, 0, 0.08)"
+          border="1px solid rgba(255,170,0,0.2)"
+          p={4}
+        >
+          <Text color="orange.300" fontWeight="600">
+            {error}
+          </Text>
         </Box>
       )}
 
@@ -1079,12 +1118,18 @@ const Dashboard: React.FC = () => {
         <Card bg={surfaceCard} border="1px solid rgba(121,95,238,0.15)" boxShadow="subtle">
           <CardHeader>
             <Heading size="sm">
-              Processing · Step {processingProgress.step}/{processingProgress.total_steps} · {processingProgress.stage_name}
+              Processing · Step {processingProgress.step}/{processingProgress.total_steps} ·{' '}
+              {processingProgress.stage_name}
             </Heading>
           </CardHeader>
           <CardBody>
             <Stack spacing={3}>
-              <Progress value={(processingProgress.step / processingProgress.total_steps) * 100} colorScheme="brand" borderRadius="full" height="10px" />
+              <Progress
+                value={(processingProgress.step / processingProgress.total_steps) * 100}
+                colorScheme="brand"
+                borderRadius="full"
+                height="10px"
+              />
               <Text color="text.muted">{processingProgress.message}</Text>
             </Stack>
           </CardBody>
@@ -1112,19 +1157,14 @@ const Dashboard: React.FC = () => {
               <Stack spacing={3} mb={6}>
                 <Flex gap={2} wrap="wrap" align="center">
                   {/* Always show basic buttons */}
-                  <Button 
-                    size="sm" 
-                    colorScheme="blue" 
-                    variant="outline" 
-                    onClick={selectAll}
-                  >
+                  <Button size="sm" colorScheme="blue" variant="outline" onClick={selectAll}>
                     Select All
                   </Button>
 
-                  <Button 
-                    size="sm" 
-                    colorScheme="gray" 
-                    variant="outline" 
+                  <Button
+                    size="sm"
+                    colorScheme="gray"
+                    variant="outline"
                     onClick={clearSelection}
                     isDisabled={selectedFiles.length === 0}
                   >
@@ -1133,9 +1173,9 @@ const Dashboard: React.FC = () => {
 
                   {/* Show Select Range button when user has selected 2+ different items */}
                   {selectedFiles.length >= 2 && rangeStart !== null && rangeEnd !== null && (
-                    <Button 
-                      size="sm" 
-                      colorScheme="green" 
+                    <Button
+                      size="sm"
+                      colorScheme="green"
                       variant="solid"
                       onClick={selectRange}
                       leftIcon={<Box as="span">📍</Box>}
@@ -1148,21 +1188,11 @@ const Dashboard: React.FC = () => {
                   {/* Show Odd/Even buttons after a range is selected */}
                   {selectedFiles.length > 1 && rangeStart !== null && rangeEnd !== null && (
                     <>
-                      <Button 
-                        size="sm" 
-                        colorScheme="cyan" 
-                        variant="outline" 
-                        onClick={selectOdd}
-                      >
+                      <Button size="sm" colorScheme="cyan" variant="outline" onClick={selectOdd}>
                         Select Odd
                       </Button>
 
-                      <Button 
-                        size="sm" 
-                        colorScheme="cyan" 
-                        variant="outline" 
-                        onClick={selectEven}
-                      >
+                      <Button size="sm" colorScheme="cyan" variant="outline" onClick={selectEven}>
                         Select Even
                       </Button>
                     </>
@@ -1172,14 +1202,21 @@ const Dashboard: React.FC = () => {
             )}
 
             {files.length === 0 ? (
-              <Card border="1px solid rgba(121,95,238,0.2)" bg={surfaceCard} backdropFilter="blur(10px)" textAlign="center" py={10}>
+              <Card
+                border="1px solid rgba(121,95,238,0.2)"
+                bg={surfaceCard}
+                backdropFilter="blur(10px)"
+                textAlign="center"
+                py={10}
+              >
                 <CardBody>
                   <Stack spacing={3} align="center">
                     <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
-                      <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
+                    <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
                     <Heading size="sm">No files yet</Heading>
                     <Text color="text.muted" maxW="md">
-                      Initiate a capture from the Phone interface or trigger a print job to start populating this space.
+                      Initiate a capture from the Phone interface or trigger a print job to start
+                      populating this space.
                     </Text>
                   </Stack>
                 </CardBody>
@@ -1194,10 +1231,10 @@ const Dashboard: React.FC = () => {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3, delay: index * 0.05 }}
-                      whileHover={{ 
-                        y: -8, 
+                      whileHover={{
+                        y: -8,
                         scale: 1.02,
-                        transition: { duration: 0.2 }
+                        transition: { duration: 0.2 },
                       }}
                       borderRadius="2xl"
                       border={`2px solid ${isSelected ? 'rgba(72, 187, 120, 0.6)' : 'rgba(121,95,238,0.18)'}`}
@@ -1245,7 +1282,11 @@ const Dashboard: React.FC = () => {
                           borderRadius="xl"
                           overflow="hidden"
                           border="1px solid rgba(121,95,238,0.18)"
-                          _hover={{ borderColor: 'brand.300', transform: file.processing ? undefined : 'translateY(-4px)', transition: 'all 0.3s ease' }}
+                          _hover={{
+                            borderColor: 'brand.300',
+                            transform: file.processing ? undefined : 'translateY(-4px)',
+                            transition: 'all 0.3s ease',
+                          }}
                         >
                           <Box h="220px" bg="surface.blur">
                             <SecureImage
@@ -1296,12 +1337,20 @@ const Dashboard: React.FC = () => {
                           <ButtonGroup size="sm" variant="ghost" spacing={1}>
                             {!file.processing && (
                               <Tooltip label="View" hasArrow>
-                                <IconButton aria-label="View" icon={<Iconify icon={FiZoomIn} boxSize={5} />} onClick={() => openImageModal(file.filename)} />
+                                <IconButton
+                                  aria-label="View"
+                                  icon={<Iconify icon={FiZoomIn} boxSize={5} />}
+                                  onClick={() => openImageModal(file.filename)}
+                                />
                               </Tooltip>
                             )}
                             {file.has_text && !file.processing && (
                               <Tooltip label="View OCR" hasArrow>
-                                <IconButton aria-label="OCR" icon={<Iconify icon={FiFileText} boxSize={5} />} onClick={() => viewOCR(file.filename)} />
+                                <IconButton
+                                  aria-label="OCR"
+                                  icon={<Iconify icon={FiFileText} boxSize={5} />}
+                                  onClick={() => viewOCR(file.filename)}
+                                />
                               </Tooltip>
                             )}
                             <Tooltip label="Delete" hasArrow>
@@ -1326,7 +1375,14 @@ const Dashboard: React.FC = () => {
             <Card border="1px solid rgba(69,202,255,0.25)" bg={surfaceCard} boxShadow="subtle">
               <CardHeader display="flex" alignItems="center" justifyContent="space-between">
                 <Heading size="sm">OCR · {selectedFile}</Heading>
-                <Button variant="ghost" size="sm" onClick={() => { setSelectedFile(null); setOcrText(''); }}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setOcrText('');
+                  }}
+                >
                   Close
                 </Button>
               </CardHeader>
@@ -1350,40 +1406,47 @@ const Dashboard: React.FC = () => {
         </Stack>
       )}
 
-      <Modal 
-        isOpen={imageModal.isOpen && Boolean(selectedImageFile)} 
-        onClose={closeImageModal} 
-        size={{ base: "full", sm: "xl", md: "2xl", lg: "3xl", xl: "4xl" }}
+      <Modal
+        isOpen={imageModal.isOpen && Boolean(selectedImageFile)}
+        onClose={closeImageModal}
+        size={{ base: 'full', sm: 'xl', md: '2xl', lg: '3xl', xl: '4xl' }}
         scrollBehavior="inside"
         isCentered
       >
         <ModalOverlay backdropFilter="blur(12px)" />
-        <ModalContent 
-          bg={surfaceCard} 
-          borderRadius="2xl" 
-          border="1px solid rgba(121,95,238,0.25)" 
+        <ModalContent
+          bg={surfaceCard}
+          borderRadius="2xl"
+          border="1px solid rgba(121,95,238,0.25)"
           boxShadow="halo"
-          maxH={{ base: "95vh", md: "90vh" }}
+          maxH={{ base: '95vh', md: '90vh' }}
           m={{ base: 2, md: 4 }}
           overflow="hidden"
         >
           <ModalHeader>{selectedImageFile}</ModalHeader>
           <ModalCloseButton borderRadius="full" />
-          <ModalBody p={{ base: 2, md: 4 }} display="flex" alignItems="center" justifyContent="center" overflow="hidden">
+          <ModalBody
+            p={{ base: 2, md: 4 }}
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            overflow="hidden"
+          >
             {selectedImageFile && (
               <Box
                 as="img"
                 src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
                 alt={selectedImageFile}
                 maxW="100%"
-                maxH={{ base: "calc(95vh - 120px)", md: "calc(90vh - 120px)" }}
+                maxH={{ base: 'calc(95vh - 120px)', md: 'calc(90vh - 120px)' }}
                 w="auto"
                 h="auto"
                 objectFit="contain"
                 borderRadius="lg"
                 onError={(e: any) => {
                   console.error(`Failed to load image: ${selectedImageFile}`);
-                  e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f0f0f0" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-family="Arial" font-size="16"%3E Image not found or deleted%3C/text%3E%3C/svg%3E';
+                  e.target.src =
+                    'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f0f0f0" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-family="Arial" font-size="16"%3E Image not found or deleted%3C/text%3E%3C/svg%3E';
                 }}
               />
             )}
@@ -1392,9 +1455,9 @@ const Dashboard: React.FC = () => {
             <Button variant="ghost" mr={3} onClick={closeImageModal}>
               Close
             </Button>
-        <Button
+            <Button
               colorScheme="brand"
-          leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
+              leftIcon={<Iconify icon={FiDownload} boxSize={5} />}
               onClick={async () => {
                 if (!selectedImageFile) return;
                 try {
@@ -1438,7 +1501,15 @@ const Dashboard: React.FC = () => {
             <Stack spacing={5}>
               <Box>
                 <Text fontWeight="600">Selected Files: {selectedFiles.length}</Text>
-                <Box mt={2} maxH="160px" overflowY="auto" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(121,95,238,0.2)">
+                <Box
+                  mt={2}
+                  maxH="160px"
+                  overflowY="auto"
+                  bg="surface.blur"
+                  borderRadius="lg"
+                  p={3}
+                  border="1px solid rgba(121,95,238,0.2)"
+                >
                   <Stack spacing={2} fontSize="sm">
                     {selectedFiles.map((filename: string) => (
                       <Text key={filename}>{filename}</Text>
@@ -1451,7 +1522,13 @@ const Dashboard: React.FC = () => {
                 <Text fontWeight="600" mb={2}>
                   Convert to
                 </Text>
-                <Select value={targetFormat} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTargetFormat(e.target.value)} isDisabled={converting}>
+                <Select
+                  value={targetFormat}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                    setTargetFormat(e.target.value)
+                  }
+                  isDisabled={converting}
+                >
                   <option value="pdf">PDF</option>
                   <option value="png">PNG</option>
                   <option value="jpg">JPG</option>
@@ -1460,14 +1537,30 @@ const Dashboard: React.FC = () => {
               </Box>
 
               {targetFormat === 'pdf' && selectedFiles.length > 1 && (
-                <Flex align="center" justify="space-between" bg="surface.blur" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.25)">
+                <Flex
+                  align="center"
+                  justify="space-between"
+                  bg="surface.blur"
+                  borderRadius="lg"
+                  p={3}
+                  border="1px solid rgba(69,202,255,0.25)"
+                >
                   <Stack spacing={1}>
                     <Text fontWeight="600">Merge into single PDF</Text>
                     <Text fontSize="sm" color="text.muted">
-                      {mergePdf ? 'All files will merge into one premium PDF output.' : 'Each file becomes an individual PDF.'}
+                      {mergePdf
+                        ? 'All files will merge into one premium PDF output.'
+                        : 'Each file becomes an individual PDF.'}
                     </Text>
                   </Stack>
-                  <Checkbox isChecked={mergePdf} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMergePdf(e.target.checked)} isDisabled={converting} colorScheme="brand" />
+                  <Checkbox
+                    isChecked={mergePdf}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setMergePdf(e.target.checked)
+                    }
+                    isDisabled={converting}
+                    colorScheme="brand"
+                  />
                 </Flex>
               )}
 
@@ -1479,18 +1572,26 @@ const Dashboard: React.FC = () => {
                   <Input
                     placeholder="Enter custom filename (without .pdf extension)"
                     value={customFilename}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomFilename(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                      setCustomFilename(e.target.value)
+                    }
                     isDisabled={converting}
                     maxLength={50}
                   />
                   <Text fontSize="xs" color="text.muted" mt={1}>
-                    If empty, will use auto-generated name like "merged_document_20251021_123456.pdf"
+                    If empty, will use auto-generated name like
+                    "merged_document_20251021_123456.pdf"
                   </Text>
                 </Box>
               )}
 
               {conversionProgress && (
-                <Box bg="rgba(69,202,255,0.1)" borderRadius="lg" p={3} border="1px solid rgba(69,202,255,0.2)">
+                <Box
+                  bg="rgba(69,202,255,0.1)"
+                  borderRadius="lg"
+                  p={3}
+                  border="1px solid rgba(69,202,255,0.2)"
+                >
                   <Text fontFamily="mono" whiteSpace="pre-wrap" color="brand.200">
                     {conversionProgress}
                   </Text>
@@ -1502,14 +1603,24 @@ const Dashboard: React.FC = () => {
             <Button variant="ghost" mr={3} onClick={closeConversionModal} isDisabled={converting}>
               Cancel
             </Button>
-            <Button colorScheme="brand" onClick={handleConvert} isLoading={converting} loadingText="Converting">
+            <Button
+              colorScheme="brand"
+              onClick={handleConvert}
+              isLoading={converting}
+              loadingText="Converting"
+            >
               Convert
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      <Drawer isOpen={convertedDrawer.isOpen} placement="right" onClose={convertedDrawer.onClose} size="md">
+      <Drawer
+        isOpen={convertedDrawer.isOpen}
+        placement="right"
+        onClose={convertedDrawer.onClose}
+        size="md"
+      >
         <DrawerOverlay backdropFilter="blur(8px)" />
         <DrawerContent bg={surfaceCard} borderColor="rgba(121,95,238,0.25)" borderLeftWidth="1px">
           <DrawerHeader display="flex" alignItems="center" justifyContent="space-between">
@@ -1527,13 +1638,18 @@ const Dashboard: React.FC = () => {
             ) : (
               <Stack spacing={4}>
                 {convertedFiles.map((file: any) => (
-                  <Card key={file.filename} borderRadius="xl" border="1px solid rgba(69,202,255,0.18)">
+                  <Card
+                    key={file.filename}
+                    borderRadius="xl"
+                    border="1px solid rgba(69,202,255,0.18)"
+                  >
                     <CardBody>
                       <Stack spacing={3}>
                         <Stack spacing={1}>
                           <Heading size="sm">{file.filename}</Heading>
                           <Text fontSize="xs" color="text.muted">
-                            {(file.size / 1024).toFixed(2)} KB · {new Date(file.created).toLocaleString()}
+                            {(file.size / 1024).toFixed(2)} KB ·{' '}
+                            {new Date(file.created).toLocaleString()}
                           </Text>
                         </Stack>
                         <Flex gap={2} wrap="wrap">
@@ -1545,9 +1661,12 @@ const Dashboard: React.FC = () => {
                             leftIcon={<Iconify icon={FiDownload} boxSize={4} />}
                             onClick={async () => {
                               try {
-                                const response = await apiClient.get(`/converted/${file.filename}`, {
-                                  responseType: 'blob',
-                                });
+                                const response = await apiClient.get(
+                                  `/converted/${file.filename}`,
+                                  {
+                                    responseType: 'blob',
+                                  }
+                                );
                                 const blob = response.data;
                                 const url = URL.createObjectURL(blob);
                                 const a = document.createElement('a');
@@ -1578,10 +1697,12 @@ const Dashboard: React.FC = () => {
                             leftIcon={<Iconify icon={FiTrash2} boxSize={4} />}
                             onClick={async () => {
                               if (!window.confirm(`Delete ${file.filename}?`)) return;
-                              
+
                               try {
                                 await apiClient.delete(`/delete-converted/${file.filename}`);
-                                setConvertedFiles(convertedFiles.filter((f: any) => f.filename !== file.filename));
+                                setConvertedFiles(
+                                  convertedFiles.filter((f: any) => f.filename !== file.filename)
+                                );
                                 toast({
                                   title: 'File deleted',
                                   description: `${file.filename} has been deleted.`,
@@ -1616,21 +1737,18 @@ const Dashboard: React.FC = () => {
       </Drawer>
 
       {/* Orchestrate Print & Capture Modal */}
-      <Modal 
-        isOpen={orchestrateModal.isOpen} 
-        onClose={orchestrateModal.onClose} 
-        size="6xl" 
+      <Modal
+        isOpen={orchestrateModal.isOpen}
+        onClose={orchestrateModal.onClose}
+        size="6xl"
         isCentered
         scrollBehavior="inside"
       >
-        <ModalOverlay 
-          backdropFilter="blur(16px)" 
-          bg="blackAlpha.700"
-        />
-        <MotionModalContent 
-          bg={surfaceCard} 
+        <ModalOverlay backdropFilter="blur(16px)" bg="blackAlpha.700" />
+        <MotionModalContent
+          bg={surfaceCard}
           borderRadius={{ base: 'xl', md: '2xl', lg: '3xl' }}
-          border="1px solid" 
+          border="1px solid"
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
           maxH={MODAL_CONFIG.modal.maxHeight}
@@ -1647,9 +1765,9 @@ const Dashboard: React.FC = () => {
           {/* STEP 1: Choose Mode */}
           {orchestrateStep === 1 && (
             <>
-              <ModalHeader 
-                fontSize="3xl" 
-                fontWeight="700" 
+              <ModalHeader
+                fontSize="3xl"
+                fontWeight="700"
                 py="1.5rem"
                 bgGradient="linear(to-r, brand.500, nebula.500)"
                 bgClip="text"
@@ -1660,20 +1778,15 @@ const Dashboard: React.FC = () => {
                 <Iconify icon="solar:settings-bold-duotone" width={32} height={32} />
                 Orchestrate Print & Capture
               </ModalHeader>
-              <ModalCloseButton 
-                size="lg" 
-                top={6} 
+              <ModalCloseButton
+                size="lg"
+                top={6}
                 right={6}
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody py={8} px={10}>
                 <Stack spacing={8}>
-                  <Text 
-                    fontSize="lg" 
-                    color="text.muted" 
-                    textAlign="center"
-                    fontWeight="500"
-                  >
+                  <Text fontSize="lg" color="text.muted" textAlign="center" fontWeight="500">
                     Choose your operation to get started
                   </Text>
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
@@ -1690,12 +1803,12 @@ const Dashboard: React.FC = () => {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3, delay: 0.1 }}
-                      whileHover={{ 
-                        borderColor: 'brand.400', 
+                      whileHover={{
+                        borderColor: 'brand.400',
                         y: -8,
                         scale: 1.02,
                         boxShadow: '0 12px 30px rgba(121,95,238,0.35)',
-                        transition: { duration: 0.2 }
+                        transition: { duration: 0.2 },
                       }}
                       whileTap={{ scale: 0.98 }}
                     >
@@ -1713,17 +1826,13 @@ const Dashboard: React.FC = () => {
                         </Box>
                       )}
                       <VStack align="start" spacing={4}>
-                        <Box 
-                          p={4} 
-                          bg="brand.500" 
-                          borderRadius="xl"
-                          color="white"
-                        >
+                        <Box p={4} bg="brand.500" borderRadius="xl" color="white">
                           <Iconify icon="solar:document-add-bold-duotone" width={40} height={40} />
                         </Box>
                         <Heading size="lg">Scan Mode</Heading>
                         <Text fontSize="md" color="text.muted" lineHeight="1.6">
-                          Capture physical documents from your scanner with advanced options for quality, layout, and text detection
+                          Capture physical documents from your scanner with advanced options for
+                          quality, layout, and text detection
                         </Text>
                       </VStack>
                     </MotionBox>
@@ -1740,12 +1849,12 @@ const Dashboard: React.FC = () => {
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ duration: 0.3, delay: 0.2 }}
-                      whileHover={{ 
-                        borderColor: 'brand.400', 
+                      whileHover={{
+                        borderColor: 'brand.400',
                         y: -8,
                         scale: 1.02,
                         boxShadow: '0 12px 30px rgba(121,95,238,0.35)',
-                        transition: { duration: 0.2 }
+                        transition: { duration: 0.2 },
                       }}
                       whileTap={{ scale: 0.98 }}
                     >
@@ -1763,30 +1872,26 @@ const Dashboard: React.FC = () => {
                         </Box>
                       )}
                       <VStack align="start" spacing={4}>
-                        <Box 
-                          p={4} 
-                          bg="nebula.500" 
-                          borderRadius="xl"
-                          color="white"
-                        >
+                        <Box p={4} bg="nebula.500" borderRadius="xl" color="white">
                           <Iconify icon="solar:printer-bold-duotone" width={40} height={40} />
                         </Box>
                         <Heading size="lg">Print Mode</Heading>
                         <Text fontSize="md" color="text.muted" lineHeight="1.6">
-                          Print documents from your collection with precise control over layout, margins, scaling, and page selection
+                          Print documents from your collection with precise control over layout,
+                          margins, scaling, and page selection
                         </Text>
                       </VStack>
                     </MotionBox>
                   </SimpleGrid>
                 </Stack>
               </ModalBody>
-              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200">
-                <Button 
-                  variant="ghost" 
-                  mr={3} 
-                  onClick={orchestrateModal.onClose}
-                  size="lg"
-                >
+              <ModalFooter
+                py="1.5rem"
+                px="2.5rem"
+                borderTop="1px solid"
+                borderColor="whiteAlpha.200"
+              >
+                <Button variant="ghost" mr={3} onClick={orchestrateModal.onClose} size="lg">
                   Cancel
                 </Button>
                 <Button
@@ -1806,9 +1911,9 @@ const Dashboard: React.FC = () => {
           {/* STEP 2: Scan Options */}
           {orchestrateStep === 2 && orchestrateMode === 'scan' && (
             <>
-              <ModalHeader 
-                fontSize="2xl" 
-                fontWeight="700" 
+              <ModalHeader
+                fontSize="2xl"
+                fontWeight="700"
                 py="1.5rem"
                 display="flex"
                 alignItems="center"
@@ -1820,17 +1925,17 @@ const Dashboard: React.FC = () => {
                   <Iconify icon="solar:document-add-bold-duotone" width={24} height={24} />
                 </Box>
                 Scan Configuration
-                <Badge  colorScheme="purple" fontSize="sm" px={3} py={1}>
-                 Step 2 of 3
+                <Badge colorScheme="purple" fontSize="sm" px={3} py={1}>
+                  Step 2 of 3
                 </Badge>
               </ModalHeader>
-              <ModalCloseButton 
-                size="lg" 
-                top={6} 
+              <ModalCloseButton
+                size="lg"
+                top={6}
                 right={6}
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
-              <ModalBody 
+              <ModalBody
                 py="1rem"
                 px="1.5rem"
                 maxH={`calc(${MODAL_CONFIG.modalBody.maxHeight})`}
@@ -1839,23 +1944,23 @@ const Dashboard: React.FC = () => {
                 css={{
                   '&::-webkit-scrollbar': { width: '8px' },
                   '&::-webkit-scrollbar-track': { background: 'transparent' },
-                  '&::-webkit-scrollbar-thumb': { 
-                    background: 'rgba(121,95,238,0.4)', 
+                  '&::-webkit-scrollbar-thumb': {
+                    background: 'rgba(121,95,238,0.4)',
                     borderRadius: '10px',
                   },
-                  '&::-webkit-scrollbar-thumb:hover': { 
+                  '&::-webkit-scrollbar-thumb:hover': {
                     background: 'rgba(121,95,238,0.6)',
                   },
                 }}
               >
-                <Grid 
-                  templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
-                  gap="1.5rem" 
+                <Grid
+                  templateColumns={{ base: '1fr', lg: '1fr 1fr' }}
+                  gap="1.5rem"
                   alignItems="start"
                 >
                   {/* Live Preview - Scan Mode (LEFT SIDE) */}
-                  <Box 
-                    display={{ base: 'none', lg: 'flex' }} 
+                  <Box
+                    display={{ base: 'none', lg: 'flex' }}
                     flexDirection="column"
                     position="sticky"
                     top={0}
@@ -1864,10 +1969,16 @@ const Dashboard: React.FC = () => {
                     order={{ base: 2, lg: 1 }}
                   >
                     <DocumentPreview
-                      documents={selectedDocuments.length > 0 ? selectedDocuments.map(doc => ({
-                        filename: doc.filename,
-                        thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
-                      })) : []}
+                      documents={
+                        selectedDocuments.length > 0
+                          ? selectedDocuments.map(doc => ({
+                              filename: doc.filename,
+                              thumbnailUrl:
+                                doc.thumbnailUrl ||
+                                `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                            }))
+                          : []
+                      }
                       previewSettings={{
                         layout: orchestrateOptions.scanLayout,
                         paperSize: orchestrateOptions.scanPaperSize,
@@ -1877,322 +1988,463 @@ const Dashboard: React.FC = () => {
                   </Box>
 
                   {/* Options Panel (RIGHT SIDE) */}
-                  <Stack 
-                    spacing={3}
-                    order={{ base: 1, lg: 2 }}
-                  >
-                  {/* Select Document Button */}
-                  <Button
-                    size="lg"
-                    colorScheme="brand"
-                    variant="solid"
-                    leftIcon={<Iconify icon="solar:document-add-bold-duotone" width={20} height={20} />}
-                    onClick={documentSelectorModal.onOpen}
-                    w="full"
-                    py="1.5rem"
-                    fontSize="md"
-                    fontWeight="600"
-                    _hover={{
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
-                    }}
-                    transition="all 0.3s"
-                  >
-                    {selectedDocuments.length > 0
-                      ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected`
-                      : 'Select Document to Scan'}
-                  </Button>
-
-                  {/* Select Page Scan Mode */}
-                  <Box 
-                    p="1.25rem" 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    _dark={{ bg: 'whiteAlpha.50' }}
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:document-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
-                      Page Scan Mode
-                    </Heading>
-                    <Select
-                      value={orchestrateOptions.scanMode}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setOrchestrateOptions({ ...orchestrateOptions, scanMode: e.target.value as any })}
-                      bg="whiteAlpha.50"
-                      borderColor="brand.300"
+                  <Stack spacing={3} order={{ base: 1, lg: 2 }}>
+                    {/* Select Document Button */}
+                    <Button
                       size="lg"
-                      _hover={{ borderColor: 'brand.400' }}
-                      _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 3px rgba(121,95,238,0.2)' }}
+                      colorScheme="brand"
+                      variant="solid"
+                      leftIcon={
+                        <Iconify icon="solar:document-add-bold-duotone" width={20} height={20} />
+                      }
+                      onClick={documentSelectorModal.onOpen}
+                      w="full"
+                      py="1.5rem"
+                      fontSize="md"
+                      fontWeight="600"
+                      _hover={{
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
+                      }}
+                      transition="all 0.3s"
                     >
-                      <option value="single">📄 Single Page</option>
-                      <option value="multi">📚 Multi-Page Document</option>
-                    </Select>
-                  </Box>
+                      {selectedDocuments.length > 0
+                        ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected`
+                        : 'Select Document to Scan'}
+                    </Button>
 
-                  {/* Text Detection */}
-                  <Box 
-                    p="1.25rem" 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor={orchestrateOptions.scanTextMode ? 'brand.400' : 'whiteAlpha.200'}
-                    bg={orchestrateOptions.scanTextMode ? 'rgba(121,95,238,0.08)' : 'whiteAlpha.50'}
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <Flex justify="space-between" align="center">
-                      <Box flex="1">
-                        <Heading size="md" mb={2} display="flex" alignItems="center" gap={2}>
-                          <Iconify icon="solar:text-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
-                          Text Detection
-                        </Heading>
-                        <Text fontSize="sm" color="text.muted">Extract text from scanned documents using OCR</Text>
-                      </Box>
+                    {/* Select Page Scan Mode */}
+                    <Box
+                      p="1.25rem"
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      _dark={{ bg: 'whiteAlpha.50' }}
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                        <Iconify
+                          icon="solar:document-bold-duotone"
+                          width={24}
+                          height={24}
+                          color="var(--chakra-colors-brand-500)"
+                        />
+                        Page Scan Mode
+                      </Heading>
+                      <Select
+                        value={orchestrateOptions.scanMode}
+                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            scanMode: e.target.value as any,
+                          })
+                        }
+                        bg="whiteAlpha.50"
+                        borderColor="brand.300"
+                        size="lg"
+                        _hover={{ borderColor: 'brand.400' }}
+                        _focus={{
+                          borderColor: 'brand.500',
+                          boxShadow: '0 0 0 3px rgba(121,95,238,0.2)',
+                        }}
+                      >
+                        <option value="single">📄 Single Page</option>
+                        <option value="multi">📚 Multi-Page Document</option>
+                      </Select>
+                    </Box>
+
+                    {/* Text Detection */}
+                    <Box
+                      p="1.25rem"
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor={orchestrateOptions.scanTextMode ? 'brand.400' : 'whiteAlpha.200'}
+                      bg={
+                        orchestrateOptions.scanTextMode ? 'rgba(121,95,238,0.08)' : 'whiteAlpha.50'
+                      }
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Flex justify="space-between" align="center">
+                        <Box flex="1">
+                          <Heading size="md" mb={2} display="flex" alignItems="center" gap={2}>
+                            <Iconify
+                              icon="solar:text-bold-duotone"
+                              width={24}
+                              height={24}
+                              color="var(--chakra-colors-brand-500)"
+                            />
+                            Text Detection
+                          </Heading>
+                          <Text fontSize="sm" color="text.muted">
+                            Extract text from scanned documents using OCR
+                          </Text>
+                        </Box>
+                        <Checkbox
+                          size="lg"
+                          colorScheme="brand"
+                          isChecked={orchestrateOptions.scanTextMode}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              scanTextMode: e.target.checked,
+                            })
+                          }
+                        >
+                          <Text fontWeight="600">Enable OCR</Text>
+                        </Checkbox>
+                      </Flex>
+                    </Box>
+
+                    {/* Page Selection */}
+                    <Box
+                      p="1rem"
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400', boxShadow: 'md' }}
+                    >
+                      <Heading size="sm" mb={3} display="flex" alignItems="center" gap={2}>
+                        <Iconify
+                          icon="solar:documents-bold-duotone"
+                          width={20}
+                          height={20}
+                          color="var(--chakra-colors-brand-500)"
+                        />
+                        Page Selection
+                      </Heading>
+                      <RadioGroup
+                        value={orchestrateOptions.scanPageMode}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            scanPageMode: value as any,
+                          })
+                        }
+                      >
+                        <Stack spacing={4}>
+                          <Radio value="all" colorScheme="brand" size="lg">
+                            <Text fontWeight="500">All Pages</Text>
+                          </Radio>
+                          <Radio value="odd" colorScheme="brand" size="lg">
+                            <Text fontWeight="500">Odd Pages Only</Text>
+                            <Text fontSize="xs" color="text.muted">
+                              (1, 3, 5...)
+                            </Text>
+                          </Radio>
+                          <Radio value="even" colorScheme="brand" size="lg">
+                            <Text fontWeight="500">Even Pages Only</Text>
+                            <Text fontSize="xs" color="text.muted">
+                              (2, 4, 6...)
+                            </Text>
+                          </Radio>
+                          <Radio value="custom" colorScheme="brand" size="lg">
+                            <Flex direction="column" gap={2} w="full">
+                              <Text fontWeight="500">Custom Page Range</Text>
+                              {orchestrateOptions.scanPageMode === 'custom' && (
+                                <Input
+                                  size="md"
+                                  placeholder="e.g., 1-5,7,9-12"
+                                  value={orchestrateOptions.scanCustomRange}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                    setOrchestrateOptions({
+                                      ...orchestrateOptions,
+                                      scanCustomRange: e.target.value,
+                                    })
+                                  }
+                                  bg="whiteAlpha.100"
+                                  borderColor="brand.300"
+                                  _hover={{ borderColor: 'brand.400' }}
+                                  _focus={{
+                                    borderColor: 'brand.500',
+                                    boxShadow: '0 0 0 3px rgba(121,95,238,0.2)',
+                                  }}
+                                />
+                              )}
+                            </Flex>
+                          </Radio>
+                        </Stack>
+                      </RadioGroup>
+                    </Box>
+
+                    {/* Layout */}
+                    <Box
+                      p="1.25rem"
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                        <Iconify
+                          icon="solar:tablet-bold-duotone"
+                          width={24}
+                          height={24}
+                          color="var(--chakra-colors-brand-500)"
+                        />
+                        Scan Layout
+                      </Heading>
+                      <ButtonGroup isAttached width="full" size="lg">
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.scanLayout === 'portrait' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.scanLayout === 'portrait' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'portrait' })
+                          }
+                          leftIcon={<Iconify icon="solar:document-bold" width={20} height={20} />}
+                          _hover={{ transform: 'scale(1.02)' }}
+                          transition="all 0.2s"
+                        >
+                          Portrait
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.scanLayout === 'landscape' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.scanLayout === 'landscape' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              scanLayout: 'landscape',
+                            })
+                          }
+                          leftIcon={<Iconify icon="solar:tablet-bold" width={20} height={20} />}
+                          _hover={{ transform: 'scale(1.02)' }}
+                          transition="all 0.2s"
+                        >
+                          Landscape
+                        </Button>
+                      </ButtonGroup>
+                    </Box>
+
+                    {/* Paper Size */}
+                    <Box
+                      p={5}
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <FancySelect
+                        label="📏 Paper Size"
+                        options={[
+                          { value: 'A4', label: 'A4 (210×297 mm)' },
+                          { value: 'Letter', label: 'Letter (8.5×11 in)' },
+                          { value: 'Legal', label: 'Legal (8.5×14 in)' },
+                        ]}
+                        value={orchestrateOptions.scanPaperSize}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: value })
+                        }
+                      />
+                    </Box>
+
+                    {/* Resolution */}
+                    <Box
+                      p={5}
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                        <Iconify
+                          icon="solar:magnifer-zoom-in-bold-duotone"
+                          width={24}
+                          height={24}
+                          color="var(--chakra-colors-brand-500)"
+                        />
+                        Scan Resolution (DPI)
+                      </Heading>
+                      <FancySelect
+                        label=""
+                        options={[
+                          { value: '150', label: '150 DPI - Draft Quality' },
+                          { value: '300', label: '300 DPI - Standard (Recommended)' },
+                          { value: '600', label: '600 DPI - High Quality' },
+                          { value: '1200', label: '1200 DPI - Professional' },
+                        ]}
+                        value={orchestrateOptions.scanResolution}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })
+                        }
+                      />
+                    </Box>
+
+                    {/* Color Mode */}
+                    <Box
+                      p={5}
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                        <Iconify
+                          icon="solar:palette-2-bold-duotone"
+                          width={24}
+                          height={24}
+                          color="var(--chakra-colors-brand-500)"
+                        />
+                        Color Mode
+                      </Heading>
+                      <ButtonGroup isAttached width="full" size="lg">
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.scanColorMode === 'color' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.scanColorMode === 'color' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'color' })
+                          }
+                          leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
+                          _hover={{ transform: 'scale(1.02)' }}
+                          transition="all 0.2s"
+                        >
+                          Color
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.scanColorMode === 'grayscale' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.scanColorMode === 'grayscale' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              scanColorMode: 'grayscale',
+                            })
+                          }
+                          leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
+                          _hover={{ transform: 'scale(1.02)' }}
+                          transition="all 0.2s"
+                        >
+                          Grayscale
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={orchestrateOptions.scanColorMode === 'bw' ? 'solid' : 'outline'}
+                          colorScheme={orchestrateOptions.scanColorMode === 'bw' ? 'brand' : 'gray'}
+                          onClick={() =>
+                            setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'bw' })
+                          }
+                          leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
+                          _hover={{ transform: 'scale(1.02)' }}
+                          transition="all 0.2s"
+                        >
+                          B&W
+                        </Button>
+                      </ButtonGroup>
+                    </Box>
+
+                    {/* Save as Default */}
+                    <Box
+                      p={6}
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="brand.400"
+                      bg="rgba(121,95,238,0.12)"
+                      transition="all 0.3s"
+                      _hover={{
+                        transform: 'scale(1.02)',
+                        borderColor: 'brand.500',
+                        boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
+                      }}
+                    >
                       <Checkbox
                         size="lg"
                         colorScheme="brand"
-                        isChecked={orchestrateOptions.scanTextMode}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, scanTextMode: e.target.checked })}
+                        isChecked={orchestrateOptions.saveAsDefault}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            saveAsDefault: e.target.checked,
+                          });
+                          if (e.target.checked) {
+                            saveDefaultSettings();
+                          }
+                        }}
                       >
-                        <Text fontWeight="600">Enable OCR</Text>
+                        <HStack spacing={2}>
+                          <Iconify icon="solar:save-bold-duotone" width={20} height={20} />
+                          <Text fontWeight="600" fontSize="md">
+                            Save as Default Settings
+                          </Text>
+                        </HStack>
                       </Checkbox>
-                    </Flex>
-                  </Box>
-
-                  {/* Page Selection */}
-                  <Box 
-                    p="1rem"
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400', boxShadow: 'md' }}
-                  >
-                    <Heading size="sm" mb={3} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:documents-bold-duotone" width={20} height={20} color="var(--chakra-colors-brand-500)" />
-                      Page Selection
-                    </Heading>
-                    <RadioGroup
-                      value={orchestrateOptions.scanPageMode}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPageMode: value as any })}
-                    >
-                      <Stack spacing={4}>
-                        <Radio value="all" colorScheme="brand" size="lg">
-                          <Text fontWeight="500">All Pages</Text>
-                        </Radio>
-                        <Radio value="odd" colorScheme="brand" size="lg">
-                          <Text fontWeight="500">Odd Pages Only</Text>
-                          <Text fontSize="xs" color="text.muted">(1, 3, 5...)</Text>
-                        </Radio>
-                        <Radio value="even" colorScheme="brand" size="lg">
-                          <Text fontWeight="500">Even Pages Only</Text>
-                          <Text fontSize="xs" color="text.muted">(2, 4, 6...)</Text>
-                        </Radio>
-                        <Radio value="custom" colorScheme="brand" size="lg">
-                          <Flex direction="column" gap={2} w="full">
-                            <Text fontWeight="500">Custom Page Range</Text>
-                            {orchestrateOptions.scanPageMode === 'custom' && (
-                              <Input
-                                size="md"
-                                placeholder="e.g., 1-5,7,9-12"
-                                value={orchestrateOptions.scanCustomRange}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, scanCustomRange: e.target.value })}
-                                bg="whiteAlpha.100"
-                                borderColor="brand.300"
-                                _hover={{ borderColor: 'brand.400' }}
-                                _focus={{ borderColor: 'brand.500', boxShadow: '0 0 0 3px rgba(121,95,238,0.2)' }}
-                              />
-                            )}
-                          </Flex>
-                        </Radio>
-                      </Stack>
-                    </RadioGroup>
-                  </Box>
-
-                  {/* Layout */}
-                  <Box 
-                    p="1.25rem" 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:tablet-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
-                      Scan Layout
-                    </Heading>
-                    <ButtonGroup isAttached width="full" size="lg">
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.scanLayout === 'portrait' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.scanLayout === 'portrait' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'portrait' })}
-                        leftIcon={<Iconify icon="solar:document-bold" width={20} height={20} />}
-                        _hover={{ transform: 'scale(1.02)' }}
-                        transition="all 0.2s"
-                      >
-                        Portrait
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.scanLayout === 'landscape' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.scanLayout === 'landscape' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'landscape' })}
-                        leftIcon={<Iconify icon="solar:tablet-bold" width={20} height={20} />}
-                        _hover={{ transform: 'scale(1.02)' }}
-                        transition="all 0.2s"
-                      >
-                        Landscape
-                      </Button>
-                    </ButtonGroup>
-                  </Box>
-
-                  {/* Paper Size */}
-                  <Box 
-                    p={5} 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <FancySelect
-                      label="📏 Paper Size"
-                      options={[
-                        { value: 'A4', label: 'A4 (210×297 mm)' },
-                        { value: 'Letter', label: 'Letter (8.5×11 in)' },
-                        { value: 'Legal', label: 'Legal (8.5×14 in)' },
-                      ]}
-                      value={orchestrateOptions.scanPaperSize}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanPaperSize: value })}
-                    />
-                  </Box>
-
-                  {/* Resolution */}
-                  <Box 
-                    p={5} 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:magnifer-zoom-in-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
-                      Scan Resolution (DPI)
-                    </Heading>
-                    <FancySelect
-                      label=""
-                      options={[
-                        { value: '150', label: '150 DPI - Draft Quality' },
-                        { value: '300', label: '300 DPI - Standard (Recommended)' },
-                        { value: '600', label: '600 DPI - High Quality' },
-                        { value: '1200', label: '1200 DPI - Professional' },
-                      ]}
-                      value={orchestrateOptions.scanResolution}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, scanResolution: value })}
-                    />
-                  </Box>
-
-                  {/* Color Mode */}
-                  <Box 
-                    p={5} 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'brand.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:palette-2-bold-duotone" width={24} height={24} color="var(--chakra-colors-brand-500)" />
-                      Color Mode
-                    </Heading>
-                    <ButtonGroup isAttached width="full" size="lg">
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.scanColorMode === 'color' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.scanColorMode === 'color' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'color' })}
-                        leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
-                        _hover={{ transform: 'scale(1.02)' }}
-                        transition="all 0.2s"
-                      >
-                        Color
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.scanColorMode === 'grayscale' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.scanColorMode === 'grayscale' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'grayscale' })}
-                        leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
-                        _hover={{ transform: 'scale(1.02)' }}
-                        transition="all 0.2s"
-                      >
-                        Grayscale
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.scanColorMode === 'bw' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.scanColorMode === 'bw' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, scanColorMode: 'bw' })}
-                        leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
-                        _hover={{ transform: 'scale(1.02)' }}
-                        transition="all 0.2s"
-                      >
-                        B&W
-                      </Button>
-                    </ButtonGroup>
-                  </Box>
-
-                  {/* Save as Default */}
-                  <Box 
-                    p={6} 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="brand.400" 
-                    bg="rgba(121,95,238,0.12)"
-                    transition="all 0.3s"
-                    _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500', boxShadow: '0 8px 20px rgba(121,95,238,0.3)' }}
-                  >
-                    <Checkbox
-                      size="lg"
-                      colorScheme="brand"
-                      isChecked={orchestrateOptions.saveAsDefault}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                        setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked });
-                        if (e.target.checked) {
-                          saveDefaultSettings();
-                        }
-                      }}
-                    >
-                      <HStack spacing={2}>
-                        <Iconify icon="solar:save-bold-duotone" width={20} height={20} />
-                        <Text fontWeight="600" fontSize="md">Save as Default Settings</Text>
-                      </HStack>
-                    </Checkbox>
-                    <Text fontSize="sm" color="text.muted" mt={2} ml={8}>
-                      Your preferences will be remembered for future scans
-                    </Text>
-                  </Box>
-                </Stack>
-              </Grid>
+                      <Text fontSize="sm" color="text.muted" mt={2} ml={8}>
+                        Your preferences will be remembered for future scans
+                      </Text>
+                    </Box>
+                  </Stack>
+                </Grid>
               </ModalBody>
-              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
+              <ModalFooter
+                py="1.5rem"
+                px="2.5rem"
+                borderTop="1px solid"
+                borderColor="whiteAlpha.200"
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+              >
                 <HStack spacing={4}>
                   {selectedDocuments.length > 0 && (
                     <>
                       <HStack spacing={2} fontSize="sm">
                         <Iconify icon="solar:document-bold" width={16} height={16} />
                         <Text fontWeight="500">
-                          {selectedDocuments.length} {selectedDocuments.length === 1 ? 'sheet' : 'sheets'}
+                          {selectedDocuments.length}{' '}
+                          {selectedDocuments.length === 1 ? 'sheet' : 'sheets'}
                         </Text>
                       </HStack>
                       <HStack spacing={2}>
@@ -2212,16 +2464,16 @@ const Dashboard: React.FC = () => {
                   )}
                 </HStack>
                 <HStack>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     onClick={() => setOrchestrateStep(1)}
                     size="lg"
                     leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
                   >
                     Back
                   </Button>
-                  <Button 
-                    colorScheme="brand" 
+                  <Button
+                    colorScheme="brand"
                     onClick={() => setOrchestrateStep(3)}
                     size="lg"
                     px={8}
@@ -2237,9 +2489,9 @@ const Dashboard: React.FC = () => {
           {/* STEP 2: Print Options */}
           {orchestrateStep === 2 && orchestrateMode === 'print' && (
             <>
-              <ModalHeader 
-                fontSize="2xl" 
-                fontWeight="700" 
+              <ModalHeader
+                fontSize="2xl"
+                fontWeight="700"
                 py="1.5rem"
                 display="flex"
                 alignItems="center"
@@ -2255,13 +2507,13 @@ const Dashboard: React.FC = () => {
                   Step 2 of 3
                 </Badge>
               </ModalHeader>
-              <ModalCloseButton 
-                size="lg" 
-                top={6} 
+              <ModalCloseButton
+                size="lg"
+                top={6}
                 right={6}
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
-              <ModalBody 
+              <ModalBody
                 py={4}
                 px={6}
                 maxH="calc(85vh - 140px)"
@@ -2270,23 +2522,19 @@ const Dashboard: React.FC = () => {
                 css={{
                   '&::-webkit-scrollbar': { width: '8px' },
                   '&::-webkit-scrollbar-track': { background: 'transparent' },
-                  '&::-webkit-scrollbar-thumb': { 
-                    background: 'rgba(69,202,255,0.4)', 
+                  '&::-webkit-scrollbar-thumb': {
+                    background: 'rgba(69,202,255,0.4)',
                     borderRadius: '10px',
                   },
-                  '&::-webkit-scrollbar-thumb:hover': { 
+                  '&::-webkit-scrollbar-thumb:hover': {
                     background: 'rgba(69,202,255,0.6)',
                   },
                 }}
               >
-                <Grid 
-                  templateColumns={{ base: '1fr', lg: '1fr 1fr' }} 
-                  gap={6} 
-                  alignItems="start"
-                >
+                <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={6} alignItems="start">
                   {/* Live Preview - Print Mode (LEFT SIDE) */}
-                  <Box 
-                    display={{ base: 'none', lg: 'flex' }} 
+                  <Box
+                    display={{ base: 'none', lg: 'flex' }}
                     flexDirection="column"
                     position="sticky"
                     top={0}
@@ -2295,10 +2543,16 @@ const Dashboard: React.FC = () => {
                     order={{ base: 2, lg: 1 }}
                   >
                     <DocumentPreview
-                      documents={selectedDocuments.length > 0 ? selectedDocuments.map(doc => ({
-                        filename: doc.filename,
-                        thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
-                      })) : []}
+                      documents={
+                        selectedDocuments.length > 0
+                          ? selectedDocuments.map(doc => ({
+                              filename: doc.filename,
+                              thumbnailUrl:
+                                doc.thumbnailUrl ||
+                                `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                            }))
+                          : []
+                      }
                       previewSettings={{
                         layout: orchestrateOptions.printLayout,
                         scale: parseInt(orchestrateOptions.printScale),
@@ -2309,344 +2563,487 @@ const Dashboard: React.FC = () => {
                   </Box>
 
                   {/* Options Panel (RIGHT SIDE) */}
-                  <Stack 
-                    spacing={3}
-                    order={{ base: 1, lg: 2 }}
-                  >
-                  {/* Select Document Button */}
-                  <Button
-                    size="lg"
-                    colorScheme="nebula"
-                    variant="solid"
-                    leftIcon={<Iconify icon="solar:printer-bold-duotone" width={20} height={20} />}
-                    onClick={documentSelectorModal.onOpen}
-                    w="full"
-                    py="1.5rem"
-                    fontSize="md"
-                    fontWeight="600"
-                    _hover={{
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 8px 20px rgba(69,202,255,0.3)',
-                    }}
-                    transition="all 0.3s"
-                  >
-                    {selectedDocuments.length > 0
-                      ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected for Print`
-                      : 'Select Documents to Print'}
-                  </Button>
-
-                  {/* Pages to Print */}
-                  <Box 
-                    p={5} 
-                    borderRadius="xl" 
-                    border="2px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.3s"
-                    _hover={{ borderColor: 'nebula.400', transform: 'translateY(-2px)', boxShadow: 'lg' }}
-                  >
-                    <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
-                      <Iconify icon="solar:documents-bold-duotone" width={24} height={24} color="var(--chakra-colors-nebula-500)" />
-                      Pages to Print
-                    </Heading>
-                    <RadioGroup
-                      value={orchestrateOptions.printPages}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })}
-                    >
-                      <Stack spacing={3}>
-                        <Radio value="all" colorScheme="brand">All Pages</Radio>
-                        <Radio value="odd" colorScheme="brand">Odd Pages Only (1, 3, 5...)</Radio>
-                        <Radio value="even" colorScheme="brand">Even Pages Only (2, 4, 6...)</Radio>
-                        <Radio value="custom" colorScheme="brand">
-                          <Flex direction="column" gap={2} mt={orchestrateOptions.printPages === 'custom' ? 2 : 0}>
-                            <Text>Custom Pages</Text>
-                            {orchestrateOptions.printPages === 'custom' && (
-                              <Input
-                                size="sm"
-                                placeholder="e.g., 1-5,7,9"
-                                value={orchestrateOptions.printCustomRange}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, printCustomRange: e.target.value })}
-                                bg="whiteAlpha.100"
-                                borderColor="brand.300"
-                                _hover={{ borderColor: 'brand.400' }}
-                              />
-                            )}
-                          </Flex>
-                        </Radio>
-                      </Stack>
-                    </RadioGroup>
-                  </Box>
-
-                  {/* Layout */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
-                  >
-                    <Heading size="sm" mb={3}>📐 Layout</Heading>
-                    <ButtonGroup isAttached width="full">
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printLayout === 'portrait' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printLayout === 'portrait' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printLayout: 'portrait' })}
-                      >
-                        📄 Portrait
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printLayout === 'landscape' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printLayout === 'landscape' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printLayout: 'landscape' })}
-                      >
-                        📐 Landscape
-                      </Button>
-                    </ButtonGroup>
-                  </Box>
-
-                  {/* Paper Size */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
-                  >
-                    <FancySelect
-                      label="📏 Paper Size"
-                      options={[
-                        { value: 'A4', label: 'A4 (210×297 mm)' },
-                        { value: 'Letter', label: 'Letter (8.5×11 in)' },
-                        { value: 'Legal', label: 'Legal (8.5×14 in)' },
-                      ]}
-                      value={orchestrateOptions.printPaperSize}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })}
-                    />
-                  </Box>
-
-                  {/* Print Resolution (DPI) */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
-                  >
-                    <FancySelect
-                      label="🔍 Scan Resolution (DPI)"
-                      options={[
-                        { value: '150', label: '150 DPI - Draft Quality' },
-                        { value: '300', label: '300 DPI - Standard (Recommended)' },
-                        { value: '600', label: '600 DPI - High Quality' },
-                        { value: '1200', label: '1200 DPI - Professional' },
-                      ]}
-                      value={orchestrateOptions.printResolution}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printResolution: value })}
-                    />
-                  </Box>
-
-                  {/* Color Mode */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
-                  >
-                    <Heading size="sm" mb={3}>Color Mode</Heading>
-                    <ButtonGroup isAttached width="full" size="md">
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printColorMode === 'color' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printColorMode === 'color' ? 'nebula' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'color' })}
-                        leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
-                      >
-                        Color
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printColorMode === 'grayscale' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printColorMode === 'grayscale' ? 'nebula' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'grayscale' })}
-                        leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
-                      >
-                        Grayscale
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printColorMode === 'bw' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printColorMode === 'bw' ? 'nebula' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'bw' })}
-                        leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
-                      >
-                        B&W
-                      </Button>
-                    </ButtonGroup>
-                  </Box>
-
-                  {/* Print Scale */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
-                  >
-                    <Heading size="sm" mb={3}>🔍 Print Scale (%)</Heading>
-                    <Flex align="center" gap={3}>
-                      <Input
-                        type="number"
-                        min="25"
-                        max="400"
-                        value={orchestrateOptions.printScale}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, printScale: e.target.value })}
-                        bg="whiteAlpha.100"
-                        borderColor="brand.300"
-                        _hover={{ borderColor: 'brand.400' }}
-                      />
-                      <Text minW="40px">%</Text>
-                    </Flex>
-                    <Text fontSize="xs" color="text.muted" mt={2}>Default: 100% (Actual Size)</Text>
-                  </Box>
-
-                  {/* Margins */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="whiteAlpha.200" 
-                    bg="whiteAlpha.50"
-                    transition="all 0.2s"
-                    _hover={{ borderColor: 'brand.400' }}
-                  >
-                    <Heading size="sm" mb={3}>📏 Margins</Heading>
-                    <ButtonGroup isAttached width="full" size="sm">
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printMargins === 'default' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printMargins === 'default' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'default' })}
-                      >
-                        Default (1")
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printMargins === 'narrow' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printMargins === 'narrow' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'narrow' })}
-                      >
-                        Narrow
-                      </Button>
-                      <Button
-                        flex={1}
-                        variant={orchestrateOptions.printMargins === 'none' ? 'solid' : 'outline'}
-                        colorScheme={orchestrateOptions.printMargins === 'none' ? 'brand' : 'gray'}
-                        onClick={() => setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'none' })}
-                      >
-                        None
-                      </Button>
-                    </ButtonGroup>
-                  </Box>
-
-                  {/* Pages per Sheet - Fancy Select */}
-                  <Box>
-                    <FancySelect
-                      label="Pages per Sheet"
-                      options={[
-                        { value: '1', label: '1 Page per Sheet (Normal)' },
-                        { value: '2', label: '2 Pages per Sheet (A5 Size)' },
-                        { value: '4', label: '4 Pages per Sheet (Booklet)' },
-                        { value: '6', label: '6 Pages per Sheet' },
-                        { value: '9', label: '9 Pages per Sheet' },
-                        { value: 'custom', label: '✏️ Custom Layout' },
-                      ]}
-                      value={orchestrateOptions.printPagesPerSheet}
-                      onChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheet: value })}
-                      allowCustom={true}
-                      customValue={orchestrateOptions.printPagesPerSheetCustom}
-                      onCustomChange={(value: string) => setOrchestrateOptions({ ...orchestrateOptions, printPagesPerSheetCustom: value })}
-                    />
-                  </Box>
-
-                  {/* Select Converted PDFs */}
-                  <Box>
-                    <Heading size="sm" mb={3}>Select Converted PDFs</Heading>
-                    {convertedFiles.length === 0 ? (
-                      <Text fontSize="sm" color="text.muted">No converted PDFs available</Text>
-                    ) : (
-                      <VStack spacing={2}>
-                        {convertedFiles.map((file: any) => (
-                          <Box
-                            key={file.filename}
-                            p={2}
-                            borderRadius="md"
-                            border="1px"
-                            borderColor="whiteAlpha.200"
-                            width="full"
-                            cursor="pointer"
-                            onClick={() => {
-                              const isSelected = orchestrateOptions.printConvertedFiles.includes(file.filename);
-                              setOrchestrateOptions({
-                                ...orchestrateOptions,
-                                printConvertedFiles: isSelected
-                                  ? orchestrateOptions.printConvertedFiles.filter((f: string) => f !== file.filename)
-                                  : [...orchestrateOptions.printConvertedFiles, file.filename],
-                              });
-                            }}
-                            bg={orchestrateOptions.printConvertedFiles.includes(file.filename) ? 'rgba(121,95,238,0.1)' : 'transparent'}
-                          >
-                            <Checkbox isChecked={orchestrateOptions.printConvertedFiles.includes(file.filename)}>
-                              {file.filename} ({(file.size / 1024).toFixed(2)} KB)
-                            </Checkbox>
-                          </Box>
-                        ))}
-                      </VStack>
-                    )}
-                  </Box>
-
-                  {/* Save as Default */}
-                  <Box 
-                    p={4} 
-                    borderRadius="lg" 
-                    border="1px solid" 
-                    borderColor="brand.400" 
-                    bg="rgba(121,95,238,0.1)"
-                    transition="all 0.3s"
-                    _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500' }}
-                  >
-                    <Checkbox
+                  <Stack spacing={3} order={{ base: 1, lg: 2 }}>
+                    {/* Select Document Button */}
+                    <Button
                       size="lg"
-                      colorScheme="brand"
-                      isChecked={orchestrateOptions.saveAsDefault}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrchestrateOptions({ ...orchestrateOptions, saveAsDefault: e.target.checked })}
+                      colorScheme="nebula"
+                      variant="solid"
+                      leftIcon={
+                        <Iconify icon="solar:printer-bold-duotone" width={20} height={20} />
+                      }
+                      onClick={documentSelectorModal.onOpen}
+                      w="full"
+                      py="1.5rem"
+                      fontSize="md"
+                      fontWeight="600"
+                      _hover={{
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 8px 20px rgba(69,202,255,0.3)',
+                      }}
+                      transition="all 0.3s"
                     >
-                      <Text fontWeight="600">💾 Save as Default Settings</Text>
-                    </Checkbox>
-                  </Box>
-                </Stack>
-              </Grid>
+                      {selectedDocuments.length > 0
+                        ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected for Print`
+                        : 'Select Documents to Print'}
+                    </Button>
+
+                    {/* Pages to Print */}
+                    <Box
+                      p={5}
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'nebula.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
+                        <Iconify
+                          icon="solar:documents-bold-duotone"
+                          width={24}
+                          height={24}
+                          color="var(--chakra-colors-nebula-500)"
+                        />
+                        Pages to Print
+                      </Heading>
+                      <RadioGroup
+                        value={orchestrateOptions.printPages}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({ ...orchestrateOptions, printPages: value as any })
+                        }
+                      >
+                        <Stack spacing={3}>
+                          <Radio value="all" colorScheme="brand">
+                            All Pages
+                          </Radio>
+                          <Radio value="odd" colorScheme="brand">
+                            Odd Pages Only (1, 3, 5...)
+                          </Radio>
+                          <Radio value="even" colorScheme="brand">
+                            Even Pages Only (2, 4, 6...)
+                          </Radio>
+                          <Radio value="custom" colorScheme="brand">
+                            <Flex
+                              direction="column"
+                              gap={2}
+                              mt={orchestrateOptions.printPages === 'custom' ? 2 : 0}
+                            >
+                              <Text>Custom Pages</Text>
+                              {orchestrateOptions.printPages === 'custom' && (
+                                <Input
+                                  size="sm"
+                                  placeholder="e.g., 1-5,7,9"
+                                  value={orchestrateOptions.printCustomRange}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                                    setOrchestrateOptions({
+                                      ...orchestrateOptions,
+                                      printCustomRange: e.target.value,
+                                    })
+                                  }
+                                  bg="whiteAlpha.100"
+                                  borderColor="brand.300"
+                                  _hover={{ borderColor: 'brand.400' }}
+                                />
+                              )}
+                            </Flex>
+                          </Radio>
+                        </Stack>
+                      </RadioGroup>
+                    </Box>
+
+                    {/* Layout */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Heading size="sm" mb={3}>
+                        📐 Layout
+                      </Heading>
+                      <ButtonGroup isAttached width="full">
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.printLayout === 'portrait' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.printLayout === 'portrait' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printLayout: 'portrait',
+                            })
+                          }
+                        >
+                          📄 Portrait
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.printLayout === 'landscape' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.printLayout === 'landscape' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printLayout: 'landscape',
+                            })
+                          }
+                        >
+                          📐 Landscape
+                        </Button>
+                      </ButtonGroup>
+                    </Box>
+
+                    {/* Paper Size */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <FancySelect
+                        label="📏 Paper Size"
+                        options={[
+                          { value: 'A4', label: 'A4 (210×297 mm)' },
+                          { value: 'Letter', label: 'Letter (8.5×11 in)' },
+                          { value: 'Legal', label: 'Legal (8.5×14 in)' },
+                        ]}
+                        value={orchestrateOptions.printPaperSize}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })
+                        }
+                      />
+                    </Box>
+
+                    {/* Print Resolution (DPI) */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <FancySelect
+                        label="🔍 Scan Resolution (DPI)"
+                        options={[
+                          { value: '150', label: '150 DPI - Draft Quality' },
+                          { value: '300', label: '300 DPI - Standard (Recommended)' },
+                          { value: '600', label: '600 DPI - High Quality' },
+                          { value: '1200', label: '1200 DPI - Professional' },
+                        ]}
+                        value={orchestrateOptions.printResolution}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({ ...orchestrateOptions, printResolution: value })
+                        }
+                      />
+                    </Box>
+
+                    {/* Color Mode */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Heading size="sm" mb={3}>
+                        Color Mode
+                      </Heading>
+                      <ButtonGroup isAttached width="full" size="md">
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.printColorMode === 'color' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.printColorMode === 'color' ? 'nebula' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printColorMode: 'color',
+                            })
+                          }
+                          leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
+                        >
+                          Color
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.printColorMode === 'grayscale' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.printColorMode === 'grayscale' ? 'nebula' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printColorMode: 'grayscale',
+                            })
+                          }
+                          leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
+                        >
+                          Grayscale
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={orchestrateOptions.printColorMode === 'bw' ? 'solid' : 'outline'}
+                          colorScheme={
+                            orchestrateOptions.printColorMode === 'bw' ? 'nebula' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'bw' })
+                          }
+                          leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
+                        >
+                          B&W
+                        </Button>
+                      </ButtonGroup>
+                    </Box>
+
+                    {/* Print Scale */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Heading size="sm" mb={3}>
+                        🔍 Print Scale (%)
+                      </Heading>
+                      <Flex align="center" gap={3}>
+                        <Input
+                          type="number"
+                          min="25"
+                          max="400"
+                          value={orchestrateOptions.printScale}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printScale: e.target.value,
+                            })
+                          }
+                          bg="whiteAlpha.100"
+                          borderColor="brand.300"
+                          _hover={{ borderColor: 'brand.400' }}
+                        />
+                        <Text minW="40px">%</Text>
+                      </Flex>
+                      <Text fontSize="xs" color="text.muted" mt={2}>
+                        Default: 100% (Actual Size)
+                      </Text>
+                    </Box>
+
+                    {/* Margins */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Heading size="sm" mb={3}>
+                        📏 Margins
+                      </Heading>
+                      <ButtonGroup isAttached width="full" size="sm">
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.printMargins === 'default' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.printMargins === 'default' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printMargins: 'default',
+                            })
+                          }
+                        >
+                          Default (1")
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={
+                            orchestrateOptions.printMargins === 'narrow' ? 'solid' : 'outline'
+                          }
+                          colorScheme={
+                            orchestrateOptions.printMargins === 'narrow' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'narrow' })
+                          }
+                        >
+                          Narrow
+                        </Button>
+                        <Button
+                          flex={1}
+                          variant={orchestrateOptions.printMargins === 'none' ? 'solid' : 'outline'}
+                          colorScheme={
+                            orchestrateOptions.printMargins === 'none' ? 'brand' : 'gray'
+                          }
+                          onClick={() =>
+                            setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'none' })
+                          }
+                        >
+                          None
+                        </Button>
+                      </ButtonGroup>
+                    </Box>
+
+                    {/* Pages per Sheet - Fancy Select */}
+                    <Box>
+                      <FancySelect
+                        label="Pages per Sheet"
+                        options={[
+                          { value: '1', label: '1 Page per Sheet (Normal)' },
+                          { value: '2', label: '2 Pages per Sheet (A5 Size)' },
+                          { value: '4', label: '4 Pages per Sheet (Booklet)' },
+                          { value: '6', label: '6 Pages per Sheet' },
+                          { value: '9', label: '9 Pages per Sheet' },
+                          { value: 'custom', label: '✏️ Custom Layout' },
+                        ]}
+                        value={orchestrateOptions.printPagesPerSheet}
+                        onChange={(value: string) =>
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            printPagesPerSheet: value,
+                          })
+                        }
+                        allowCustom={true}
+                        customValue={orchestrateOptions.printPagesPerSheetCustom}
+                        onCustomChange={(value: string) =>
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            printPagesPerSheetCustom: value,
+                          })
+                        }
+                      />
+                    </Box>
+
+                    {/* Select Converted PDFs */}
+                    <Box>
+                      <Heading size="sm" mb={3}>
+                        Select Converted PDFs
+                      </Heading>
+                      {convertedFiles.length === 0 ? (
+                        <Text fontSize="sm" color="text.muted">
+                          No converted PDFs available
+                        </Text>
+                      ) : (
+                        <VStack spacing={2}>
+                          {convertedFiles.map((file: any) => (
+                            <Box
+                              key={file.filename}
+                              p={2}
+                              borderRadius="md"
+                              border="1px"
+                              borderColor="whiteAlpha.200"
+                              width="full"
+                              cursor="pointer"
+                              onClick={() => {
+                                const isSelected = orchestrateOptions.printConvertedFiles.includes(
+                                  file.filename
+                                );
+                                setOrchestrateOptions({
+                                  ...orchestrateOptions,
+                                  printConvertedFiles: isSelected
+                                    ? orchestrateOptions.printConvertedFiles.filter(
+                                        (f: string) => f !== file.filename
+                                      )
+                                    : [...orchestrateOptions.printConvertedFiles, file.filename],
+                                });
+                              }}
+                              bg={
+                                orchestrateOptions.printConvertedFiles.includes(file.filename)
+                                  ? 'rgba(121,95,238,0.1)'
+                                  : 'transparent'
+                              }
+                            >
+                              <Checkbox
+                                isChecked={orchestrateOptions.printConvertedFiles.includes(
+                                  file.filename
+                                )}
+                              >
+                                {file.filename} ({(file.size / 1024).toFixed(2)} KB)
+                              </Checkbox>
+                            </Box>
+                          ))}
+                        </VStack>
+                      )}
+                    </Box>
+
+                    {/* Save as Default */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="brand.400"
+                      bg="rgba(121,95,238,0.1)"
+                      transition="all 0.3s"
+                      _hover={{ transform: 'scale(1.02)', borderColor: 'brand.500' }}
+                    >
+                      <Checkbox
+                        size="lg"
+                        colorScheme="brand"
+                        isChecked={orchestrateOptions.saveAsDefault}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            saveAsDefault: e.target.checked,
+                          })
+                        }
+                      >
+                        <Text fontWeight="600">💾 Save as Default Settings</Text>
+                      </Checkbox>
+                    </Box>
+                  </Stack>
+                </Grid>
               </ModalBody>
-              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
+              <ModalFooter
+                py="1.5rem"
+                px="2.5rem"
+                borderTop="1px solid"
+                borderColor="whiteAlpha.200"
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+              >
                 <HStack spacing={4}>
                   {selectedDocuments.length > 0 && (
                     <>
                       <HStack spacing={2} fontSize="sm">
                         <Iconify icon="solar:document-bold" width={16} height={16} />
                         <Text fontWeight="500">
-                          {selectedDocuments.length} {selectedDocuments.length === 1 ? 'sheet' : 'sheets'}
+                          {selectedDocuments.length}{' '}
+                          {selectedDocuments.length === 1 ? 'sheet' : 'sheets'}
                         </Text>
                       </HStack>
                       <HStack spacing={2}>
@@ -2661,16 +3058,16 @@ const Dashboard: React.FC = () => {
                   )}
                 </HStack>
                 <HStack>
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     onClick={() => setOrchestrateStep(1)}
                     size="lg"
                     leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
                   >
                     Back
                   </Button>
-                  <Button 
-                    colorScheme="nebula" 
+                  <Button
+                    colorScheme="nebula"
                     onClick={() => setOrchestrateStep(3)}
                     size="lg"
                     px={8}
@@ -2686,9 +3083,9 @@ const Dashboard: React.FC = () => {
           {/* STEP 3: Confirmation */}
           {orchestrateStep === 3 && (
             <>
-              <ModalHeader 
-                fontSize="2xl" 
-                fontWeight="700" 
+              <ModalHeader
+                fontSize="2xl"
+                fontWeight="700"
                 py="1.5rem"
                 display="flex"
                 alignItems="center"
@@ -2704,144 +3101,299 @@ const Dashboard: React.FC = () => {
                   Step 3 of 3
                 </Badge>
               </ModalHeader>
-              <ModalCloseButton 
-                size="lg" 
-                top={6} 
+              <ModalCloseButton
+                size="lg"
+                top={6}
                 right={6}
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody py={8} px={10}>
                 <Stack spacing={6}>
-                  <Box 
-                    bg="linear-gradient(135deg, rgba(121,95,238,0.15), rgba(69,202,255,0.15))" 
-                    p={8} 
+                  <Box
+                    bg="linear-gradient(135deg, rgba(121,95,238,0.15), rgba(69,202,255,0.15))"
+                    p={8}
                     borderRadius="2xl"
                     border="2px solid"
                     borderColor={orchestrateMode === 'scan' ? 'brand.300' : 'nebula.300'}
                     boxShadow="0 8px 25px rgba(121,95,238,0.2)"
                   >
                     <Heading size="lg" mb={6} display="flex" alignItems="center" gap={3}>
-                      <Iconify 
-                        icon={orchestrateMode === 'scan' ? 'solar:document-add-bold-duotone' : 'solar:printer-bold-duotone'} 
-                        width={32} 
-                        height={32} 
-                        color={orchestrateMode === 'scan' ? 'var(--chakra-colors-brand-500)' : 'var(--chakra-colors-nebula-500)'}
+                      <Iconify
+                        icon={
+                          orchestrateMode === 'scan'
+                            ? 'solar:document-add-bold-duotone'
+                            : 'solar:printer-bold-duotone'
+                        }
+                        width={32}
+                        height={32}
+                        color={
+                          orchestrateMode === 'scan'
+                            ? 'var(--chakra-colors-brand-500)'
+                            : 'var(--chakra-colors-nebula-500)'
+                        }
                       />
                       {orchestrateMode === 'scan' ? 'Scan' : 'Print'} Configuration Summary
                     </Heading>
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                       {orchestrateMode === 'scan' ? (
                         <>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Operation Mode:</Text>
-                            <Badge colorScheme="purple" fontSize="md" px={3} py={1}>Scan</Badge>
+                            <Badge colorScheme="purple" fontSize="md" px={3} py={1}>
+                              Scan
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Page Mode:</Text>
-                            <Badge colorScheme="blue" fontSize="md" px={3} py={1}>{orchestrateOptions.scanPageMode}</Badge>
+                            <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.scanPageMode}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Layout:</Text>
-                            <Badge colorScheme="cyan" fontSize="md" px={3} py={1}>{orchestrateOptions.scanLayout}</Badge>
+                            <Badge colorScheme="cyan" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.scanLayout}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Paper Size:</Text>
-                            <Badge colorScheme="teal" fontSize="md" px={3} py={1}>{orchestrateOptions.scanPaperSize}</Badge>
+                            <Badge colorScheme="teal" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.scanPaperSize}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Resolution:</Text>
-                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>{orchestrateOptions.scanResolution} DPI</Badge>
+                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.scanResolution} DPI
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Color Mode:</Text>
-                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>{orchestrateOptions.scanColorMode}</Badge>
+                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.scanColorMode}
+                            </Badge>
                           </HStack>
                           {orchestrateOptions.scanTextMode && (
-                            <HStack justify="space-between" p={4} bg="green.100" borderRadius="lg" gridColumn={{ base: 'span 1', md: 'span 2' }}>
+                            <HStack
+                              justify="space-between"
+                              p={4}
+                              bg="green.100"
+                              borderRadius="lg"
+                              gridColumn={{ base: 'span 1', md: 'span 2' }}
+                            >
                               <HStack>
-                                <Iconify icon="solar:check-circle-bold" width={20} height={20} color="green.600" />
-                                <Text fontWeight="600" color="green.700">OCR Text Detection:</Text>
+                                <Iconify
+                                  icon="solar:check-circle-bold"
+                                  width={20}
+                                  height={20}
+                                  color="green.600"
+                                />
+                                <Text fontWeight="600" color="green.700">
+                                  OCR Text Detection:
+                                </Text>
                               </HStack>
-                              <Badge colorScheme="green" fontSize="md" px={3} py={1}>Enabled</Badge>
+                              <Badge colorScheme="green" fontSize="md" px={3} py={1}>
+                                Enabled
+                              </Badge>
                             </HStack>
                           )}
                         </>
                       ) : (
                         <>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Operation Mode:</Text>
-                            <Badge colorScheme="blue" fontSize="md" px={3} py={1}>Print</Badge>
+                            <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
+                              Print
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Pages:</Text>
-                            <Badge colorScheme="purple" fontSize="md" px={3} py={1}>{orchestrateOptions.printPages}</Badge>
+                            <Badge colorScheme="purple" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printPages}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Layout:</Text>
-                            <Badge colorScheme="cyan" fontSize="md" px={3} py={1}>{orchestrateOptions.printLayout}</Badge>
+                            <Badge colorScheme="cyan" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printLayout}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Paper Size:</Text>
-                            <Badge colorScheme="teal" fontSize="md" px={3} py={1}>{orchestrateOptions.printPaperSize}</Badge>
+                            <Badge colorScheme="teal" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printPaperSize}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Scale:</Text>
-                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>{orchestrateOptions.printScale}%</Badge>
+                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printScale}%
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Pages per Sheet:</Text>
-                            <Badge colorScheme="orange" fontSize="md" px={3} py={1}>{orchestrateOptions.printPagesPerSheet}</Badge>
+                            <Badge colorScheme="orange" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printPagesPerSheet}
+                            </Badge>
                           </HStack>
-                          <HStack justify="space-between" p={4} bg="whiteAlpha.200" borderRadius="lg">
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
                             <Text fontWeight="600">Margins:</Text>
-                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>{orchestrateOptions.printMargins}</Badge>
+                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printMargins}
+                            </Badge>
                           </HStack>
                           {orchestrateOptions.printConvertedFiles.length > 0 && (
                             <HStack justify="space-between" p={4} bg="blue.100" borderRadius="lg">
                               <HStack>
-                                <Iconify icon="solar:document-text-bold" width={20} height={20} color="blue.600" />
-                                <Text fontWeight="600" color="blue.700">Selected PDFs:</Text>
+                                <Iconify
+                                  icon="solar:document-text-bold"
+                                  width={20}
+                                  height={20}
+                                  color="blue.600"
+                                />
+                                <Text fontWeight="600" color="blue.700">
+                                  Selected PDFs:
+                                </Text>
                               </HStack>
-                              <Badge colorScheme="blue" fontSize="md" px={3} py={1}>{orchestrateOptions.printConvertedFiles.length} file(s)</Badge>
+                              <Badge colorScheme="blue" fontSize="md" px={3} py={1}>
+                                {orchestrateOptions.printConvertedFiles.length} file(s)
+                              </Badge>
                             </HStack>
                           )}
                         </>
                       )}
                       {orchestrateOptions.saveAsDefault && (
-                        <HStack justify="space-between" p={4} bg="green.100" borderRadius="lg" gridColumn={{ base: 'span 1', md: 'span 2' }}>
+                        <HStack
+                          justify="space-between"
+                          p={4}
+                          bg="green.100"
+                          borderRadius="lg"
+                          gridColumn={{ base: 'span 1', md: 'span 2' }}
+                        >
                           <HStack>
-                            <Iconify icon="solar:save-bold-duotone" width={20} height={20} color="green.600" />
-                            <Text fontWeight="600" color="green.700">Save as Default:</Text>
+                            <Iconify
+                              icon="solar:save-bold-duotone"
+                              width={20}
+                              height={20}
+                              color="green.600"
+                            />
+                            <Text fontWeight="600" color="green.700">
+                              Save as Default:
+                            </Text>
                           </HStack>
-                          <Badge colorScheme="green" fontSize="md" px={3} py={1}>Yes</Badge>
+                          <Badge colorScheme="green" fontSize="md" px={3} py={1}>
+                            Yes
+                          </Badge>
                         </HStack>
                       )}
                     </SimpleGrid>
                   </Box>
-                  <Box 
-                    p={5} 
-                    bg="yellow.50" 
-                    borderRadius="xl" 
-                    border="2px solid" 
+                  <Box
+                    p={5}
+                    bg="yellow.50"
+                    borderRadius="xl"
+                    border="2px solid"
                     borderColor="yellow.300"
                     _dark={{ bg: 'rgba(255,193,7,0.15)', borderColor: 'yellow.600' }}
                   >
                     <HStack spacing={3} mb={2}>
-                      <Iconify icon="solar:info-circle-bold" width={24} height={24} color="orange.500" />
-                      <Text fontWeight="700" fontSize="lg" color="orange.700" _dark={{ color: 'orange.300' }}>
+                      <Iconify
+                        icon="solar:info-circle-bold"
+                        width={24}
+                        height={24}
+                        color="orange.500"
+                      />
+                      <Text
+                        fontWeight="700"
+                        fontSize="lg"
+                        color="orange.700"
+                        _dark={{ color: 'orange.300' }}
+                      >
                         Ready to Proceed
                       </Text>
                     </HStack>
                     <Text color="text.muted" fontSize="sm">
-                      Review your settings above. Click "Start {orchestrateMode === 'scan' ? 'Scanning' : 'Printing'}" to begin the operation with these configurations.
+                      Review your settings above. Click "Start{' '}
+                      {orchestrateMode === 'scan' ? 'Scanning' : 'Printing'}" to begin the operation
+                      with these configurations.
                     </Text>
                   </Box>
                 </Stack>
               </ModalBody>
-              <ModalFooter py="1.5rem" px="2.5rem" borderTop="1px solid" borderColor="whiteAlpha.200">
-                <Button 
-                  variant="ghost" 
-                  mr={3} 
+              <ModalFooter
+                py="1.5rem"
+                px="2.5rem"
+                borderTop="1px solid"
+                borderColor="whiteAlpha.200"
+              >
+                <Button
+                  variant="ghost"
+                  mr={3}
                   onClick={() => setOrchestrateStep(2)}
                   size="lg"
                   leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
@@ -2873,18 +3425,21 @@ const Dashboard: React.FC = () => {
           )}
         </MotionModalContent>
       </Modal>
-      
+
       {/* Voice AI Chat Drawer */}
       <VoiceAIChat isOpen={voiceAIDrawer.isOpen} onClose={voiceAIDrawer.onClose} />
-      
+
       {/* AI Orchestration Overlay */}
-      <OrchestrationOverlay isOpen={orchestrationOverlay.isOpen} onClose={orchestrationOverlay.onClose} />
-      
+      <OrchestrationOverlay
+        isOpen={orchestrationOverlay.isOpen}
+        onClose={orchestrationOverlay.onClose}
+      />
+
       {/* Document Selector Modal */}
       <DocumentSelector
         isOpen={documentSelectorModal.isOpen}
         onClose={documentSelectorModal.onClose}
-        onSelect={(docs) => {
+        onSelect={docs => {
           setSelectedDocuments(docs);
           documentSelectorModal.onClose();
         }}
@@ -2910,4 +3465,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-

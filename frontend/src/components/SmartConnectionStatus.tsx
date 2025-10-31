@@ -44,7 +44,9 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ onStatusC
     phoneCamera: 'Ready to check',
   });
   const [isChecking, setIsChecking] = useState(false);
-  const [overallStatus, setOverallStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>('idle');
+  const [overallStatus, setOverallStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>(
+    'idle'
+  );
 
   const bgCard = useColorModeValue('rgba(255, 255, 255, 0.05)', 'rgba(30, 30, 40, 0.6)');
   const borderColor = useColorModeValue('rgba(69, 202, 255, 0.2)', 'rgba(69, 202, 255, 0.15)');
@@ -55,16 +57,16 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ onStatusC
 
     try {
       // Step 1: Check Phone Wi-Fi Connection
-      setStatus((prev) => ({ ...prev, phoneWiFi: 'checking' }));
-      setDetails((prev) => ({ ...prev, phoneWiFi: 'Checking Wi-Fi link...' }));
-      
+      setStatus(prev => ({ ...prev, phoneWiFi: 'checking' }));
+      setDetails(prev => ({ ...prev, phoneWiFi: 'Checking Wi-Fi link...' }));
+
       const phoneCheck = await apiClient.get('/connection/phone-wifi').catch(() => ({
         data: { connected: false, message: 'Phone not detected on network' },
       }));
-      
+
       const phoneConnected = phoneCheck?.data?.connected;
-      setStatus((prev) => ({ ...prev, phoneWiFi: phoneConnected ? 'connected' : 'failed' }));
-      setDetails((prev) => ({
+      setStatus(prev => ({ ...prev, phoneWiFi: phoneConnected ? 'connected' : 'failed' }));
+      setDetails(prev => ({
         ...prev,
         phoneWiFi: phoneConnected
           ? `Phone connected (${phoneCheck?.data?.ip || 'Network active'})`
@@ -72,16 +74,19 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ onStatusC
       }));
 
       // Step 2: Check Printer Connection
-      setStatus((prev) => ({ ...prev, printerConnection: 'checking' }));
-      setDetails((prev) => ({ ...prev, printerConnection: 'Verifying printer access...' }));
-      
+      setStatus(prev => ({ ...prev, printerConnection: 'checking' }));
+      setDetails(prev => ({ ...prev, printerConnection: 'Verifying printer access...' }));
+
       const printerCheck = await apiClient.get('/connection/printer-status').catch(() => ({
         data: { connected: false, message: 'Printer not responding' },
       }));
-      
+
       const printerConnected = printerCheck?.data?.connected;
-      setStatus((prev) => ({ ...prev, printerConnection: printerConnected ? 'connected' : 'failed' }));
-      setDetails((prev) => ({
+      setStatus(prev => ({
+        ...prev,
+        printerConnection: printerConnected ? 'connected' : 'failed',
+      }));
+      setDetails(prev => ({
         ...prev,
         printerConnection: printerConnected
           ? `Printer ready (${printerCheck?.data?.model || 'Connected'})`
@@ -89,24 +94,26 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ onStatusC
       }));
 
       // Step 3: Check Phone Camera Readiness
-      setStatus((prev) => ({ ...prev, phoneCamera: 'checking' }));
-      setDetails((prev) => ({ ...prev, phoneCamera: 'Checking camera session...' }));
-      
+      setStatus(prev => ({ ...prev, phoneCamera: 'checking' }));
+      setDetails(prev => ({ ...prev, phoneCamera: 'Checking camera session...' }));
+
       const cameraCheck = await apiClient.get('/connection/camera-ready').catch(() => ({
         data: { ready: false, message: 'Camera session not detected' },
       }));
-      
+
       const cameraReady = cameraCheck?.data?.ready;
-      setStatus((prev) => ({ ...prev, phoneCamera: cameraReady ? 'connected' : 'failed' }));
-      setDetails((prev) => ({
+      setStatus(prev => ({ ...prev, phoneCamera: cameraReady ? 'connected' : 'failed' }));
+      setDetails(prev => ({
         ...prev,
-        phoneCamera: cameraReady ? 'Camera ready' : cameraCheck?.data?.message || 'Camera session not detected',
+        phoneCamera: cameraReady
+          ? 'Camera ready'
+          : cameraCheck?.data?.message || 'Camera session not detected',
       }));
 
       // Determine overall status
       const allConnected = phoneConnected && printerConnected && cameraReady;
       setOverallStatus(allConnected ? 'success' : 'failed');
-      
+
       if (onStatusComplete) {
         onStatusComplete(allConnected);
       }
@@ -139,11 +146,12 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ onStatusC
           left: 0,
           right: 0,
           bottom: 0,
-          background: overallStatus === 'success'
-            ? 'linear-gradient(135deg, rgba(72, 187, 120, 0.1) 0%, rgba(72, 187, 120, 0) 100%)'
-            : overallStatus === 'failed'
-            ? 'linear-gradient(135deg, rgba(245, 101, 101, 0.1) 0%, rgba(245, 101, 101, 0) 100%)'
-            : 'transparent',
+          background:
+            overallStatus === 'success'
+              ? 'linear-gradient(135deg, rgba(72, 187, 120, 0.1) 0%, rgba(72, 187, 120, 0) 100%)'
+              : overallStatus === 'failed'
+                ? 'linear-gradient(135deg, rgba(245, 101, 101, 0.1) 0%, rgba(245, 101, 101, 0) 100%)'
+                : 'transparent',
           pointerEvents: 'none',
         }}
       >
@@ -278,8 +286,9 @@ const ConnectionDevice: React.FC<{
   status: string;
   details: string;
 }> = ({ label, status, details }) => {
-  const statusColor = status === 'connected' ? 'green.400' : status === 'failed' ? 'red.400' : 'yellow.400';
-  
+  const statusColor =
+    status === 'connected' ? 'green.400' : status === 'failed' ? 'red.400' : 'yellow.400';
+
   return (
     <Tooltip label={details} placement="top">
       <VStack spacing={1} align="center">
@@ -334,7 +343,7 @@ const StatusItem: React.FC<{
   details: string;
 }> = ({ label, status, details }) => {
   const statusColor = status === 'connected' ? 'green' : status === 'failed' ? 'red' : 'yellow';
-  
+
   return (
     <HStack spacing={3} justify="space-between" p={2} borderRadius="md" bg="rgba(0,0,0,0.2)">
       <HStack spacing={2} flex={1}>

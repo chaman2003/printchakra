@@ -50,7 +50,7 @@ const FancySelect: React.FC<FancySelectProps> = ({
   const borderColor = useColorModeValue('brand.200', 'rgba(121,95,238,0.3)');
   const menuBg = useColorModeValue('white', 'rgba(12, 16, 35, 0.95)');
 
-  const selectedOption = options.find((opt) => opt.value === value);
+  const selectedOption = options.find(opt => opt.value === value);
   const displayValue = isCustom ? customValue : selectedOption?.label || placeholder;
 
   const handleCustomMode = () => {
@@ -90,7 +90,7 @@ const FancySelect: React.FC<FancySelectProps> = ({
           boxShadow="lg"
           zIndex={10}
         >
-          {options.map((option) => (
+          {options.map(option => (
             <MenuItem
               key={option.value}
               onClick={() => {
@@ -130,11 +130,11 @@ const FancySelect: React.FC<FancySelectProps> = ({
                     <Input
                       placeholder="Enter custom value..."
                       value={customValue}
-                      onChange={(e) => {
+                      onChange={e => {
                         e.stopPropagation();
                         onCustomChange(e.target.value);
                       }}
-                      onClick={(e) => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
                       size="sm"
                       mt={2}
                     />

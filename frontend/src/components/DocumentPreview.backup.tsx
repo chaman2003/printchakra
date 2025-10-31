@@ -18,12 +18,7 @@ import {
   Badge,
   Tooltip,
 } from '@chakra-ui/react';
-import {
-  FiZoomIn,
-  FiZoomOut,
-  FiMaximize,
-  FiMinimize,
-} from 'react-icons/fi';
+import { FiZoomIn, FiZoomOut, FiMaximize, FiMinimize } from 'react-icons/fi';
 import Iconify from './Iconify';
 
 interface DocumentPage {
@@ -47,7 +42,11 @@ interface DocumentPreviewProps {
   isLoading?: boolean;
 }
 
-const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSettings, isLoading = false }) => {
+const DocumentPreview: React.FC<DocumentPreviewProps> = ({
+  documents,
+  previewSettings,
+  isLoading = false,
+}) => {
   const [currentDocIndex, setCurrentDocIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -66,30 +65,68 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   const currentDoc = documents[currentDocIndex];
   const totalPages = currentDoc?.pages?.length || 1;
 
-  useEffect(() => { const measure = () => { const el = containerRef.current; if (!el) return; const rect = el.getBoundingClientRect(); setContainerSize({ width: Math.round(rect.width), height: Math.round(rect.height) }); }; measure(); window.addEventListener('resize', measure); let ro: ResizeObserver | null = null; try { ro = new ResizeObserver(measure); if (containerRef.current) ro.observe(containerRef.current); } catch (e) {} return () => { window.removeEventListener('resize', measure); if (ro && containerRef.current) ro.unobserve(containerRef.current); }; }, []);
+  useEffect(() => {
+    const measure = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setContainerSize({ width: Math.round(rect.width), height: Math.round(rect.height) });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    let ro: ResizeObserver | null = null;
+    try {
+      ro = new ResizeObserver(measure);
+      if (containerRef.current) ro.observe(containerRef.current);
+    } catch (e) {}
+    return () => {
+      window.removeEventListener('resize', measure);
+      if (ro && containerRef.current) ro.unobserve(containerRef.current);
+    };
+  }, []);
 
   const thumbnailWidth = showThumbnails ? (containerSize.width < 800 ? 100 : 140) : 0;
   const paddingSpace = 56;
   const availableWidth = Math.max(300, containerSize.width - thumbnailWidth - paddingSpace);
-  const imageDisplayWidth = Math.max(220, Math.min(availableWidth * (zoomLevel / 100), availableWidth * 3));
+  const imageDisplayWidth = Math.max(
+    220,
+    Math.min(availableWidth * (zoomLevel / 100), availableWidth * 3)
+  );
 
-  useEffect(() => { if (zoomMode === 'fit-width') setZoomLevel(100); else if (zoomMode === 'fit-page') setZoomLevel(85); }, [zoomMode]);
+  useEffect(() => {
+    if (zoomMode === 'fit-width') setZoomLevel(100);
+    else if (zoomMode === 'fit-page') setZoomLevel(85);
+  }, [zoomMode]);
 
-  const handleZoomIn = useCallback(() => { setZoomLevel((v) => Math.min(v + 10, 400)); setZoomMode('custom'); }, []);
-  const handleZoomOut = useCallback(() => { setZoomLevel((v) => Math.max(v - 10, 25)); setZoomMode('custom'); }, []);
-  const handleFullscreen = useCallback(() => { if (!document.fullscreenElement) { containerRef.current?.requestFullscreen(); setIsFullscreen(true); } else { document.exitFullscreen(); setIsFullscreen(false); } }, []);
+  const handleZoomIn = useCallback(() => {
+    setZoomLevel(v => Math.min(v + 10, 400));
+    setZoomMode('custom');
+  }, []);
+  const handleZoomOut = useCallback(() => {
+    setZoomLevel(v => Math.max(v - 10, 25));
+    setZoomMode('custom');
+  }, []);
+  const handleFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }, []);
 
   if (documents.length === 0) {
     return (
-      <Flex 
-        direction="column" 
-        align="center" 
-        justify="center" 
-        h="100%" 
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        h="100%"
         minH="600px"
-        bg={bgColor} 
-        borderRadius="md" 
-        border="1px solid" 
+        bg={bgColor}
+        borderRadius="md"
+        border="1px solid"
         borderColor={borderColor}
         p={8}
         position="relative"
@@ -110,13 +147,15 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         >
           <VStack spacing={4}>
             <Iconify icon="solar:document-bold" width={64} height={64} color="gray.300" />
-            <Text fontSize="lg" fontWeight="500" color="gray.500">No Document Selected</Text>
+            <Text fontSize="lg" fontWeight="500" color="gray.500">
+              No Document Selected
+            </Text>
             <Text fontSize="sm" color="gray.400" textAlign="center" maxW="280px">
               Select a document to see preview
             </Text>
           </VStack>
         </Box>
-        
+
         {/* Page indicator at bottom */}
         <Text mt={6} fontSize="sm" color="text.muted" fontWeight="500">
           Ready to preview
@@ -126,25 +165,25 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
   }
 
   return (
-    <Box 
-      ref={containerRef} 
-      bg={useColorModeValue('white', 'rgba(12,16,35,0.95)')} 
-      borderRadius="md" 
-      border="1px solid" 
-      borderColor={borderColor} 
-      overflow="hidden" 
-      position="relative" 
-      h="100%" 
+    <Box
+      ref={containerRef}
+      bg={useColorModeValue('white', 'rgba(12,16,35,0.95)')}
+      borderRadius="md"
+      border="1px solid"
+      borderColor={borderColor}
+      overflow="hidden"
+      position="relative"
+      h="100%"
       minH="600px"
       boxShadow="0 2px 8px rgba(0,0,0,0.08)"
     >
-      <Flex 
-        px={5} 
-        py={3} 
-        borderBottom="1px solid" 
-        borderColor={borderColor} 
-        bg={useColorModeValue('#f5f5f5','rgba(12,16,35,0.95)')} 
-        justify="space-between" 
+      <Flex
+        px={5}
+        py={3}
+        borderBottom="1px solid"
+        borderColor={borderColor}
+        bg={useColorModeValue('#f5f5f5', 'rgba(12,16,35,0.95)')}
+        justify="space-between"
         align="center"
       >
         <HStack spacing={3}>
@@ -161,22 +200,27 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         <HStack spacing={2}>
           <ButtonGroup size="sm" isAttached variant="outline">
             <Tooltip label="Zoom Out">
-              <IconButton 
-                aria-label="Zoom out" 
-                icon={<Iconify icon={FiZoomOut} boxSize={4} />} 
-                onClick={handleZoomOut} 
+              <IconButton
+                aria-label="Zoom out"
+                icon={<Iconify icon={FiZoomOut} boxSize={4} />}
+                onClick={handleZoomOut}
                 isDisabled={zoomLevel <= 25}
                 bg="white"
               />
             </Tooltip>
-            <Button minW="70px" onClick={() => setZoomMode('fit-width')} bg="white" fontWeight="500">
+            <Button
+              minW="70px"
+              onClick={() => setZoomMode('fit-width')}
+              bg="white"
+              fontWeight="500"
+            >
               {zoomLevel}%
             </Button>
             <Tooltip label="Zoom In">
-              <IconButton 
-                aria-label="Zoom in" 
-                icon={<Iconify icon={FiZoomIn} boxSize={4} />} 
-                onClick={handleZoomIn} 
+              <IconButton
+                aria-label="Zoom in"
+                icon={<Iconify icon={FiZoomIn} boxSize={4} />}
+                onClick={handleZoomIn}
                 isDisabled={zoomLevel >= 400}
                 bg="white"
               />
@@ -184,11 +228,11 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           </ButtonGroup>
 
           <Tooltip label={showThumbnails ? 'Hide Thumbnails' : 'Show Thumbnails'}>
-            <IconButton 
-              aria-label="Toggle thumbnails" 
-              icon={<Iconify icon="solar:sidebar-bold" boxSize={4} />} 
-              size="sm" 
-              variant={showThumbnails ? 'solid' : 'outline'} 
+            <IconButton
+              aria-label="Toggle thumbnails"
+              icon={<Iconify icon="solar:sidebar-bold" boxSize={4} />}
+              size="sm"
+              variant={showThumbnails ? 'solid' : 'outline'}
               colorScheme={showThumbnails ? 'brand' : 'gray'}
               onClick={() => setShowThumbnails(s => !s)}
               bg={showThumbnails ? undefined : 'white'}
@@ -196,10 +240,10 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
           </Tooltip>
 
           <Tooltip label={isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen'}>
-            <IconButton 
-              aria-label="Toggle fullscreen" 
-              icon={<Iconify icon={isFullscreen ? FiMinimize : FiMaximize} boxSize={4} />} 
-              size="sm" 
+            <IconButton
+              aria-label="Toggle fullscreen"
+              icon={<Iconify icon={isFullscreen ? FiMinimize : FiMaximize} boxSize={4} />}
+              size="sm"
               onClick={handleFullscreen}
               bg="white"
             />
@@ -208,7 +252,47 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
       </Flex>
 
       <Flex h={isFullscreen ? 'calc(100vh - 64px)' : 'calc(100% - 64px)'}>
-        {showThumbnails && (<VStack w={`${thumbnailWidth}px`} borderRight="1px solid" borderColor={borderColor} bg={thumbnailBg} p={2} spacing={2} overflowY="auto">{currentDoc?.pages?.map((page)=> (<Box key={page.pageNumber} w="100%" cursor="pointer" onClick={()=>setCurrentPage(page.pageNumber)} borderRadius="md" overflow="hidden" bg={bgColor} transition="all 0.15s"><Box h={{base:'70px', md:'100px'}} bg="gray.700">{page.thumbnailUrl ? <img src={page.thumbnailUrl} alt={`Page ${page.pageNumber}`} style={{width:'100%', height:'100%', objectFit:'cover'}} /> : <Flex align="center" justify="center" h="100%"><Text color="whiteAlpha.700">{page.pageNumber}</Text></Flex>}</Box><Text fontSize="xs" textAlign="center" py={1}>Page {page.pageNumber}</Text></Box>))}</VStack>)}
+        {showThumbnails && (
+          <VStack
+            w={`${thumbnailWidth}px`}
+            borderRight="1px solid"
+            borderColor={borderColor}
+            bg={thumbnailBg}
+            p={2}
+            spacing={2}
+            overflowY="auto"
+          >
+            {currentDoc?.pages?.map(page => (
+              <Box
+                key={page.pageNumber}
+                w="100%"
+                cursor="pointer"
+                onClick={() => setCurrentPage(page.pageNumber)}
+                borderRadius="md"
+                overflow="hidden"
+                bg={bgColor}
+                transition="all 0.15s"
+              >
+                <Box h={{ base: '70px', md: '100px' }} bg="gray.700">
+                  {page.thumbnailUrl ? (
+                    <img
+                      src={page.thumbnailUrl}
+                      alt={`Page ${page.pageNumber}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    <Flex align="center" justify="center" h="100%">
+                      <Text color="whiteAlpha.700">{page.pageNumber}</Text>
+                    </Flex>
+                  )}
+                </Box>
+                <Text fontSize="xs" textAlign="center" py={1}>
+                  Page {page.pageNumber}
+                </Text>
+              </Box>
+            ))}
+          </VStack>
+        )}
 
         <Flex flex={1} align="center" justify="center" p={8} overflowY="auto" bg={bgColor}>
           {isLoading ? (
@@ -217,7 +301,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
               <Text color="text.muted">Loading preview...</Text>
             </VStack>
           ) : (
-            <Box 
+            <Box
               width={`${imageDisplayWidth}px`}
               maxW="90%"
               transition="all 0.25s ease"
@@ -230,25 +314,28 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
               position="relative"
             >
               {currentDoc?.thumbnailUrl ? (
-                <img 
-                  src={currentDoc.thumbnailUrl} 
-                  alt={currentDoc.filename} 
+                <img
+                  src={currentDoc.thumbnailUrl}
+                  alt={currentDoc.filename}
                   style={{
                     width: '100%',
                     height: 'auto',
                     display: 'block',
-                    filter: previewSettings?.colorMode === 'grayscale' 
-                      ? 'grayscale(100%)' 
-                      : previewSettings?.colorMode === 'bw' 
-                      ? 'grayscale(100%) contrast(2)' 
-                      : 'none',
-                  }} 
+                    filter:
+                      previewSettings?.colorMode === 'grayscale'
+                        ? 'grayscale(100%)'
+                        : previewSettings?.colorMode === 'bw'
+                          ? 'grayscale(100%) contrast(2)'
+                          : 'none',
+                  }}
                 />
               ) : (
                 <Flex align="center" justify="center" minH={{ base: '400px', md: '600px' }} p={8}>
                   <VStack spacing={3}>
                     <Iconify icon="solar:document-bold" width={56} height={56} color="gray.300" />
-                    <Text color="gray.500" fontSize="md">Preview not available</Text>
+                    <Text color="gray.500" fontSize="md">
+                      Preview not available
+                    </Text>
                   </VStack>
                 </Flex>
               )}
@@ -259,12 +346,12 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
 
       {/* Bottom Footer - Sheet Count (Windows-like) */}
       {documents.length > 0 && (
-        <Flex 
-          px={5} 
-          py={2} 
-          borderTop="1px solid" 
+        <Flex
+          px={5}
+          py={2}
+          borderTop="1px solid"
           borderColor={borderColor}
-          bg={useColorModeValue('#f5f5f5','rgba(12,16,35,0.95)')} 
+          bg={useColorModeValue('#f5f5f5', 'rgba(12,16,35,0.95)')}
           justify="center"
           align="center"
         >
