@@ -2067,25 +2067,51 @@ const Dashboard: React.FC = () => {
                 </Stack>
               </Grid>
               </ModalBody>
-              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200">
-                <Button 
-                  variant="ghost" 
-                  mr={3} 
-                  onClick={() => setOrchestrateStep(1)}
-                  size="lg"
-                  leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
-                >
-                  Back
-                </Button>
-                <Button 
-                  colorScheme="brand" 
-                  onClick={() => setOrchestrateStep(3)}
-                  size="lg"
-                  px={8}
-                  rightIcon={<Iconify icon="solar:arrow-right-bold" width={20} height={20} />}
-                >
-                  Review Settings
-                </Button>
+              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
+                <HStack spacing={4}>
+                  {selectedDocuments.length > 0 && (
+                    <>
+                      <HStack spacing={2} fontSize="sm">
+                        <Iconify icon="solar:document-bold" width={16} height={16} />
+                        <Text fontWeight="500">
+                          {selectedDocuments.length} {selectedDocuments.length === 1 ? 'sheet' : 'sheets'}
+                        </Text>
+                      </HStack>
+                      <HStack spacing={2}>
+                        <Badge colorScheme="blue" fontSize="xs">
+                          {orchestrateOptions.scanPaperSize}
+                        </Badge>
+                        <Badge colorScheme="purple" fontSize="xs" textTransform="uppercase">
+                          {orchestrateOptions.scanLayout}
+                        </Badge>
+                        {orchestrateOptions.scanColorMode !== 'color' && (
+                          <Badge colorScheme="gray" fontSize="xs" textTransform="uppercase">
+                            {orchestrateOptions.scanColorMode}
+                          </Badge>
+                        )}
+                      </HStack>
+                    </>
+                  )}
+                </HStack>
+                <HStack>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setOrchestrateStep(1)}
+                    size="lg"
+                    leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    colorScheme="brand" 
+                    onClick={() => setOrchestrateStep(3)}
+                    size="lg"
+                    px={8}
+                    rightIcon={<Iconify icon="solar:arrow-right-bold" width={20} height={20} />}
+                  >
+                    Review Settings
+                  </Button>
+                </HStack>
               </ModalFooter>
             </>
           )}
@@ -2429,13 +2455,46 @@ const Dashboard: React.FC = () => {
                 </Stack>
               </Grid>
               </ModalBody>
-              <ModalFooter>
-                <Button variant="ghost" mr={3} onClick={() => setOrchestrateStep(1)}>
-                  Back
-                </Button>
-                <Button colorScheme="brand" onClick={() => setOrchestrateStep(3)}>
-                  Continue →
-                </Button>
+              <ModalFooter py={6} px={10} borderTop="1px solid" borderColor="whiteAlpha.200" display="flex" justifyContent="space-between" alignItems="center">
+                <HStack spacing={4}>
+                  {selectedDocuments.length > 0 && (
+                    <>
+                      <HStack spacing={2} fontSize="sm">
+                        <Iconify icon="solar:document-bold" width={16} height={16} />
+                        <Text fontWeight="500">
+                          {selectedDocuments.length} {selectedDocuments.length === 1 ? 'sheet' : 'sheets'}
+                        </Text>
+                      </HStack>
+                      <HStack spacing={2}>
+                        <Badge colorScheme="blue" fontSize="xs">
+                          {orchestrateOptions.printPaperSize}
+                        </Badge>
+                        <Badge colorScheme="purple" fontSize="xs" textTransform="uppercase">
+                          {orchestrateOptions.printLayout}
+                        </Badge>
+                      </HStack>
+                    </>
+                  )}
+                </HStack>
+                <HStack>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => setOrchestrateStep(1)}
+                    size="lg"
+                    leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    colorScheme="nebula" 
+                    onClick={() => setOrchestrateStep(3)}
+                    size="lg"
+                    px={8}
+                    rightIcon={<Iconify icon="solar:arrow-right-bold" width={20} height={20} />}
+                  >
+                    Review Settings
+                  </Button>
+                </HStack>
               </ModalFooter>
             </>
           )}

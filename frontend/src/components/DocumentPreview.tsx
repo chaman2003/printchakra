@@ -360,47 +360,6 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({ documents, previewSet
         </Flex>
       </Flex>
 
-      {/* Bottom Footer */}
-      {documents.length > 0 && (
-        <Flex 
-          px={{ base: 3, md: 4 }} 
-          py={2}
-          borderTop="1px solid" 
-          borderColor={borderColor}
-          bg="rgba(12,16,35,0.4)"
-          backdropFilter="blur(10px)"
-          justify="space-between"
-          align="center"
-          flexShrink={0}
-          gap={2}
-          flexWrap="wrap"
-        >
-          <HStack spacing={2} fontSize={{ base: 'xs', md: 'sm' }}>
-            <Iconify icon="solar:document-bold" width={14} height={14} color="whiteAlpha.700" />
-            <Text color="whiteAlpha.800" fontWeight="500">
-              {documents.length} {documents.length === 1 ? 'sheet' : 'sheets'}
-            </Text>
-          </HStack>
-
-          <HStack spacing={2} fontSize={{ base: 'xs', md: 'sm' }}>
-            {previewSettings?.paperSize && (
-              <Badge colorScheme="blue" fontSize="xs">
-                {previewSettings.paperSize}
-              </Badge>
-            )}
-            {previewSettings?.layout && (
-              <Badge colorScheme="purple" fontSize="xs">
-                {previewSettings.layout}
-              </Badge>
-            )}
-            {previewSettings?.colorMode && previewSettings.colorMode !== 'color' && (
-              <Badge colorScheme="gray" fontSize="xs">
-                {previewSettings.colorMode}
-              </Badge>
-            )}
-          </HStack>
-        </Flex>
-      )}
     </Box>
   );
 };
