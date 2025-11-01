@@ -84,6 +84,7 @@ import VoiceAIChat from '../components/VoiceAIChat';
 import ConnectionValidator from '../components/ConnectionValidator';
 import DocumentSelector from '../components/DocumentSelector';
 import DocumentPreview from '../components/DocumentPreview';
+import OrchestrationVoiceControl from '../components/OrchestrationVoiceControl';
 
 // Motion components
 const MotionBox = motion(Box);
@@ -304,6 +305,9 @@ const Dashboard: React.FC = () => {
 
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
+
+  // Ref for scrolling the modal body
+  const modalBodyRef = React.useRef<HTMLDivElement>(null);
 
   // Load saved defaults from localStorage on mount
   useEffect(() => {
@@ -640,6 +644,144 @@ const Dashboard: React.FC = () => {
         description: err.response?.data?.error || err.message,
         status: 'error',
       });
+    }
+  };
+
+  // Voice command handler for orchestration modal
+  const handleVoiceCommand = (command: string, params?: any) => {
+    console.log('🎤 Voice command received:', command, params);
+
+    switch (command) {
+      case 'SELECT_DOCUMENT':
+        documentSelectorModal.onOpen();
+        toast({
+          title: '📄 Opening Document Selector',
+          status: 'info',
+          duration: 2000,
+        });
+        break;
+
+      case 'SCROLL_DOWN':
+        if (modalBodyRef.current) {
+          modalBodyRef.current.scrollBy({ top: 300, behavior: 'smooth' });
+        }
+        break;
+
+      case 'SCROLL_UP':
+        if (modalBodyRef.current) {
+          modalBodyRef.current.scrollBy({ top: -300, behavior: 'smooth' });
+        }
+        break;
+
+      case 'APPLY_SETTINGS':
+        if (orchestrateStep === 2) {
+          setOrchestrateStep(3);
+          toast({
+            title: '✅ Proceeding to Confirmation',
+            status: 'success',
+            duration: 2000,
+          });
+        } else if (orchestrateStep === 3) {
+          if (orchestrateMode === 'print') {
+            executePrintJob();
+          } else if (orchestrateMode === 'scan') {
+            executeScanJob();
+          }
+        }
+        break;
+
+      case 'GO_BACK':
+        if (orchestrateStep > 1) {
+          setOrchestrateStep(orchestrateStep - 1);
+          toast({
+            title: '⬅️ Going Back',
+            status: 'info',
+            duration: 2000,
+          });
+        }
+        break;
+
+      case 'CANCEL':
+        orchestrateModal.onClose();
+        toast({
+          title: '❌ Orchestration Cancelled',
+          status: 'info',
+          duration: 2000,
+        });
+        break;
+
+      case 'SET_COLOR':
+        if (params?.colorMode) {
+          if (orchestrateMode === 'scan') {
+            setOrchestrateOptions({
+              ...orchestrateOptions,
+              scanColorMode: params.colorMode,
+            });
+          } else if (orchestrateMode === 'print') {
+            setOrchestrateOptions({
+              ...orchestrateOptions,
+              printColorMode: params.colorMode,
+            });
+          }
+          toast({
+            title: `🎨 Color Mode: ${params.colorMode}`,
+            status: 'success',
+            duration: 2000,
+          });
+        }
+        break;
+
+      case 'SET_LAYOUT':
+        if (params?.layout) {
+          if (orchestrateMode === 'scan') {
+            setOrchestrateOptions({
+              ...orchestrateOptions,
+              scanLayout: params.layout,
+            });
+          } else if (orchestrateMode === 'print') {
+            setOrchestrateOptions({
+              ...orchestrateOptions,
+              printLayout: params.layout,
+            });
+          }
+          toast({
+            title: `📄 Layout: ${params.layout}`,
+            status: 'success',
+            duration: 2000,
+          });
+        }
+        break;
+
+      case 'SET_RESOLUTION':
+        if (params?.dpi && orchestrateMode === 'scan') {
+          setOrchestrateOptions({
+            ...orchestrateOptions,
+            scanResolution: String(params.dpi),
+          });
+          toast({
+            title: `🔍 Resolution: ${params.dpi} DPI`,
+            status: 'success',
+            duration: 2000,
+          });
+        }
+        break;
+
+      case 'TOGGLE_OCR':
+        if (orchestrateMode === 'scan') {
+          setOrchestrateOptions({
+            ...orchestrateOptions,
+            scanTextMode: params?.enabled ?? !orchestrateOptions.scanTextMode,
+          });
+          toast({
+            title: params?.enabled ? '✅ OCR Enabled' : '❌ OCR Disabled',
+            status: 'success',
+            duration: 2000,
+          });
+        }
+        break;
+
+      default:
+        console.log('Unknown voice command:', command);
     }
   };
 
@@ -1916,6 +2058,7 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody
+                ref={modalBodyRef}
                 py="1rem"
                 px="1.5rem"
                 maxH={`calc(${MODAL_CONFIG.modalBody.maxHeight})`}
@@ -1933,6 +2076,8 @@ const Dashboard: React.FC = () => {
                   },
                 }}
               >
+                {/* Voice Control - Embedded in Modal */}
+                <OrchestrationVoiceControl mode="scan" onCommand={handleVoiceCommand} />
                 <Grid
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }}
                   gap="1.5rem"
@@ -2494,6 +2639,7 @@ const Dashboard: React.FC = () => {
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
               <ModalBody
+                ref={modalBodyRef}
                 py={4}
                 px={6}
                 maxH="calc(85vh - 140px)"
@@ -2511,6 +2657,9 @@ const Dashboard: React.FC = () => {
                   },
                 }}
               >
+                {/* Voice Control - Embedded in Modal */}
+                <OrchestrationVoiceControl mode="print" onCommand={handleVoiceCommand} />
+                
                 <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={6} alignItems="start">
                   {/* Live Preview - Print Mode (LEFT SIDE) */}
                   <Box
