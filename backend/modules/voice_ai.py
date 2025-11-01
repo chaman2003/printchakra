@@ -518,43 +518,33 @@ class Smollm2ChatService:
         self.model_name = model_name
         self.conversation_history = []
         self.pending_orchestration = None  # Track if waiting for confirmation (print/scan)
-        self.system_prompt = """You are PrintChakra AI. CRITICAL: Detect print/scan intents and respond EXACTLY as specified.
+        self.system_prompt = """You are PrintChakra AI - a direct, action-focused assistant.
 
-INTENT DETECTION (MANDATORY):
-IF user message contains "print" → ASK: "Ready to print. Shall we proceed?"
-IF user message contains "scan" OR "capture" → ASK: "Ready to scan. Shall we proceed?"
-IF previous message asked "Shall we proceed?" AND user says "yes"/"proceed"/"go ahead" → RESPOND: "TRIGGER_ORCHESTRATION:print" (or scan)
+⚠️ CRITICAL: The system handles print/scan intents automatically. You should NEVER see messages about printing or scanning - they are intercepted before reaching you.
 
-STRICT RULES:
-1. ANY mention of "print" MUST trigger: "Ready to print. Shall we proceed?"
-2. ANY mention of "scan" MUST trigger: "Ready to scan. Shall we proceed?"
-3. NEVER have casual conversation about printing - ALWAYS ask confirmation
-4. AFTER user confirms, ALWAYS include "TRIGGER_ORCHESTRATION:" in response
-5. Keep responses under 12 words
+YOUR ROLE:
+- Answer general questions about PrintChakra features (OCR, file conversion, voice commands)
+- Help with document questions ("what formats supported?", "how to use OCR?")
+- Be friendly but concise (under 10 words)
+- If somehow print/scan slips through, immediately say: "Opening interface now!"
 
-EXACT RESPONSE PATTERNS:
-User: "can we print" / "print document" / "print this" / "let's print"
-→ You: "Ready to print. Shall we proceed?"
+TOPICS YOU HANDLE:
+✅ "What can PrintChakra do?" → "OCR, file conversion, printing, scanning, voice commands!"
+✅ "What formats do you support?" → "PDF, DOCX, images, text files, and more!"
+✅ "How does voice work?" → "Just say 'Hey' then your command!"
 
-User: "can we scan" / "scan document" / "scan this" / "let's scan"
-→ You: "Ready to scan. Shall we proceed?"
+NEVER ASK QUESTIONS LIKE:
+❌ "What kind of document?"
+❌ "Academic or business?"
+❌ "What details do you need?"
+❌ "Tell me more about..."
 
-User: "yes" / "proceed" / "go ahead" / "okay" (AFTER "Shall we proceed?")
-→ You: "TRIGGER_ORCHESTRATION:print" (or scan based on context)
+BE DIRECT:
+- User: "thanks" → You: "You're welcome!"
+- User: "what do you do?" → You: "I help with printing, scanning, and documents!"
+- User: "great" → You: "Happy to help!"
 
-User: "print 3 copies landscape"
-→ You: "Ready: 3 copies, landscape. Shall we proceed?"
-
-CONFIGURATION EXTRACTION (optional):
-- Detect: color, grayscale, landscape, portrait, DPI numbers, copies, pages
-
-NEVER:
-- Don't chat about printing - immediately ask to proceed
-- Don't explain options - just confirm and trigger
-- Don't ask what kind of document - just proceed
-- Don't be overly conversational - be direct
-
-FOR NON-PRINT/SCAN QUESTIONS: Keep under 8 words, be helpful."""
+Remember: Print/scan requests are handled automatically - you won't see them."""
 
     def check_ollama_available(self) -> bool:
         """Check if Ollama is running and model is available"""
@@ -593,36 +583,44 @@ FOR NON-PRINT/SCAN QUESTIONS: Keep under 8 words, be helpful."""
         try:
             import requests
 
-            user_lower = user_message.lower()
-
-            # Check if user is confirming a pending orchestration
-            confirmation_words = ["yes", "proceed", "go ahead", "okay", "sure", "yep", "yeah"]
-            is_confirmation = any(word in user_lower for word in confirmation_words)
-
-            # If confirming and we have pending orchestration, trigger it
-            if is_confirmation and self.pending_orchestration:
-                mode = self.pending_orchestration
-                self.pending_orchestration = None  # Clear pending state
-                
-                ai_response = f"TRIGGER_ORCHESTRATION:{mode} Opening {mode} interface now!"
-                
-                # Add to history
-                self.conversation_history.append({"role": "user", "content": user_message})
-                self.conversation_history.append({"role": "assistant", "content": ai_response})
-                
-                return {
-                    "success": True,
-                    "response": ai_response,
-                    "model": self.model_name,
-                    "timestamp": datetime.now().isoformat(),
-                    "tts_enabled": TTS_AVAILABLE,
-                    "spoken": False,
-                }
+            user_lower = user_message.lower().strip()
             
-            # Check for print/scan intent
+            logger.info(f"🔍 Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
+
+            # PRIORITY 1: Check for confirmation if we have pending orchestration
+            if self.pending_orchestration:
+                confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye"]
+                is_confirmation = any(user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words)
+                
+                if is_confirmation:
+                    mode = self.pending_orchestration
+                    self.pending_orchestration = None  # Clear pending state
+                    
+                    ai_response = f"TRIGGER_ORCHESTRATION:{mode} Opening {mode} interface now!"
+                    logger.info(f"✅ TRIGGERING ORCHESTRATION: {mode}")
+                    
+                    # Add to history
+                    self.conversation_history.append({"role": "user", "content": user_message})
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    
+                    return {
+                        "success": True,
+                        "response": ai_response,
+                        "model": self.model_name,
+                        "timestamp": datetime.now().isoformat(),
+                        "tts_enabled": TTS_AVAILABLE,
+                        "spoken": False,
+                    }
+                else:
+                    # User said something else - clear pending and continue conversation
+                    logger.info(f"⚠️ User response not a confirmation, clearing pending state")
+                    self.pending_orchestration = None
+            
+            # PRIORITY 2: Check for print/scan intent
             if "print" in user_lower:
                 self.pending_orchestration = "print"
                 ai_response = "Ready to print. Shall we proceed?"
+                logger.info(f"🖨️ Print intent detected, setting pending_orchestration = print")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -639,6 +637,7 @@ FOR NON-PRINT/SCAN QUESTIONS: Keep under 8 words, be helpful."""
             if "scan" in user_lower or "capture" in user_lower:
                 self.pending_orchestration = "scan"
                 ai_response = "Ready to scan. Shall we proceed?"
+                logger.info(f"📷 Scan intent detected, setting pending_orchestration = scan")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
