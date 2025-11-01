@@ -1112,7 +1112,7 @@ const Dashboard: React.FC = () => {
       minH="100vh" 
       w="100%"
       overflow="hidden" 
-      pos="relative"
+      position="relative"
     >
       {/* Main Content Area */}
       <Box 
