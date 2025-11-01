@@ -12,14 +12,11 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { FiLayout, FiMoon, FiSmartphone, FiSun } from 'react-icons/fi';
-import { motion } from 'framer-motion';
 import Dashboard from './pages/Dashboard';
 import Phone from './pages/Phone';
 import Iconify from './components/Iconify';
 import AnimatedBackground from './components/AnimatedBackground';
 import { SocketProvider } from './context/SocketContext';
-
-const MotionBox = motion(Box);
 
 function App() {
   const { colorMode, toggleColorMode } = useColorMode();
@@ -47,7 +44,7 @@ function App() {
             <Container maxW="7xl" py={4}>
               <Flex align="center" justify="space-between">
                 <HStack spacing={3}>
-                  <MotionBox
+                  <Box
                     bgGradient="linear(to-r, brand.400, nebula.400)"
                     borderRadius="xl"
                     px={3}
@@ -55,83 +52,62 @@ function App() {
                     color="white"
                     fontSize="lg"
                     fontWeight="bold"
-                    animate={{
-                      boxShadow: [
-                        '0 0 0 rgba(121,95,238,0.66)',
-                        '0 0 28px rgba(69,202,255,0.45)',
-                        '0 0 0 rgba(121,95,238,0.66)',
-                      ],
-                    }}
-                    transition={{ duration: 6, repeat: Infinity }}
                   >
                     <Text as="span" mr={2}>
                       📄
                     </Text>
                     PrintChakra
-                  </MotionBox>
+                  </Box>
                   <Text fontSize="sm" color="text.muted">
                     All in One Document Solution is here!
                   </Text>
                 </HStack>
 
                 <HStack spacing={2}>
-                  <MotionBox whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button
-                      as={RouterLink}
-                      to="/"
-                      variant="ghost"
-                      leftIcon={<Iconify icon={FiLayout} boxSize={5} />}
-                      fontWeight="600"
-                      _hover={{ bg: 'brand.50', color: 'brand.600', transform: 'translateY(-2px)' }}
-                      transition="all 0.3s ease"
-                    >
-                      Dashboard
-                    </Button>
-                  </MotionBox>
-                  <MotionBox whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    <Button
-                      as={RouterLink}
-                      to="/phone"
-                      variant="ghost"
-                      leftIcon={<Iconify icon={FiSmartphone} boxSize={5} />}
-                      fontWeight="600"
-                      _hover={{ bg: 'brand.50', color: 'brand.600', transform: 'translateY(-2px)' }}
-                      transition="all 0.3s ease"
-                    >
-                      Phone Capture
-                    </Button>
-                  </MotionBox>
-                  <MotionBox
-                    whileHover={{ rotate: 180, scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    transition={{ type: 'spring', stiffness: 300 }}
+                  <Button
+                    as={RouterLink}
+                    to="/"
+                    variant="ghost"
+                    leftIcon={<Iconify icon={FiLayout} boxSize={5} />}
+                    fontWeight="600"
+                    _hover={{ bg: 'brand.50', color: 'brand.600', transform: 'translateY(-2px)' }}
+                    transition="all 0.3s ease"
                   >
-                    <IconButton
-                      aria-label="Toggle color mode"
-                      icon={<Iconify icon={colorMode === 'light' ? FiMoon : FiSun} boxSize={5} />}
-                      onClick={toggleColorMode}
-                      variant="ghost"
-                      borderRadius="full"
-                    />
-                  </MotionBox>
+                    Dashboard
+                  </Button>
+                  <Button
+                    as={RouterLink}
+                    to="/phone"
+                    variant="ghost"
+                    leftIcon={<Iconify icon={FiSmartphone} boxSize={5} />}
+                    fontWeight="600"
+                    _hover={{ bg: 'brand.50', color: 'brand.600', transform: 'translateY(-2px)' }}
+                    transition="all 0.3s ease"
+                  >
+                    Phone Capture
+                  </Button>
+                  <IconButton
+                    aria-label="Toggle color mode"
+                    icon={<Iconify icon={colorMode === 'light' ? FiMoon : FiSun} boxSize={5} />}
+                    onClick={toggleColorMode}
+                    variant="ghost"
+                    borderRadius="full"
+                    transition="all 0.3s ease"
+                    _hover={{ transform: 'scale(1.1)' }}
+                  />
                 </HStack>
               </Flex>
             </Container>
           </Box>
 
-          <MotionBox
-            py={10}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-          >
+          <Box py={10}>
             <Container maxW="7xl">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/phone" element={<Phone />} />
               </Routes>
             </Container>
-          </MotionBox>
+          </Box>
         </Box>
       </Router>
     </SocketProvider>
