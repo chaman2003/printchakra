@@ -26,16 +26,8 @@ import {
 } from '@chakra-ui/react';
 import { FiMic, FiMicOff, FiX, FiSend } from 'react-icons/fi';
 import apiClient from '../apiClient';
-import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../utils/audioUtils';
+import { convertToWAV, isValidAudioBlob, getAudioDuration, VoiceMessage, addMessageWithDedup } from '../utils/voiceAIHelpers';
 import Iconify from './Iconify';
-
-interface VoiceMessage {
-  id: string;
-  type: 'user' | 'ai' | 'system';
-  text: string;
-  timestamp: string;
-  count?: number; // Track how many times this message has been repeated
-}
 
 interface VoiceAIChatProps {
   isOpen: boolean;
@@ -109,35 +101,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   }, [isOpen, isSessionActive]);
 
   const addMessage = useCallback((type: 'user' | 'ai' | 'system', text: string) => {
-    setMessages(prev => {
-      // Get the last message
-      const lastMessage = prev[prev.length - 1];
-
-      // Check if this is a duplicate of the last system message
-      if (
-        lastMessage &&
-        lastMessage.type === type &&
-        lastMessage.text === text &&
-        type === 'system'
-      ) {
-        // Increment the counter for this duplicate message
-        const newCount = (lastMessage.count || 1) + 1;
-        const updatedMessage = { ...lastMessage, count: newCount };
-
-        // Replace the last message with the updated count
-        return [...prev.slice(0, -1), updatedMessage];
-      }
-
-      // Otherwise, add a new message
-      const message: VoiceMessage = {
-        id: `${Date.now()}-${Math.random()}`,
-        type,
-        text,
-        timestamp: new Date().toISOString(),
-        count: 1, // Initialize count to 1
-      };
-      return [...prev, message];
-    });
+    setMessages(prev => addMessageWithDedup(prev, type, text));
   }, []);
 
   const startSession = async () => {
