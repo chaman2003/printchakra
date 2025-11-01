@@ -299,8 +299,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       let silenceStart: number | null = null;
       let speechDetected = false;
       let audioContextClosed = false;
-      const SILENCE_THRESHOLD = 25; // Audio level threshold
-      const SILENCE_DURATION = 1500; // Stop after 1.5 seconds of silence
+      const SILENCE_THRESHOLD = 15; // Lower threshold for faster detection (was 25)
+      const SILENCE_DURATION = 800; // Stop after 0.8 seconds of silence (was 1500)
 
       const closeAudioContext = () => {
         if (!audioContextClosed && audioContext.state !== 'closed') {
@@ -354,14 +354,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       // Start monitoring audio levels
       checkAudioLevel();
 
-      // Fallback: Auto-stop after 8 seconds maximum
+      // Fallback: Auto-stop after 5 seconds maximum (was 8)
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           console.log('⏱️ Max duration reached - stopping recording');
           stopRecording();
           closeAudioContext();
         }
-      }, 8000);
+      }, 5000);
     } catch (error: any) {
       console.error('Recording error:', error);
       toast({
