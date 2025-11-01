@@ -192,9 +192,12 @@ AI: ✅ Processing your command...
 
 ### 🎯 How to Use Hands-Free Mode
 
-#### Step 1: Open Voice Chat
+#### Step 1: Start AI Orchestration
 1. Click **"Talk with PrintChakra AI"** button (voice icon)
-2. Click **"Start Voice Session"**
+   - **This opens BOTH voice chat AND AI orchestration together!**
+   - Both interfaces appear simultaneously
+   - No need for separate buttons
+2. Click **"Start Voice Session"** in the voice drawer
 3. Wait for: "Voice AI Ready!"
 4. Recording starts automatically
 
@@ -209,9 +212,10 @@ You MUST say wake word first for EVERY command:
 ✅ "Okay, set to landscape"
 ```
 
-#### Step 3: AI Responds
+#### Step 3: AI Responds & Orchestration Updates
 - AI transcribes your speech
 - Displays what it heard: 🎤 Heard: "hey print this document"
+- **Orchestration UI updates in real-time with your commands**
 - Processes command (wake word is stripped)
 - Responds with text AND voice (TTS)
 - Recording resumes automatically
@@ -219,7 +223,8 @@ You MUST say wake word first for EVERY command:
 #### Step 4: Continue Conversation
 - AI listens continuously in 5-second cycles
 - Say wake word for EACH command
-- No need to click buttons
+- Both voice and orchestration stay active
+- **Orchestration panel shows all configuration changes**
 - Say "bye printchakra" to end session
 
 ### 📋 Complete Voice Command Reference
@@ -236,12 +241,12 @@ You MUST say wake word first for EVERY command:
 #### 🖨️ Print Commands
 | Wake Word + Command | Result |
 |---------------------|--------|
-| "Hey, print this document" | Start print workflow |
-| "Hi, print in color" | Print with color mode |
-| "Hello, print 3 copies" | Set copies to 3 |
-| "Okay, landscape mode" | Change to landscape |
-| "Hey, double sided printing" | Enable duplex |
-| "Hi, A4 paper size" | Set paper to A4 |
+| "Hey, print this document" | Start print workflow + orchestration updates |
+| "Hi, print in color" | Print with color mode (orchestration shows) |
+| "Hello, print 3 copies" | Set copies to 3 (live update in orchestration UI) |
+| "Okay, landscape mode" | Change to landscape (orchestration reflects change) |
+| "Hey, double sided printing" | Enable duplex (orchestration shows option) |
+| "Hi, A4 paper size" | Set paper to A4 (orchestration updates)|
 
 #### 📸 Scan Commands
 | Wake Word + Command | Result |
