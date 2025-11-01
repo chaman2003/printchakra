@@ -1104,7 +1104,7 @@ const Dashboard: React.FC = () => {
         overflowY="auto" 
         overflowX="hidden"
         p={6}
-        width={isChatVisible && orchestrateModal.isOpen ? "calc(100% - 900px)" : isChatVisible ? "calc(100% - 450px)" : "100%"}
+        width={isChatVisible && orchestrateModal.isOpen ? "calc(100% - 1050px)" : isChatVisible ? "calc(100% - 450px)" : "100%"}
         transition="width 0.3s"
         css={{
           '&::-webkit-scrollbar': {
@@ -1931,28 +1931,35 @@ const Dashboard: React.FC = () => {
         </DrawerContent>
       </Drawer>
 
-      {/* Orchestrate Print & Capture Modal - Only show as modal when chat is NOT visible */}
-      {!isChatVisible && (
+      {/* Orchestrate Print & Capture Modal */}
       <Modal
         isOpen={orchestrateModal.isOpen}
         onClose={orchestrateModal.onClose}
         size="6xl"
-        isCentered
+        isCentered={!isChatVisible}
         scrollBehavior="inside"
       >
-        <ModalOverlay backdropFilter="blur(16px)" bg="blackAlpha.700" />
+        <ModalOverlay 
+          backdropFilter={isChatVisible ? "none" : "blur(16px)"} 
+          bg={isChatVisible ? "transparent" : "blackAlpha.700"} 
+        />
         <MotionModalContent
           bg={surfaceCard}
-          borderRadius={{ base: 'xl', md: '2xl', lg: '3xl' }}
+          borderRadius={isChatVisible ? "0" : { base: 'xl', md: '2xl', lg: '3xl' }}
           border="1px solid"
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
-          maxH={MODAL_CONFIG.modal.maxHeight}
-          maxW={MODAL_CONFIG.modal.maxWidth}
-          w="auto"
-          h="auto"
-          mx="auto"
-          my="auto"
+          maxH={isChatVisible ? "100vh" : MODAL_CONFIG.modal.maxHeight}
+          maxW={isChatVisible ? "600px" : MODAL_CONFIG.modal.maxWidth}
+          w={isChatVisible ? "600px" : "auto"}
+          h={isChatVisible ? "100vh" : "auto"}
+          mx={isChatVisible ? "0" : "auto"}
+          my={isChatVisible ? "0" : "auto"}
+          ml={isChatVisible ? "0" : "auto"}
+          mr={isChatVisible ? "450px" : "auto"}
+          position={isChatVisible ? "fixed" : "relative"}
+          right={isChatVisible ? "450px" : "auto"}
+          top={isChatVisible ? "0" : "auto"}
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -3628,7 +3635,6 @@ const Dashboard: React.FC = () => {
           )}
         </MotionModalContent>
       </Modal>
-      )}
 
       {/* Document Selector Modal */}
       <DocumentSelector
@@ -3657,164 +3663,6 @@ const Dashboard: React.FC = () => {
       />
         </VStack>
       </Box>
-
-      {/* Orchestration Panel - Side-by-side with AI chat when both are open */}
-      {orchestrateModal.isOpen && isChatVisible && (
-        <Box
-          position="fixed"
-          top={0}
-          right="450px"
-          bottom={0}
-          width="450px"
-          bg={useColorModeValue('white', 'gray.800')}
-          boxShadow="-2px 0 20px rgba(0,0,0,0.2)"
-          zIndex={9999}
-          display="flex"
-          flexDirection="column"
-          overflowY="auto"
-          animation="slideInRight 0.3s ease-out"
-          sx={{
-            '@keyframes slideInRight': {
-              from: {
-                transform: 'translateX(100%)',
-              },
-              to: {
-                transform: 'translateX(0)',
-              },
-            },
-          }}
-        >
-          {/* Orchestration content - simplified view when side-by-side with AI */}
-          <VStack p={6} spacing={6} align="stretch">
-            <Flex justify="space-between" align="center">
-              <HStack>
-                <Box p={2} bg="brand.500" borderRadius="lg" color="white">
-                  <Iconify 
-                    icon={orchestrateMode === 'scan' ? 'solar:document-add-bold-duotone' : 'solar:printer-bold-duotone'} 
-                    width={24} 
-                    height={24} 
-                  />
-                </Box>
-                <Heading size="md">
-                  {orchestrateMode === 'scan' ? 'Scan Configuration' : 'Print Configuration'}
-                </Heading>
-              </HStack>
-              <IconButton
-                aria-label="Close configuration"
-                icon={<Iconify icon="solar:close-circle-bold" boxSize={6} />}
-                variant="ghost"
-                colorScheme="red"
-                onClick={orchestrateModal.onClose}
-              />
-            </Flex>
-
-            <Divider />
-
-            {/* Current Settings Display */}
-            <VStack align="stretch" spacing={4} bg={useColorModeValue('gray.50', 'gray.700')} p={4} borderRadius="lg">
-              <Heading size="sm" color="brand.500">Current Settings</Heading>
-              
-              {orchestrateMode === 'scan' ? (
-                <>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Color Mode:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.scanColorMode}</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Layout:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.scanLayout}</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Resolution:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.scanResolution} DPI</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Paper Size:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.scanPaperSize}</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Text Detection:</Text>
-                    <Badge colorScheme={orchestrateOptions.scanTextMode ? 'green' : 'gray'}>
-                      {orchestrateOptions.scanTextMode ? 'Enabled' : 'Disabled'}
-                    </Badge>
-                  </HStack>
-                </>
-              ) : (
-                <>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Color Mode:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.printColorMode}</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Layout:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.printLayout}</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Resolution:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.printResolution} DPI</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Paper Size:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.printPaperSize}</Badge>
-                  </HStack>
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" fontWeight="600">Scale:</Text>
-                    <Badge colorScheme="purple">{orchestrateOptions.printScale}%</Badge>
-                  </HStack>
-                </>
-              )}
-            </VStack>
-
-            <Divider />
-
-            {/* AI Instructions */}
-            <Box bg="brand.50" _dark={{ bg: 'brand.900' }} p={4} borderRadius="lg" borderLeft="4px solid" borderColor="brand.500">
-              <HStack mb={2}>
-                <Iconify icon="solar:magic-stick-3-bold-duotone" width={20} height={20} color="var(--chakra-colors-brand-500)" />
-                <Heading size="xs" color="brand.500">Use AI to Configure</Heading>
-              </HStack>
-              <Text fontSize="sm" color="text.muted">
-                Talk to the AI assistant on the right to adjust these settings. For example:
-              </Text>
-              <VStack align="stretch" mt={3} spacing={2}>
-                <Text fontSize="xs" color="text.muted" fontStyle="italic">
-                  • "Change color mode to grayscale"
-                </Text>
-                <Text fontSize="xs" color="text.muted" fontStyle="italic">
-                  • "Set resolution to 300 DPI"
-                </Text>
-                <Text fontSize="xs" color="text.muted" fontStyle="italic">
-                  • "Use landscape layout"
-                </Text>
-              </VStack>
-            </Box>
-
-            <Button
-              size="lg"
-              colorScheme="brand"
-              leftIcon={<Iconify icon="solar:settings-bold-duotone" width={20} height={20} />}
-              onClick={() => {
-                setIsChatVisible(false);
-                setTimeout(() => orchestrateModal.onOpen(), 100);
-              }}
-            >
-              Open Full Configuration
-            </Button>
-
-            <Button
-              size="lg"
-              colorScheme="green"
-              leftIcon={<Iconify icon="solar:check-circle-bold" width={20} height={20} />}
-              onClick={() => {
-                setOrchestrateStep(3);
-              }}
-              isDisabled={orchestrateMode === 'print' && selectedDocuments.length === 0}
-            >
-              Continue to Confirmation
-            </Button>
-          </VStack>
-        </Box>
-      )}
 
       {/* AI Chat Modal/Drawer - Opens without affecting layout */}
       {isChatVisible && (
