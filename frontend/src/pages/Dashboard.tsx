@@ -84,7 +84,6 @@ import VoiceAIChat from '../components/VoiceAIChat';
 import ConnectionValidator from '../components/ConnectionValidator';
 import DocumentSelector from '../components/DocumentSelector';
 import DocumentPreview from '../components/DocumentPreview';
-import OrchestrationOverlay from '../components/OrchestrationOverlay';
 
 // Motion components
 const MotionBox = motion(Box);
@@ -302,7 +301,6 @@ const Dashboard: React.FC = () => {
   const orchestrateModal = useDisclosure();
   const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
   const documentSelectorModal = useDisclosure(); // Document selector modal
-  const orchestrationOverlay = useDisclosure(); // AI orchestration overlay
 
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
@@ -1027,10 +1025,7 @@ const Dashboard: React.FC = () => {
             size="lg"
             colorScheme="purple"
             variant="solid"
-            onClick={() => {
-              voiceAIDrawer.onOpen();
-              orchestrationOverlay.onOpen();
-            }}
+            onClick={voiceAIDrawer.onOpen}
             leftIcon={<Iconify icon={FiMic} boxSize={5} />}
             boxShadow="0 4px 14px rgba(147,51,234,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
@@ -3413,12 +3408,6 @@ const Dashboard: React.FC = () => {
 
       {/* Voice AI Chat Drawer */}
       <VoiceAIChat isOpen={voiceAIDrawer.isOpen} onClose={voiceAIDrawer.onClose} />
-
-      {/* AI Orchestration Overlay */}
-      <OrchestrationOverlay
-        isOpen={orchestrationOverlay.isOpen}
-        onClose={orchestrationOverlay.onClose}
-      />
 
       {/* Document Selector Modal */}
       <DocumentSelector
