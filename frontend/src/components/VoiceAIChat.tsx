@@ -285,10 +285,69 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       mediaRecorder.start();
       setIsRecording(true);
 
-      // Auto-stop after 8 seconds for longer phrases (was 5)
+      // Real-time silence detection using Web Audio API
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      let silenceStart: number | null = null;
+      let speechDetected = false;
+      const SILENCE_THRESHOLD = 25; // Audio level threshold
+      const SILENCE_DURATION = 1500; // Stop after 1.5 seconds of silence
+
+      const checkAudioLevel = () => {
+        if (mediaRecorderRef.current?.state !== 'recording') {
+          audioContext.close();
+          return;
+        }
+
+        analyser.getByteTimeDomainData(dataArray);
+
+        // Calculate RMS (Root Mean Square) for audio level
+        let sum = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          const normalized = (dataArray[i] - 128) / 128;
+          sum += normalized * normalized;
+        }
+        const rms = Math.sqrt(sum / bufferLength);
+        const audioLevel = rms * 100;
+
+        // Detect speech vs silence
+        if (audioLevel > SILENCE_THRESHOLD) {
+          speechDetected = true;
+          silenceStart = null; // Reset silence timer
+        } else if (speechDetected && audioLevel <= SILENCE_THRESHOLD) {
+          // Silence detected after speech
+          if (silenceStart === null) {
+            silenceStart = Date.now();
+          } else if (Date.now() - silenceStart > SILENCE_DURATION) {
+            // Silence lasted long enough - stop recording
+            console.log('✅ Silence detected - stopping recording');
+            stopRecording();
+            audioContext.close();
+            return;
+          }
+        }
+
+        // Continue checking
+        requestAnimationFrame(checkAudioLevel);
+      };
+
+      // Start monitoring audio levels
+      checkAudioLevel();
+
+      // Fallback: Auto-stop after 8 seconds maximum
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
+          console.log('⏱️ Max duration reached - stopping recording');
           stopRecording();
+          audioContext.close();
         }
       }, 8000);
     } catch (error: any) {
