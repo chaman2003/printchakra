@@ -23,7 +23,6 @@ import {
   InputGroup,
   InputRightElement,
 } from '@chakra-ui/react';
-import { FiMic, FiMicOff, FiChevronDown, FiChevronUp, FiSend } from 'react-icons/fi';
 import apiClient from '../apiClient';
 import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../utils/audioUtils';
 import Iconify from './Iconify';
@@ -380,7 +379,13 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
         </HStack>
         <IconButton
           aria-label={isExpanded ? 'Collapse' : 'Expand'}
-          icon={isExpanded ? <FiChevronUp /> : <FiChevronDown />}
+          icon={
+            isExpanded ? (
+              <Iconify icon="solar:chevron-up-bold" width={20} height={20} />
+            ) : (
+              <Iconify icon="solar:chevron-down-bold" width={20} height={20} />
+            )
+          }
           size="sm"
           variant="ghost"
         />
@@ -401,12 +406,17 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
             >
               <IconButton
                 aria-label="Voice control"
-                icon={isRecording ? <FiMicOff /> : <FiMic />}
+                icon={
+                  isRecording ? (
+                    <Iconify icon="solar:microphone-slash-bold-duotone" width={28} height={28} />
+                  ) : (
+                    <Iconify icon="solar:microphone-3-bold-duotone" width={28} height={28} />
+                  )
+                }
                 colorScheme={isRecording ? 'red' : 'brand'}
                 size="lg"
                 isRound
                 boxSize="60px"
-                fontSize="24px"
                 onClick={isRecording ? stopRecording : startRecording}
                 isDisabled={isProcessing}
                 boxShadow={isRecording ? '0 0 20px rgba(255,0,0,0.4)' : 'lg'}
@@ -444,7 +454,7 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
               <InputRightElement>
                 <IconButton
                   aria-label="Send command"
-                  icon={<FiSend />}
+                  icon={<Iconify icon="solar:send-bold-duotone" width={20} height={20} />}
                   size="sm"
                   colorScheme="brand"
                   onClick={handleTextCommand}
