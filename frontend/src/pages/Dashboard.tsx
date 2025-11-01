@@ -1092,7 +1092,10 @@ const Dashboard: React.FC = () => {
         mr={isChatVisible ? "450px" : "0"}
         transition="margin-right 0.3s ease-out"
         minH="100vh"
-        p={6}
+        pt={6}
+        px={6}
+        pb={6}
+        pr={isChatVisible ? "0" : "6"}
       >
         <VStack align="stretch" spacing={10} pb={12}>
           <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
