@@ -1083,6 +1083,18 @@ const Dashboard: React.FC = () => {
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
 
+  // Hide scrollbar when chat is visible
+  React.useEffect(() => {
+    if (isChatVisible) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [isChatVisible]);
+
   return (
     <Flex direction="row" h="100vh" overflow="hidden" position="relative">
       {/* Main Content Area */}
@@ -1090,6 +1102,21 @@ const Dashboard: React.FC = () => {
         flex="1" 
         overflowY="auto" 
         p={6}
+        css={{
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: 'transparent',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: 'rgba(121, 95, 238, 0.4)',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb:hover': {
+            background: 'rgba(121, 95, 238, 0.6)',
+          },
+        }}
       >
         <VStack align="stretch" spacing={10} pb={12}>
           <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
