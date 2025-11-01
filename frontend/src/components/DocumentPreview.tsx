@@ -20,14 +20,7 @@ import {
   Badge,
   Tooltip,
 } from '@chakra-ui/react';
-import { motion, AnimatePresence } from 'framer-motion';
 import Iconify from './Iconify';
-
-// Motion components
-const MotionBox = motion(Box);
-const MotionIconButton = motion(IconButton);
-const MotionFlex = motion(Flex);
-const MotionImage = motion.img;
 
 // ==================== PREVIEW SIZE CONFIGURATION ====================
 // A4 paper aspect ratio: 1:1.414 (210mm x 297mm)
@@ -276,7 +269,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
         <HStack spacing={1} flexShrink={0}>
           <ButtonGroup size="sm" isAttached variant="outline">
             <Tooltip label="Zoom Out">
-              <MotionIconButton
+              <IconButton
                 aria-label="Zoom out"
                 icon={<Iconify icon="solar:magnifer-zoom-out-bold" width={14} height={14} />}
                 onClick={handleZoomOut}
@@ -285,8 +278,6 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                 color="white"
                 _hover={{ bg: 'whiteAlpha.300' }}
                 _dark={{ bg: 'whiteAlpha.100' }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
               />
             </Tooltip>
             <Button
@@ -301,7 +292,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               {zoomLevel}%
             </Button>
             <Tooltip label="Zoom In">
-              <MotionIconButton
+              <IconButton
                 aria-label="Zoom in"
                 icon={<Iconify icon="solar:magnifer-zoom-in-bold" width={14} height={14} />}
                 onClick={handleZoomIn}
@@ -310,15 +301,13 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                 color="white"
                 _hover={{ bg: 'whiteAlpha.300' }}
                 _dark={{ bg: 'whiteAlpha.100' }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
               />
             </Tooltip>
           </ButtonGroup>
 
           {/* Rotate Button */}
           <Tooltip label="Rotate 90°">
-            <MotionIconButton
+            <IconButton
               aria-label="Rotate"
               icon={<Iconify icon="solar:refresh-bold" width={14} height={14} />}
               size="sm"
@@ -327,8 +316,6 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               color="white"
               _hover={{ bg: 'whiteAlpha.300' }}
               _dark={{ bg: 'whiteAlpha.100' }}
-              whileHover={{ scale: 1.1, rotate: 90 }}
-              whileTap={{ scale: 0.95 }}
             />
           </Tooltip>
 
@@ -521,11 +508,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               }}
             >
               {currentPageUrl ? (
-                <MotionImage
+                <img
                   key={`${currentDocIndex}-${currentPage}-${rotation}`}
-                  initial={{ opacity: 0, scale: 0.95, rotate: rotation }}
-                  animate={{ opacity: 1, scale: 1, rotate: rotation }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
                   src={currentPageUrl}
                   alt={`${currentDoc.filename} - Page ${currentPage}`}
                   style={{
@@ -536,12 +520,14 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                     display: 'block',
                     objectFit: 'contain',
                     transformOrigin: 'center center',
+                    transform: `rotate(${rotation}deg)`,
                     filter:
                       previewSettings?.colorMode === 'grayscale'
                         ? 'grayscale(100%)'
                         : previewSettings?.colorMode === 'bw'
                           ? 'grayscale(100%) contrast(2)'
                           : 'none',
+                    transition: 'transform 0.3s ease-out',
                   }}
                 />
               ) : (
