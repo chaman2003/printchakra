@@ -1085,58 +1085,14 @@ const Dashboard: React.FC = () => {
   const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
 
   // Prevent scrolling when chat visibility changes
-  useEffect(() => {
-    if (isChatVisible) {
-      // Prevent body scroll when chat opens
-      document.body.style.overflow = 'hidden';
-      
-      // Store current scroll position
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
-      
-      // Prevent scroll
-      window.scrollTo(scrollX, scrollY);
-    } else {
-      // Re-enable body scroll when chat closes
-      document.body.style.overflow = 'auto';
-    }
-    
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, [isChatVisible]);
-
   return (
-    <Flex 
-      direction="row" 
-      minH="100vh" 
-      w="100%"
-      overflow="hidden" 
-      position="relative"
-    >
+    <Box position="relative" minH="100vh">
       {/* Main Content Area */}
       <Box 
-        flex={isChatVisible ? "0 1 auto" : "1"}
-        minW={0}
-        overflowY="auto" 
-        overflowX="hidden"
+        mr={isChatVisible ? "450px" : "0"}
+        transition="margin-right 0.3s ease-out"
+        minH="100vh"
         p={6}
-        transition="flex 0.3s ease-out"
-        css={{
-          '&::-webkit-scrollbar': {
-            width: '8px',
-          },
-          '&::-webkit-scrollbar-track': {
-            background: 'transparent',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: 'rgba(121, 95, 238, 0.4)',
-            borderRadius: '4px',
-          },
-          '&::-webkit-scrollbar-thumb:hover': {
-            background: 'rgba(121, 95, 238, 0.6)',
-          },
-        }}
       >
         <VStack align="stretch" spacing={10} pb={12}>
           <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
@@ -3680,21 +3636,23 @@ const Dashboard: React.FC = () => {
         </VStack>
       </Box>
 
-      {/* AI Chat Sidebar - Pushes content to the left */}
+      {/* AI Chat Sidebar - Independent Fixed Position */}
       {isChatVisible && (
         <Box
+          position="fixed"
+          top="0"
+          right="0"
           w="450px"
-          minW="450px"
-          maxW="450px"
-          minH="100vh"
+          h="100vh"
           bg={useColorModeValue('white', 'gray.800')}
           boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
           display="flex"
           flexDirection="column"
           borderLeft="1px solid"
           borderColor={useColorModeValue('gray.200', 'gray.700')}
-          overflowY="hidden"
-          transition="all 0.3s ease-out"
+          overflowY="auto"
+          zIndex={1000}
+          transition="transform 0.3s ease-out"
         >
           <VoiceAIChat
             isOpen={isChatVisible}
@@ -3752,7 +3710,7 @@ const Dashboard: React.FC = () => {
           />
         </Box>
       )}
-    </Flex>
+    </Box>
   );
 };
 
