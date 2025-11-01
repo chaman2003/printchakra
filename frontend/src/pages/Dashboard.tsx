@@ -1084,18 +1084,6 @@ const Dashboard: React.FC = () => {
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
 
-  // Hide scrollbar when chat is visible
-  React.useEffect(() => {
-    if (isChatVisible) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'auto';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, [isChatVisible]);
-
   return (
     <Flex direction="row" h="100vh" overflow="hidden" position="relative">
       {/* Main Content Area */}
@@ -3664,30 +3652,17 @@ const Dashboard: React.FC = () => {
         </VStack>
       </Box>
 
-      {/* AI Chat Modal/Drawer - Opens without affecting layout */}
+      {/* AI Chat Sidebar - Pushes content to the left */}
       {isChatVisible && (
         <Box
-          position="fixed"
-          top={0}
-          right={0}
-          bottom={0}
           width="450px"
           bg={useColorModeValue('white', 'gray.800')}
           boxShadow="-2px 0 20px rgba(0,0,0,0.2)"
-          zIndex={9999}
           display="flex"
           flexDirection="column"
-          animation="slideInRight 0.3s ease-out"
-          sx={{
-            '@keyframes slideInRight': {
-              from: {
-                transform: 'translateX(100%)',
-              },
-              to: {
-                transform: 'translateX(0)',
-              },
-            },
-          }}
+          borderLeft="1px solid"
+          borderColor={useColorModeValue('gray.200', 'gray.700')}
+          transition="all 0.3s ease"
         >
           <VoiceAIChat
             isOpen={isChatVisible}
@@ -3744,20 +3719,6 @@ const Dashboard: React.FC = () => {
             onToggleMinimize={() => setIsChatVisible(false)}
           />
         </Box>
-      )}
-
-      {/* Backdrop overlay when chat is open (but not when orchestration modal is also open) */}
-      {isChatVisible && !orchestrateModal.isOpen && (
-        <Box
-          position="fixed"
-          top={0}
-          left={0}
-          right={0}
-          bottom={0}
-          bg="rgba(0,0,0,0.3)"
-          zIndex={9998}
-          onClick={() => setIsChatVisible(false)}
-        />
       )}
     </Flex>
   );
