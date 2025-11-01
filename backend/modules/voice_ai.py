@@ -442,7 +442,6 @@ class WhisperTranscriptionService:
                         no_speech_threshold=0.6,  # Higher threshold to filter non-speech sounds
                         logprob_threshold=-0.8,  # Stricter filtering for human voice
                         condition_on_previous_text=True,  # Use context for accuracy
-                        vad_filter=True,  # Voice Activity Detection - filters non-speech
                     )
                     text = result.get("text", "").strip()
                     
