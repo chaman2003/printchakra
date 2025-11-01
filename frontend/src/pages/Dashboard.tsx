@@ -1096,12 +1096,11 @@ const Dashboard: React.FC = () => {
   }, [isChatVisible]);
 
   return (
-    <Flex direction="row" h="100vh" w="100vw" position="relative">
+    <Flex direction="row" h="100vh" overflow="hidden" position="relative">
       {/* Main Content Area */}
       <Box 
         flex="1" 
         overflowY="auto" 
-        overflowX="hidden"
         p={6}
         css={{
           '&::-webkit-scrollbar': {
