@@ -46,9 +46,10 @@ interface VoiceMessage {
 interface VoiceAIChatProps {
   isOpen: boolean;
   onClose: () => void;
+  onOrchestrationTrigger?: (mode: 'print' | 'scan', config?: any) => void;
 }
 
-const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
+const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrationTrigger }) => {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -380,8 +381,16 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
       }
 
       if (response.data.success) {
-        const { user_text, full_text, ai_response, session_ended, keyword_detected } =
-          response.data;
+        const {
+          user_text,
+          full_text,
+          ai_response,
+          session_ended,
+          keyword_detected,
+          orchestration_trigger,
+          orchestration_mode,
+          config_params,
+        } = response.data;
 
         // Add full transcription as system message
         addMessage('system', `🎤 Heard: "${full_text || user_text}"`);
@@ -393,6 +402,31 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
         addMessage('ai', ai_response);
 
         setIsProcessing(false);
+
+        // Check for orchestration trigger BEFORE TTS
+        if (orchestration_trigger && orchestration_mode) {
+          console.log(
+            `🎯 Orchestration triggered: ${orchestration_mode}`,
+            config_params || {}
+          );
+
+          // Show notification about orchestration
+          toast({
+            title: `${orchestration_mode === 'print' ? '🖨️' : '📸'} Opening ${orchestration_mode.charAt(0).toUpperCase() + orchestration_mode.slice(1)} Interface`,
+            description: 'Orchestration system activated',
+            status: 'info',
+            duration: 3000,
+            isClosable: true,
+          });
+
+          // Trigger orchestration in parent component
+          if (onOrchestrationTrigger) {
+            // Delay slightly to allow TTS to start
+            setTimeout(() => {
+              onOrchestrationTrigger(orchestration_mode as 'print' | 'scan', config_params);
+            }, 500);
+          }
+        }
 
         // 2. THEN play TTS (blocking - no input allowed)
         setIsSpeaking(true);
@@ -574,10 +608,34 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose }) => {
 
       if (response.data.success) {
         const aiResponse = response.data.response;
+        const orchestrationTrigger = response.data.orchestration_trigger;
+        const orchestrationMode = response.data.orchestration_mode;
+        const configParams = response.data.config_params;
 
         // 1. Display AI message FIRST
         addMessage('ai', aiResponse);
         setIsProcessing(false);
+
+        // Check for orchestration trigger BEFORE TTS
+        if (orchestrationTrigger && orchestrationMode) {
+          console.log(`🎯 Orchestration triggered: ${orchestrationMode}`, configParams || {});
+
+          // Show notification
+          toast({
+            title: `${orchestrationMode === 'print' ? '🖨️' : '📸'} Opening ${orchestrationMode.charAt(0).toUpperCase() + orchestrationMode.slice(1)} Interface`,
+            description: 'Orchestration system activated',
+            status: 'info',
+            duration: 3000,
+            isClosable: true,
+          });
+
+          // Trigger orchestration
+          if (onOrchestrationTrigger) {
+            setTimeout(() => {
+              onOrchestrationTrigger(orchestrationMode as 'print' | 'scan', configParams);
+            }, 500);
+          }
+        }
 
         // 2. THEN play TTS (blocking - no input allowed until complete)
         setIsSpeaking(true);
