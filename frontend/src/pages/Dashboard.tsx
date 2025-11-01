@@ -1109,12 +1109,10 @@ const Dashboard: React.FC = () => {
   return (
     <Flex 
       direction="row" 
-      h="100vh" 
-      w="100vw"
+      minH="100vh" 
+      w="100%"
       overflow="hidden" 
-      position="fixed"
-      top={0}
-      left={0}
+      pos="relative"
     >
       {/* Main Content Area */}
       <Box 
@@ -3688,7 +3686,7 @@ const Dashboard: React.FC = () => {
           w="450px"
           minW="450px"
           maxW="450px"
-          h="100vh"
+          minH="100vh"
           bg={useColorModeValue('white', 'gray.800')}
           boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
           display="flex"
