@@ -1089,7 +1089,7 @@ const Dashboard: React.FC = () => {
     <Box position="relative" minH="100vh">
       {/* Main Content Area */}
       <Box 
-        mr={isChatVisible ? "450px" : "0"}
+        mr={isChatVisible ? "35vw" : "0"}
         transition="margin-right 0.3s ease-out"
         minH="100vh"
         pt={2}
@@ -1098,6 +1098,7 @@ const Dashboard: React.FC = () => {
         pr={isChatVisible ? "0" : "3"}
       >
         <VStack align="stretch" spacing={4} pb={4}>
+          
           <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
         <Stack spacing={2}>
           <Heading size="lg" display="flex" alignItems="center" gap={3}>
@@ -3645,7 +3646,7 @@ const Dashboard: React.FC = () => {
           position="fixed"
           top="0"
           right="0"
-          w="450px"
+          w="35vw"
           h="100vh"
           bg={useColorModeValue('white', 'gray.800')}
           boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
