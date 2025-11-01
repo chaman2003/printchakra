@@ -1110,18 +1110,20 @@ const Dashboard: React.FC = () => {
     <Flex 
       direction="row" 
       h="100vh" 
+      w="100vw"
       overflow="hidden" 
-      position="relative"
-      width="100vw"
+      position="fixed"
+      top={0}
+      left={0}
     >
       {/* Main Content Area */}
       <Box 
-        flex="1" 
+        flex={isChatVisible ? "0 1 auto" : "1"}
+        minW={0}
         overflowY="auto" 
         overflowX="hidden"
         p={6}
-        width={isChatVisible && orchestrateModal.isOpen ? "calc(100% - 1050px)" : isChatVisible ? "calc(100% - 450px)" : "100%"}
-        transition="width 0.3s"
+        transition="flex 0.3s ease-out"
         css={{
           '&::-webkit-scrollbar': {
             width: '8px',
@@ -3683,14 +3685,18 @@ const Dashboard: React.FC = () => {
       {/* AI Chat Sidebar - Pushes content to the left */}
       {isChatVisible && (
         <Box
-          width="450px"
+          w="450px"
+          minW="450px"
+          maxW="450px"
+          h="100vh"
           bg={useColorModeValue('white', 'gray.800')}
-          boxShadow="-2px 0 20px rgba(0,0,0,0.2)"
+          boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
           display="flex"
           flexDirection="column"
           borderLeft="1px solid"
           borderColor={useColorModeValue('gray.200', 'gray.700')}
-          transition="all 0.3s ease"
+          overflowY="hidden"
+          transition="all 0.3s ease-out"
         >
           <VoiceAIChat
             isOpen={isChatVisible}
