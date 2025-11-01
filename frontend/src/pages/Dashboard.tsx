@@ -1092,12 +1092,12 @@ const Dashboard: React.FC = () => {
         mr={isChatVisible ? "450px" : "0"}
         transition="margin-right 0.3s ease-out"
         minH="100vh"
-        pt={6}
-        px={6}
-        pb={6}
-        pr={isChatVisible ? "0" : "6"}
+        pt={2}
+        px={3}
+        pb={2}
+        pr={isChatVisible ? "0" : "3"}
       >
-        <VStack align="stretch" spacing={10} pb={12}>
+        <VStack align="stretch" spacing={4} pb={4}>
           <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
         <Stack spacing={2}>
           <Heading size="lg" display="flex" alignItems="center" gap={3}>
