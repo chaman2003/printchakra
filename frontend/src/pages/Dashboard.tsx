@@ -1087,9 +1087,8 @@ const Dashboard: React.FC = () => {
     <Flex direction="row" h="100vh" overflow="hidden" position="relative">
       {/* Main Content Area */}
       <Box 
-        flex={isChatVisible ? "0 1 calc(100% - 450px)" : "1"} 
+        flex="1" 
         overflowY="auto" 
-        transition="all 0.3s"
         p={6}
       >
         <VStack align="stretch" spacing={10} pb={12}>
@@ -3626,18 +3625,30 @@ const Dashboard: React.FC = () => {
         </VStack>
       </Box>
 
-      {/* Persistent AI Chat Sidebar - Only shown when visible */}
+      {/* AI Chat Modal/Drawer - Opens without affecting layout */}
       {isChatVisible && (
-        <Box 
-          flex="0 0 450px"
-          borderLeft="2px solid"
-          borderColor="rgba(121,95,238,0.3)"
+        <Box
+          position="fixed"
+          top={0}
+          right={0}
+          bottom={0}
+          width="450px"
           bg={useColorModeValue('white', 'gray.800')}
-          overflow="hidden"
-          transition="all 0.3s"
-          position="relative"
+          boxShadow="-2px 0 20px rgba(0,0,0,0.2)"
+          zIndex={9999}
           display="flex"
           flexDirection="column"
+          animation="slideInRight 0.3s ease-out"
+          sx={{
+            '@keyframes slideInRight': {
+              from: {
+                transform: 'translateX(100%)',
+              },
+              to: {
+                transform: 'translateX(0)',
+              },
+            },
+          }}
         >
           <VoiceAIChat
             isOpen={isChatVisible}
@@ -3690,10 +3701,24 @@ const Dashboard: React.FC = () => {
               isClosable: true,
             });
           }}
-          isMinimized={false}
-          onToggleMinimize={() => setIsChatVisible(false)}
-        />
+            isMinimized={false}
+            onToggleMinimize={() => setIsChatVisible(false)}
+          />
         </Box>
+      )}
+
+      {/* Backdrop overlay when chat is open */}
+      {isChatVisible && (
+        <Box
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          bg="rgba(0,0,0,0.3)"
+          zIndex={9998}
+          onClick={() => setIsChatVisible(false)}
+        />
       )}
     </Flex>
   );
