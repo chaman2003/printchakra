@@ -1101,6 +1101,7 @@ const Dashboard: React.FC = () => {
       <Box 
         flex="1" 
         overflowY="auto" 
+        overflowX="hidden"
         p={6}
         css={{
           '&::-webkit-scrollbar': {
