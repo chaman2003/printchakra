@@ -300,7 +300,6 @@ const Dashboard: React.FC = () => {
   const conversionModal = useDisclosure();
   const convertedDrawer = useDisclosure();
   const orchestrateModal = useDisclosure();
-  const voiceAIDrawer = useDisclosure(); // Voice AI chat drawer
   const documentSelectorModal = useDisclosure(); // Document selector modal
 
   // Selected documents for orchestrate modal
@@ -1082,10 +1081,19 @@ const Dashboard: React.FC = () => {
   };
 
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
+  const [isChatMinimized, setIsChatMinimized] = useState(false);
 
   return (
-    <VStack align="stretch" spacing={10} pb={12}>
-      <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
+    <Flex direction="row" h="100vh" overflow="hidden" position="relative">
+      {/* Main Content Area */}
+      <Box 
+        flex={isChatMinimized ? "1" : "0 1 calc(100% - 450px)"} 
+        overflowY="auto" 
+        transition="all 0.3s"
+        p={6}
+      >
+        <VStack align="stretch" spacing={10} pb={12}>
+          <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
         <Stack spacing={2}>
           <Heading size="lg" display="flex" alignItems="center" gap={3}>
             📊 Dashboard
@@ -1178,13 +1186,13 @@ const Dashboard: React.FC = () => {
             size="lg"
             colorScheme="purple"
             variant="solid"
-            onClick={voiceAIDrawer.onOpen}
-            leftIcon={<Iconify icon={FiMic} boxSize={5} />}
+            onClick={() => setIsChatMinimized(!isChatMinimized)}
+            leftIcon={<Iconify icon={isChatMinimized ? FiMic : "solar:minimize-square-3-bold-duotone"} boxSize={5} />}
             boxShadow="0 4px 14px rgba(147,51,234,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
             transition="all 0.3s"
           >
-            Talk with PrintChakra AI
+            {isChatMinimized ? 'Show' : 'Hide'} AI Chat
           </Button>
         </MotionBox>
         <MotionBox
@@ -3590,60 +3598,6 @@ const Dashboard: React.FC = () => {
         </MotionModalContent>
       </Modal>
 
-      {/* Voice AI Chat Drawer */}
-      <VoiceAIChat
-        isOpen={voiceAIDrawer.isOpen}
-        onClose={voiceAIDrawer.onClose}
-        onOrchestrationTrigger={(mode, config) => {
-          console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
-
-          // Set orchestration mode
-          setOrchestrateMode(mode);
-
-          // Apply configuration if provided
-          if (config) {
-            setOrchestrateOptions(prev => ({
-              ...prev,
-              // Apply scan configuration
-              ...(mode === 'scan' && {
-                scanColorMode: config.colorMode || prev.scanColorMode,
-                scanLayout: config.layout || prev.scanLayout,
-                scanResolution: config.resolution || prev.scanResolution,
-                scanPaperSize: config.paperSize || prev.scanPaperSize,
-                scanTextMode: config.scanTextMode !== undefined ? config.scanTextMode : prev.scanTextMode,
-                scanPageMode: config.pages || prev.scanPageMode,
-                scanCustomRange: config.customRange || prev.scanCustomRange,
-              }),
-              // Apply print configuration
-              ...(mode === 'print' && {
-                printColorMode: config.colorMode || prev.printColorMode,
-                printLayout: config.layout || prev.printLayout,
-                printResolution: config.resolution || prev.printResolution,
-                printPaperSize: config.paperSize || prev.printPaperSize,
-                printPages: config.pages || prev.printPages,
-                printCustomRange: config.customRange || prev.printCustomRange,
-                printScale: config.scale || prev.printScale,
-              }),
-            }));
-          }
-
-          // Skip step 1 (mode selection) and go directly to step 2 (configuration)
-          setOrchestrateStep(2);
-
-          // Open orchestration modal
-          orchestrateModal.onOpen();
-
-          // Show visual feedback
-          toast({
-            title: `${mode === 'print' ? '🖨️ Print' : '📸 Scan'} Mode Activated`,
-            description: 'AI has configured your settings. Review and proceed.',
-            status: 'success',
-            duration: 4000,
-            isClosable: true,
-          });
-        }}
-      />
-
       {/* Document Selector Modal */}
       <DocumentSelector
         isOpen={documentSelectorModal.isOpen}
@@ -3669,7 +3623,77 @@ const Dashboard: React.FC = () => {
         allowMultiple={true}
         mode={orchestrateMode || 'print'}
       />
-    </VStack>
+        </VStack>
+      </Box>
+
+      {/* Persistent AI Chat Sidebar */}
+      <Box 
+        flex={isChatMinimized ? "0 0 60px" : "0 0 450px"}
+        borderLeft="2px solid"
+        borderColor="rgba(121,95,238,0.3)"
+        bg={useColorModeValue('white', 'gray.800')}
+        overflow="hidden"
+        transition="all 0.3s"
+        position="relative"
+        display="flex"
+        flexDirection="column"
+      >
+        <VoiceAIChat
+          isOpen={true}
+          onClose={() => setIsChatMinimized(!isChatMinimized)}
+          onOrchestrationTrigger={(mode, config) => {
+            console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
+
+            // Set orchestration mode
+            setOrchestrateMode(mode);
+
+            // Apply configuration if provided
+            if (config) {
+              setOrchestrateOptions(prev => ({
+                ...prev,
+                // Apply scan configuration
+                ...(mode === 'scan' && {
+                  scanColorMode: config.colorMode || prev.scanColorMode,
+                  scanLayout: config.layout || prev.scanLayout,
+                  scanResolution: config.resolution || prev.scanResolution,
+                  scanPaperSize: config.paperSize || prev.scanPaperSize,
+                  scanTextMode: config.scanTextMode !== undefined ? config.scanTextMode : prev.scanTextMode,
+                  scanPageMode: config.pages || prev.scanPageMode,
+                  scanCustomRange: config.customRange || prev.scanCustomRange,
+                }),
+                // Apply print configuration
+                ...(mode === 'print' && {
+                  printColorMode: config.colorMode || prev.printColorMode,
+                  printLayout: config.layout || prev.printLayout,
+                  printResolution: config.resolution || prev.printResolution,
+                  printPaperSize: config.paperSize || prev.printPaperSize,
+                  printPages: config.pages || prev.printPages,
+                  printCustomRange: config.customRange || prev.printCustomRange,
+                  printScale: config.scale || prev.printScale,
+                }),
+              }));
+            }
+
+            // Skip step 1 (mode selection) and go directly to step 2 (configuration)
+            setOrchestrateStep(2);
+
+            // Open orchestration modal
+            orchestrateModal.onOpen();
+
+            // Show visual feedback
+            toast({
+              title: `${mode === 'print' ? '🖨️ Print' : '📸 Scan'} Mode Activated`,
+              description: 'AI has configured your settings. Review and proceed.',
+              status: 'success',
+              duration: 4000,
+              isClosable: true,
+            });
+          }}
+          isMinimized={isChatMinimized}
+          onToggleMinimize={() => setIsChatMinimized(!isChatMinimized)}
+        />
+      </Box>
+    </Flex>
   );
 };
 
