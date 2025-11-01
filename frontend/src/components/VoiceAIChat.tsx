@@ -592,13 +592,20 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         const orchestrationMode = response.data.orchestration_mode;
         const configParams = response.data.config_params;
 
+        console.log('🔍 Backend response:', {
+          aiResponse,
+          orchestrationTrigger,
+          orchestrationMode,
+          configParams,
+        });
+
         // 1. Display AI message FIRST
         addMessage('ai', aiResponse);
         setIsProcessing(false);
 
         // Check for orchestration trigger BEFORE TTS
         if (orchestrationTrigger && orchestrationMode) {
-          console.log(`🎯 Orchestration triggered: ${orchestrationMode}`, configParams || {});
+          console.log(`🎯🎯🎯 Orchestration triggered: ${orchestrationMode}`, configParams || {});
 
           // Show notification
           toast({

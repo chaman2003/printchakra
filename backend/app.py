@@ -2663,13 +2663,14 @@ def chat_with_ai():
         if not user_message:
             return jsonify({"success": False, "error": "No message provided"}), 400
 
-        logger.info(f"User message: {user_message}")
+        logger.info(f"📨 User message: {user_message}")
 
         # Generate response (text only, no TTS)
         response = voice_ai_orchestrator.chat_service.generate_response(user_message)
 
         if response.get("success"):
             ai_response = response.get("response", "")
+            logger.info(f"🤖 AI response (raw): {ai_response}")
             
             # Check for orchestration triggers in AI response
             orchestration_trigger = None
@@ -2693,6 +2694,7 @@ def chat_with_ai():
                 # Remove trigger from response (clean display text)
                 ai_response = ai_response.replace(trigger_text, "").strip()
                 response["response"] = ai_response
+                logger.info(f"🎯 ORCHESTRATION DETECTED! Mode: {orchestration_mode}, Trigger removed from response")
             
             # Extract configuration parameters from user text
             config_params = voice_ai_orchestrator._extract_config_parameters(user_message.lower())
@@ -2702,9 +2704,11 @@ def chat_with_ai():
             response["orchestration_mode"] = orchestration_mode
             response["config_params"] = config_params
             
-            logger.info(f"✅ AI response: {ai_response}")
+            logger.info(f"✅ Final AI response: {ai_response}")
             if orchestration_trigger:
-                logger.info(f"🎯 Orchestration triggered: {orchestration_mode} with params: {config_params}")
+                logger.info(f"🎯🎯🎯 Orchestration will trigger: {orchestration_mode} with params: {config_params}")
+            else:
+                logger.info(f"ℹ️ No orchestration trigger in this response")
             
             return jsonify(response), 200
         else:
