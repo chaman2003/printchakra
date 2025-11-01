@@ -335,25 +335,26 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
 
   return (
     <Box
-      position="sticky"
-      top={0}
-      zIndex={10}
+      position="relative"
+      mb={4}
+      p={4}
       bg={bgColor}
-      borderBottom="2px solid"
+      borderRadius="xl"
+      border="2px solid"
       borderColor={borderColor}
       boxShadow="0 4px 12px rgba(121,95,238,0.15)"
     >
       {/* Header - Always Visible */}
       <Flex
-        p={3}
         align="center"
         justify="space-between"
         cursor="pointer"
         onClick={toggleExpanded}
-        _hover={{ bg: 'whiteAlpha.50' }}
+        _hover={{ opacity: 0.8 }}
         transition="all 0.2s"
+        mb={isExpanded ? 3 : 0}
       >
-        <HStack spacing={3}>
+        <HStack spacing={3} flex={1}>
           <Box
             p={2}
             bg="brand.500"
@@ -363,16 +364,16 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
           >
             <Iconify icon="solar:microphone-3-bold-duotone" width={20} height={20} />
           </Box>
-          <VStack align="start" spacing={0}>
+          <VStack align="start" spacing={0} flex={1}>
             <Text fontWeight="bold" fontSize="md">
-              Voice Control
+              🎤 Voice Control
             </Text>
             <Text fontSize="xs" color="text.muted">
               {isSessionActive ? 'Active - Say a command' : 'Click to activate'}
             </Text>
           </VStack>
           {isRecording && (
-            <Badge colorScheme="red" fontSize="xs" px={2}>
+            <Badge colorScheme="red" fontSize="xs" px={2} whiteSpace="nowrap">
               Recording...
             </Badge>
           )}
@@ -388,55 +389,58 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
           }
           size="sm"
           variant="ghost"
+          ml={2}
         />
       </Flex>
 
       {/* Expandable Content */}
       <Collapse in={isExpanded}>
-        <Box p={4} pt={0}>
+        <VStack spacing={3} align="stretch" pt={2} borderTop="1px solid" borderColor="whiteAlpha.200">
           {/* Voice Control Button */}
-          <Flex justify="center" mb={3}>
+          <Flex justify="center" py={2}>
             <Tooltip
               label={
                 isRecording
                   ? 'Click to stop recording'
-                  : 'Hold to record or click to toggle'
+                  : 'Click to start recording'
               }
               placement="top"
             >
-              <IconButton
-                aria-label="Voice control"
-                icon={
-                  isRecording ? (
-                    <Iconify icon="solar:microphone-slash-bold-duotone" width={28} height={28} />
-                  ) : (
-                    <Iconify icon="solar:microphone-3-bold-duotone" width={28} height={28} />
-                  )
-                }
-                colorScheme={isRecording ? 'red' : 'brand'}
-                size="lg"
-                isRound
-                boxSize="60px"
-                onClick={isRecording ? stopRecording : startRecording}
-                isDisabled={isProcessing}
-                boxShadow={isRecording ? '0 0 20px rgba(255,0,0,0.4)' : 'lg'}
-                _hover={{
-                  transform: 'scale(1.1)',
-                  boxShadow: '0 8px 25px rgba(121,95,238,0.4)',
-                }}
-                transition="all 0.3s"
-              />
+              <Box>
+                <IconButton
+                  aria-label="Voice control"
+                  icon={
+                    isRecording ? (
+                      <Iconify icon="solar:microphone-slash-bold-duotone" width={28} height={28} />
+                    ) : (
+                      <Iconify icon="solar:microphone-3-bold-duotone" width={28} height={28} />
+                    )
+                  }
+                  colorScheme={isRecording ? 'red' : 'brand'}
+                  size="lg"
+                  isRound
+                  boxSize="60px"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  isDisabled={isProcessing}
+                  boxShadow={isRecording ? '0 0 20px rgba(255,0,0,0.4)' : 'lg'}
+                  _hover={{
+                    transform: 'scale(1.1)',
+                    boxShadow: '0 8px 25px rgba(121,95,238,0.4)',
+                  }}
+                  transition="all 0.3s"
+                />
+              </Box>
             </Tooltip>
           </Flex>
 
           {/* Text Input - For Testing */}
-          <Box mb={3}>
+          <Box>
             <Text fontSize="xs" fontWeight="bold" color="text.muted" mb={2} textAlign="center">
               Or type your command:
             </Text>
             <InputGroup size="md">
               <Input
-                placeholder="Type command (e.g., 'select document', 'scroll down')"
+                placeholder="Type command (e.g., 'select document')"
                 value={textInput}
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyPress={handleKeyPress}
@@ -468,14 +472,14 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
 
           {/* Processing Indicator */}
           {(isProcessing || isTextSending) && (
-            <Progress size="xs" isIndeterminate colorScheme="brand" mb={3} borderRadius="full" />
+            <Progress size="xs" isIndeterminate colorScheme="brand" borderRadius="full" />
           )}
 
           {/* Last Command */}
           {lastCommand && (
-            <Box p={3} bg={commandBg} borderRadius="lg" mb={2}>
+            <Box p={3} bg={commandBg} borderRadius="lg">
               <Text fontSize="xs" fontWeight="bold" color="text.muted" mb={1}>
-                YOU SAID:
+                📝 YOU SAID:
               </Text>
               <Text fontSize="sm" fontWeight="500">
                 {lastCommand}
@@ -485,9 +489,9 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
 
           {/* AI Response */}
           {aiResponse && (
-            <Box p={3} bg={responseBg} borderRadius="lg" mb={2}>
+            <Box p={3} bg={responseBg} borderRadius="lg">
               <Text fontSize="xs" fontWeight="bold" color="text.muted" mb={1}>
-                AI:
+                🤖 AI:
               </Text>
               <Text fontSize="sm">{aiResponse}</Text>
             </Box>
@@ -508,7 +512,7 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
               <Text>• "Portrait/Landscape" - Change orientation</Text>
             </VStack>
           </Box>
-        </Box>
+        </VStack>
       </Collapse>
 
       <style>

@@ -568,6 +568,17 @@ const Dashboard: React.FC = () => {
     orchestrateModal.onOpen();
   };
 
+  const reopenOrchestrateModal = () => {
+    // Reopen with current mode and step 2 (keep same settings)
+    if (orchestrateMode) {
+      setOrchestrateStep(2);
+      orchestrateModal.onOpen();
+    } else {
+      // If no mode set, open from beginning
+      openOrchestrateModal();
+    }
+  };
+
   const executePrintJob = async () => {
     try {
       const formData = new FormData();
@@ -1221,6 +1232,30 @@ const Dashboard: React.FC = () => {
             {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
           </Button>
         </MotionBox>
+        {orchestrateMode && !orchestrateModal.isOpen && (
+          <MotionBox
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            whileHover={{ scale: 1.05, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Button
+              size="lg"
+              colorScheme="brand"
+              variant="outline"
+              onClick={reopenOrchestrateModal}
+              leftIcon={
+                <Iconify
+                  icon="solar:redo-bold-duotone"
+                  boxSize={5}
+                />
+              }
+            >
+              Re-open {orchestrateMode === 'print' ? 'Print' : 'Scan'} Configuration
+            </Button>
+          </MotionBox>
+        )}
       </Stack>
 
       {error && (
