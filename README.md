@@ -56,7 +56,9 @@ PrintChakra is a **complete automated document processing system** with **AI-pow
 
 ### What Makes PrintChakra Unique?
 
-- 🎤 **Voice-Controlled Operations** - Complete hands-free print and scan control with AI chat
+- 🤖 **AI-Powered Orchestration** - **NEW!** Intelligent voice assistant with complete system awareness
+- 🎤 **Voice-Controlled Operations** - Complete hands-free print and scan control with natural language
+- 🎯 **Automatic Intent Detection** - AI understands "print 3 copies in landscape" and configures everything
 - 📱 **Mobile-First Design** - Auto-triggered phone capture with real-time processing
 - 🔍 **Advanced OCR Pipeline** - 12-stage sequential processing with multi-strategy document detection
 - ⚡ **Real-Time Synchronization** - Socket.IO WebSocket communication for instant updates
@@ -127,14 +129,103 @@ Perfect for digitizing physical documents, extracting text from images, and buil
 
 ---
 
+## 🤖 AI-Powered Intelligent Orchestration **[NEW!]**
+
+### Revolutionary Voice-Driven Automation
+
+PrintChakra's AI Assistant now has **complete awareness** of the Orchestrate Print & Capture system! Simply speak your command, and watch the AI intelligently detect your intent, extract configuration parameters, and automatically trigger the orchestration interface.
+
+### ✨ What Makes It Intelligent?
+
+#### 🧠 **Complete System Awareness**
+- Understands all print/scan modes, options, and workflows
+- Knows about layout, color, resolution, margins, page selection, and more
+- Can detect and extract configuration from natural language
+
+#### 🎯 **Automatic Intent Detection**
+```
+You: "Hey, print 3 copies in landscape with color mode"
+AI: "Ready: 3 copies, landscape, color. Shall we proceed?"
+You: "Yes"
+AI: [Opens orchestration with settings pre-configured!]
+```
+
+#### ⚙️ **Smart Configuration Extraction**
+The AI automatically detects and applies:
+- **Color Mode**: "color", "grayscale", "black and white"
+- **Layout**: "landscape", "portrait"
+- **Resolution**: "300 DPI", "600 DPI", "high quality"
+- **Pages**: "all", "odd pages", "pages 1-5"
+- **Paper Size**: "A4", "Letter", "Legal"
+- **Special Options**: "double sided", "text mode", "high quality"
+
+### 🎤 Quick Start Examples
+
+#### Basic Print
+```
+"Hey, print this document"
+→ AI: "Ready to print. Shall we proceed?"
+→ You: "Yes"
+→ [Print orchestration opens automatically]
+```
+
+#### Advanced Configuration
+```
+"Hey, scan at 600 DPI in color as PDF"
+→ AI: "Ready to scan at 600 DPI in color. Shall we proceed?"
+→ You: "Go ahead"
+→ [Scan orchestration opens with settings applied:
+    ✅ Resolution: 600 DPI
+    ✅ Color Mode: Color
+    ✅ Ready to proceed]
+```
+
+#### Multi-Turn Conversation
+```
+You: "Hey, print this document"
+AI: "Ready to print. Shall we proceed?"
+You: "Make it landscape and 3 copies"
+AI: "Updated: landscape, 3 copies. Proceed?"
+You: "Yes"
+AI: [Opens print interface with all settings configured]
+```
+
+### 📊 Supported Commands
+
+| Say This | AI Configures |
+|----------|---------------|
+| "print 3 copies" | Copies setting |
+| "landscape mode" | Layout orientation |
+| "color mode" / "grayscale" | Color settings |
+| "600 DPI" / "high quality" | Resolution |
+| "pages 1-5" / "odd pages" | Page selection |
+| "double sided" | Duplex printing |
+| "A4 paper" | Paper size |
+| "scan with text mode" | OCR enabled |
+
+### 🚀 Complete Workflow
+
+1. **Speak Command**: "Hey, print this in color"
+2. **AI Detects Intent**: Print mode + color configuration
+3. **AI Confirms**: "Ready to print in color. Shall we proceed?"
+4. **You Confirm**: "Yes" / "Proceed" / "Go ahead"
+5. **AI Triggers**: Opens Orchestrate Print & Capture modal
+6. **Settings Applied**: Color mode enabled, ready to print
+7. **You Execute**: Review and click proceed
+
+### 📖 Documentation
+
+- **Quick Start**: See [QUICK_START_AI_ORCHESTRATION.md](QUICK_START_AI_ORCHESTRATION.md)
+- **Complete Guide**: See [AI_ORCHESTRATION_ENHANCEMENT.md](AI_ORCHESTRATION_ENHANCEMENT.md)
+- **Troubleshooting**: Check documentation for common issues
+
+---
+
 ## 🎤 Voice Control with AI Assistant
 
 PrintChakra features a **hands-free voice assistant** for document operations powered by Whisper, Smollm2, and Microsoft Ravi TTS.
 
----
-
-
-###  Key Features
+### Key Features
 
 - **Wake Word System**: Start commands with 'Hey', 'Hi', 'Hello', or 'Okay'
 - **Speech Recognition**: Whisper Large-v3 Turbo (local, offline)
@@ -142,7 +233,7 @@ PrintChakra features a **hands-free voice assistant** for document operations po
 - **Conversational AI**: Smollm2:135m via Ollama
 - **Contextual Memory**: Maintains conversation history
 
-###  How to Use
+### How to Use
 
 1. Click **'Talk with PrintChakra AI'** button
 2. Click **'Start Voice Session'**
@@ -151,12 +242,12 @@ PrintChakra features a **hands-free voice assistant** for document operations po
 5. AI responds with voice and text
 6. Say 'bye printchakra' to end session
 
-###  Voice Command Examples
+### Voice Command Examples
 
 | Command | Result |
 |---------|--------|
-| 'Hey, print this document' | Start print workflow |
-| 'Hi, scan a document' | Start scan workflow |
+| 'Hey, print this document' | Triggers print orchestration |
+| 'Hi, scan a document' | Triggers scan orchestration |
 | 'Hello, what can you do?' | Show capabilities |
 | 'Okay, show status' | Current system status |
 | 'Hey, bye printchakra' | End voice session |
