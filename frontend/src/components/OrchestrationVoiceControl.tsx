@@ -19,8 +19,11 @@ import {
   useColorModeValue,
   Tooltip,
   Progress,
+  Input,
+  InputGroup,
+  InputRightElement,
 } from '@chakra-ui/react';
-import { FiMic, FiMicOff, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiMic, FiMicOff, FiChevronDown, FiChevronUp, FiSend } from 'react-icons/fi';
 import apiClient from '../apiClient';
 import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../utils/audioUtils';
 import Iconify from './Iconify';
@@ -40,6 +43,8 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [lastCommand, setLastCommand] = useState<string>('');
   const [aiResponse, setAiResponse] = useState<string>('');
+  const [textInput, setTextInput] = useState<string>('');
+  const [isTextSending, setIsTextSending] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -70,7 +75,7 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
 
   const startSession = async () => {
     try {
-      const response = await apiClient.post('/voice/start-session', {
+      const response = await apiClient.post('/voice/start', {
         context: `orchestration-${mode}`,
       });
       if (response.data.success) {
@@ -90,7 +95,7 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
 
   const endSession = async () => {
     try {
-      await apiClient.post('/voice/end-session');
+      await apiClient.post('/voice/end');
       setIsSessionActive(false);
       setLastCommand('');
       setAiResponse('');
@@ -289,6 +294,46 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
     }
   };
 
+  const handleTextCommand = async () => {
+    if (!textInput.trim()) return;
+
+    setIsTextSending(true);
+    setLastCommand(textInput);
+
+    try {
+      // Send text directly to chat endpoint
+      const chatResponse = await apiClient.post('/voice/chat', {
+        message: textInput,
+        context: `orchestration-${mode}`,
+      });
+
+      if (chatResponse.data.success) {
+        const aiText = chatResponse.data.response;
+        setAiResponse(aiText);
+
+        // Parse and execute command
+        parseAndExecuteCommand(textInput, aiText);
+      }
+    } catch (error) {
+      console.error('Text command error:', error);
+      toast({
+        title: 'Command Error',
+        description: 'Failed to process text command',
+        status: 'error',
+        duration: 3000,
+      });
+    } finally {
+      setIsTextSending(false);
+      setTextInput('');
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !isTextSending) {
+      handleTextCommand();
+    }
+  };
+
   return (
     <Box
       position="sticky"
@@ -374,8 +419,45 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
             </Tooltip>
           </Flex>
 
+          {/* Text Input - For Testing */}
+          <Box mb={3}>
+            <Text fontSize="xs" fontWeight="bold" color="text.muted" mb={2} textAlign="center">
+              Or type your command:
+            </Text>
+            <InputGroup size="md">
+              <Input
+                placeholder="Type command (e.g., 'select document', 'scroll down')"
+                value={textInput}
+                onChange={(e) => setTextInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                isDisabled={isTextSending || isProcessing}
+                bg={useColorModeValue('white', 'gray.700')}
+                borderColor="brand.300"
+                _focus={{
+                  borderColor: 'brand.500',
+                  boxShadow: '0 0 0 1px var(--chakra-colors-brand-500)',
+                }}
+                _hover={{
+                  borderColor: 'brand.400',
+                }}
+              />
+              <InputRightElement>
+                <IconButton
+                  aria-label="Send command"
+                  icon={<FiSend />}
+                  size="sm"
+                  colorScheme="brand"
+                  onClick={handleTextCommand}
+                  isLoading={isTextSending}
+                  isDisabled={!textInput.trim() || isProcessing}
+                  variant="ghost"
+                />
+              </InputRightElement>
+            </InputGroup>
+          </Box>
+
           {/* Processing Indicator */}
-          {isProcessing && (
+          {(isProcessing || isTextSending) && (
             <Progress size="xs" isIndeterminate colorScheme="brand" mb={3} borderRadius="full" />
           )}
 
