@@ -810,23 +810,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
               </>
             )}
           </Flex>
-          <Flex gap={2}>
-            <IconButton
-              aria-label="Close chat"
-              icon={<Iconify icon={FiX} boxSize={5} />}
-              size="sm"
-              variant="ghost"
-              colorScheme="red"
-              onClick={onClose}
-            />
-            <IconButton
-              aria-label={isMinimized ? "Expand chat" : "Minimize chat"}
-              icon={<Iconify icon={isMinimized ? "solar:double-alt-arrow-left-bold-duotone" : "solar:double-alt-arrow-right-bold-duotone"} boxSize={5} />}
-              size="sm"
-              variant="ghost"
-              onClick={onToggleMinimize}
-            />
-          </Flex>
+          <IconButton
+            aria-label="Close chat"
+            icon={<Iconify icon={FiX} boxSize={5} />}
+            size="sm"
+            variant="ghost"
+            colorScheme="red"
+            onClick={onClose}
+          />
         </Flex>
       </Box>
 
