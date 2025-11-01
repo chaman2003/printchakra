@@ -1027,31 +1027,16 @@ const Dashboard: React.FC = () => {
             size="lg"
             colorScheme="purple"
             variant="solid"
-            onClick={voiceAIDrawer.onOpen}
+            onClick={() => {
+              voiceAIDrawer.onOpen();
+              orchestrationOverlay.onOpen();
+            }}
             leftIcon={<Iconify icon={FiMic} boxSize={5} />}
             boxShadow="0 4px 14px rgba(147,51,234,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
             transition="all 0.3s"
           >
             Talk with PrintChakra AI
-          </Button>
-        </MotionBox>
-        <MotionBox
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-        >
-          <Button
-            size="lg"
-            colorScheme="cyan"
-            variant="solid"
-            onClick={orchestrationOverlay.onOpen}
-            leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
-            boxShadow="0 4px 14px rgba(69,202,255,0.4)"
-            _hover={{ boxShadow: '0 6px 20px rgba(69,202,255,0.6)' }}
-            transition="all 0.3s"
-          >
-            AI Orchestration
           </Button>
         </MotionBox>
         <MotionBox
