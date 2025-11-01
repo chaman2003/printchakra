@@ -158,7 +158,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         setSessionStatus('Ready - Say wake word first!');
         addMessage(
           'system',
-          '🎙️ Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.'
+          'Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.'
         );
 
         // Close previous toast if exists
@@ -202,7 +202,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   const startRecording = async () => {
     // Block recording if TTS is currently speaking
     if (isSpeaking) {
-      console.log('🔊 TTS is speaking - blocking recording');
+      console.log('TTS is speaking - blocking recording');
       return;
     }
 
@@ -346,7 +346,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   const processAudio = async (audioBlob: Blob) => {
     // Block processing if TTS is currently speaking
     if (isSpeaking) {
-      console.log('🔊 TTS is speaking - skipping audio processing');
+      console.log('TTS is speaking - skipping audio processing');
       // Auto-restart recording after TTS finishes
       return;
     }
@@ -426,7 +426,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           // Show notification about orchestration
           toast({
-            title: `${orchestration_mode === 'print' ? '🖨️' : '📸'} Opening ${orchestration_mode.charAt(0).toUpperCase() + orchestration_mode.slice(1)} Interface`,
+            title: `Opening ${orchestration_mode === 'print' ? 'Print' : 'Scan'} Interface`,
             description: 'Orchestration system activated',
             status: 'info',
             duration: 3000,
@@ -444,7 +444,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         // 2. THEN play TTS (blocking - no input allowed)
         setIsSpeaking(true);
-        setSessionStatus('🔊 Speaking response...');
+        setSessionStatus('Speaking response...');
 
         try {
           await apiClient.post(
@@ -636,7 +636,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           // Show notification
           toast({
-            title: `${orchestrationMode === 'print' ? '🖨️' : '📸'} Opening ${orchestrationMode.charAt(0).toUpperCase() + orchestrationMode.slice(1)} Interface`,
+            title: `Opening ${orchestrationMode === 'print' ? 'Print' : 'Scan'} Interface`,
             description: 'Orchestration system activated',
             status: 'info',
             duration: 3000,
@@ -653,7 +653,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         // 2. THEN play TTS (blocking - no input allowed until complete)
         setIsSpeaking(true);
-        setSessionStatus('🔊 Speaking response...');
+        setSessionStatus('Speaking response...');
 
         try {
           await apiClient.post(
@@ -801,7 +801,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
                       <Badge colorScheme="purple" fontSize="xs">
                         <HStack spacing={1}>
                           <Spinner size="xs" />
-                          <Text>🔊 Speaking</Text>
+                          <Text>Speaking</Text>
                         </HStack>
                       </Badge>
                     )}
@@ -960,8 +960,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
             <Text fontSize="xs" color="gray.500" textAlign="center">
               Powered by Whisper & Smollm2 + Indian English TTS
             </Text>
-            <Text fontSize="xs" color="gray.400" textAlign="center">
-              🔊 Voice: Microsoft Ravi • 🎙️ Hands-free
+            <Text fontSize="xs" color="gray.500" textAlign="center">
+              Voice: Microsoft Ravi • Hands-free
             </Text>
           </VStack>
           </Box>
