@@ -2669,7 +2669,43 @@ def chat_with_ai():
         response = voice_ai_orchestrator.chat_service.generate_response(user_message)
 
         if response.get("success"):
-            logger.info(f"✅ AI response: {response.get('response')}")
+            ai_response = response.get("response", "")
+            
+            # Check for orchestration triggers in AI response
+            orchestration_trigger = None
+            orchestration_mode = None
+            
+            if "TRIGGER_ORCHESTRATION:" in ai_response:
+                # Extract orchestration mode from trigger
+                trigger_start = ai_response.index("TRIGGER_ORCHESTRATION:")
+                trigger_end = ai_response.find(" ", trigger_start)
+                if trigger_end == -1:
+                    trigger_end = len(ai_response)
+                
+                trigger_text = ai_response[trigger_start:trigger_end]
+                if "print" in trigger_text.lower():
+                    orchestration_mode = "print"
+                    orchestration_trigger = True
+                elif "scan" in trigger_text.lower():
+                    orchestration_mode = "scan"
+                    orchestration_trigger = True
+                
+                # Remove trigger from response (clean display text)
+                ai_response = ai_response.replace(trigger_text, "").strip()
+                response["response"] = ai_response
+            
+            # Extract configuration parameters from user text
+            config_params = voice_ai_orchestrator._extract_config_parameters(user_message.lower())
+            
+            # Add orchestration data to response
+            response["orchestration_trigger"] = orchestration_trigger
+            response["orchestration_mode"] = orchestration_mode
+            response["config_params"] = config_params
+            
+            logger.info(f"✅ AI response: {ai_response}")
+            if orchestration_trigger:
+                logger.info(f"🎯 Orchestration triggered: {orchestration_mode} with params: {config_params}")
+            
             return jsonify(response), 200
         else:
             logger.error(f"❌ Chat failed: {response.get('error')}")

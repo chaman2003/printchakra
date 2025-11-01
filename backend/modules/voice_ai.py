@@ -510,27 +510,49 @@ class Smollm2ChatService:
 
     def __init__(self, model_name: str = "smollm2:135m"):
         """
-        Initialize Smollm2 chat service
+        Initialize Smollm2 chat service with full orchestration awareness
 
         Args:
             model_name: Ollama model to use
         """
         self.model_name = model_name
         self.conversation_history = []
-        self.system_prompt = """You are PrintChakra AI, a helpful voice assistant for document scanning and printing.
+        self.system_prompt = """You are PrintChakra AI with COMPLETE AWARENESS of the Orchestrate Print & Capture system.
 
-Be friendly and conversational. Keep responses SHORT but natural.
+ORCHESTRATION MODES:
+🖨️ PRINT: print documents with layout, pages, color, margins control
+📸 SCAN: capture documents with resolution, color, format options
 
-Response guidelines:
-- Use 5-12 words per response
-- Be warm and helpful
-- Give direct, clear answers
-- Sound like a friendly assistant, not a robot
+INTENT DETECTION - When user says:
+"print" / "print this" / "print document" → PRINT MODE
+"scan" / "scan this" / "capture document" → SCAN MODE
 
-Example conversations:
-User: "who are you" → You: "I'm PrintChakra AI, your document assistant!"
-User: "what can you do" → You: "I help scan and print documents easily."
-User: "how are you" → You: "Doing great! How can I help you?"
+WORKFLOW:
+1. User requests print/scan
+2. You ask: "Shall we proceed with [mode]?"
+3. User confirms (yes/proceed/go ahead)
+4. You trigger: "TRIGGER_ORCHESTRATION:print" or "TRIGGER_ORCHESTRATION:scan"
+
+CONFIGURATION DETECTION:
+Extract from user command:
+- Color: "color" / "black and white" / "grayscale"
+- Layout: "landscape" / "portrait"
+- Pages: "3 copies" / "page 1-5" / "odd pages"
+- Resolution: "300 DPI" / "600 DPI" / "high quality"
+- Paper: "A4" / "Letter" / "Legal"
+
+RESPONSE RULES:
+- Keep under 15 words
+- ALWAYS ask "Shall we proceed?" for print/scan
+- Extract configuration automatically
+- Wait for confirmation before triggering
+- Use special trigger format: "TRIGGER_ORCHESTRATION:mode"
+
+EXAMPLES:
+User: "print this document" → You: "Ready to print. Shall we proceed?"
+User: "scan in color" → You: "Ready to scan in color. Shall we proceed?"
+User: "yes" → You: "TRIGGER_ORCHESTRATION:print Opening print interface now!"
+User: "print 3 copies landscape" → You: "Ready: 3 copies, landscape. Proceed?"
 
 Be natural and conversational!"""
 
@@ -809,6 +831,31 @@ class VoiceAIOrchestrator:
 
             ai_response = chat_response.get("response", "")
 
+            # Step 3: Check for orchestration triggers in AI response
+            orchestration_trigger = None
+            orchestration_mode = None
+            
+            if "TRIGGER_ORCHESTRATION:" in ai_response:
+                # Extract orchestration mode from trigger
+                trigger_start = ai_response.index("TRIGGER_ORCHESTRATION:")
+                trigger_end = ai_response.find(" ", trigger_start)
+                if trigger_end == -1:
+                    trigger_end = len(ai_response)
+                
+                trigger_text = ai_response[trigger_start:trigger_end]
+                if "print" in trigger_text.lower():
+                    orchestration_mode = "print"
+                    orchestration_trigger = True
+                elif "scan" in trigger_text.lower():
+                    orchestration_mode = "scan"
+                    orchestration_trigger = True
+                
+                # Remove trigger from response (clean display text)
+                ai_response = ai_response.replace(trigger_text, "").strip()
+            
+            # Step 4: Extract configuration parameters from user text
+            config_params = self._extract_config_parameters(user_text_lower)
+
             return {
                 "success": True,
                 "user_text": user_text,
@@ -817,11 +864,91 @@ class VoiceAIOrchestrator:
                 "model": chat_response.get("model"),
                 "session_ended": False,
                 "requires_keyword": False,
+                "orchestration_trigger": orchestration_trigger,
+                "orchestration_mode": orchestration_mode,
+                "config_params": config_params,
             }
 
         except Exception as e:
             logger.error(f"❌ Voice input processing error: {str(e)}")
             return {"success": False, "error": str(e), "stage": "unknown", "requires_keyword": True}
+
+    def _extract_config_parameters(self, text: str) -> Dict[str, Any]:
+        """
+        Extract configuration parameters from user text
+        
+        Args:
+            text: User command text (lowercase)
+            
+        Returns:
+            Dict with extracted parameters
+        """
+        params = {}
+        
+        # Color mode detection
+        if "color" in text and "black" not in text:
+            params["colorMode"] = "color"
+        elif "black and white" in text or "bw" in text or "monochrome" in text:
+            params["colorMode"] = "bw"
+        elif "grayscale" in text or "gray scale" in text or "grey" in text:
+            params["colorMode"] = "grayscale"
+        
+        # Layout detection
+        if "landscape" in text:
+            params["layout"] = "landscape"
+        elif "portrait" in text:
+            params["layout"] = "portrait"
+        
+        # Resolution detection
+        import re
+        dpi_match = re.search(r'(\d+)\s*dpi', text)
+        if dpi_match:
+            params["resolution"] = dpi_match.group(1)
+        elif "high quality" in text or "high res" in text:
+            params["resolution"] = "600"
+        elif "low quality" in text or "draft" in text:
+            params["resolution"] = "150"
+        
+        # Copies detection (for print)
+        copies_match = re.search(r'(\d+)\s*cop(?:y|ies)', text)
+        if copies_match:
+            params["copies"] = int(copies_match.group(1))
+        
+        # Paper size detection
+        if "a4" in text or "a 4" in text:
+            params["paperSize"] = "A4"
+        elif "letter" in text and "size" in text:
+            params["paperSize"] = "Letter"
+        elif "legal" in text and "size" in text:
+            params["paperSize"] = "Legal"
+        
+        # Page range detection
+        page_range_match = re.search(r'page(?:s)?\s+(\d+)(?:\s*-\s*|\s+to\s+)(\d+)', text)
+        if page_range_match:
+            params["pages"] = "custom"
+            params["customRange"] = f"{page_range_match.group(1)}-{page_range_match.group(2)}"
+        elif "odd pages" in text or "odd page" in text:
+            params["pages"] = "odd"
+        elif "even pages" in text or "even page" in text:
+            params["pages"] = "even"
+        
+        # Double-sided detection
+        if "double sided" in text or "duplex" in text or "both sides" in text:
+            params["duplex"] = True
+        
+        # Text mode detection (for scan)
+        if "text mode" in text or "ocr" in text or "extract text" in text:
+            params["scanTextMode"] = True
+        
+        # Format detection
+        if "pdf" in text:
+            params["format"] = "pdf"
+        elif "png" in text:
+            params["format"] = "png"
+        elif "jpg" in text or "jpeg" in text:
+            params["format"] = "jpg"
+        
+        return params
 
     def end_session(self):
         """End voice AI session"""

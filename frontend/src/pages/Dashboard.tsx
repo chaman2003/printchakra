@@ -3407,7 +3407,58 @@ const Dashboard: React.FC = () => {
       </Modal>
 
       {/* Voice AI Chat Drawer */}
-      <VoiceAIChat isOpen={voiceAIDrawer.isOpen} onClose={voiceAIDrawer.onClose} />
+      <VoiceAIChat
+        isOpen={voiceAIDrawer.isOpen}
+        onClose={voiceAIDrawer.onClose}
+        onOrchestrationTrigger={(mode, config) => {
+          console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
+
+          // Set orchestration mode
+          setOrchestrateMode(mode);
+
+          // Apply configuration if provided
+          if (config) {
+            setOrchestrateOptions(prev => ({
+              ...prev,
+              // Apply scan configuration
+              ...(mode === 'scan' && {
+                scanColorMode: config.colorMode || prev.scanColorMode,
+                scanLayout: config.layout || prev.scanLayout,
+                scanResolution: config.resolution || prev.scanResolution,
+                scanPaperSize: config.paperSize || prev.scanPaperSize,
+                scanTextMode: config.scanTextMode !== undefined ? config.scanTextMode : prev.scanTextMode,
+                scanPageMode: config.pages || prev.scanPageMode,
+                scanCustomRange: config.customRange || prev.scanCustomRange,
+              }),
+              // Apply print configuration
+              ...(mode === 'print' && {
+                printColorMode: config.colorMode || prev.printColorMode,
+                printLayout: config.layout || prev.printLayout,
+                printResolution: config.resolution || prev.printResolution,
+                printPaperSize: config.paperSize || prev.printPaperSize,
+                printPages: config.pages || prev.printPages,
+                printCustomRange: config.customRange || prev.printCustomRange,
+                printScale: config.scale || prev.printScale,
+              }),
+            }));
+          }
+
+          // Skip step 1 (mode selection) and go directly to step 2 (configuration)
+          setOrchestrateStep(2);
+
+          // Open orchestration modal
+          orchestrateModal.onOpen();
+
+          // Show visual feedback
+          toast({
+            title: `${mode === 'print' ? '🖨️ Print' : '📸 Scan'} Mode Activated`,
+            description: 'AI has configured your settings. Review and proceed.',
+            status: 'success',
+            duration: 4000,
+            isClosable: true,
+          });
+        }}
+      />
 
       {/* Document Selector Modal */}
       <DocumentSelector
