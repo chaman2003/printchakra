@@ -60,6 +60,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageCounterRef = useRef<{ [key: string]: number }>({});
   const chatInputRef = useRef<HTMLInputElement>(null);
+  const sessionStartedRef = useRef<boolean>(false);
+  const toastIdRef = useRef<string | number | undefined>(undefined);
 
   const toast = useToast();
 
@@ -90,8 +92,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
   // Start voice AI session when drawer opens
   useEffect(() => {
-    if (isOpen && !isSessionActive) {
+    if (isOpen && !isSessionActive && !sessionStartedRef.current) {
+      sessionStartedRef.current = true;
       startSession();
+    }
+    if (!isOpen) {
+      sessionStartedRef.current = false;
     }
     // Focus chat input when drawer opens
     if (isOpen) {
@@ -155,11 +161,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           '🎙️ Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.'
         );
 
-        toast({
+        // Close previous toast if exists
+        if (toastIdRef.current) {
+          toast.close(toastIdRef.current);
+        }
+
+        toastIdRef.current = toast({
           title: 'Voice AI Ready',
           description: 'Start with: Hey, Hi, Hello, or Okay',
           status: 'success',
           duration: 4000,
+          isClosable: true,
         });
 
         // Auto-start recording after session starts
@@ -171,12 +183,18 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       console.error('Session start error:', error);
       setSessionStatus('Failed');
 
-      toast({
+      // Close previous toast if exists
+      if (toastIdRef.current) {
+        toast.close(toastIdRef.current);
+      }
+
+      toastIdRef.current = toast({
         title: 'Session Start Failed',
         description:
           error.response?.data?.error || error.message || 'Could not start voice AI session',
         status: 'error',
         duration: 5000,
+        isClosable: true,
       });
     }
   };
@@ -748,55 +766,67 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
     <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%">
       {/* Header */}
       <Box borderBottomWidth="1px" p={3} bg={bgColor}>
-        <Flex align="center" gap={3}>
-          {!isMinimized && (
-            <>
-              <Avatar size="sm" name="PrintChakra AI" bg="blue.500" />
-              <Box flex="1">
-                <Heading size="md">PrintChakra AI</Heading>
-                <HStack spacing={2} mt={1} flexWrap="wrap">
-                  <Badge colorScheme={isSessionActive ? 'green' : 'gray'} fontSize="xs">{sessionStatus}</Badge>
-                  {isRecording && (
-                    <Badge colorScheme="red" variant="solid" fontSize="xs">
-                      <HStack spacing={1}>
-                        <Box
-                          w={2}
-                          h={2}
-                          borderRadius="full"
-                          bg="white"
-                          animation="pulse 1.5s infinite"
-                        />
-                        <Text>Recording</Text>
-                      </HStack>
-                    </Badge>
-                  )}
-                  {isProcessing && (
-                    <Badge colorScheme="blue" fontSize="xs">
-                      <HStack spacing={1}>
-                        <Spinner size="xs" />
-                        <Text>Processing</Text>
-                      </HStack>
-                    </Badge>
-                  )}
-                  {isSpeaking && (
-                    <Badge colorScheme="purple" fontSize="xs">
-                      <HStack spacing={1}>
-                        <Spinner size="xs" />
-                        <Text>🔊 Speaking</Text>
-                      </HStack>
-                    </Badge>
-                  )}
-                </HStack>
-              </Box>
-            </>
-          )}
-          <IconButton
-            aria-label={isMinimized ? "Expand chat" : "Minimize chat"}
-            icon={<Iconify icon={isMinimized ? "solar:double-alt-arrow-left-bold-duotone" : "solar:double-alt-arrow-right-bold-duotone"} boxSize={5} />}
-            size="sm"
-            variant="ghost"
-            onClick={onToggleMinimize}
-          />
+        <Flex align="center" gap={3} justify="space-between">
+          <Flex align="center" gap={3} flex="1">
+            {!isMinimized && (
+              <>
+                <Avatar size="sm" name="PrintChakra AI" bg="blue.500" />
+                <Box flex="1">
+                  <Heading size="md">PrintChakra AI</Heading>
+                  <HStack spacing={2} mt={1} flexWrap="wrap">
+                    <Badge colorScheme={isSessionActive ? 'green' : 'gray'} fontSize="xs">{sessionStatus}</Badge>
+                    {isRecording && (
+                      <Badge colorScheme="red" variant="solid" fontSize="xs">
+                        <HStack spacing={1}>
+                          <Box
+                            w={2}
+                            h={2}
+                            borderRadius="full"
+                            bg="white"
+                            animation="pulse 1.5s infinite"
+                          />
+                          <Text>Recording</Text>
+                        </HStack>
+                      </Badge>
+                    )}
+                    {isProcessing && (
+                      <Badge colorScheme="blue" fontSize="xs">
+                        <HStack spacing={1}>
+                          <Spinner size="xs" />
+                          <Text>Processing</Text>
+                        </HStack>
+                      </Badge>
+                    )}
+                    {isSpeaking && (
+                      <Badge colorScheme="purple" fontSize="xs">
+                        <HStack spacing={1}>
+                          <Spinner size="xs" />
+                          <Text>🔊 Speaking</Text>
+                        </HStack>
+                      </Badge>
+                    )}
+                  </HStack>
+                </Box>
+              </>
+            )}
+          </Flex>
+          <Flex gap={2}>
+            <IconButton
+              aria-label="Close chat"
+              icon={<Iconify icon={FiX} boxSize={5} />}
+              size="sm"
+              variant="ghost"
+              colorScheme="red"
+              onClick={onClose}
+            />
+            <IconButton
+              aria-label={isMinimized ? "Expand chat" : "Minimize chat"}
+              icon={<Iconify icon={isMinimized ? "solar:double-alt-arrow-left-bold-duotone" : "solar:double-alt-arrow-right-bold-duotone"} boxSize={5} />}
+              size="sm"
+              variant="ghost"
+              onClick={onToggleMinimize}
+            />
+          </Flex>
         </Flex>
       </Box>
 
