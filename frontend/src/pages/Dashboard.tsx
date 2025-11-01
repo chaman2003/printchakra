@@ -1084,8 +1084,36 @@ const Dashboard: React.FC = () => {
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
 
+  // Prevent scrolling when chat visibility changes
+  useEffect(() => {
+    if (isChatVisible) {
+      // Prevent body scroll when chat opens
+      document.body.style.overflow = 'hidden';
+      
+      // Store current scroll position
+      const scrollY = window.scrollY;
+      const scrollX = window.scrollX;
+      
+      // Prevent scroll
+      window.scrollTo(scrollX, scrollY);
+    } else {
+      // Re-enable body scroll when chat closes
+      document.body.style.overflow = 'auto';
+    }
+    
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [isChatVisible]);
+
   return (
-    <Flex direction="row" h="100vh" overflow="hidden" position="relative">
+    <Flex 
+      direction="row" 
+      h="100vh" 
+      overflow="hidden" 
+      position="relative"
+      width="100vw"
+    >
       {/* Main Content Area */}
       <Box 
         flex="1" 
