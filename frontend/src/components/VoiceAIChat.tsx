@@ -17,12 +17,6 @@ import {
   HStack,
   useToast,
   Avatar,
-  Drawer,
-  DrawerBody,
-  DrawerHeader,
-  DrawerContent,
-  DrawerOverlay,
-  DrawerCloseButton,
   Badge,
   Divider,
   useColorModeValue,
@@ -47,9 +41,11 @@ interface VoiceAIChatProps {
   isOpen: boolean;
   onClose: () => void;
   onOrchestrationTrigger?: (mode: 'print' | 'scan', config?: any) => void;
+  isMinimized?: boolean;
+  onToggleMinimize?: () => void;
 }
 
-const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrationTrigger }) => {
+const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrationTrigger, isMinimized = false, onToggleMinimize }) => {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -749,55 +745,67 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   };
 
   return (
-    <Drawer isOpen={isOpen} placement="right" onClose={handleClose} size="md">
-      <DrawerOverlay />
-      <DrawerContent bg={bgColor}>
-        <DrawerCloseButton />
-        <DrawerHeader borderBottomWidth="1px">
-          <Flex align="center" gap={3}>
-            <Avatar size="sm" name="PrintChakra AI" bg="blue.500" />
-            <Box>
-              <Heading size="md">PrintChakra AI</Heading>
-              <HStack spacing={2} mt={1}>
-                <Badge colorScheme={isSessionActive ? 'green' : 'gray'}>{sessionStatus}</Badge>
-                {isRecording && (
-                  <Badge colorScheme="red" variant="solid">
-                    <HStack spacing={1}>
-                      <Box
-                        w={2}
-                        h={2}
-                        borderRadius="full"
-                        bg="white"
-                        animation="pulse 1.5s infinite"
-                      />
-                      <Text>Recording - Say: Hey, Hi, Hello, or Okay</Text>
-                    </HStack>
-                  </Badge>
-                )}
-                {isProcessing && (
-                  <Badge colorScheme="blue">
-                    <HStack spacing={1}>
-                      <Spinner size="xs" />
-                      <Text>Processing</Text>
-                    </HStack>
-                  </Badge>
-                )}
-                {isSpeaking && (
-                  <Badge colorScheme="purple">
-                    <HStack spacing={1}>
-                      <Spinner size="xs" />
-                      <Text>🔊 Speaking</Text>
-                    </HStack>
-                  </Badge>
-                )}
-              </HStack>
-            </Box>
-          </Flex>
-        </DrawerHeader>
+    <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%">
+      {/* Header */}
+      <Box borderBottomWidth="1px" p={3} bg={bgColor}>
+        <Flex align="center" gap={3}>
+          {!isMinimized && (
+            <>
+              <Avatar size="sm" name="PrintChakra AI" bg="blue.500" />
+              <Box flex="1">
+                <Heading size="md">PrintChakra AI</Heading>
+                <HStack spacing={2} mt={1} flexWrap="wrap">
+                  <Badge colorScheme={isSessionActive ? 'green' : 'gray'} fontSize="xs">{sessionStatus}</Badge>
+                  {isRecording && (
+                    <Badge colorScheme="red" variant="solid" fontSize="xs">
+                      <HStack spacing={1}>
+                        <Box
+                          w={2}
+                          h={2}
+                          borderRadius="full"
+                          bg="white"
+                          animation="pulse 1.5s infinite"
+                        />
+                        <Text>Recording</Text>
+                      </HStack>
+                    </Badge>
+                  )}
+                  {isProcessing && (
+                    <Badge colorScheme="blue" fontSize="xs">
+                      <HStack spacing={1}>
+                        <Spinner size="xs" />
+                        <Text>Processing</Text>
+                      </HStack>
+                    </Badge>
+                  )}
+                  {isSpeaking && (
+                    <Badge colorScheme="purple" fontSize="xs">
+                      <HStack spacing={1}>
+                        <Spinner size="xs" />
+                        <Text>🔊 Speaking</Text>
+                      </HStack>
+                    </Badge>
+                  )}
+                </HStack>
+              </Box>
+            </>
+          )}
+          <IconButton
+            aria-label={isMinimized ? "Expand chat" : "Minimize chat"}
+            icon={<Iconify icon={isMinimized ? "solar:double-alt-arrow-left-bold-duotone" : "solar:double-alt-arrow-right-bold-duotone"} boxSize={5} />}
+            size="sm"
+            variant="ghost"
+            onClick={onToggleMinimize}
+          />
+        </Flex>
+      </Box>
 
-        <DrawerBody p={0}>
-          <VStack spacing={3} align="stretch" p={4} height="100%" overflowY="auto">
-            {messages.length === 0 && (
+      {/* Chat Body */}
+      {!isMinimized && (
+        <>
+          <Box flex="1" overflowY="auto" p={4}>
+            <VStack spacing={3} align="stretch">
+              {messages.length === 0 && (
               <Flex
                 direction="column"
                 align="center"
@@ -859,11 +867,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
               </Box>
             ))}
 
-            <div ref={messagesEndRef} />
-          </VStack>
-        </DrawerBody>
+              <div ref={messagesEndRef} />
+            </VStack>
+          </Box>
 
-        {isSessionActive && (
+          {isSessionActive && (
           <Box borderTopWidth="1px" p={3} bg={chatBoxBg}>
             <InputGroup size="sm" mb={3}>
               <Input
@@ -892,9 +900,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
               💬 Or type a message manually
             </Text>
           </Box>
-        )}
+          )}
 
-        <Box borderTopWidth="1px" p={4}>
+          <Box borderTopWidth="1px" p={4}>
           <Flex gap={2} justify="center">
             {isSessionActive ? (
               <>
@@ -935,9 +943,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
               🔊 Voice: Microsoft Ravi • 🎙️ Hands-free
             </Text>
           </VStack>
-        </Box>
-      </DrawerContent>
-    </Drawer>
+          </Box>
+        </>
+      )}
+    </VStack>
   );
 };
 
