@@ -1081,13 +1081,13 @@ const Dashboard: React.FC = () => {
   };
 
   const [showConnectionStatus, setShowConnectionStatus] = useState(false);
-  const [isChatMinimized, setIsChatMinimized] = useState(false);
+  const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
 
   return (
     <Flex direction="row" h="100vh" overflow="hidden" position="relative">
       {/* Main Content Area */}
       <Box 
-        flex={isChatMinimized ? "1" : "0 1 calc(100% - 450px)"} 
+        flex={isChatVisible ? "0 1 calc(100% - 450px)" : "1"} 
         overflowY="auto" 
         transition="all 0.3s"
         p={6}
@@ -1186,13 +1186,13 @@ const Dashboard: React.FC = () => {
             size="lg"
             colorScheme="purple"
             variant="solid"
-            onClick={() => setIsChatMinimized(!isChatMinimized)}
-            leftIcon={<Iconify icon={isChatMinimized ? FiMic : "solar:minimize-square-3-bold-duotone"} boxSize={5} />}
+            onClick={() => setIsChatVisible(!isChatVisible)}
+            leftIcon={<Iconify icon={FiMic} boxSize={5} />}
             boxShadow="0 4px 14px rgba(147,51,234,0.4)"
             _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
             transition="all 0.3s"
           >
-            {isChatMinimized ? 'Show' : 'Hide'} AI Chat
+            {isChatVisible ? 'Hide' : 'Show'} AI Chat
           </Button>
         </MotionBox>
         <MotionBox
@@ -3626,22 +3626,23 @@ const Dashboard: React.FC = () => {
         </VStack>
       </Box>
 
-      {/* Persistent AI Chat Sidebar */}
-      <Box 
-        flex={isChatMinimized ? "0 0 60px" : "0 0 450px"}
-        borderLeft="2px solid"
-        borderColor="rgba(121,95,238,0.3)"
-        bg={useColorModeValue('white', 'gray.800')}
-        overflow="hidden"
-        transition="all 0.3s"
-        position="relative"
-        display="flex"
-        flexDirection="column"
-      >
-        <VoiceAIChat
-          isOpen={true}
-          onClose={() => setIsChatMinimized(!isChatMinimized)}
-          onOrchestrationTrigger={(mode, config) => {
+      {/* Persistent AI Chat Sidebar - Only shown when visible */}
+      {isChatVisible && (
+        <Box 
+          flex="0 0 450px"
+          borderLeft="2px solid"
+          borderColor="rgba(121,95,238,0.3)"
+          bg={useColorModeValue('white', 'gray.800')}
+          overflow="hidden"
+          transition="all 0.3s"
+          position="relative"
+          display="flex"
+          flexDirection="column"
+        >
+          <VoiceAIChat
+            isOpen={isChatVisible}
+            onClose={() => setIsChatVisible(false)}
+            onOrchestrationTrigger={(mode, config) => {
             console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
 
             // Set orchestration mode
@@ -3689,10 +3690,11 @@ const Dashboard: React.FC = () => {
               isClosable: true,
             });
           }}
-          isMinimized={isChatMinimized}
-          onToggleMinimize={() => setIsChatMinimized(!isChatMinimized)}
+          isMinimized={false}
+          onToggleMinimize={() => setIsChatVisible(false)}
         />
-      </Box>
+        </Box>
+      )}
     </Flex>
   );
 };
