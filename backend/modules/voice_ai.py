@@ -435,15 +435,32 @@ class WhisperTranscriptionService:
                         language=language,
                         task="transcribe",
                         fp16=torch.cuda.is_available(),  # Use FP16 on GPU for speed
-                        beam_size=5,  # Better accuracy with beam search (was 1)
-                        best_of=5,  # Sample multiple candidates for accuracy (was 1)
-                        temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),  # Temperature fallback for accuracy
+                        beam_size=5,  # Better accuracy with beam search
+                        best_of=5,  # Sample multiple candidates for accuracy
+                        temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),  # Temperature fallback
                         compression_ratio_threshold=2.4,
-                        no_speech_threshold=0.5,  # Lower threshold to catch more speech (was 0.6)
-                        logprob_threshold=-1.0,  # Better filtering
+                        no_speech_threshold=0.6,  # Higher threshold to filter non-speech sounds
+                        logprob_threshold=-0.8,  # Stricter filtering for human voice
                         condition_on_previous_text=True,  # Use context for accuracy
+                        vad_filter=True,  # Voice Activity Detection - filters non-speech
                     )
                     text = result.get("text", "").strip()
+                    
+                    # Check for non-speech detection via probability
+                    no_speech_prob = result.get("segments", [{}])[0].get("no_speech_prob", 0) if result.get("segments") else 0
+                    
+                    # If high probability of no speech (> 0.5), reject and request retry
+                    if no_speech_prob > 0.5:
+                        logger.warning(f"⚠️ Non-speech audio detected (probability: {no_speech_prob:.2f})")
+                        os.unlink(temp_audio_path)
+                        return {
+                            "success": False,
+                            "error": "No human speech detected. Please try again.",
+                            "text": "",
+                            "no_speech_detected": True,
+                            "auto_retry": True
+                        }
+                    
             except Exception as transcribe_error:
                 logger.error(f"❌ Whisper transcription failed: {str(transcribe_error)}")
                 logger.error(f"   Error type: {type(transcribe_error).__name__}")
@@ -533,7 +550,7 @@ YOUR ROLE:
 TOPICS YOU HANDLE:
 ✅ "What can PrintChakra do?" → "OCR, file conversion, printing, scanning, voice commands!"
 ✅ "What formats do you support?" → "PDF, DOCX, images, text files, and more!"
-✅ "How does voice work?" → "Just say 'Hey' then your command!"
+✅ "How does voice work?" → "Just speak naturally - no wake words needed!"
 
 NEVER ASK QUESTIONS LIKE:
 ❌ "What kind of document?"
@@ -839,32 +856,20 @@ class VoiceAIOrchestrator:
 
             logger.info(f"📝 Transcribed text: {user_text}")
 
-            # Check for wake words (must start with these)
+            # Remove optional wake words from beginning (if present)
             wake_words = ["hey", "hi", "hello", "okay"]
             user_text_lower = user_text.lower()
 
-            has_wake_word = False
             for wake_word in wake_words:
                 if user_text_lower.startswith(wake_word):
-                    has_wake_word = True
                     # Remove wake word from beginning
                     user_text = user_text[len(wake_word) :].strip()
+                    user_text_lower = user_text.lower()
+                    logger.info(f"✅ Removed wake word, processing: {user_text}")
                     break
 
-            # If no wake word detected, prompt user
-            if not has_wake_word:
-                logger.warning(f"⚠️ No wake word detected in: {user_text}")
-                return {
-                    "success": False,
-                    "user_text": transcription.get("text", ""),
-                    "ai_response": 'Please say "Hey" first to talk with PrintChakra AI.',
-                    "error": "Wake word not detected",
-                    "stage": "wake_word",
-                    "requires_keyword": True,
-                    "wake_word_missing": True,
-                }
-
-            logger.info(f"✅ Wake word detected! Processing: {user_text}")
+            # Process all speech input (no wake word required)
+            logger.info(f"✅ Processing speech: {user_text}")
 
             # Check for exit keyword
             if "bye printchakra" in user_text_lower or "goodbye" in user_text_lower:

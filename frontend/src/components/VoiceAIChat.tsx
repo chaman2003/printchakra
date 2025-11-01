@@ -119,10 +119,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
       if (response.data.success) {
         setIsSessionActive(true);
-        setSessionStatus('Ready - Say wake word first!');
+        setSessionStatus('Ready - Just speak naturally');
         addMessage(
           'system',
-          'Voice AI Ready! You MUST say "Hey", "Hi", "Hello", or "Okay" before each command. Example: "Hey, what time is it?". Say "bye printchakra" to end.'
+          'Voice AI Ready! Just speak naturally - no wake words needed. Say "bye printchakra" to end.'
         );
 
         // Close previous toast if exists
@@ -132,7 +132,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         toastIdRef.current = toast({
           title: 'Voice AI Ready',
-          description: 'Start with: Hey, Hi, Hello, or Okay',
+          description: 'Just speak naturally',
           status: 'success',
           duration: 4000,
           isClosable: true,
@@ -319,7 +319,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
     try {
       setIsProcessing(true);
-      setSessionStatus('Transcribing audio (checking for "hey" keyword)...');
+      setSessionStatus('Transcribing audio...');
 
       console.log(`📝 Processing audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
@@ -340,22 +340,16 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
       console.log('✅ Backend response:', response.data);
 
-      // Check for wake word missing first
-      if (response.data.wake_word_missing) {
-        console.log('⏭️ Wake word missing - prompting user');
-
-        const transcribedText =
-          response.data.user_text || response.data.full_text || 'your command';
-        addMessage('system', `🎤 Heard: "${transcribedText}"`);
-        addMessage(
-          'system',
-          '⚠️ Please say "Hey", "Hi", "Hello", or "Okay" first to talk with PrintChakra AI'
-        );
-
-        setSessionStatus('Waiting for wake word...');
+      // Check for no speech detected (auto-retry)
+      if (response.data.auto_retry && response.data.no_speech_detected) {
+        console.log('⚠️ No human speech detected - auto-retrying in 1 second');
+        
+        addMessage('system', '⚠️ No human speech detected. Retrying...');
+        
+        setSessionStatus('No speech detected, retrying...');
         setIsProcessing(false);
 
-        // Continue recording
+        // Auto-retry recording after 1 second
         setTimeout(() => startRecording(), 1000);
         return;
       }
@@ -427,7 +421,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           // Continue even if TTS fails
         } finally {
           setIsSpeaking(false);
-          setSessionStatus('Ready - Say "hey" to trigger AI');
+          setSessionStatus('Ready - Just speak naturally');
           // Focus chat input after TTS completes
           setTimeout(() => {
             chatInputRef.current?.focus();
@@ -449,22 +443,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           // Continue recording for next input (after TTS finishes)
           setTimeout(() => startRecording(), 1000);
         }
-      } else if (response.data.skipped) {
-        // Audio was transcribed but "hey" keyword was not found
-        const transcribedText = response.data.user_text;
-
-        console.log(`⏭️ Audio skipped - no "hey" keyword detected`);
-        console.log(`   Transcribed: "${transcribedText}"`);
-
-        // Only show message if not silent
-        if (!response.data.silent) {
-          addMessage('system', `🎤 Heard: "${transcribedText}" (no "hey" - skipped)`);
-        }
-
-        setSessionStatus('Ready - Say "hey" to trigger AI');
-
-        // Continue recording
-        setTimeout(() => startRecording(), 500);
       } else {
         throw new Error(response.data.error || 'Processing failed');
       }
@@ -484,7 +462,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       if (error.response?.data?.requires_keyword) {
         // Silent retry for keyword errors - don't spam user
         console.log(`⏭️ Keyword detection error, retrying...`);
-        setSessionStatus('Ready - Say "hey" to trigger AI');
+        setSessionStatus('Ready - Just speak naturally');
 
         // Auto-restart recording after keyword error
         setTimeout(() => startRecording(), 300);
@@ -495,7 +473,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         // Don't show file access errors - just retry silently
         if (errorMessage.includes('process cannot access') || errorMessage.includes('being used')) {
           console.log('⏭️ File access error, retrying...');
-          setSessionStatus('Ready - Say "hey" to trigger AI');
+          setSessionStatus('Ready - Just speak naturally');
 
           setTimeout(() => {
             if (isSessionActive) {
@@ -511,7 +489,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
             duration: 3000,
           });
 
-          setSessionStatus('Ready - Say "hey" to trigger AI');
+          setSessionStatus('Ready - Just speak naturally');
 
           // Auto-restart recording after error
           setTimeout(() => {
@@ -643,7 +621,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           // Don't show error to user, TTS failure is non-critical
         } finally {
           setIsSpeaking(false);
-          setSessionStatus('Ready - Say "hey" to trigger AI');
+          setSessionStatus('Ready - Just speak naturally');
           // Focus chat input after TTS completes
           setTimeout(() => {
             chatInputRef.current?.focus();
