@@ -100,7 +100,9 @@ export const stopMediaStream = (stream: MediaStream | null): void => {
  */
 export const convertToWAV = async (blob: Blob): Promise<Blob> => {
   const arrayBuffer = await blob.arrayBuffer();
-  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
+    sampleRate: 48000, // Match recording sample rate for better quality
+  });
   const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
   const numberOfChannels = audioBuffer.numberOfChannels;
@@ -142,7 +144,7 @@ export const convertToWAV = async (blob: Blob): Promise<Blob> => {
   view.setUint32(40, dataLength, true);
 
   let offset = 44;
-  const volume = 0.8;
+  const volume = 1.0; // Full volume for better quality (was 0.8)
   for (let i = 0; i < interleaved.length; i++) {
     view.setInt16(offset, interleaved[i] * volume * 0x7fff, true);
     offset += 2;

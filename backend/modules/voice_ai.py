@@ -277,16 +277,16 @@ class WhisperTranscriptionService:
                     logger.warning("⚠️ GPU not available, using CPU")
                 device = "cpu"
 
-            # Use base model for fastest transcription (244MB, 4x faster than large-v3-turbo)
+            # Use small model for better accuracy (461MB, good balance)
             if not hasattr(self, "_logged_load"):  # Only log once
-                logger.info(f"Loading openai-whisper base model on {device.upper()}")
-            self.model = whisper.load_model("base", device=device)
+                logger.info(f"Loading openai-whisper small model on {device.upper()}")
+            self.model = whisper.load_model("small", device=device)
             self.is_loaded = True
             self.use_whisper_cpp = False
             self.device = device
             if not hasattr(self, "_logged_load"):  # Only log once
-                logger.info(f"✅ Whisper base model loaded successfully on {device.upper()}")
-                logger.info(f"   Model optimized for speed (244MB, ~4x faster)")
+                logger.info(f"✅ Whisper small model loaded successfully on {device.upper()}")
+                logger.info(f"   Model optimized for accuracy (461MB, better transcription)")
                 self._logged_load = True
             return True
         except Exception as e:
@@ -295,9 +295,9 @@ class WhisperTranscriptionService:
 
             logger.error(traceback.format_exc())
 
-            # Fallback to tiny model if base fails (fastest option)
+            # Fallback to base model if small fails
             try:
-                logger.info("Falling back to tiny model...")
+                logger.info("Falling back to base model...")
                 import torch
                 import whisper
 
@@ -306,13 +306,13 @@ class WhisperTranscriptionService:
                 else:
                     device = "cpu"
 
-                self.model = whisper.load_model("tiny", device=device)
+                self.model = whisper.load_model("base", device=device)
                 self.is_loaded = True
                 self.use_whisper_cpp = False
                 self.device = device
                 if not hasattr(self, "_logged_load"):  # Only log once
-                    logger.info(f"✅ Whisper tiny model loaded successfully on {device.upper()}")
-                    logger.info(f"   Model optimized for maximum speed (75MB)")
+                    logger.info(f"✅ Whisper base model loaded successfully on {device.upper()}")
+                    logger.info(f"   Model with balanced performance (244MB)")
                     self._logged_load = True
                 return True
             except Exception as fallback_error:
@@ -427,19 +427,21 @@ class WhisperTranscriptionService:
                     result = self.model.transcribe(temp_audio_path)
                     text = result["result"]
                 else:
-                    # Use openai-whisper with speed optimizations
+                    # Use openai-whisper with balanced accuracy/speed settings
                     import torch
 
                     result = self.model.transcribe(
                         temp_audio_path,
                         language=language,
                         task="transcribe",
-                        fp16=torch.cuda.is_available(),  # Use FP16 on GPU for 2x speed
-                        beam_size=1,  # Greedy decoding for speed (no beam search)
-                        best_of=1,  # No sampling, fastest option
-                        temperature=0,  # Deterministic for speed
+                        fp16=torch.cuda.is_available(),  # Use FP16 on GPU for speed
+                        beam_size=5,  # Better accuracy with beam search (was 1)
+                        best_of=5,  # Sample multiple candidates for accuracy (was 1)
+                        temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),  # Temperature fallback for accuracy
                         compression_ratio_threshold=2.4,
-                        no_speech_threshold=0.6,
+                        no_speech_threshold=0.5,  # Lower threshold to catch more speech (was 0.6)
+                        logprob_threshold=-1.0,  # Better filtering
+                        condition_on_previous_text=True,  # Use context for accuracy
                     )
                     text = result.get("text", "").strip()
             except Exception as transcribe_error:

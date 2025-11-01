@@ -180,8 +180,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 16000, // Optimal for Whisper
+          sampleRate: 48000, // Higher quality for better transcription
           channelCount: 1, // Mono audio
+          sampleSize: 16, // 16-bit depth
+          latency: 0, // Minimize latency
         },
       });
 
@@ -199,7 +201,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: selectedMimeType,
-        audioBitsPerSecond: 128000,
+        audioBitsPerSecond: 256000, // Higher bitrate for better quality
       });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -283,12 +285,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       mediaRecorder.start();
       setIsRecording(true);
 
-      // Auto-stop after 5 seconds (configurable)
+      // Auto-stop after 8 seconds for longer phrases (was 5)
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           stopRecording();
         }
-      }, 5000);
+      }, 8000);
     } catch (error: any) {
       console.error('Recording error:', error);
       toast({
