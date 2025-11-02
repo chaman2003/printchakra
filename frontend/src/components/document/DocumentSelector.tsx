@@ -34,7 +34,7 @@ import {
   Icon,
 } from '@chakra-ui/react';
 import { FiFile, FiUpload, FiCheck } from 'react-icons/fi';
-import Iconify from './Iconify';
+import Iconify from '../common/Iconify';
 
 interface Document {
   filename: string;
@@ -198,10 +198,25 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
 
         <Box position="relative" h={{ base: '120px', md: '150px' }} bg="gray.800" overflow="hidden">
           {doc.thumbnailUrl ? (
-            <Image src={doc.thumbnailUrl} alt={doc.filename} objectFit="cover" w="100%" h="100%" />
+            <Image 
+              src={doc.thumbnailUrl} 
+              alt={doc.filename} 
+              objectFit="contain" 
+              w="100%" 
+              h="100%"
+              onError={(e) => {
+                // If thumbnail fails to load, show fallback icon
+                e.currentTarget.style.display = 'none';
+              }}
+              fallback={
+                <Flex align="center" justify="center" h="100%" bg="gray.700">
+                  <Iconify icon="solar:document-bold" boxSize={8} color="whiteAlpha.600" />
+                </Flex>
+              }
+            />
           ) : (
             <Flex align="center" justify="center" h="100%">
-              <Iconify icon={FiFile} boxSize={12} color="whiteAlpha.500" />
+              <Iconify icon="solar:document-bold" boxSize={8} color="whiteAlpha.500" />
             </Flex>
           )}
         </Box>

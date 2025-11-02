@@ -1,0 +1,357 @@
+import React, { useState, useCallback } from 'react';
+import {
+  Box,
+  Button,
+  Flex,
+  Spinner,
+  Stack,
+  Text,
+  VStack,
+  HStack,
+  Badge,
+  Tooltip,
+  useColorModeValue,
+  Progress,
+} from '@chakra-ui/react';
+import { FiWifi, FiCheckCircle, FiAlertCircle, FiRefreshCw, FiCamera } from 'react-icons/fi';
+import Iconify from './Iconify';
+import apiClient from '../../apiClient';
+
+interface ConnectionStatus {
+  phoneWiFi: 'idle' | 'checking' | 'connected' | 'failed';
+  phoneCamera: 'idle' | 'checking' | 'connected' | 'failed';
+  laptopPrinter: 'idle' | 'checking' | 'connected' | 'failed';
+}
+
+interface ConnectionDetails {
+  phoneWiFi: string;
+  phoneCamera: string;
+  laptopPrinter: string;
+}
+
+interface SmartConnectionStatusProps {
+  onStatusComplete?: (allConnected: boolean) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  videoRef?: React.RefObject<HTMLVideoElement | null>;
+  isCapturing?: boolean;
+}
+
+const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ 
+  onStatusComplete, 
+  isOpen = true, 
+  onClose, 
+  videoRef,
+  isCapturing = false
+}) => {
+  const [status, setStatus] = useState<ConnectionStatus>({
+    phoneWiFi: 'idle',
+    phoneCamera: 'idle',
+    laptopPrinter: 'idle',
+  });
+  const [details, setDetails] = useState<ConnectionDetails>({
+    phoneWiFi: 'Awaiting check',
+    phoneCamera: 'Awaiting check',
+    laptopPrinter: 'Awaiting check',
+  });
+  const [isChecking, setIsChecking] = useState(false);
+  const [overallStatus, setOverallStatus] = useState<'idle' | 'checking' | 'success' | 'failed'>(
+    'idle'
+  );
+  const [checkProgress, setCheckProgress] = useState(0);
+
+  const bgCard = useColorModeValue('rgba(255, 255, 255, 0.05)', 'rgba(30, 30, 40, 0.6)');
+  const borderColor = useColorModeValue('rgba(69, 202, 255, 0.2)', 'rgba(69, 202, 255, 0.15)');
+
+  const runSequentialConnectionCheck = useCallback(async () => {
+    setIsChecking(true);
+    setOverallStatus('checking');
+    setCheckProgress(0);
+
+    try {
+      let allConnected = true;
+
+      // STEP 1: Phone ↔ Laptop WiFi Connection
+      setCheckProgress(25);
+      setStatus(prev => ({ ...prev, phoneWiFi: 'checking' }));
+      setDetails(prev => ({ ...prev, phoneWiFi: 'Validating WiFi link...' }));
+
+      try {
+        const wifiResponse = await apiClient.post('/connection/validate-wifi', {
+          timestamp: Date.now(),
+        });
+        
+        const wifiConnected = wifiResponse?.data?.connected;
+        setStatus(prev => ({ ...prev, phoneWiFi: wifiConnected ? 'connected' : 'failed' }));
+        setDetails(prev => ({
+          ...prev,
+          phoneWiFi: wifiConnected
+            ? `✅ Same network (${wifiResponse?.data?.ip || 'Active'})`
+            : wifiResponse?.data?.message || '❌ Not on same WiFi',
+        }));
+        allConnected = allConnected && wifiConnected;
+      } catch (err: any) {
+        setStatus(prev => ({ ...prev, phoneWiFi: 'failed' }));
+        setDetails(prev => ({ ...prev, phoneWiFi: '❌ WiFi check failed' }));
+        allConnected = false;
+      }
+
+      // Small delay between checks for visual effect
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // STEP 2: Phone Camera Capturing Validation
+      setCheckProgress(50);
+      setStatus(prev => ({ ...prev, phoneCamera: 'checking' }));
+      setDetails(prev => ({ ...prev, phoneCamera: 'Validating camera stream...' }));
+
+      try {
+        const cameraResponse = await apiClient.post('/connection/validate-camera', {
+          isCapturing: isCapturing || (videoRef?.current?.srcObject !== null),
+          timestamp: Date.now(),
+        });
+        
+        const cameraActive = cameraResponse?.data?.capturing;
+        setStatus(prev => ({ ...prev, phoneCamera: cameraActive ? 'connected' : 'failed' }));
+        setDetails(prev => ({
+          ...prev,
+          phoneCamera: cameraActive
+            ? '✅ Camera capturing frames'
+            : '❌ Camera not active',
+        }));
+        allConnected = allConnected && cameraActive;
+      } catch (err: any) {
+        setStatus(prev => ({ ...prev, phoneCamera: 'failed' }));
+        setDetails(prev => ({ ...prev, phoneCamera: '❌ Camera check failed' }));
+        allConnected = false;
+      }
+
+      // Small delay between checks for visual effect
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // STEP 3: Laptop ↔ Printer Connection (Auto-print blank PDF)
+      setCheckProgress(75);
+      setStatus(prev => ({ ...prev, laptopPrinter: 'checking' }));
+      setDetails(prev => ({ ...prev, laptopPrinter: 'Testing printer connection...' }));
+
+      try {
+        const printerResponse = await apiClient.post('/connection/validate-printer', {
+          testPrint: true,
+          timestamp: Date.now(),
+        });
+        
+        const printerReady = printerResponse?.data?.connected;
+        setStatus(prev => ({ ...prev, laptopPrinter: printerReady ? 'connected' : 'failed' }));
+        setDetails(prev => ({
+          ...prev,
+          laptopPrinter: printerReady
+            ? `✅ Printer ready (${printerResponse?.data?.model || 'Connected'})`
+            : printerResponse?.data?.message || '❌ Printer not responding',
+        }));
+        allConnected = allConnected && printerReady;
+      } catch (err: any) {
+        setStatus(prev => ({ ...prev, laptopPrinter: 'failed' }));
+        setDetails(prev => ({ ...prev, laptopPrinter: '❌ Printer check failed' }));
+        allConnected = false;
+      }
+
+      // Final status
+      setCheckProgress(100);
+      setOverallStatus(allConnected ? 'success' : 'failed');
+
+      if (onStatusComplete) {
+        onStatusComplete(allConnected);
+      }
+    } catch (error) {
+      console.error('Sequential connection check failed:', error);
+      setOverallStatus('failed');
+      setStatus({
+        phoneWiFi: 'failed',
+        phoneCamera: 'failed',
+        laptopPrinter: 'failed',
+      });
+    } finally {
+      setIsChecking(false);
+    }
+  }, [isCapturing, videoRef, onStatusComplete]);
+
+  if (!isOpen && !onClose) {
+    return null;
+  }
+
+  return (
+    <Stack spacing={2} w="full">
+      <Box
+        bg={bgCard}
+        border={`1px solid ${borderColor}`}
+        borderRadius="lg"
+        p={3}
+        position="relative"
+        overflow="hidden"
+        _before={{
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background:
+            overallStatus === 'success'
+              ? 'linear-gradient(135deg, rgba(72, 187, 120, 0.05) 0%, rgba(72, 187, 120, 0) 100%)'
+              : overallStatus === 'failed'
+                ? 'linear-gradient(135deg, rgba(245, 101, 101, 0.05) 0%, rgba(245, 101, 101, 0) 100%)'
+                : 'transparent',
+          pointerEvents: 'none',
+        }}
+      >
+        <Stack spacing={2} position="relative" zIndex={1}>
+          {/* Header */}
+          <Flex justify="space-between" align="flex-start" gap={2}>
+            <VStack align="flex-start" spacing={0} flex={1}>
+              <Text fontSize="sm" fontWeight="600">
+                🔗 System Connection
+              </Text>
+              <Text fontSize="xs" color="text.muted">
+                {overallStatus === 'idle' && 'Ready to validate'}
+                {overallStatus === 'checking' && 'Validating connections...'}
+                {overallStatus === 'success' && '✅ All systems connected'}
+                {overallStatus === 'failed' && '⚠️ Issues detected'}
+              </Text>
+            </VStack>
+            <HStack gap={1}>
+              {isChecking && <Spinner size="xs" color="brand.400" />}
+              {onClose && (
+                <Button size="xs" variant="ghost" onClick={onClose} p={0} minW="auto">
+                  ✕
+                </Button>
+              )}
+            </HStack>
+          </Flex>
+
+          {/* Progress Bar */}
+          {isChecking && (
+            <Progress value={checkProgress} size="sm" borderRadius="full" colorScheme="brand" />
+          )}
+
+          {/* Connection Items */}
+          <VStack spacing={2} align="stretch">
+            <ConnectionCheckItem
+              label="Phone ↔ Laptop"
+              icon={FiWifi}
+              status={status.phoneWiFi}
+              details={details.phoneWiFi}
+            />
+            <ConnectionCheckItem
+              label="Phone Camera"
+              icon={FiCamera}
+              status={status.phoneCamera}
+              details={details.phoneCamera}
+            />
+            <ConnectionCheckItem
+              label="Laptop ↔ Printer"
+              icon={FiRefreshCw}
+              status={status.laptopPrinter}
+              details={details.laptopPrinter}
+            />
+          </VStack>
+
+          {/* Validate Button */}
+          <Flex gap={2} justify="flex-end" pt={1}>
+            <Button
+              size="sm"
+              colorScheme="brand"
+              isLoading={isChecking}
+              loadingText="Validating..."
+              onClick={runSequentialConnectionCheck}
+              leftIcon={<Iconify icon={FiRefreshCw} boxSize={3} />}
+              fontSize="xs"
+              isDisabled={isChecking}
+            >
+              Validate
+            </Button>
+            {overallStatus === 'success' && (
+              <Badge
+                colorScheme="green"
+                p={1}
+                borderRadius="md"
+                fontSize="xs"
+                display="flex"
+                alignItems="center"
+                gap={1}
+              >
+                <Iconify icon={FiCheckCircle} boxSize={3} />
+                Ready
+              </Badge>
+            )}
+          </Flex>
+        </Stack>
+      </Box>
+
+      {overallStatus === 'failed' && (
+        <Box
+          bg="rgba(245, 101, 101, 0.05)"
+          border="1px solid rgba(245, 101, 101, 0.15)"
+          borderRadius="md"
+          p={2}
+          fontSize="xs"
+        >
+          <VStack align="flex-start" spacing={1}>
+            <Text fontWeight="600" color="red.300" fontSize="xs">
+              ⚠️ Connection Failed
+            </Text>
+            <VStack align="flex-start" spacing={0.5} pl={3} fontSize="xs">
+              {status.phoneWiFi === 'failed' && (
+                <Text>• Check if phone is on same WiFi network</Text>
+              )}
+              {status.phoneCamera === 'failed' && (
+                <Text>• Ensure camera is actively capturing</Text>
+              )}
+              {status.laptopPrinter === 'failed' && (
+                <Text>• Verify printer is powered and online</Text>
+              )}
+            </VStack>
+          </VStack>
+        </Box>
+      )}
+    </Stack>
+  );
+};
+
+// New simplified connection check item component
+const ConnectionCheckItem: React.FC<{
+  label: string;
+  icon: any;
+  status: 'idle' | 'checking' | 'connected' | 'failed';
+  details: string;
+}> = ({ label, icon, status, details }) => {
+  const statusColor = status === 'connected' ? 'green.400' : status === 'failed' ? 'red.400' : 'yellow.400';
+  const statusBg = status === 'connected' ? 'green' : status === 'failed' ? 'red' : status === 'checking' ? 'yellow' : 'gray';
+
+  return (
+    <HStack spacing={2} p={1.5} borderRadius="md" bg="rgba(0,0,0,0.1)" w="full">
+      <Box position="relative" w="6" h="6" display="flex" alignItems="center" justifyContent="center">
+        {status === 'checking' ? (
+          <Spinner size="sm" color={statusColor} />
+        ) : status === 'connected' ? (
+          <Iconify icon={FiCheckCircle} boxSize={5} color="green.400" />
+        ) : status === 'failed' ? (
+          <Iconify icon={FiAlertCircle} boxSize={5} color="red.400" />
+        ) : (
+          <Iconify icon={icon} boxSize={5} color="gray.400" />
+        )}
+      </Box>
+      <VStack align="flex-start" spacing={0} flex={1} minW={0}>
+        <Text fontSize="xs" fontWeight="500">
+          {label}
+        </Text>
+        <Text fontSize="xs" color="text.muted" noOfLines={1}>
+          {details}
+        </Text>
+      </VStack>
+      <Badge colorScheme={statusBg} variant="subtle" fontSize="xs" py={0} px={1}>
+        {status === 'checking' ? 'Validating' : status === 'connected' ? 'OK' : status === 'failed' ? 'Failed' : 'Idle'}
+      </Badge>
+    </HStack>
+  );
+};
+
+export default SmartConnectionStatus;

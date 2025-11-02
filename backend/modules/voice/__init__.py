@@ -427,7 +427,7 @@ class WhisperTranscriptionService:
                     result = self.model.transcribe(temp_audio_path)
                     text = result["result"]
                 else:
-                    # Use openai-whisper with balanced accuracy/speed settings
+                    # Use openai-whisper with SPEED-OPTIMIZED settings for real-time voice processing
                     import torch
 
                     result = self.model.transcribe(
@@ -435,22 +435,70 @@ class WhisperTranscriptionService:
                         language=language,
                         task="transcribe",
                         fp16=torch.cuda.is_available(),  # Use FP16 on GPU for speed
-                        beam_size=5,  # Better accuracy with beam search
-                        best_of=5,  # Sample multiple candidates for accuracy
-                        temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0),  # Temperature fallback
+                        beam_size=1,  # FAST: Greedy decoding (5→1 = 5x faster)
+                        best_of=1,  # FAST: Single candidate (5→1 = no extra sampling)
+                        temperature=0.0,  # FAST: Deterministic, no fallback (6→1 temps)
                         compression_ratio_threshold=2.4,
-                        no_speech_threshold=0.6,  # Higher threshold to filter non-speech sounds
-                        logprob_threshold=-0.8,  # Stricter filtering for human voice
-                        condition_on_previous_text=True,  # Use context for accuracy
+                        no_speech_threshold=0.75,  # Strict threshold to filter background noise
+                        logprob_threshold=-0.5,  # Strict filtering for human voice only
+                        condition_on_previous_text=False,  # FAST: Disable context (each chunk independent)
                     )
                     text = result.get("text", "").strip()
                     
-                    # Check for non-speech detection via probability
-                    no_speech_prob = result.get("segments", [{}])[0].get("no_speech_prob", 0) if result.get("segments") else 0
+                    # ENHANCED: Multi-level speech detection
+                    segments = result.get("segments", [])
                     
-                    # If high probability of no speech (> 0.5), reject and request retry
-                    if no_speech_prob > 0.5:
-                        logger.warning(f"⚠️ Non-speech audio detected (probability: {no_speech_prob:.2f})")
+                    # Level 1: Check no_speech_prob for each segment
+                    if segments:
+                        # Calculate average no_speech probability across all segments
+                        avg_no_speech_prob = sum(seg.get("no_speech_prob", 0) for seg in segments) / len(segments)
+                        max_no_speech_prob = max(seg.get("no_speech_prob", 0) for seg in segments)
+                        
+                        # STRICT: If average > 0.4 OR max > 0.6, reject as background noise
+                        if avg_no_speech_prob > 0.4 or max_no_speech_prob > 0.6:
+                            logger.warning(f"⚠️ Background noise detected (avg: {avg_no_speech_prob:.2f}, max: {max_no_speech_prob:.2f})")
+                            os.unlink(temp_audio_path)
+                            return {
+                                "success": False,
+                                "error": "Only background noise detected. Please speak clearly.",
+                                "text": "",
+                                "no_speech_detected": True,
+                                "auto_retry": True
+                            }
+                        
+                        # Level 2: Check average log probability (confidence in transcription)
+                        avg_logprob = sum(seg.get("avg_logprob", -1.0) for seg in segments) / len(segments)
+                        
+                        # STRICT: If confidence too low (logprob < -0.6), likely background noise
+                        if avg_logprob < -0.6:
+                            logger.warning(f"⚠️ Low confidence transcription (avg_logprob: {avg_logprob:.2f}) - likely background noise")
+                            os.unlink(temp_audio_path)
+                            return {
+                                "success": False,
+                                "error": "Unclear audio. Please speak louder and clearer.",
+                                "text": "",
+                                "no_speech_detected": True,
+                                "auto_retry": True
+                            }
+                    
+                    # Level 3: Check if transcribed text is too short or gibberish
+                    if text:
+                        word_count = len(text.split())
+                        # If less than 2 words, likely noise or non-speech
+                        if word_count < 2:
+                            logger.warning(f"⚠️ Transcription too short ({word_count} words): '{text}' - likely background noise")
+                            os.unlink(temp_audio_path)
+                            return {
+                                "success": False,
+                                "error": "No clear speech detected. Please try again.",
+                                "text": "",
+                                "no_speech_detected": True,
+                                "auto_retry": True
+                            }
+                    
+                    # Level 4: Check for empty or whitespace-only transcription
+                    if not text or text.isspace():
+                        logger.warning(f"⚠️ Empty transcription - background noise only")
                         os.unlink(temp_audio_path)
                         return {
                             "success": False,
@@ -523,7 +571,7 @@ class WhisperTranscriptionService:
 class Smollm2ChatService:
     """
     Service for AI chat responses using Smollm2:135m via Ollama
-    Fast, efficient local inference
+    Fast, efficient local inference with intelligent voice command interpretation
     """
 
     def __init__(self, model_name: str = "smollm2:135m"):
@@ -536,6 +584,20 @@ class Smollm2ChatService:
         self.model_name = model_name
         self.conversation_history = []
         self.pending_orchestration = None  # Track if waiting for confirmation (print/scan)
+        
+        # Command mappings for intelligent voice navigation
+        self.command_mappings = {
+            # Navigation commands
+            "scroll": ["scroll", "scroll down", "scroll up", "move down", "move up", "swipe", "page down", "page up", "next page", "prev page", "previous page"],
+            "select": ["select", "choose", "pick", "open", "click", "tap", "select it", "this one", "that one"],
+            "confirm": ["yes", "okay", "ok", "confirm", "proceed", "go ahead", "do it", "apply", "submit", "next", "continue"],
+            "cancel": ["no", "cancel", "stop", "exit", "quit", "back", "nope", "don't", "abort"],
+            "next": ["next", "continue", "go to next", "next step", "forward", "ahead"],
+            "back": ["back", "previous", "go back", "prior", "behind", "earlier"],
+            "settings": ["settings", "config", "configure", "change settings", "options", "preferences"],
+            "help": ["help", "assist", "how to", "guide", "help me", "i don't know"],
+        }
+        
         self.system_prompt = """You are PrintChakra AI - a direct, action-focused assistant.
 
 ⚠️ CRITICAL: The system handles print/scan intents automatically. You should NEVER see messages about printing or scanning - they are intercepted before reaching you.
@@ -588,9 +650,63 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 self._logged_ollama_error = True
             return False
 
+    def interpret_voice_command(self, user_message: str) -> tuple[Optional[str], float]:
+        """
+        Intelligently interpret voice commands with fuzzy matching
+        
+        Args:
+            user_message: User's spoken text
+            
+        Returns:
+            Tuple of (command_type, confidence_score) or (None, 0) if no match
+        """
+        try:
+            from difflib import SequenceMatcher
+            
+            user_lower = user_message.lower().strip()
+            best_command = None
+            best_confidence = 0.0
+            
+            # Check each command type
+            for command_type, keywords in self.command_mappings.items():
+                for keyword in keywords:
+                    # Exact match gets highest confidence
+                    if user_lower == keyword:
+                        logger.info(f"✅ EXACT MATCH: '{user_message}' → {command_type}")
+                        return command_type, 1.0
+                    
+                    # Substring match within message (contains keyword)
+                    if keyword in user_lower:
+                        confidence = 0.9
+                        if confidence > best_confidence:
+                            best_command = command_type
+                            best_confidence = confidence
+                        logger.info(f"🎯 SUBSTRING MATCH: '{user_message}' contains '{keyword}' → {command_type} (confidence: {confidence})")
+                        continue
+                    
+                    # Fuzzy match (similarity score)
+                    similarity = SequenceMatcher(None, user_lower, keyword).ratio()
+                    if similarity > 0.75:  # >75% similar
+                        if similarity > best_confidence:
+                            best_command = command_type
+                            best_confidence = similarity
+                        logger.info(f"🔀 FUZZY MATCH: '{user_message}' ≈ '{keyword}' → {command_type} (confidence: {similarity:.2f})")
+            
+            if best_command and best_confidence > 0.6:
+                logger.info(f"✅ COMMAND INTERPRETED: {best_command} (confidence: {best_confidence:.2f})")
+                return best_command, best_confidence
+            
+            logger.info(f"❓ NO COMMAND MATCH: '{user_message}' (best match: {best_command} @ {best_confidence:.2f})")
+            return None, 0.0
+            
+        except Exception as e:
+            logger.error(f"Error interpreting voice command: {e}")
+            return None, 0.0
+
     def generate_response(self, user_message: str) -> Dict[str, Any]:
         """
-        Generate AI response to user message with orchestration awareness
+        Generate AI response to user message with intelligent command interpretation
+        First tries to match voice commands, then handles print/scan, then general chat
 
         Args:
             user_message: User's text input
@@ -604,6 +720,27 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
             user_lower = user_message.lower().strip()
             
             logger.info(f"🔍 Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
+
+            # PRIORITY 0: Try to interpret as a voice command (navigation, control)
+            command_type, confidence = self.interpret_voice_command(user_message)
+            if command_type and confidence > 0.7:  # High confidence command match
+                ai_response = f"VOICE_COMMAND:{command_type} Executing {command_type}!"
+                logger.info(f"✅ VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f})")
+                
+                # Add to history
+                self.conversation_history.append({"role": "user", "content": user_message})
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+                
+                return {
+                    "success": True,
+                    "response": f"Got it! {command_type.capitalize()}.",
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "tts_enabled": TTS_AVAILABLE,
+                    "spoken": False,
+                    "voice_command": command_type,
+                    "command_confidence": confidence,
+                }
 
             # PRIORITY 1: Check for confirmation if we have pending orchestration
             if self.pending_orchestration:
@@ -634,39 +771,43 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                     logger.info(f"⚠️ User response not a confirmation, clearing pending state")
                     self.pending_orchestration = None
             
-            # PRIORITY 2: Check for print/scan intent
-            if "print" in user_lower:
-                self.pending_orchestration = "print"
-                ai_response = "Ready to print. Shall we proceed?"
-                logger.info(f"🖨️ Print intent detected, setting pending_orchestration = print")
+            # PRIORITY 2: Check for DIRECT print/scan commands - TRIGGER IMMEDIATELY
+            if "print" in user_lower and not any(word in user_lower for word in ["what", "can", "do", "help", "how", "tell"]):
+                # Direct print command detected
+                ai_response = f"TRIGGER_ORCHESTRATION:print Opening print interface now!"
+                logger.info(f"🖨️ DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
                 return {
                     "success": True,
-                    "response": ai_response,
+                    "response": "Opening print interface!",
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
+                    "orchestration_trigger": True,
+                    "orchestration_mode": "print",
                 }
             
-            if "scan" in user_lower or "capture" in user_lower:
-                self.pending_orchestration = "scan"
-                ai_response = "Ready to scan. Shall we proceed?"
-                logger.info(f"📷 Scan intent detected, setting pending_orchestration = scan")
+            if ("scan" in user_lower or "capture" in user_lower) and not any(word in user_lower for word in ["what", "can", "do", "help", "how", "tell"]):
+                # Direct scan command detected
+                ai_response = f"TRIGGER_ORCHESTRATION:scan Opening scan interface now!"
+                logger.info(f"📷 DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
                 return {
                     "success": True,
-                    "response": ai_response,
+                    "response": "Opening scan interface!",
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
+                    "orchestration_trigger": True,
+                    "orchestration_mode": "scan",
                 }
 
             # Add user message to history for general conversation

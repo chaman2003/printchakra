@@ -20,7 +20,7 @@ import {
   Badge,
   Tooltip,
 } from '@chakra-ui/react';
-import { Iconify } from './common';
+import Iconify from '../common/Iconify';
 
 // ==================== PREVIEW SIZE CONFIGURATION ====================
 // A4 paper aspect ratio: 1:1.414 (210mm x 297mm)

@@ -23,9 +23,9 @@ import {
   InputGroup,
   InputRightElement,
 } from '@chakra-ui/react';
-import apiClient from '../apiClient';
-import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../utils/audioUtils';
-import Iconify from './Iconify';
+import apiClient from '../../apiClient';
+import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../../utils/audioUtils';
+import Iconify from '../common/Iconify';
 
 interface OrchestrationVoiceControlProps {
   mode: 'print' | 'scan';

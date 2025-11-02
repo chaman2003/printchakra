@@ -43,8 +43,7 @@ import {
   SOCKET_IO_ENABLED,
   getDefaultHeaders,
 } from '../config';
-import Iconify from '../components/Iconify';
-import ConnectionValidator from '../components/ConnectionValidator';
+import { Iconify, ConnectionValidator } from '../components/common';
 
 interface QualityCheck {
   blur_score: number;
@@ -1118,12 +1117,11 @@ const Phone: React.FC = () => {
           </Stack>
         </CardBody>
       </Card>
-
       {/* Connection Validator Modal */}
       <ConnectionValidator
         isOpen={showConnectionValidator}
         onClose={() => setShowConnectionValidator(false)}
-        videoRef={videoRef}
+        videoRef={videoRef as React.RefObject<HTMLVideoElement>}
       />
     </VStack>
   );

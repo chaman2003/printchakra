@@ -76,16 +76,12 @@ import {
   FiZoomIn,
   FiLayers,
   FiMic,
+  FiWifiOff,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
-import Iconify from '../components/Iconify';
-import FancySelect from '../components/FancySelect';
-import VoiceAIChat from '../components/VoiceAIChat';
-import ConnectionValidator from '../components/ConnectionValidator';
-import DocumentSelector from '../components/DocumentSelector';
-import DocumentPreview from '../components/DocumentPreview';
-import OrchestrationVoiceControl from '../components/OrchestrationVoiceControl';
+import { Iconify, FancySelect, ConnectionValidator } from '../components/common';
+import { VoiceAIChat, DocumentSelector, DocumentPreview } from '../components';
 
 // Motion components
 const MotionBox = motion(Box);
@@ -94,66 +90,86 @@ const MotionModalContent = motion(ModalContent);
 const MotionButton = motion(Button);
 const MotionFlex = motion(Flex);
 
+interface ProcessingProgress {
+  step: number;
+  total_steps: number;
+  stage_name: string;
+  message?: string;
+}
+
 interface FileInfo {
   filename: string;
   size: number;
   created: string;
   has_text: boolean;
+  page_count?: number;
+  mime_type?: string;
   processing?: boolean;
   processing_step?: number;
   processing_total?: number;
   processing_stage?: string;
+  processing_eta?: number;
+  processing_progress?: number;
+  thumbnail?: string;
 }
 
-interface ProcessingProgress {
-  step: number;
-  total_steps: number;
-  stage_name: string;
-  message: string;
-}
-
-// Custom hook to load images with proper headers
 const useImageWithHeaders = (imageUrl: string) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!imageUrl) {
+      return;
+    }
+
     let revokeUrl: string | null = null;
+    setLoading(true);
+    setError(null);
 
     const loadImage = async () => {
       try {
-        setLoading(true);
-        setError(false);
+        const headers: Record<string, string> = {
+          'X-Requested-With': 'XMLHttpRequest',
+        };
 
-        const response = await apiClient.get(imageUrl.replace(API_BASE_URL, ''), {
-          responseType: 'blob',
-          timeout: 10000,
+        // Add ngrok bypass header if using ngrok tunnel
+        if (API_BASE_URL.includes('ngrok') || API_BASE_URL.includes('loca.lt')) {
+          headers['ngrok-skip-browser-warning'] = 'true';
+        }
+
+        const response = await fetch(imageUrl, {
+          headers,
+          credentials: 'include',
         });
 
-        if (isMounted) {
-          const blob = response.data;
-          const url = URL.createObjectURL(blob);
-          revokeUrl = url;
-          setBlobUrl(url);
-          setLoading(false);
+        if (!response.ok) {
+          console.error(`Failed to fetch image: ${response.status} ${response.statusText}`, imageUrl);
+          throw new Error(`Failed to fetch image: ${response.status}`);
         }
+
+        const blob = await response.blob();
+        
+        // Validate blob
+        if (!blob || blob.size === 0) {
+          throw new Error('Empty image response');
+        }
+
+        const url = URL.createObjectURL(blob);
+        revokeUrl = url;
+        setBlobUrl(url);
       } catch (err) {
-        console.error('Failed to load image:', imageUrl, err);
-        if (isMounted) {
-          setError(true);
-          setLoading(false);
-        }
+        console.error('Image load error:', err, imageUrl);
+        setError(err as Error);
+        setBlobUrl(null);
+      } finally {
+        setLoading(false);
       }
     };
 
-    if (imageUrl) {
-      loadImage();
-    }
+    loadImage();
 
     return () => {
-      isMounted = false;
       if (revokeUrl) {
         URL.revokeObjectURL(revokeUrl);
       }
@@ -173,7 +189,9 @@ interface SecureImageProps {
 }
 
 const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onClick, style }) => {
+  // Try /processed first, fallback to /thumbnail
   const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
+  const thumbnailUrl = `${API_BASE_URL}/thumbnail/${filename}`;
   const { blobUrl, loading, error } = useImageWithHeaders(imageUrl);
 
   if (loading) {
@@ -197,22 +215,28 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
   }
 
   if (error || !blobUrl) {
+    // Fallback to thumbnail endpoint if /processed fails
     return (
-      <Flex
-        direction="column"
-        align="center"
-        justify="center"
+      <Box
+        as="img"
+        src={thumbnailUrl}
+        alt={alt}
         className={className}
+        onClick={onClick}
         style={style}
-        minH="160px"
-        bg="surface.blur"
+        cursor={onClick ? 'pointer' : 'default'}
+        objectFit="cover"
+        w="100%"
+        h="100%"
         borderRadius="lg"
-      >
-        <Iconify icon={FiFileText} boxSize={8} color="brand.300" />
-        <Text mt={3} fontSize="sm" color="text.muted">
-          Preview unavailable
-        </Text>
-      </Flex>
+        onError={(e: any) => {
+          // If thumbnail also fails, show placeholder
+          (e.target as HTMLImageElement).style.display = 'none';
+          const placeholder = document.createElement('div');
+          placeholder.innerHTML = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(0,0,0,0.2); border-radius: 8px;"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg><span style="margin-top: 8px; font-size: 12px; color: #999;">Preview unavailable</span></div>';
+          (e.target as HTMLImageElement).parentElement?.appendChild(placeholder);
+        }}
+      />
     );
   }
 
@@ -306,6 +330,9 @@ const Dashboard: React.FC = () => {
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
 
+  // Connection status modal state
+  const connectivityModal = useDisclosure();
+
   // Ref for scrolling the modal body
   const modalBodyRef = React.useRef<HTMLDivElement>(null);
 
@@ -377,6 +404,8 @@ const Dashboard: React.FC = () => {
   });
 
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
+  const dockedChatBg = useColorModeValue('rgba(248, 250, 255, 0.95)', 'rgba(9, 14, 26, 0.96)');
+  const dockedBorderColor = useColorModeValue('rgba(121,95,238,0.12)', 'rgba(121,95,238,0.35)');
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
 
@@ -421,6 +450,7 @@ const Dashboard: React.FC = () => {
     });
 
     loadFiles();
+    loadConvertedFiles(); // Load converted files on component mount
 
     let pollInterval = 60000;
     const maxInterval = 300000;
@@ -555,6 +585,7 @@ const Dashboard: React.FC = () => {
   };
 
   const openOrchestrateModal = () => {
+    setOrchestrationContext('manual');
     // Reset state
     setOrchestrateStep(1);
     setOrchestrateMode(null);
@@ -569,6 +600,7 @@ const Dashboard: React.FC = () => {
   };
 
   const reopenOrchestrateModal = () => {
+    setOrchestrationContext('manual');
     // Reopen with current mode and step 2 (keep same settings)
     if (orchestrateMode) {
       setOrchestrateStep(2);
@@ -576,6 +608,62 @@ const Dashboard: React.FC = () => {
     } else {
       // If no mode set, open from beginning
       openOrchestrateModal();
+    }
+  };
+
+  const handleVoiceOrchestrationTrigger = (mode: 'print' | 'scan', config?: any) => {
+    console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
+
+    setOrchestrationContext('voice');
+    if (!isChatVisible) {
+      setIsChatVisible(true);
+    }
+
+    setOrchestrateMode(mode);
+
+    if (config) {
+      setOrchestrateOptions(prev => ({
+        ...prev,
+        ...(mode === 'scan' && {
+          scanColorMode: config.colorMode || prev.scanColorMode,
+          scanLayout: config.layout || prev.scanLayout,
+          scanResolution: config.resolution || prev.scanResolution,
+          scanPaperSize: config.paperSize || prev.scanPaperSize,
+          scanTextMode:
+            config.scanTextMode !== undefined ? config.scanTextMode : prev.scanTextMode,
+          scanPageMode: config.pages || prev.scanPageMode,
+          scanCustomRange: config.customRange || prev.scanCustomRange,
+        }),
+        ...(mode === 'print' && {
+          printColorMode: config.colorMode || prev.printColorMode,
+          printLayout: config.layout || prev.printLayout,
+          printResolution: config.resolution || prev.printResolution,
+          printPaperSize: config.paperSize || prev.printPaperSize,
+          printPages: config.pages || prev.printPages,
+          printCustomRange: config.customRange || prev.printCustomRange,
+          printScale: config.scale || prev.printScale,
+        }),
+      }));
+    }
+
+    setOrchestrateStep(2);
+
+    if (!orchestrateModal.isOpen) {
+      orchestrateModal.onOpen();
+      toast({
+        title: `${mode === 'print' ? '🖨️ Print' : '📸 Scan'} Mode Activated`,
+        description: 'AI has configured your settings. Review and proceed.',
+        status: 'success',
+        duration: 4000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleDockedChatClose = () => {
+    setIsChatVisible(false);
+    if (orchestrationContext === 'voice') {
+      setOrchestrationContext('manual');
     }
   };
 
@@ -659,143 +747,6 @@ const Dashboard: React.FC = () => {
   };
 
   // Voice command handler for orchestration modal
-  const handleVoiceCommand = (command: string, params?: any) => {
-    console.log('🎤 Voice command received:', command, params);
-
-    switch (command) {
-      case 'SELECT_DOCUMENT':
-        documentSelectorModal.onOpen();
-        toast({
-          title: '📄 Opening Document Selector',
-          status: 'info',
-          duration: 2000,
-        });
-        break;
-
-      case 'SCROLL_DOWN':
-        if (modalBodyRef.current) {
-          modalBodyRef.current.scrollBy({ top: 300, behavior: 'smooth' });
-        }
-        break;
-
-      case 'SCROLL_UP':
-        if (modalBodyRef.current) {
-          modalBodyRef.current.scrollBy({ top: -300, behavior: 'smooth' });
-        }
-        break;
-
-      case 'APPLY_SETTINGS':
-        if (orchestrateStep === 2) {
-          setOrchestrateStep(3);
-          toast({
-            title: '✅ Proceeding to Confirmation',
-            status: 'success',
-            duration: 2000,
-          });
-        } else if (orchestrateStep === 3) {
-          if (orchestrateMode === 'print') {
-            executePrintJob();
-          } else if (orchestrateMode === 'scan') {
-            executeScanJob();
-          }
-        }
-        break;
-
-      case 'GO_BACK':
-        if (orchestrateStep > 1) {
-          setOrchestrateStep(orchestrateStep - 1);
-          toast({
-            title: '⬅️ Going Back',
-            status: 'info',
-            duration: 2000,
-          });
-        }
-        break;
-
-      case 'CANCEL':
-        orchestrateModal.onClose();
-        toast({
-          title: '❌ Orchestration Cancelled',
-          status: 'info',
-          duration: 2000,
-        });
-        break;
-
-      case 'SET_COLOR':
-        if (params?.colorMode) {
-          if (orchestrateMode === 'scan') {
-            setOrchestrateOptions({
-              ...orchestrateOptions,
-              scanColorMode: params.colorMode,
-            });
-          } else if (orchestrateMode === 'print') {
-            setOrchestrateOptions({
-              ...orchestrateOptions,
-              printColorMode: params.colorMode,
-            });
-          }
-          toast({
-            title: `🎨 Color Mode: ${params.colorMode}`,
-            status: 'success',
-            duration: 2000,
-          });
-        }
-        break;
-
-      case 'SET_LAYOUT':
-        if (params?.layout) {
-          if (orchestrateMode === 'scan') {
-            setOrchestrateOptions({
-              ...orchestrateOptions,
-              scanLayout: params.layout,
-            });
-          } else if (orchestrateMode === 'print') {
-            setOrchestrateOptions({
-              ...orchestrateOptions,
-              printLayout: params.layout,
-            });
-          }
-          toast({
-            title: `📄 Layout: ${params.layout}`,
-            status: 'success',
-            duration: 2000,
-          });
-        }
-        break;
-
-      case 'SET_RESOLUTION':
-        if (params?.dpi && orchestrateMode === 'scan') {
-          setOrchestrateOptions({
-            ...orchestrateOptions,
-            scanResolution: String(params.dpi),
-          });
-          toast({
-            title: `🔍 Resolution: ${params.dpi} DPI`,
-            status: 'success',
-            duration: 2000,
-          });
-        }
-        break;
-
-      case 'TOGGLE_OCR':
-        if (orchestrateMode === 'scan') {
-          setOrchestrateOptions({
-            ...orchestrateOptions,
-            scanTextMode: params?.enabled ?? !orchestrateOptions.scanTextMode,
-          });
-          toast({
-            title: params?.enabled ? '✅ OCR Enabled' : '❌ OCR Disabled',
-            status: 'success',
-            duration: 2000,
-          });
-        }
-        break;
-
-      default:
-        console.log('Unknown voice command:', command);
-    }
-  };
-
   const triggerPrint = async () => {
     // Use the new orchestrate modal
     openOrchestrateModal();
@@ -1081,21 +1032,28 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const [showConnectionStatus, setShowConnectionStatus] = useState(false);
   const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
+  const [orchestrationContext, setOrchestrationContext] = useState<'manual' | 'voice'>('manual');
+  const isVoiceOrchestration = orchestrationContext === 'voice';
+
+  useEffect(() => {
+    if (!orchestrateModal.isOpen && orchestrationContext === 'voice') {
+      setOrchestrationContext('manual');
+    }
+  }, [orchestrateModal.isOpen, orchestrationContext]);
 
   // Prevent scrolling when chat visibility changes
   return (
     <Box position="relative" minH="100vh">
       {/* Main Content Area */}
       <Box 
-        mr={isChatVisible ? "35vw" : "0"}
+        mr={isChatVisible && !isVoiceOrchestration ? "35vw" : "0"}
         transition="margin-right 0.3s ease-out"
         minH="100vh"
         pt={2}
         px={3}
         pb={2}
-        pr={isChatVisible ? "0" : "3"}
+        pr={isChatVisible && !isVoiceOrchestration ? "0" : "3"}
       >
         <VStack align="stretch" spacing={4} pb={4}>
           
@@ -1146,23 +1104,6 @@ const Dashboard: React.FC = () => {
           />
         </Stack>
       </Flex>
-
-      {/* Smart Connection Status - only show when button is clicked */}
-      <Button
-        size="lg"
-        colorScheme="cyan"
-        variant="outline"
-        mb={4}
-        onClick={() => setShowConnectionStatus(true)}
-      >
-        Show Connection Status
-      </Button>
-
-      {/* Connection Validator Modal */}
-      <ConnectionValidator
-        isOpen={showConnectionStatus}
-        onClose={() => setShowConnectionStatus(false)}
-      />
 
       <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
         <MotionBox
@@ -1228,6 +1169,27 @@ const Dashboard: React.FC = () => {
             </Button>
           </MotionBox>
         )}
+        {/* Check Connectivity Button */}
+        <MotionBox
+          whileHover={{ scale: 1.05, y: -3 }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+        >
+          <Button
+            size="lg"
+            colorScheme="cyan"
+            variant="solid"
+            onClick={connectivityModal.onOpen}
+            leftIcon={<Iconify icon={FiWifiOff} boxSize={5} />}
+            boxShadow="0 4px 14px rgba(34,211,238,0.4)"
+            _hover={{ boxShadow: '0 6px 20px rgba(34,211,238,0.6)' }}
+            transition="all 0.3s"
+            position="relative"
+            overflow="hidden"
+          >
+            Check Connectivity
+          </Button>
+        </MotionBox>
         <MotionBox
           whileHover={{ scale: 1.05, y: -3 }}
           whileTap={{ scale: 0.95 }}
@@ -1911,36 +1873,42 @@ const Dashboard: React.FC = () => {
       <Modal
         isOpen={orchestrateModal.isOpen}
         onClose={orchestrateModal.onClose}
-        size="6xl"
-        isCentered={!isChatVisible}
-        scrollBehavior="inside"
+        size={isVoiceOrchestration ? 'full' : '6xl'}
+        isCentered={!isVoiceOrchestration}
+        scrollBehavior={isVoiceOrchestration ? 'outside' : 'inside'}
+        motionPreset={isVoiceOrchestration ? 'slideInBottom' : 'scale'}
       >
-        <ModalOverlay 
-          backdropFilter={isChatVisible ? "none" : "blur(16px)"} 
-          bg={isChatVisible ? "transparent" : "blackAlpha.700"} 
+        <ModalOverlay
+          backdropFilter={isVoiceOrchestration ? 'blur(8px)' : 'blur(16px)'}
+          bg={isVoiceOrchestration ? 'blackAlpha.600' : 'blackAlpha.700'}
         />
         <MotionModalContent
           bg={surfaceCard}
-          borderRadius={isChatVisible ? "0" : { base: 'xl', md: '2xl', lg: '3xl' }}
+          borderRadius={isVoiceOrchestration ? '2xl' : { base: 'xl', md: '2xl', lg: '3xl' }}
           border="1px solid"
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
-          maxH={isChatVisible ? "100vh" : MODAL_CONFIG.modal.maxHeight}
-          maxW={isChatVisible ? "600px" : MODAL_CONFIG.modal.maxWidth}
-          w={isChatVisible ? "600px" : "auto"}
-          h={isChatVisible ? "100vh" : "auto"}
-          mx={isChatVisible ? "0" : "auto"}
-          my={isChatVisible ? "0" : "auto"}
-          ml={isChatVisible ? "0" : "auto"}
-          mr={isChatVisible ? "450px" : "auto"}
-          position={isChatVisible ? "fixed" : "relative"}
-          right={isChatVisible ? "450px" : "auto"}
-          top={isChatVisible ? "0" : "auto"}
+          maxH={isVoiceOrchestration ? '90vh' : MODAL_CONFIG.modal.maxHeight}
+          maxW={isVoiceOrchestration ? '95vw' : MODAL_CONFIG.modal.maxWidth}
+          w={isVoiceOrchestration ? '95vw' : 'auto'}
+          h={isVoiceOrchestration ? '90vh' : 'auto'}
+          mx={isVoiceOrchestration ? 'auto' : 'auto'}
+          my={isVoiceOrchestration ? '5vh' : 'auto'}
+          overflow="hidden"
+          display="flex"
+          flexDirection="column"
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
           transition={{ duration: 0.3, ease: 'easeOut' }}
         >
+          <Flex
+            h="100%"
+            w="100%"
+            direction={{ base: 'column', xl: isVoiceOrchestration ? 'row' : 'column' }}
+            overflow="hidden"
+          >
+            <Box flex="1" display="flex" flexDirection="column" overflow="hidden">
           {/* STEP 1: Choose Mode */}
           {orchestrateStep === 1 && (
             <>
@@ -2133,8 +2101,6 @@ const Dashboard: React.FC = () => {
                   },
                 }}
               >
-                {/* Voice Control - Embedded in Modal */}
-                <OrchestrationVoiceControl mode="scan" onCommand={handleVoiceCommand} />
                 <Grid
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }}
                   gap="1.5rem"
@@ -2714,8 +2680,6 @@ const Dashboard: React.FC = () => {
                   },
                 }}
               >
-                {/* Voice Control - Embedded in Modal */}
-                <OrchestrationVoiceControl mode="print" onCommand={handleVoiceCommand} />
                 
                 <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={6} alignItems="start">
                   {/* Live Preview - Print Mode (LEFT SIDE) */}
@@ -3609,6 +3573,31 @@ const Dashboard: React.FC = () => {
               </ModalFooter>
             </>
           )}
+            </Box>
+            {isVoiceOrchestration && (
+              <Box
+                w={{ base: '100%', xl: '32rem' }}
+                maxW="32rem"
+                flexShrink={0}
+                borderLeft={{ base: 'none', xl: '1px solid' }}
+                borderTop={{ base: '1px solid', xl: 'none' }}
+                borderColor={dockedBorderColor}
+                bg={dockedChatBg}
+                backdropFilter="blur(12px)"
+                display="flex"
+                flexDirection="column"
+                maxH="100%"
+              >
+                <VoiceAIChat
+                  isOpen={isChatVisible}
+                  onClose={handleDockedChatClose}
+                  onOrchestrationTrigger={handleVoiceOrchestrationTrigger}
+                  isMinimized={false}
+                  onToggleMinimize={handleDockedChatClose}
+                />
+              </Box>
+            )}
+          </Flex>
         </MotionModalContent>
       </Modal>
 
@@ -3624,14 +3613,14 @@ const Dashboard: React.FC = () => {
           filename: file.filename,
           size: file.size,
           type: 'image',
-          thumbnailUrl: `${API_BASE_URL}${API_ENDPOINTS.processed}/${file.filename}`,
+          thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
           isProcessed: file.has_text,
         }))}
         convertedDocuments={convertedFiles.map((file: any) => ({
           filename: file.filename,
           size: file.size,
           type: 'pdf',
-          thumbnailUrl: `${API_BASE_URL}/converted/${file.filename}`,
+          thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
           isProcessed: true,
         }))}
         allowMultiple={true}
@@ -3640,8 +3629,144 @@ const Dashboard: React.FC = () => {
         </VStack>
       </Box>
 
-      {/* AI Chat Sidebar - Independent Fixed Position */}
-      {isChatVisible && (
+      {/* Connectivity Status Modal */}
+      <Modal
+        isOpen={connectivityModal.isOpen}
+        onClose={connectivityModal.onClose}
+        size="lg"
+        isCentered
+      >
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <MotionModalContent
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          bg={useColorModeValue(
+            'linear-gradient(135deg, #ffffff 0%, #f8f7ff 100%)',
+            'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)'
+          )}
+          borderRadius="2xl"
+          border="1px solid"
+          borderColor="rgba(121,95,238,0.2)"
+          boxShadow="0 20px 60px rgba(0,0,0,0.3)"
+        >
+          <ModalHeader
+            fontSize="2xl"
+            fontWeight="bold"
+            bgGradient="linear-gradient(135deg, #795FEE 0%, #22d3ee 100%)"
+            bgClip="text"
+            color="transparent"
+            pb={4}
+          >
+            🔍 PrintChakra System Status
+          </ModalHeader>
+          <ModalCloseButton colorScheme="brand" size="lg" />
+
+          <ModalBody>
+            <VStack spacing={6} align="stretch">
+              <Box
+                bg="rgba(121,95,238,0.08)"
+                border="1px solid rgba(121,95,238,0.2)"
+                borderRadius="xl"
+                p={4}
+              >
+                <HStack justify="space-between" mb={2}>
+                  <Text fontWeight="600" fontSize="sm" color="text.muted">
+                    SYSTEM CHECK IN PROGRESS
+                  </Text>
+                  <Spinner size="sm" color="brand.400" />
+                </HStack>
+                <Text fontSize="xs" color="text.secondary">
+                  Validating WiFi connectivity, camera capture, and printer connection...
+                </Text>
+              </Box>
+
+              {/* Connection Validator Component */}
+              <Box
+                bg={useColorModeValue('rgba(255,255,255,0.5)', 'rgba(0,0,0,0.2)')}
+                backdropFilter="blur(10px)"
+                borderRadius="xl"
+                p={6}
+                border="1px solid"
+                borderColor="rgba(121,95,238,0.15)"
+              >
+                <ConnectionValidator
+                  onStatusComplete={(allConnected) => {
+                    console.log('Connection validation complete:', allConnected);
+                    if (allConnected) {
+                      toast({
+                        title: '✅ All Systems Connected',
+                        description: 'PrintChakra is ready to go!',
+                        status: 'success',
+                        duration: 3000,
+                        isClosable: true,
+                      });
+                    }
+                  }}
+                />
+              </Box>
+
+              <Box
+                bg="rgba(34,211,238,0.08)"
+                border="1px solid rgba(34,211,238,0.2)"
+                borderRadius="xl"
+                p={4}
+              >
+                <VStack align="start" spacing={2}>
+                  <HStack>
+                    <Box w={2} h={2} borderRadius="full" bg="green.400" />
+                    <Text fontSize="sm" fontWeight="500">
+                      Phone ↔ Laptop WiFi
+                    </Text>
+                  </HStack>
+                  <HStack>
+                    <Box w={2} h={2} borderRadius="full" bg="green.400" />
+                    <Text fontSize="sm" fontWeight="500">
+                      Phone Camera Capture
+                    </Text>
+                  </HStack>
+                  <HStack>
+                    <Box w={2} h={2} borderRadius="full" bg="green.400" />
+                    <Text fontSize="sm" fontWeight="500">
+                      Laptop ↔ Printer
+                    </Text>
+                  </HStack>
+                </VStack>
+              </Box>
+            </VStack>
+          </ModalBody>
+
+          <ModalFooter>
+            <HStack spacing={3} w="100%">
+              <Button
+                variant="ghost"
+                flex={1}
+                onClick={connectivityModal.onClose}
+                colorScheme="brand"
+              >
+                Close
+              </Button>
+              <Button
+                colorScheme="cyan"
+                flex={1}
+                size="md"
+                boxShadow="0 4px 14px rgba(34,211,238,0.4)"
+                _hover={{ boxShadow: '0 6px 20px rgba(34,211,238,0.6)' }}
+                onClick={() => {
+                  // Trigger re-check
+                  window.location.reload();
+                }}
+              >
+                Re-check
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </MotionModalContent>
+      </Modal>
+
+  {/* AI Chat Sidebar - Independent Fixed Position */}
+  {isChatVisible && !isVoiceOrchestration && (
         <Box
           position="fixed"
           top="0"
@@ -3661,54 +3786,7 @@ const Dashboard: React.FC = () => {
           <VoiceAIChat
             isOpen={isChatVisible}
             onClose={() => setIsChatVisible(false)}
-            onOrchestrationTrigger={(mode, config) => {
-            console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
-
-            // Set orchestration mode
-            setOrchestrateMode(mode);
-
-            // Apply configuration if provided
-            if (config) {
-              setOrchestrateOptions(prev => ({
-                ...prev,
-                // Apply scan configuration
-                ...(mode === 'scan' && {
-                  scanColorMode: config.colorMode || prev.scanColorMode,
-                  scanLayout: config.layout || prev.scanLayout,
-                  scanResolution: config.resolution || prev.scanResolution,
-                  scanPaperSize: config.paperSize || prev.scanPaperSize,
-                  scanTextMode: config.scanTextMode !== undefined ? config.scanTextMode : prev.scanTextMode,
-                  scanPageMode: config.pages || prev.scanPageMode,
-                  scanCustomRange: config.customRange || prev.scanCustomRange,
-                }),
-                // Apply print configuration
-                ...(mode === 'print' && {
-                  printColorMode: config.colorMode || prev.printColorMode,
-                  printLayout: config.layout || prev.printLayout,
-                  printResolution: config.resolution || prev.printResolution,
-                  printPaperSize: config.paperSize || prev.printPaperSize,
-                  printPages: config.pages || prev.printPages,
-                  printCustomRange: config.customRange || prev.printCustomRange,
-                  printScale: config.scale || prev.printScale,
-                }),
-              }));
-            }
-
-            // Skip step 1 (mode selection) and go directly to step 2 (configuration)
-            setOrchestrateStep(2);
-
-            // Open orchestration modal
-            orchestrateModal.onOpen();
-
-            // Show visual feedback
-            toast({
-              title: `${mode === 'print' ? '🖨️ Print' : '📸 Scan'} Mode Activated`,
-              description: 'AI has configured your settings. Review and proceed.',
-              status: 'success',
-              duration: 4000,
-              isClosable: true,
-            });
-          }}
+            onOrchestrationTrigger={handleVoiceOrchestrationTrigger}
             isMinimized={false}
             onToggleMinimize={() => setIsChatVisible(false)}
           />

@@ -14,8 +14,7 @@ import {
 import { FiLayout, FiMoon, FiSmartphone, FiSun } from 'react-icons/fi';
 import Dashboard from './pages/Dashboard';
 import Phone from './pages/Phone';
-import Iconify from './components/Iconify';
-import AnimatedBackground from './components/AnimatedBackground';
+import { Iconify, AnimatedBackground } from './components/common';
 import { SocketProvider } from './context/SocketContext';
 
 function App() {

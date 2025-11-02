@@ -25,9 +25,9 @@ import {
   InputRightElement,
 } from '@chakra-ui/react';
 import { FiMic, FiMicOff, FiX, FiSend } from 'react-icons/fi';
-import apiClient from '../apiClient';
-import { convertToWAV, isValidAudioBlob, getAudioDuration, VoiceMessage, addMessageWithDedup } from '../utils/voiceAIHelpers';
-import Iconify from './Iconify';
+import apiClient from '../../apiClient';
+import { convertToWAV, isValidAudioBlob, getAudioDuration, VoiceMessage, addMessageWithDedup } from '../../utils/voiceAIHelpers';
+import Iconify from '../common/Iconify';
 
 interface VoiceAIChatProps {
   isOpen: boolean;
@@ -183,7 +183,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           sampleRate: 48000, // Higher quality for better transcription
           channelCount: 1, // Mono audio
           sampleSize: 16, // 16-bit depth
-          latency: 0, // Minimize latency
         },
       });
 
@@ -238,16 +237,18 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           console.log(`Audio duration: ${duration.toFixed(2)}s`);
 
           // Check for voice activity before processing
-          const { hasVoiceActivity } = await import('../utils/audioUtils');
-          const hasVoice = await hasVoiceActivity(audioBlob, 0.015);
+          // Using stricter threshold (0.025) to ONLY detect human voice, reject background noise
+          const { hasVoiceActivity } = await import('../../utils/audioUtils');
+          const hasVoice = await hasVoiceActivity(audioBlob, 0.025);
 
           if (!hasVoice) {
-            console.log('⏭️ No voice detected in audio - skipping processing');
+            console.log('⏭️ No human voice detected - only background noise/silence - auto-restarting');
             // Don't show annoying "no voice" message - just silently retry
 
-            // Auto-restart recording for continuous listening
+            // ALWAYS auto-restart recording for continuous listening when session is active
             if (isSessionActive) {
-              setTimeout(() => startRecording(), 300);
+              console.log('🔄 Continuous mode: restarting recording immediately');
+              setTimeout(() => startRecording(), 200);
             }
             return;
           }
@@ -262,9 +263,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
             duration: 5000,
           });
 
-          // Auto-restart recording on error
+          // ALWAYS auto-restart recording on error for continuous listening
           if (isSessionActive) {
-            setTimeout(() => startRecording(), 1000);
+            console.log('🔄 Error occurred - restarting recording for continuous listening');
+            setTimeout(() => startRecording(), 500);
           }
         } finally {
           // Stop all tracks
@@ -299,8 +301,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       let silenceStart: number | null = null;
       let speechDetected = false;
       let audioContextClosed = false;
+      let continuousSilenceStart = Date.now(); // Track total silence from start
       const SILENCE_THRESHOLD = 15; // Lower threshold for faster detection (was 25)
-      const SILENCE_DURATION = 800; // Stop after 0.8 seconds of silence (was 1500)
+      const SILENCE_DURATION = 800; // Stop after 0.8 seconds of silence after speech (was 1500)
+      const CONTINUOUS_SILENCE_LIMIT = 3000; // If NO speech detected for 3 seconds, restart
 
       const closeAudioContext = () => {
         if (!audioContextClosed && audioContext.state !== 'closed') {
@@ -334,17 +338,24 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         if (audioLevel > SILENCE_THRESHOLD) {
           speechDetected = true;
           silenceStart = null; // Reset silence timer
+          continuousSilenceStart = Date.now(); // Reset continuous silence timer
         } else if (speechDetected && audioLevel <= SILENCE_THRESHOLD) {
           // Silence detected after speech
           if (silenceStart === null) {
             silenceStart = Date.now();
           } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            // Silence lasted long enough - stop recording
-            console.log('✅ Silence detected - stopping recording');
+            // Silence lasted long enough - stop and process this recording
+            console.log('✅ Silence after speech detected - processing recording');
             stopRecording();
             closeAudioContext();
             return;
           }
+        } else if (!speechDetected && Date.now() - continuousSilenceStart > CONTINUOUS_SILENCE_LIMIT) {
+          // NO speech detected for 3 seconds - just restart without processing
+          console.log('⏭️ No speech detected for 3 seconds - restarting recording');
+          mediaRecorderRef.current?.stop(); // This will trigger onstop which restarts
+          closeAudioContext();
+          return;
         }
 
         // Continue checking
@@ -354,14 +365,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       // Start monitoring audio levels
       checkAudioLevel();
 
-      // Fallback: Auto-stop after 5 seconds maximum (was 8)
+      // Fallback: Auto-stop after 10 seconds maximum
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
-          console.log('⏱️ Max duration reached - stopping recording');
+          console.log('⏱️ Max duration (10s) reached - processing and restarting');
           stopRecording();
           closeAudioContext();
         }
-      }, 5000);
+      }, 10000);
     } catch (error: any) {
       console.error('Recording error:', error);
       toast({
@@ -413,15 +424,19 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
       // Check for no speech detected (auto-retry)
       if (response.data.auto_retry && response.data.no_speech_detected) {
-        console.log('⚠️ No human speech detected - auto-retrying in 1 second');
+        console.log('⚠️ Backend: No human speech detected - auto-restarting recording');
         
-        addMessage('system', '⚠️ No human speech detected. Retrying...');
+        // Don't spam user with messages for background noise
+        // addMessage('system', '⚠️ No human speech detected. Retrying...');
         
-        setSessionStatus('No speech detected, retrying...');
+        setSessionStatus('Listening...');
         setIsProcessing(false);
 
-        // Auto-retry recording after 1 second
-        setTimeout(() => startRecording(), 1000);
+        // ALWAYS auto-restart immediately for continuous listening
+        if (isSessionActive) {
+          console.log('🔄 Continuous mode: restarting recording immediately');
+          setTimeout(() => startRecording(), 200);
+        }
         return;
       }
 
@@ -435,6 +450,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           orchestration_trigger,
           orchestration_mode,
           config_params,
+          voice_command,
+          command_confidence,
         } = response.data;
 
         // Add full transcription as system message
@@ -447,6 +464,37 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         addMessage('ai', ai_response);
 
         setIsProcessing(false);
+
+        // Check for voice command BEFORE orchestration
+        if (voice_command && command_confidence && command_confidence > 0.7) {
+          console.log(
+            `🎯 Voice command detected: ${voice_command}`,
+            `(confidence: ${command_confidence})`
+          );
+
+          // Show notification about command execution
+          toast({
+            title: `Command: ${voice_command.toUpperCase()}`,
+            description: `Executing with ${(command_confidence * 100).toFixed(0)}% confidence`,
+            status: 'success',
+            duration: 2000,
+            isClosable: true,
+          });
+
+          // Emit voice command event (can be handled by parent or other listeners)
+          if (onOrchestrationTrigger) {
+            // For navigation commands, pass them as special events
+            window.dispatchEvent(
+              new CustomEvent('voiceCommand', {
+                detail: {
+                  command: voice_command,
+                  confidence: command_confidence,
+                  text: user_text,
+                },
+              })
+            );
+          }
+        }
 
         // Check for orchestration trigger BEFORE TTS
         if (orchestration_trigger && orchestration_mode) {
@@ -511,8 +559,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
             duration: 3000,
           });
         } else {
-          // Continue recording for next input (after TTS finishes)
-          setTimeout(() => startRecording(), 1000);
+          // ALWAYS continue recording for next input if session is still active
+          if (isSessionActive) {
+            console.log('🔄 Restarting recording for continuous listening...');
+            setTimeout(() => startRecording(), 500);
+          }
         }
       } else {
         throw new Error(response.data.error || 'Processing failed');
@@ -640,17 +691,49 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         const orchestrationTrigger = response.data.orchestration_trigger;
         const orchestrationMode = response.data.orchestration_mode;
         const configParams = response.data.config_params;
+        const voiceCommand = response.data.voice_command;
+        const commandConfidence = response.data.command_confidence;
 
         console.log('🔍 Backend response:', {
           aiResponse,
           orchestrationTrigger,
           orchestrationMode,
           configParams,
+          voiceCommand,
+          commandConfidence,
         });
 
         // 1. Display AI message FIRST
         addMessage('ai', aiResponse);
         setIsProcessing(false);
+
+        // Check for voice command BEFORE orchestration
+        if (voiceCommand && commandConfidence && commandConfidence > 0.7) {
+          console.log(
+            `🎯 Voice command detected: ${voiceCommand}`,
+            `(confidence: ${commandConfidence})`
+          );
+
+          // Show notification about command execution
+          toast({
+            title: `Command: ${voiceCommand.toUpperCase()}`,
+            description: `Executing with ${(commandConfidence * 100).toFixed(0)}% confidence`,
+            status: 'success',
+            duration: 2000,
+            isClosable: true,
+          });
+
+          // Emit voice command event (can be handled by parent or other listeners)
+          window.dispatchEvent(
+            new CustomEvent('voiceCommand', {
+              detail: {
+                command: voiceCommand,
+                confidence: commandConfidence,
+                text: text,
+              },
+            })
+          );
+        }
 
         // Check for orchestration trigger BEFORE TTS
         if (orchestrationTrigger && orchestrationMode) {

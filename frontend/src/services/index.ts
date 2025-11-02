@@ -9,7 +9,7 @@ import type {
   ScanConfig,
   PrintConfig,
   ConversionOptions,
-} from '../features/dashboard/types';
+} from '../features';
 
 /**
  * File Service

@@ -202,7 +202,7 @@ export async function getAudioDuration(audioBlob: Blob): Promise<number> {
  */
 export async function hasVoiceActivity(
   audioBlob: Blob,
-  threshold: number = 0.015
+  threshold: number = 0.025 // INCREASED from 0.015 for stricter human voice detection
 ): Promise<boolean> {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -243,40 +243,52 @@ export async function hasVoiceActivity(
     const windowSize = Math.floor(sampleRate * 0.02); // 20ms windows
     const windowCount = Math.floor(channelData.length / windowSize);
     let activeWindows = 0;
+    let peakWindows = 0; // Track windows with strong peaks (human speech bursts)
 
     for (let w = 0; w < windowCount; w++) {
       let windowSum = 0;
+      let windowMax = 0;
       const start = w * windowSize;
       const end = Math.min(start + windowSize, channelData.length);
 
       for (let i = start; i < end; i++) {
         windowSum += channelData[i] * channelData[i];
+        windowMax = Math.max(windowMax, Math.abs(channelData[i]));
       }
 
       const windowRMS = Math.sqrt(windowSum / (end - start));
 
       // Count windows with significant energy (voice-like activity)
-      if (windowRMS > threshold * 0.8) {
+      if (windowRMS > threshold * 0.9) { // INCREASED from 0.8 - stricter
         activeWindows++;
+      }
+      
+      // Count windows with clear speech peaks (not just constant background noise)
+      if (windowMax > threshold * 4) { // Strong peaks indicate speech
+        peakWindows++;
       }
     }
 
     const activeRatio = activeWindows / windowCount;
+    const peakRatio = peakWindows / windowCount;
 
-    // Multi-criteria voice detection
-    const hasEnergy = rms > threshold;
-    const hasPeaks = maxAmplitude > threshold * 3; // At least 3x threshold for peaks
-    const hasVoicePattern = activeRatio > 0.1; // At least 10% of windows have voice-like activity
-    const properZCR = zcr > 0.01 && zcr < 0.5; // Voice typically has ZCR in this range
+    // ENHANCED multi-criteria voice detection for HUMAN VOICE ONLY
+    const hasEnergy = rms > threshold; // Overall energy check
+    const hasSufficientPeaks = maxAmplitude > threshold * 5; // INCREASED from 3x - need stronger peaks for human voice
+    const hasVoicePattern = activeRatio > 0.15; // INCREASED from 0.1 - need more active content
+    const hasSpeechBursts = peakRatio > 0.08; // NEW: Human speech has clear peak patterns
+    const properZCR = zcr > 0.015 && zcr < 0.45; // TIGHTENED from 0.01-0.5 - human voice range
+    
+    // More strict detection: all energy criteria + zero-crossing in voice range
+    const isVoice = hasEnergy && hasSufficientPeaks && (hasVoicePattern || hasSpeechBursts) && properZCR;
 
-    const isVoice = hasEnergy && (hasPeaks || hasVoicePattern) && properZCR;
-
-    console.log(`🎙️ Voice Activity Detection:`);
-    console.log(`   RMS: ${rms.toFixed(4)} (threshold: ${threshold})`);
-    console.log(`   Peak: ${maxAmplitude.toFixed(4)}`);
-    console.log(`   Active Windows: ${activeRatio.toFixed(2)} (${activeWindows}/${windowCount})`);
-    console.log(`   Zero Crossing Rate: ${zcr.toFixed(4)}`);
-    console.log(`   Result: ${isVoice ? '✅ VOICE DETECTED' : '❌ SILENCE/NOISE'}`);
+    console.log(`🎙️ Voice Activity Detection (Human Voice Only Mode):`);
+    console.log(`   RMS: ${rms.toFixed(4)} (threshold: ${threshold}) - ${hasEnergy ? '✅' : '❌'}`);
+    console.log(`   Peak Amplitude: ${maxAmplitude.toFixed(4)} (min: ${(threshold * 5).toFixed(4)}) - ${hasSufficientPeaks ? '✅' : '❌'}`);
+    console.log(`   Active Windows: ${(activeRatio * 100).toFixed(1)}% (min: 15%) - ${hasVoicePattern ? '✅' : '❌'}`);
+    console.log(`   Peak Windows: ${(peakRatio * 100).toFixed(1)}% (min: 8%) - ${hasSpeechBursts ? '✅' : '❌'}`);
+    console.log(`   Zero Crossing Rate: ${zcr.toFixed(4)} (range: 0.015-0.45) - ${properZCR ? '✅' : '❌'}`);
+    console.log(`   Result: ${isVoice ? '✅ HUMAN VOICE DETECTED' : '❌ BACKGROUND NOISE/SILENCE REJECTED'}`);
 
     return isVoice;
   } catch (error) {
