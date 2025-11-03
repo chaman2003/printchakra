@@ -182,6 +182,14 @@ except Exception as e:
 
     traceback.print_exc()
 
+# Pre-initialize TTS engine for faster response
+try:
+    from modules.voice import _init_tts_engine
+    _init_tts_engine()
+    logger.info("✅ TTS engine pre-initialized at startup")
+except Exception as e:
+    logger.warning(f"⚠️ TTS pre-initialization warning: {e}")
+
 # Initialize Flask app
 app = Flask(__name__)
 
@@ -3028,8 +3036,10 @@ def chat_with_ai():
 @app.route("/voice/speak", methods=["POST"])
 def speak_text():
     """
-    Speak text using TTS (blocking call)
+    Speak text using TTS (background/non-blocking)
+    TTS plays asynchronously on the backend
     Expects: JSON with 'text' field
+    Returns immediately to frontend so it doesn't get stuck waiting
     """
     try:
         from modules.voice import voice_ai_orchestrator
@@ -3038,20 +3048,28 @@ def speak_text():
         text = data.get("text", "").strip()
 
         if not text:
+            logger.warning("⚠️ TTS endpoint called with no text")
             return jsonify({"success": False, "error": "No text provided"}), 400
 
-        # Speak text (blocking)
-        result = voice_ai_orchestrator.speak_text_response(text)
+        logger.info(f"🔊 TTS endpoint called: '{text[:50]}...' ({len(text.split())} words)")
+
+        # Run TTS in background (non-blocking) - returns immediately
+        # This prevents frontend from getting stuck waiting for TTS to finish
+        result = voice_ai_orchestrator.speak_text_response(text, background=True)
+
+        logger.info(f"✅ TTS queued: duration estimate {result.get('estimated_duration', 0):.2f}s")
 
         if result.get("success"):
             return jsonify(result), 200
         else:
+            logger.error(f"❌ TTS failed: {result.get('error', 'Unknown error')}")
             return jsonify(result), 500
 
     except ImportError:
+        logger.error("❌ Voice AI module not available for TTS")
         return jsonify({"success": False, "error": "Voice AI module not available"}), 503
     except Exception as e:
-        logger.error(f"TTS error: {str(e)}")
+        logger.error(f"❌ TTS error: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

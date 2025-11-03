@@ -70,8 +70,9 @@ def _init_tts_engine():
             if not _tts_initialized_once:
                 logger.error("❌ No TTS voices available on system!")
 
-        engine.setProperty("rate", 200)
-        engine.setProperty("volume", 0.9)
+        # Fast speech settings for responsive TTS
+        engine.setProperty("rate", 280)  # Faster speech rate (default is 150)
+        engine.setProperty("volume", 1.0)  # Max volume
 
         _tts_engine = engine
         TTS_AVAILABLE = True
@@ -80,6 +81,7 @@ def _init_tts_engine():
         if not _tts_initialized_once:
             logger.info("✅ Text-to-Speech initialized successfully")
             logger.info(f"   Engine: Windows SAPI (pyttsx3)")
+            logger.info(f"   Speed: 280 wpm (fast)")
             logger.info(f"   Mode: Offline & Lightweight")
             _tts_initialized_once = True
 
@@ -97,7 +99,7 @@ def _init_tts_engine():
 def speak_text(text: str) -> bool:
     """
     Speak text using TTS (blocking call)
-    Tries Windows OneCore voices first (for Ravi), then falls back to SAPI5
+    INTERRUPTS any currently playing TTS to speak new text immediately
 
     Args:
         text: Text to speak
@@ -105,123 +107,57 @@ def speak_text(text: str) -> bool:
     Returns:
         bool: True if speech was successful
     """
-    global _tts_lock
+    global _tts_lock, _tts_engine
+    import traceback
 
-    # Ensure only one TTS call at a time
-    with _tts_lock:
-        # Method 1: Try C# PowerShell for OneCore Ravi
+    logger.debug(f"[SPEAK_TEXT] Attempting to acquire lock (non-blocking)...")
+    # Try to acquire lock with timeout - if TTS is already speaking, interrupt it
+    lock_acquired = _tts_lock.acquire(blocking=False)
+    
+    if not lock_acquired:
+        # TTS is currently speaking - interrupt it by stopping the engine
+        logger.info(f"⚠️ [SPEAK_TEXT] TTS already playing - interrupting to speak new text: '{text[:40]}...'")
         try:
-            temp_wav = os.path.join(tempfile.gettempdir(), f"ravi_tts_{int(time.time()*1000)}.wav")
-
-            # Escape for PowerShell
-            safe_text = text.replace("'", "''")
-            safe_path = temp_wav.replace("\\", "/")
-
-            ps_code = f"""
-$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
-Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
-[Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] > $null
-$synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
-
-$ravi = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
-if (-not $ravi) {{ Write-Output 'NO_RAVI'; exit 1 }}
-
-$synth.Voice = $ravi
-$task = $synth.SynthesizeTextToStreamAsync('{safe_text}')
-
-$task.AsTask().Wait()
-$stream = $task.GetResults()
-
-$fs = [IO.File]::Create('{safe_path}')
-$stream.AsStreamForRead().CopyTo($fs)
-$fs.Close()
-$stream.Dispose()
-$synth.Dispose()
-
-Write-Output 'SUCCESS'
-"""
-
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_code],
-                capture_output=True,
-                text=True,
-                timeout=8,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            )
-
-            if (
-                "SUCCESS" in result.stdout
-                and os.path.exists(temp_wav)
-                and os.path.getsize(temp_wav) > 0
-            ):
-                try:
-                    import winsound
-
-                    winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
-                    return True
-                finally:
-                    try:
-                        os.remove(temp_wav)
-                    except:
-                        pass
-
+            if _tts_engine:
+                logger.debug("[SPEAK_TEXT] Calling engine.stop()...")
+                _tts_engine.stop()  # Stop current speech
+                logger.info("[SPEAK_TEXT] Engine stopped successfully")
         except Exception as e:
-            pass  # Silently fail to fallback
-
-        # Method 2 Fallback: pyttsx3 with SAPI5 (David/Zira) - OPTIMIZED for speed
-        try:
-            import gc
-            gc.collect()
-
-            import pyttsx3
-
-            # Use minimal init for faster startup
-            engine = pyttsx3.init("sapi5", debug=False)
-
-            # Set voice (skip search if possible - use first available)
-            voices = engine.getProperty("voices")
-            selected_voice = None
-
-            voice_preferences = ["david", "zira"]  # David is fastest
-
-            for preference in voice_preferences:
-                for voice in voices:
-                    if preference in voice.name.lower():
-                        selected_voice = voice
-                        break
-                if selected_voice:
-                    break
-
-            if not selected_voice and voices:
-                selected_voice = voices[0]
-
-            if selected_voice:
-                engine.setProperty("voice", selected_voice.id)
-
-            # Fast speech settings
-            engine.setProperty("rate", 250)  # Increased from 220 for faster speech
-            engine.setProperty("volume", 0.9)
-
-            # Speak and wait (non-interruptible)
-            engine.say(text)
-            engine.runAndWait()
-
-            # Cleanup (minimal impact on performance)
-            try:
-                engine.stop()
-            except:
-                pass
-
-            del engine
-            gc.collect()
-
-            return True
-
-        except Exception as e:
-            logger.error(f"❌ TTS error: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+            logger.warning(f"⚠️ [SPEAK_TEXT] Could not stop TTS: {e}")
+        
+        # Now acquire the lock (should be released after stop)
+        logger.debug("[SPEAK_TEXT] Acquiring lock (blocking) after stop...")
+        _tts_lock.acquire(blocking=True)
+        logger.debug("[SPEAK_TEXT] Lock acquired")
+    else:
+        logger.debug("[SPEAK_TEXT] Lock acquired on first try")
+    
+    try:
+        # Ensure TTS engine is initialized
+        _init_tts_engine()
+        
+        if _tts_engine is None:
+            logger.error("❌ [SPEAK_TEXT] TTS engine not available")
             return False
+
+        # Use pre-initialized engine (faster than reinitializing)
+        try:
+            logger.debug(f"[SPEAK_TEXT] Calling engine.say('{text[:40]}...')")
+            _tts_engine.say(text)
+            logger.debug("[SPEAK_TEXT] Calling engine.runAndWait()...")
+            _tts_engine.runAndWait()
+            logger.info(f"✅ [SPEAK_TEXT] TTS complete: '{text[:50]}...'")
+            return True
+        except Exception as e:
+            logger.error(f"❌ [SPEAK_TEXT] TTS error during say/runAndWait: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+    finally:
+        try:
+            _tts_lock.release()
+            logger.debug("[SPEAK_TEXT] Lock released")
+        except Exception as e:
+            logger.warning(f"⚠️ [SPEAK_TEXT] Error releasing lock: {e}")
 
 
 class WhisperTranscriptionService:
@@ -1202,55 +1138,70 @@ class VoiceAIOrchestrator:
         Args:
             text: Text to speak
         """
+        import traceback
         try:
+            logger.info(f"🔊 [BACKGROUND] Starting TTS for: '{text[:50]}...'")
             speak_success = speak_text(text)
             if speak_success:
-                logger.info(f"✅ TTS completed: '{text[:50]}...'")
+                logger.info(f"✅ [BACKGROUND] TTS completed: '{text[:50]}...'")
             else:
-                logger.warning(f"⚠️ TTS failed for: '{text[:50]}...'")
+                logger.warning(f"⚠️ [BACKGROUND] TTS returned False for: '{text[:50]}...'")
         except Exception as e:
-            logger.error(f"❌ Background TTS error: {e}")
+            logger.error(f"❌ [BACKGROUND] TTS error: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def speak_text_response(self, text: str, background: bool = True) -> Dict[str, Any]:
         """
-        Speak text using TTS (non-blocking by default)
+        Speak text using TTS (background by default for non-blocking)
         Used to play TTS after message is displayed
 
         Args:
             text: Text to speak
-            background: If True, run TTS in background thread (non-blocking)
-                       If False, run blocking (legacy behavior)
+            background: If True, run TTS in background thread (non-blocking) - DEFAULT
+                       If False, run blocking (wait for TTS to complete)
 
         Returns:
-            dict: Status of TTS operation
+            dict: Status of TTS operation with duration estimate
         """
         try:
             if not TTS_AVAILABLE:
                 return {"success": False, "error": "TTS not available"}
 
+            # Estimate TTS duration: ~3 words per second at 280 wpm
+            word_count = len(text.split())
+            estimated_duration_seconds = max(1.0, word_count / 3.0)  # Minimum 1 second
+
             if background:
                 # NON-BLOCKING: Start TTS in background thread and return immediately
+                logger.info(f"📝 Creating background TTS thread for: '{text[:50]}...'")
                 tts_thread = threading.Thread(
                     target=self._speak_text_background,
                     args=(text,),
-                    daemon=True,
+                    daemon=False,  # Non-daemon so we can ensure TTS finishes
                     name=f"TTS-{int(time.time()*1000)}"
                 )
                 tts_thread.start()
+                logger.info(f"🚀 Background TTS thread started: {tts_thread.name}")
                 
-                # Return immediately without waiting for TTS to complete
+                # Return immediately with duration estimate so frontend knows how long to wait
                 return {
                     "success": True,
                     "spoken": False,  # Will be spoken asynchronously
                     "async": True,
+                    "estimated_duration": estimated_duration_seconds,
                     "message": "TTS queued for playback"
                 }
             else:
-                # BLOCKING: Legacy behavior (wait for TTS to complete)
+                # BLOCKING: Wait for TTS to complete before returning (ensures frontend waits)
                 speak_success = speak_text(text)
 
                 if speak_success:
-                    return {"success": True, "spoken": True}
+                    return {
+                        "success": True,
+                        "spoken": True,
+                        "async": False,
+                        "estimated_duration": estimated_duration_seconds
+                    }
                 else:
                     logger.warning("⚠️ TTS returned False")
                     return {"success": False, "error": "TTS failed to speak"}
