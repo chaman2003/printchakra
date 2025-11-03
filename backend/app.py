@@ -3218,6 +3218,17 @@ def process_voice_complete():
                         except Exception as socket_error:
                             logger.warning(f"Orchestration socket emit failed: {socket_error}")
 
+            # Start TTS in background IMMEDIATELY (before returning response)
+            # This eliminates the 1-2 second delay from waiting for frontend to call /voice/speak
+            ai_response = result.get("ai_response", "")
+            if ai_response:
+                try:
+                    # Start TTS in background thread - returns immediately
+                    voice_ai_orchestrator.speak_text_response(ai_response, background=True)
+                    logger.info("✅ TTS started in background")
+                except Exception as tts_error:
+                    logger.warning(f"⚠️ TTS background start failed: {tts_error}")
+
             # Emit to frontend via Socket.IO
             try:
                 socketio.emit(
