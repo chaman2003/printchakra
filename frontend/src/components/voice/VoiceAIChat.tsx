@@ -532,7 +532,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           }
         }
 
-        // 2. THEN play TTS (non-blocking - starts immediately in background)
+        // 2. THEN play TTS (blocking - waits for completion on backend)
         
         // Cancel any previous TTS timeout (if user spoke during previous TTS)
         if (ttsTimeoutRef.current) {
@@ -544,68 +544,56 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         setIsSpeaking(true);
         setSessionStatus('Speaking response...');
         
-        // Fire TTS request (non-blocking - returns immediately with duration estimate)
+        // Fire TTS request (BLOCKING - backend waits for TTS to complete)
         apiClient.post(
           '/voice/speak',
           {
             text: ai_response,
           },
           {
-            timeout: 60000,
+            timeout: 120000,  // 2 minutes timeout (TTS can take a while)
           }
         ).then((ttsResponse: any) => {
-          console.log('✅ TTS started (non-blocking)');
+          console.log('✅ TTS completed (backend blocking)');
           
-          // Get estimated duration from backend to know when TTS will finish
-          const estimatedDuration = ttsResponse.data?.estimated_duration || 3;
-          console.log(`⏱️ Estimated TTS duration: ${estimatedDuration.toFixed(2)}s`);
+          // Release speaking lock immediately (TTS already completed on backend)
+          setIsSpeaking(false);
+          setSessionStatus('Ready - Just speak naturally');
+          ttsTimeoutRef.current = null;
           
-          // Add 500ms buffer to ensure TTS completely finishes before recording restarts
-          const waitTime = (estimatedDuration * 1000) + 500;
-          
-          // Store timeout reference so we can cancel it if needed
-          ttsTimeoutRef.current = setTimeout(() => {
-            // Release speaking lock after TTS duration elapses
-            setIsSpeaking(false);
-            setSessionStatus('Ready - Just speak naturally');
-            ttsTimeoutRef.current = null; // Clear ref
-            
-            // Focus chat input after TTS completes
-            setTimeout(() => {
-              chatInputRef.current?.focus();
-            }, 100);
+          // Focus chat input after TTS completes
+          setTimeout(() => {
+            chatInputRef.current?.focus();
+          }, 100);
 
-            // Check if session should end
-            if (session_ended) {
-              setIsSessionActive(false);
-              isSessionActiveRef.current = false; // Update ref
-              addMessage('system', 'Voice session ended. Thank you!');
+          // Check if session should end
+          if (session_ended) {
+            setIsSessionActive(false);
+            isSessionActiveRef.current = false; // Update ref
+            addMessage('system', 'Voice session ended. Thank you!');
 
-              toast({
-                title: 'Session Ended',
-                description: 'Goodbye!',
-                status: 'info',
-                duration: 3000,
-              });
-            } else {
-              // ONLY restart recording AFTER TTS actually finishes
-              if (isSessionActiveRef.current) {
-                console.log(`🔄 TTS finished (waited ${waitTime}ms) - restarting recording for continuous listening...`);
-                setTimeout(() => startRecording(), 300);
-              }
+            toast({
+              title: 'Session Ended',
+              description: 'Goodbye!',
+              status: 'info',
+              duration: 3000,
+            });
+          } else {
+            // Restart recording AFTER TTS completes
+            if (isSessionActiveRef.current) {
+              console.log('🔄 TTS finished on backend - restarting recording for continuous listening...');
+              setTimeout(() => startRecording(), 300);
             }
-          }, waitTime);
+          }
           
         }).catch((ttsError) => {
           console.error('TTS error:', ttsError);
-          // Even on error, reset speaking state after timeout
-          setTimeout(() => {
-            setIsSpeaking(false);
-            setSessionStatus('Ready - Just speak naturally');
-            if (isSessionActiveRef.current) {
-              startRecording();
-            }
-          }, 3000);
+          // Reset speaking state on error
+          setIsSpeaking(false);
+          setSessionStatus('Ready - Just speak naturally');
+          if (isSessionActiveRef.current) {
+            startRecording();
+          }
         });
       } else {
         throw new Error(response.data.error || 'Processing failed');

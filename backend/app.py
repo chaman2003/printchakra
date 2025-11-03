@@ -3036,10 +3036,10 @@ def chat_with_ai():
 @app.route("/voice/speak", methods=["POST"])
 def speak_text():
     """
-    Speak text using TTS (background/non-blocking)
-    TTS plays asynchronously on the backend
+    Speak text using TTS (BLOCKING - waits for TTS to complete)
+    TTS plays synchronously on the backend
     Expects: JSON with 'text' field
-    Returns immediately to frontend so it doesn't get stuck waiting
+    Returns after TTS finishes
     """
     try:
         from modules.voice import voice_ai_orchestrator
@@ -3053,11 +3053,11 @@ def speak_text():
 
         logger.info(f"🔊 TTS endpoint called: '{text[:50]}...' ({len(text.split())} words)")
 
-        # Run TTS in background (non-blocking) - returns immediately
-        # This prevents frontend from getting stuck waiting for TTS to finish
-        result = voice_ai_orchestrator.speak_text_response(text, background=True)
+        # Run TTS BLOCKING (waits for completion) - ensures we hear it
+        # This is slower but ensures TTS actually completes before returning
+        result = voice_ai_orchestrator.speak_text_response(text, background=False)
 
-        logger.info(f"✅ TTS queued: duration estimate {result.get('estimated_duration', 0):.2f}s")
+        logger.info(f"✅ TTS completed: duration {result.get('estimated_duration', 0):.2f}s")
 
         if result.get("success"):
             return jsonify(result), 200

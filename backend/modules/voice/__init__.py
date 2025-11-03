@@ -1168,15 +1168,15 @@ class VoiceAIOrchestrator:
             sys.stdout.flush()
             sys.stderr.flush()
 
-    def speak_text_response(self, text: str, background: bool = True) -> Dict[str, Any]:
+    def speak_text_response(self, text: str, background: bool = False) -> Dict[str, Any]:
         """
-        Speak text using TTS (background by default for non-blocking)
+        Speak text using TTS (BLOCKING by default for reliability)
         Used to play TTS after message is displayed
 
         Args:
             text: Text to speak
-            background: If True, run TTS in background thread (non-blocking) - DEFAULT
-                       If False, run blocking (wait for TTS to complete)
+            background: If True, run TTS in background thread (non-blocking)
+                       If False, run BLOCKING (wait for TTS to complete) - DEFAULT
 
         Returns:
             dict: Status of TTS operation with duration estimate
