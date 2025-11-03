@@ -54,6 +54,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   const chatInputRef = useRef<HTMLInputElement>(null);
   const sessionStartedRef = useRef<boolean>(false);
   const toastIdRef = useRef<string | number | undefined>(undefined);
+  const recordingPendingRef = useRef<boolean>(false); // Prevent multiple simultaneous startRecording calls
+  const isSessionActiveRef = useRef<boolean>(false); // Track session state in ref for closures
 
   const toast = useToast();
 
@@ -119,6 +121,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
       if (response.data.success) {
         setIsSessionActive(true);
+        isSessionActiveRef.current = true; // Update ref for closures
         setSessionStatus('Ready - Just speak naturally');
         addMessage(
           'system',
@@ -164,11 +167,19 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   };
 
   const startRecording = async () => {
+    // Prevent multiple simultaneous startRecording calls (causes infinite loop)
+    if (recordingPendingRef.current || isRecording) {
+      console.log('⏹️ Recording already pending or active - skipping startRecording call');
+      return;
+    }
+
     // Block recording if TTS is currently speaking
     if (isSpeaking) {
       console.log('TTS is speaking - blocking recording');
       return;
     }
+
+    recordingPendingRef.current = true;
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -237,16 +248,16 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           console.log(`Audio duration: ${duration.toFixed(2)}s`);
 
           // Check for voice activity before processing
-          // Using stricter threshold (0.025) to ONLY detect human voice, reject background noise
+          // Using balanced threshold (0.020) to detect human voice while filtering background noise
           const { hasVoiceActivity } = await import('../../utils/audioUtils');
-          const hasVoice = await hasVoiceActivity(audioBlob, 0.025);
+          const hasVoice = await hasVoiceActivity(audioBlob, 0.020);
 
           if (!hasVoice) {
             console.log('⏭️ No human voice detected - only background noise/silence - auto-restarting');
             // Don't show annoying "no voice" message - just silently retry
 
             // ALWAYS auto-restart recording for continuous listening when session is active
-            if (isSessionActive) {
+            if (isSessionActiveRef.current) {
               console.log('🔄 Continuous mode: restarting recording immediately');
               setTimeout(() => startRecording(), 200);
             }
@@ -264,7 +275,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           });
 
           // ALWAYS auto-restart recording on error for continuous listening
-          if (isSessionActive) {
+          if (isSessionActiveRef.current) {
             console.log('🔄 Error occurred - restarting recording for continuous listening');
             setTimeout(() => startRecording(), 500);
           }
@@ -286,6 +297,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
       mediaRecorder.start();
       setIsRecording(true);
+      recordingPendingRef.current = false; // Recording started successfully
 
       // Real-time silence detection using Web Audio API
       const audioContext = new AudioContext();
@@ -374,6 +386,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         }
       }, 10000);
     } catch (error: any) {
+      recordingPendingRef.current = false; // Reset flag on error
       console.error('Recording error:', error);
       toast({
         title: 'Microphone Error',
@@ -550,6 +563,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         // Check if session should end
         if (session_ended) {
           setIsSessionActive(false);
+          isSessionActiveRef.current = false; // Update ref
           addMessage('system', 'Voice session ended. Thank you!');
 
           toast({
@@ -560,7 +574,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           });
         } else {
           // ALWAYS continue recording for next input if session is still active
-          if (isSessionActive) {
+          if (isSessionActiveRef.current) {
             console.log('🔄 Restarting recording for continuous listening...');
             setTimeout(() => startRecording(), 500);
           }
@@ -644,6 +658,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       await apiClient.post('/voice/end');
 
       setIsSessionActive(false);
+      isSessionActiveRef.current = false; // Update ref
       addMessage('system', '🛑 Session ended manually.');
 
       toast({
@@ -657,6 +672,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       // Force cleanup even on error
       setIsRecording(false);
       setIsSessionActive(false);
+      isSessionActiveRef.current = false; // Update ref
       if (mediaRecorderRef.current?.stream) {
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
@@ -829,42 +845,44 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         }
       }
 
-      // End session if active
-      if (isSessionActive) {
-        try {
-          await apiClient.post('/voice/end');
-        } catch (error) {
-          console.error('Error ending session on close:', error);
+        // End session if active
+        if (isSessionActive) {
+          try {
+            await apiClient.post('/voice/end');
+          } catch (error) {
+            console.error('Error ending session on close:', error);
+          }
+          setIsSessionActive(false);
+          isSessionActiveRef.current = false; // Update ref
         }
+
+        // Clear messages and close
+        setMessages([]);
+        setSessionStatus('');
+        onClose();
+
+        toast({
+          title: 'Voice AI Closed',
+          description: 'Recording stopped and session ended',
+          status: 'info',
+          duration: 2000,
+        });
+      } catch (error) {
+        console.error('Error closing drawer:', error);
+        // Force close anyway
+        setMessages([]);
+        setSessionStatus('');
+        setIsRecording(false);
         setIsSessionActive(false);
+        isSessionActiveRef.current = false; // Update ref
+
+        // Force stop media tracks
+        if (mediaRecorderRef.current?.stream) {
+          mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+        }
+
+        onClose();
       }
-
-      // Clear messages and close
-      setMessages([]);
-      setSessionStatus('');
-      onClose();
-
-      toast({
-        title: 'Voice AI Closed',
-        description: 'Recording stopped and session ended',
-        status: 'info',
-        duration: 2000,
-      });
-    } catch (error) {
-      console.error('Error closing drawer:', error);
-      // Force close anyway
-      setMessages([]);
-      setSessionStatus('');
-      setIsRecording(false);
-      setIsSessionActive(false);
-
-      // Force stop media tracks
-      if (mediaRecorderRef.current?.stream) {
-        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      }
-
-      onClose();
-    }
   };
 
   return (

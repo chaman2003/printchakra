@@ -202,7 +202,7 @@ export async function getAudioDuration(audioBlob: Blob): Promise<number> {
  */
 export async function hasVoiceActivity(
   audioBlob: Blob,
-  threshold: number = 0.025 // INCREASED from 0.015 for stricter human voice detection
+  threshold: number = 0.020 // BALANCED: 0.020 for good detection while filtering background noise
 ): Promise<boolean> {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -259,12 +259,12 @@ export async function hasVoiceActivity(
       const windowRMS = Math.sqrt(windowSum / (end - start));
 
       // Count windows with significant energy (voice-like activity)
-      if (windowRMS > threshold * 0.9) { // INCREASED from 0.8 - stricter
+      if (windowRMS > threshold * 0.85) { // BALANCED: relaxed from 0.9 to accept quieter speech
         activeWindows++;
       }
       
       // Count windows with clear speech peaks (not just constant background noise)
-      if (windowMax > threshold * 4) { // Strong peaks indicate speech
+      if (windowMax > threshold * 3.5) { // BALANCED: relaxed from 4 to detect softer speech
         peakWindows++;
       }
     }
@@ -272,14 +272,14 @@ export async function hasVoiceActivity(
     const activeRatio = activeWindows / windowCount;
     const peakRatio = peakWindows / windowCount;
 
-    // ENHANCED multi-criteria voice detection for HUMAN VOICE ONLY
+    // BALANCED multi-criteria voice detection - filters noise while accepting real speech
     const hasEnergy = rms > threshold; // Overall energy check
-    const hasSufficientPeaks = maxAmplitude > threshold * 5; // INCREASED from 3x - need stronger peaks for human voice
-    const hasVoicePattern = activeRatio > 0.15; // INCREASED from 0.1 - need more active content
-    const hasSpeechBursts = peakRatio > 0.08; // NEW: Human speech has clear peak patterns
-    const properZCR = zcr > 0.015 && zcr < 0.45; // TIGHTENED from 0.01-0.5 - human voice range
+    const hasSufficientPeaks = maxAmplitude > threshold * 4; // BALANCED: relaxed from 5x to 4x
+    const hasVoicePattern = activeRatio > 0.12; // BALANCED: relaxed from 0.15 to 0.12
+    const hasSpeechBursts = peakRatio > 0.06; // BALANCED: relaxed from 0.08 to 0.06
+    const properZCR = zcr > 0.01 && zcr < 0.5; // BALANCED: relaxed range for varied speech patterns
     
-    // More strict detection: all energy criteria + zero-crossing in voice range
+    // Balanced detection: filters background noise but accepts real speech
     const isVoice = hasEnergy && hasSufficientPeaks && (hasVoicePattern || hasSpeechBursts) && properZCR;
 
     console.log(`🎙️ Voice Activity Detection (Human Voice Only Mode):`);
