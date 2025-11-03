@@ -536,8 +536,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         // 2. THEN play TTS (non-blocking - starts immediately in background)
         setIsSpeaking(true);
+        setSessionStatus('Speaking response...');
         
-        // Fire TTS request without waiting (async/non-blocking)
+        // Fire TTS request and wait for completion before restarting recording
         apiClient.post(
           '/voice/speak',
           {
@@ -551,36 +552,35 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         }).catch((ttsError) => {
           console.error('TTS error:', ttsError);
         }).finally(() => {
-          // Release speaking lock after estimated TTS duration
-          // This allows user to interrupt if needed
+          // Release speaking lock after TTS completes
           setIsSpeaking(false);
-        });
+          setSessionStatus('Ready - Just speak naturally');
+          
+          // Focus chat input after TTS completes
+          setTimeout(() => {
+            chatInputRef.current?.focus();
+          }, 100);
 
-        // Immediately continue - don't block on TTS
-        setSessionStatus('Ready - Just speak naturally');
-        setTimeout(() => {
-          chatInputRef.current?.focus();
-        }, 100);
+          // Check if session should end
+          if (session_ended) {
+            setIsSessionActive(false);
+            isSessionActiveRef.current = false; // Update ref
+            addMessage('system', 'Voice session ended. Thank you!');
 
-        // Check if session should end
-        if (session_ended) {
-          setIsSessionActive(false);
-          isSessionActiveRef.current = false; // Update ref
-          addMessage('system', 'Voice session ended. Thank you!');
-
-          toast({
-            title: 'Session Ended',
-            description: 'Goodbye!',
-            status: 'info',
-            duration: 3000,
-          });
-        } else {
-          // ALWAYS continue recording for next input if session is still active
-          if (isSessionActiveRef.current) {
-            console.log('🔄 Restarting recording for continuous listening...');
-            setTimeout(() => startRecording(), 500);
+            toast({
+              title: 'Session Ended',
+              description: 'Goodbye!',
+              status: 'info',
+              duration: 3000,
+            });
+          } else {
+            // ONLY restart recording AFTER TTS completes
+            if (isSessionActiveRef.current) {
+              console.log('🔄 TTS finished - restarting recording for continuous listening...');
+              setTimeout(() => startRecording(), 300);
+            }
           }
-        }
+        });
       } else {
         throw new Error(response.data.error || 'Processing failed');
       }
