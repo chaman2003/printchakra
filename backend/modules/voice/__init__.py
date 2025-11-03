@@ -36,7 +36,8 @@ def _init_tts_engine():
     try:
         import pyttsx3
 
-        engine = pyttsx3.init()
+        # FAST INIT: Pre-initialize pyttsx3 engine for immediate use
+        engine = pyttsx3.init("sapi5", debug=False)
 
         # Configure voice - Try Ravi first, fallback to David, then any available
         voices = engine.getProperty("voices")
@@ -70,7 +71,8 @@ def _init_tts_engine():
             if not _tts_initialized_once:
                 logger.error("❌ No TTS voices available on system!")
 
-        engine.setProperty("rate", 200)
+        # OPTIMIZED SETTINGS for fastest startup and speech
+        engine.setProperty("rate", 280)  # Even faster speech (was 250)
         engine.setProperty("volume", 0.9)
 
         _tts_engine = engine
@@ -97,7 +99,7 @@ def _init_tts_engine():
 def speak_text(text: str) -> bool:
     """
     Speak text using TTS (blocking call)
-    Tries Windows OneCore voices first (for Ravi), then falls back to SAPI5
+    Optimized for speed - tries pyttsx3 first, then PowerShell as fallback
 
     Args:
         text: Text to speak
@@ -109,9 +111,68 @@ def speak_text(text: str) -> bool:
 
     # Ensure only one TTS call at a time
     with _tts_lock:
-        # Method 1: Try C# PowerShell for OneCore Ravi
+        # Method 1: FAST pyttsx3 with pre-initialized engine (preferred)
         try:
-            temp_wav = os.path.join(tempfile.gettempdir(), f"ravi_tts_{int(time.time()*1000)}.wav")
+            import gc
+            gc.collect()
+
+            import pyttsx3
+
+            # Use pre-initialized engine if available
+            if _tts_engine is not None:
+                # FAST: Use existing engine
+                _tts_engine.say(text)
+                _tts_engine.runAndWait()
+                return True
+
+            # Fallback: Quick init for immediate use
+            engine = pyttsx3.init("sapi5", debug=False)
+
+            # Set voice (skip search if possible - use first available)
+            voices = engine.getProperty("voices")
+            selected_voice = None
+
+            voice_preferences = ["david", "zira"]  # David is fastest
+
+            for preference in voice_preferences:
+                for voice in voices:
+                    if preference in voice.name.lower():
+                        selected_voice = voice
+                        break
+                if selected_voice:
+                    break
+
+            if not selected_voice and voices:
+                selected_voice = voices[0]
+
+            if selected_voice:
+                engine.setProperty("voice", selected_voice.id)
+
+            # Fast speech settings
+            engine.setProperty("rate", 280)  # Even faster speech
+            engine.setProperty("volume", 0.9)
+
+            # Speak and wait (non-interruptible)
+            engine.say(text)
+            engine.runAndWait()
+
+            # Cleanup (minimal impact on performance)
+            try:
+                engine.stop()
+            except:
+                pass
+
+            del engine
+            gc.collect()
+
+            return True
+
+        except Exception as e:
+            logger.warning(f"pyttsx3 TTS failed, trying PowerShell: {e}")
+
+        # Method 2 Fallback: PowerShell OneCore (slower but more natural)
+        try:
+            temp_wav = os.path.join(tempfile.gettempdir(), f"tts_{int(time.time()*1000)}.wav")
 
             # Escape for PowerShell
             safe_text = text.replace("'", "''")
@@ -123,12 +184,13 @@ Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
 [Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] > $null
 $synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
 
-$ravi = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
-if (-not $ravi) {{ Write-Output 'NO_RAVI'; exit 1 }}
+$voices = $synth.AllVoices | Where {{ $_.Language -match 'en' }}
+$ravi = $voices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
+if ($ravi) {{
+    $synth.Voice = $ravi
+}}
 
-$synth.Voice = $ravi
 $task = $synth.SynthesizeTextToStreamAsync('{safe_text}')
-
 $task.AsTask().Wait()
 $stream = $task.GetResults()
 
@@ -145,7 +207,7 @@ Write-Output 'SUCCESS'
                 ["powershell", "-NoProfile", "-Command", ps_code],
                 capture_output=True,
                 text=True,
-                timeout=8,
+                timeout=5,  # Shorter timeout
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
 
@@ -166,57 +228,8 @@ Write-Output 'SUCCESS'
                         pass
 
         except Exception as e:
-            pass  # Silently fail to fallback
-
-        # Method 2 Fallback: pyttsx3 with SAPI5 (David/Zira)
-        try:
-            import gc
-
-            gc.collect()
-
-            import pyttsx3
-
-            engine = pyttsx3.init("sapi5", debug=False)
-
-            voices = engine.getProperty("voices")
-            selected_voice = None
-
-            voice_preferences = ["ravi", "david", "zira"]
-
-            for preference in voice_preferences:
-                for voice in voices:
-                    if preference in voice.name.lower():
-                        selected_voice = voice
-                        break
-                if selected_voice:
-                    break
-
-            if not selected_voice and voices:
-                selected_voice = voices[0]
-
-            if selected_voice:
-                engine.setProperty("voice", selected_voice.id)
-
-            engine.setProperty("rate", 220)
-            engine.setProperty("volume", 0.9)
-
-            engine.say(text)
-            engine.runAndWait()
-
-            try:
-                engine.stop()
-            except:
-                pass
-
-            del engine
-            gc.collect()
-
-            return True
-
-        except Exception as e:
             logger.error(f"❌ TTS error: {e}")
             import traceback
-
             logger.error(traceback.format_exc())
             return False
 
@@ -430,32 +443,53 @@ class WhisperTranscriptionService:
                     # Use openai-whisper with SPEED-OPTIMIZED settings for real-time voice processing
                     import torch
 
-                    result = self.model.transcribe(
-                        temp_audio_path,
-                        language=language,
-                        task="transcribe",
-                        fp16=torch.cuda.is_available(),  # Use FP16 on GPU for speed
-                        beam_size=1,  # FAST: Greedy decoding (5→1 = 5x faster)
-                        best_of=1,  # FAST: Single candidate (5→1 = no extra sampling)
-                        temperature=0.0,  # FAST: Deterministic, no fallback (6→1 temps)
-                        compression_ratio_threshold=2.4,
-                        no_speech_threshold=0.75,  # Strict threshold to filter background noise
-                        logprob_threshold=-0.5,  # Strict filtering for human voice only
-                        condition_on_previous_text=False,  # FAST: Disable context (each chunk independent)
-                    )
+                    # Build transcription options compatible with latest openai-whisper
+                    # Note: vad_filter was removed in recent versions, so we don't use it
+                    transcribe_options = {
+                        "language": language,
+                        "task": "transcribe",
+                        "fp16": torch.cuda.is_available(),  # Use FP16 on GPU for speed
+                        "beam_size": 1,  # FAST: Greedy decoding (5→1 = 5x faster)
+                        "best_of": 1,  # FAST: Single candidate (5→1 = no extra sampling)
+                        "temperature": 0.0,  # FAST: Deterministic, no fallback (6→1 temps)
+                        "compression_ratio_threshold": 2.4,
+                        "no_speech_threshold": 0.75,  # Strict threshold to filter background noise
+                        "logprob_threshold": -0.5,  # Strict filtering for human voice only
+                        "condition_on_previous_text": False,  # FAST: Disable context (each chunk independent)
+                        "verbose": False,  # Suppress verbose output
+                    }
+                    
+                    try:
+                        result = self.model.transcribe(temp_audio_path, **transcribe_options)
+                    except TypeError as te:
+                        # Handle version compatibility issues (e.g., vad_filter)
+                        if "vad_filter" in str(te) or "DecodingOptions" in str(te):
+                            logger.warning(f"⚠️ Transcription parameter compatibility issue: {te}")
+                            logger.info("Retrying with minimal parameters...")
+                            # Fallback: Use minimal parameters only
+                            result = self.model.transcribe(
+                                temp_audio_path,
+                                language=language,
+                                fp16=torch.cuda.is_available(),
+                                verbose=False
+                            )
+                        else:
+                            raise
+                    
                     text = result.get("text", "").strip()
                     
-                    # ENHANCED: Multi-level speech detection
+                    # ENHANCED: Multi-level speech detection (RELAXED for better real-world performance)
                     segments = result.get("segments", [])
                     
-                    # Level 1: Check no_speech_prob for each segment
+                    # Level 1: Check no_speech_prob for each segment (VERY RELAXED)
                     if segments:
                         # Calculate average no_speech probability across all segments
                         avg_no_speech_prob = sum(seg.get("no_speech_prob", 0) for seg in segments) / len(segments)
                         max_no_speech_prob = max(seg.get("no_speech_prob", 0) for seg in segments)
                         
-                        # STRICT: If average > 0.4 OR max > 0.6, reject as background noise
-                        if avg_no_speech_prob > 0.4 or max_no_speech_prob > 0.6:
+                        # RELAXED: Only reject if VERY HIGH confidence it's noise (avg > 0.85 OR max > 0.95)
+                        # This allows quiet/distant speech, accents, and background noise during speech
+                        if avg_no_speech_prob > 0.85 or max_no_speech_prob > 0.95:
                             logger.warning(f"⚠️ Background noise detected (avg: {avg_no_speech_prob:.2f}, max: {max_no_speech_prob:.2f})")
                             os.unlink(temp_audio_path)
                             return {
@@ -469,9 +503,11 @@ class WhisperTranscriptionService:
                         # Level 2: Check average log probability (confidence in transcription)
                         avg_logprob = sum(seg.get("avg_logprob", -1.0) for seg in segments) / len(segments)
                         
-                        # STRICT: If confidence too low (logprob < -0.6), likely background noise
-                        if avg_logprob < -0.6:
-                            logger.warning(f"⚠️ Low confidence transcription (avg_logprob: {avg_logprob:.2f}) - likely background noise")
+                        # MUCH MORE RELAXED: Only reject if extremely low confidence (< -1.5)
+                        # This accepts normal speech with accents, quiet speech, or some background noise
+                        # -1.08 (your case) will now PASS and be transcribed
+                        if avg_logprob < -1.5:
+                            logger.warning(f"⚠️ Very low confidence transcription (avg_logprob: {avg_logprob:.2f}) - likely background noise")
                             os.unlink(temp_audio_path)
                             return {
                                 "success": False,
@@ -480,12 +516,16 @@ class WhisperTranscriptionService:
                                 "no_speech_detected": True,
                                 "auto_retry": True
                             }
+                        else:
+                            # Log acceptance for debugging
+                            logger.info(f"✅ Speech accepted (no_speech: avg={avg_no_speech_prob:.2f}, max={max_no_speech_prob:.2f}, logprob={avg_logprob:.2f})")
                     
-                    # Level 3: Check if transcribed text is too short or gibberish
+                    # Level 3: Check if transcribed text is too short or gibberish (RELAXED)
                     if text:
                         word_count = len(text.split())
-                        # If less than 2 words, likely noise or non-speech
-                        if word_count < 2:
+                        # RELAXED: Accept even single words (e.g., "print", "scan", "yes", "no")
+                        # Only reject completely empty or very suspicious results
+                        if word_count < 1:
                             logger.warning(f"⚠️ Transcription too short ({word_count} words): '{text}' - likely background noise")
                             os.unlink(temp_audio_path)
                             return {
@@ -495,6 +535,9 @@ class WhisperTranscriptionService:
                                 "no_speech_detected": True,
                                 "auto_retry": True
                             }
+                        
+                        # Log what we transcribed
+                        logger.info(f"📝 Transcribed: '{text}' ({word_count} words)")
                     
                     # Level 4: Check for empty or whitespace-only transcription
                     if not text or text.isspace():
@@ -1161,13 +1204,32 @@ class VoiceAIOrchestrator:
         self.chat_service.reset_conversation()
         logger.info("Voice AI session ended")
 
-    def speak_text_response(self, text: str) -> Dict[str, Any]:
+    def _speak_text_background(self, text: str):
         """
-        Speak text using TTS (blocking call)
+        Background worker for TTS (runs in separate thread)
+        Non-blocking TTS execution
+        
+        Args:
+            text: Text to speak
+        """
+        try:
+            speak_success = speak_text(text)
+            if speak_success:
+                logger.info(f"✅ TTS completed: '{text[:50]}...'")
+            else:
+                logger.warning(f"⚠️ TTS failed for: '{text[:50]}...'")
+        except Exception as e:
+            logger.error(f"❌ Background TTS error: {e}")
+
+    def speak_text_response(self, text: str, background: bool = True) -> Dict[str, Any]:
+        """
+        Speak text using TTS (non-blocking by default)
         Used to play TTS after message is displayed
 
         Args:
             text: Text to speak
+            background: If True, run TTS in background thread (non-blocking)
+                       If False, run blocking (legacy behavior)
 
         Returns:
             dict: Status of TTS operation
@@ -1176,15 +1238,32 @@ class VoiceAIOrchestrator:
             if not TTS_AVAILABLE:
                 return {"success": False, "error": "TTS not available"}
 
-            # logger.info("🔊 Starting TTS (blocking)...")
-            speak_success = speak_text(text)
-
-            if speak_success:
-                # logger.info("✅ TTS completed successfully")
-                return {"success": True, "spoken": True}
+            if background:
+                # NON-BLOCKING: Start TTS in background thread and return immediately
+                tts_thread = threading.Thread(
+                    target=self._speak_text_background,
+                    args=(text,),
+                    daemon=True,
+                    name=f"TTS-{int(time.time()*1000)}"
+                )
+                tts_thread.start()
+                
+                # Return immediately without waiting for TTS to complete
+                return {
+                    "success": True,
+                    "spoken": False,  # Will be spoken asynchronously
+                    "async": True,
+                    "message": "TTS queued for playback"
+                }
             else:
-                logger.warning("⚠️  TTS returned False")
-                return {"success": False, "error": "TTS failed to speak"}
+                # BLOCKING: Legacy behavior (wait for TTS to complete)
+                speak_success = speak_text(text)
+
+                if speak_success:
+                    return {"success": True, "spoken": True}
+                else:
+                    logger.warning("⚠️ TTS returned False")
+                    return {"success": False, "error": "TTS failed to speak"}
 
         except Exception as e:
             logger.error(f"❌ TTS error: {e}")

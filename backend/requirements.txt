@@ -40,7 +40,9 @@ img2pdf
 python-docx
 
 # Voice AI dependencies
-openai-whisper>=20231117
+openai-whisper>=20240930  # Updated for compatibility with latest version
+torch>=2.0.0  # Required for Whisper
+torchaudio>=2.0.0  # Required for audio processing
 requests>=2.31.0
 pyttsx3>=2.99  # Text-to-Speech (Indian English - Microsoft Ravi)
 pypiwin32>=223  # Required for pyttsx3 on Windows

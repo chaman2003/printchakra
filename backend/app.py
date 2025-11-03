@@ -284,7 +284,7 @@ def clear_processing_status(filename):
 
 
 # Initialize new document pipeline
-if MODULES_AVAILABLE:
+if MODULES_AVAILABLE and create_default_pipeline is not None:
     try:
         pipeline_config = {
             "blur_threshold": 100.0,
@@ -302,6 +302,9 @@ if MODULES_AVAILABLE:
         MODULES_AVAILABLE = False
 else:
     doc_pipeline = None
+    if MODULES_AVAILABLE and create_default_pipeline is None:
+        print("⚠️ Pipeline not available (optional module disabled)")
+        MODULES_AVAILABLE = False
 
 # Tesseract configuration (update path if needed)
 # pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'

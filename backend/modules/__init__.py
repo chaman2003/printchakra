@@ -16,7 +16,7 @@ __author__ = "Chaman S"
 # Import from submodules
 from .api_endpoints import create_enhanced_endpoints
 from .ocr import OCRModule, AIEnhancer, DocumentClassifier
-from .voice import VoiceAIModule
+from .voice import VoiceAIOrchestrator, WhisperTranscriptionService, Smollm2ChatService
 from .image import ImageProcessingModule, ImageEnhancer
 from .document import (
     DocumentDetector,
@@ -26,7 +26,17 @@ from .document import (
     StorageModule,
     ExportModule,
 )
-from .pipeline import DocumentPipeline, create_default_pipeline, EnhancedDocumentPipeline
+
+# Import pipeline with error handling (optional dependency)
+try:
+    from .pipeline import DocumentPipeline, create_default_pipeline, EnhancedDocumentPipeline
+except ImportError as e:
+    import logging
+    logging.warning(f"Pipeline module not fully available: {e}")
+    DocumentPipeline = None
+    create_default_pipeline = None
+    EnhancedDocumentPipeline = None
+
 from .utility import *
 
 __all__ = [
@@ -35,7 +45,9 @@ __all__ = [
     "AIEnhancer",
     "DocumentClassifier",
     # Voice
-    "VoiceAIModule",
+    "VoiceAIOrchestrator",
+    "WhisperTranscriptionService",
+    "Smollm2ChatService",
     # Image Processing
     "ImageProcessingModule",
     "ImageEnhancer",

@@ -12,14 +12,10 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 
-from .document_detection import DocumentDetector
-from .export import ExportModule
-from .image_enhancement import ImageEnhancer
-from .image_processing import ImageProcessingModule
-from .ocr_ai import AIEnhancer, DocumentClassifier, OCRModule
-from .scanning import ScanningModule
-from .storage import StorageModule
-from .utility import four_point_transform, order_points
+from ..document import DocumentDetector, ScanningModule, StorageModule, ExportModule
+from ..image import ImageEnhancer, ImageProcessingModule
+from ..ocr import AIEnhancer, DocumentClassifier, OCRModule
+from ..utility import four_point_transform, order_points
 
 
 class DocumentPipeline:

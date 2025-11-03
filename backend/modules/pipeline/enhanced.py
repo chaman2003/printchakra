@@ -14,7 +14,7 @@ import numpy as np
 import pytesseract
 from PIL import Image
 
-from .image_enhancement import ImageEnhancer
+from ..image import ImageEnhancer
 
 logger = logging.getLogger(__name__)
 
