@@ -36,8 +36,7 @@ def _init_tts_engine():
     try:
         import pyttsx3
 
-        # FAST INIT: Pre-initialize pyttsx3 engine for immediate use
-        engine = pyttsx3.init("sapi5", debug=False)
+        engine = pyttsx3.init()
 
         # Configure voice - Try Ravi first, fallback to David, then any available
         voices = engine.getProperty("voices")
@@ -71,8 +70,7 @@ def _init_tts_engine():
             if not _tts_initialized_once:
                 logger.error("❌ No TTS voices available on system!")
 
-        # OPTIMIZED SETTINGS for fastest startup and speech
-        engine.setProperty("rate", 280)  # Even faster speech (was 250)
+        engine.setProperty("rate", 200)
         engine.setProperty("volume", 0.9)
 
         _tts_engine = engine
@@ -99,7 +97,7 @@ def _init_tts_engine():
 def speak_text(text: str) -> bool:
     """
     Speak text using TTS (blocking call)
-    Optimized for speed - tries pyttsx3 first, then PowerShell as fallback
+    Tries Windows OneCore voices first (for Ravi), then falls back to SAPI5
 
     Args:
         text: Text to speak
@@ -111,21 +109,73 @@ def speak_text(text: str) -> bool:
 
     # Ensure only one TTS call at a time
     with _tts_lock:
-        # Method 1: FAST pyttsx3 with pre-initialized engine (preferred)
+        # Method 1: Try C# PowerShell for OneCore Ravi
+        try:
+            temp_wav = os.path.join(tempfile.gettempdir(), f"ravi_tts_{int(time.time()*1000)}.wav")
+
+            # Escape for PowerShell
+            safe_text = text.replace("'", "''")
+            safe_path = temp_wav.replace("\\", "/")
+
+            ps_code = f"""
+$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
+[Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] > $null
+$synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
+
+$ravi = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
+if (-not $ravi) {{ Write-Output 'NO_RAVI'; exit 1 }}
+
+$synth.Voice = $ravi
+$task = $synth.SynthesizeTextToStreamAsync('{safe_text}')
+
+$task.AsTask().Wait()
+$stream = $task.GetResults()
+
+$fs = [IO.File]::Create('{safe_path}')
+$stream.AsStreamForRead().CopyTo($fs)
+$fs.Close()
+$stream.Dispose()
+$synth.Dispose()
+
+Write-Output 'SUCCESS'
+"""
+
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_code],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+
+            if (
+                "SUCCESS" in result.stdout
+                and os.path.exists(temp_wav)
+                and os.path.getsize(temp_wav) > 0
+            ):
+                try:
+                    import winsound
+
+                    winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
+                    return True
+                finally:
+                    try:
+                        os.remove(temp_wav)
+                    except:
+                        pass
+
+        except Exception as e:
+            pass  # Silently fail to fallback
+
+        # Method 2 Fallback: pyttsx3 with SAPI5 (David/Zira) - OPTIMIZED for speed
         try:
             import gc
             gc.collect()
 
             import pyttsx3
 
-            # Use pre-initialized engine if available
-            if _tts_engine is not None:
-                # FAST: Use existing engine
-                _tts_engine.say(text)
-                _tts_engine.runAndWait()
-                return True
-
-            # Fallback: Quick init for immediate use
+            # Use minimal init for faster startup
             engine = pyttsx3.init("sapi5", debug=False)
 
             # Set voice (skip search if possible - use first available)
@@ -149,7 +199,7 @@ def speak_text(text: str) -> bool:
                 engine.setProperty("voice", selected_voice.id)
 
             # Fast speech settings
-            engine.setProperty("rate", 280)  # Even faster speech
+            engine.setProperty("rate", 250)  # Increased from 220 for faster speech
             engine.setProperty("volume", 0.9)
 
             # Speak and wait (non-interruptible)
@@ -166,66 +216,6 @@ def speak_text(text: str) -> bool:
             gc.collect()
 
             return True
-
-        except Exception as e:
-            logger.warning(f"pyttsx3 TTS failed, trying PowerShell: {e}")
-
-        # Method 2 Fallback: PowerShell OneCore (slower but more natural)
-        try:
-            temp_wav = os.path.join(tempfile.gettempdir(), f"tts_{int(time.time()*1000)}.wav")
-
-            # Escape for PowerShell
-            safe_text = text.replace("'", "''")
-            safe_path = temp_wav.replace("\\", "/")
-
-            ps_code = f"""
-$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
-Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
-[Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] > $null
-$synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
-
-$voices = $synth.AllVoices | Where {{ $_.Language -match 'en' }}
-$ravi = $voices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
-if ($ravi) {{
-    $synth.Voice = $ravi
-}}
-
-$task = $synth.SynthesizeTextToStreamAsync('{safe_text}')
-$task.AsTask().Wait()
-$stream = $task.GetResults()
-
-$fs = [IO.File]::Create('{safe_path}')
-$stream.AsStreamForRead().CopyTo($fs)
-$fs.Close()
-$stream.Dispose()
-$synth.Dispose()
-
-Write-Output 'SUCCESS'
-"""
-
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_code],
-                capture_output=True,
-                text=True,
-                timeout=5,  # Shorter timeout
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            )
-
-            if (
-                "SUCCESS" in result.stdout
-                and os.path.exists(temp_wav)
-                and os.path.getsize(temp_wav) > 0
-            ):
-                try:
-                    import winsound
-
-                    winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
-                    return True
-                finally:
-                    try:
-                        os.remove(temp_wav)
-                    except:
-                        pass
 
         except Exception as e:
             logger.error(f"❌ TTS error: {e}")

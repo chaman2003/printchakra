@@ -534,20 +534,33 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           }
         }
 
-        // 2. TTS now plays automatically in backend (started in /voice/process endpoint)
-        // Just wait a moment for TTS to complete before allowing next input
+        // 2. THEN play TTS (non-blocking - starts immediately in background)
         setIsSpeaking(true);
-        setSessionStatus('Speaking response...');
-
-        // Estimate TTS duration based on text length (roughly 150 words per minute)
-        const words = ai_response.split(' ').length;
-        const estimatedDuration = Math.max(2000, (words / 150) * 60 * 1000); // At least 2 seconds
-
-        setTimeout(() => {
+        
+        // Fire TTS request without waiting (async/non-blocking)
+        apiClient.post(
+          '/voice/speak',
+          {
+            text: ai_response,
+          },
+          {
+            timeout: 60000,
+          }
+        ).then(() => {
+          console.log('✅ TTS completed');
+        }).catch((ttsError) => {
+          console.error('TTS error:', ttsError);
+        }).finally(() => {
+          // Release speaking lock after estimated TTS duration
+          // This allows user to interrupt if needed
           setIsSpeaking(false);
-          setSessionStatus('Ready - Just speak naturally');
+        });
+
+        // Immediately continue - don't block on TTS
+        setSessionStatus('Ready - Just speak naturally');
+        setTimeout(() => {
           chatInputRef.current?.focus();
-        }, estimatedDuration);
+        }, 100);
 
         // Check if session should end
         if (session_ended) {
