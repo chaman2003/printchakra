@@ -109,6 +109,7 @@ def speak_text(text: str) -> bool:
     """
     global _tts_lock, _tts_engine
     import traceback
+    import sys
 
     logger.debug(f"[SPEAK_TEXT] Attempting to acquire lock (non-blocking)...")
     # Try to acquire lock with timeout - if TTS is already speaking, interrupt it
@@ -122,6 +123,8 @@ def speak_text(text: str) -> bool:
                 logger.debug("[SPEAK_TEXT] Calling engine.stop()...")
                 _tts_engine.stop()  # Stop current speech
                 logger.info("[SPEAK_TEXT] Engine stopped successfully")
+                sys.stdout.flush()
+                sys.stderr.flush()
         except Exception as e:
             logger.warning(f"⚠️ [SPEAK_TEXT] Could not stop TTS: {e}")
         
@@ -147,15 +150,20 @@ def speak_text(text: str) -> bool:
             logger.debug("[SPEAK_TEXT] Calling engine.runAndWait()...")
             _tts_engine.runAndWait()
             logger.info(f"✅ [SPEAK_TEXT] TTS complete: '{text[:50]}...'")
+            sys.stdout.flush()
+            sys.stderr.flush()
             return True
         except Exception as e:
             logger.error(f"❌ [SPEAK_TEXT] TTS error during say/runAndWait: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            sys.stdout.flush()
+            sys.stderr.flush()
             return False
     finally:
         try:
             _tts_lock.release()
             logger.debug("[SPEAK_TEXT] Lock released")
+            sys.stdout.flush()
         except Exception as e:
             logger.warning(f"⚠️ [SPEAK_TEXT] Error releasing lock: {e}")
 
@@ -1139,16 +1147,26 @@ class VoiceAIOrchestrator:
             text: Text to speak
         """
         import traceback
+        import sys
         try:
             logger.info(f"🔊 [BACKGROUND] Starting TTS for: '{text[:50]}...'")
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
             speak_success = speak_text(text)
+            
             if speak_success:
                 logger.info(f"✅ [BACKGROUND] TTS completed: '{text[:50]}...'")
             else:
                 logger.warning(f"⚠️ [BACKGROUND] TTS returned False for: '{text[:50]}...'")
+                
+            sys.stdout.flush()
+            sys.stderr.flush()
         except Exception as e:
             logger.error(f"❌ [BACKGROUND] TTS error: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            sys.stdout.flush()
+            sys.stderr.flush()
 
     def speak_text_response(self, text: str, background: bool = True) -> Dict[str, Any]:
         """
