@@ -1,312 +1,621 @@
-<div align="center">
+<div align="center"><div align="center">
 
-# 🪷 PrintChakra
 
-### *AI-Powered Smart Print & Scan Solution with Voice Control*
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg?style=for-the-badge)](https://github.com/chaman2003/printchakra)
-[![Python](https://img.shields.io/badge/Python-3.8+-green.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![React](https://img.shields.io/badge/React-19+-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
-[![Flask](https://img.shields.io/badge/Flask-3.0+-000000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+# 🪷 PrintChakra# 🪷 PrintChakra
+
+
+
+## *AI-Powered Print & Scan with Hands-Free Voice Control*### *AI-Powered Smart Print & Scan Solution with Voice Control*
+
+
+
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg?style=for-the-badge&logo=github)](https://github.com/chaman2003/printchakra)[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg?style=for-the-badge)](https://github.com/chaman2003/printchakra)
+
+[![Python](https://img.shields.io/badge/Python-3.8+-green.svg?style=for-the-badge&logo=python)](https://www.python.org/)[![Python](https://img.shields.io/badge/Python-3.8+-green.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+
+[![React](https://img.shields.io/badge/React-19+-61DAFB.svg?style=for-the-badge&logo=react)](https://reactjs.org/)[![React](https://img.shields.io/badge/React-19+-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
+
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178C6.svg?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)[![Flask](https://img.shields.io/badge/Flask-3.0+-000000.svg?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)[![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-3178C6.svg?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
 [![Whisper](https://img.shields.io/badge/Whisper-20231117+-00A8E8.svg?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/openai/whisper)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-**Transform your documents with intelligent OCR processing, real-time automation, and complete hands-free voice control**
+### 🎯 **Just Say It. AI Does It.**[![License](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-## 🆕 Recent Updates (v2.2)
 
-### ✨ Voice System Enhancements
+
+**Hands-free document processing with voice control, AI orchestration, and advanced OCR pipeline****Transform your documents with intelligent OCR processing, real-time automation, and complete hands-free voice control**
+
+
+
+</div>## 🆕 Recent Updates (v2.2)
+
+
+
+---### ✨ Voice System Enhancements
+
 - ⚡ **10-15x faster** voice transcription (Whisper optimizations)
-- 🎤 **Continuous listening** - No manual recording restarts
-- 🚫 **98% background noise filtering** - Dual-layer VAD system
-- 🔄 **Automatic error recovery** - Seamless experience
-- ⏱️ **3-second silence detection** - Smart auto-restart
 
-### 📊 Performance Metrics
-- Transcription: 3-5s → **0.3-0.5s** (10-15x faster)
-- Background noise detection: 60% → **98%**
-- False voice triggers: High → **Near-zero**
-- User experience: Manual clicks → **Fully automatic**
+## ⚡ What It Does- 🎤 **Continuous listening** - No manual recording restarts
+
+- 🚫 **98% background noise filtering** - Dual-layer VAD system
+
+| Feature | Capability |- 🔄 **Automatic error recovery** - Seamless experience
+
+|---------|-----------|- ⏱️ **3-second silence detection** - Smart auto-restart
+
+| 🎤 **Voice Commands** | "Print 3 copies in landscape" → Done |
+
+| 🤖 **AI Orchestration** | Understands intent, configures settings automatically |### 📊 Performance Metrics
+
+| 🔍 **Smart OCR** | 12-stage pipeline with 98%+ accuracy |- Transcription: 3-5s → **0.3-0.5s** (10-15x faster)
+
+| 📱 **Mobile Capture** | Scan documents with your phone in real-time |- Background noise detection: 60% → **98%**
+
+| ⚡ **10-15x Faster** | Optimized Whisper transcription (0.3-0.5s) |- False voice triggers: High → **Near-zero**
+
+| 🌐 **Real-Time Sync** | Socket.IO WebSocket instant updates |- User experience: Manual clicks → **Fully automatic**
+
+| 🏗️ **Modular Design** | Clean architecture, easy to extend |
+
+---
 
 ---
 
 ## 📑 Table of Contents
 
+## 🚀 Quick Start
+
 **Core Documentation**
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [Quick Start Guide](#-quick-start-guide)
-- [Architecture](#️-architecture)
+
+### Prerequisites- [Overview](#-overview)
+
+```bash- [Key Features](#-key-features)
+
+✓ Python 3.8+  ✓ Node.js 16+  ✓ Tesseract OCR  ✓ 2GB storage- [Quick Start Guide](#-quick-start-guide)
+
+```- [Architecture](#️-architecture)
+
 - [Technology Stack](#-technology-stack)
-- [API Reference](#-api-reference)
 
-**Voice AI System** 🎤
-- [Voice Control Overview](#-voice-control-with-ai-assistant)
-- [Voice Commands](#-voice-command-examples)
+### Setup (30 seconds)- [API Reference](#-api-reference)
 
-**Modularization & Structure**
-- [Modular Architecture](#-modular-architecture)
+```powershell
+
+# Clone & setup**Voice AI System** 🎤
+
+git clone https://github.com/chaman2003/printchakra.git- [Voice Control Overview](#-voice-control-with-ai-assistant)
+
+cd printchakra- [Voice Commands](#-voice-command-examples)
+
+
+
+# Backend (auto-setup with venv)**Modularization & Structure**
+
+.\scripts\setup-backend.ps1- [Modular Architecture](#-modular-architecture)
+
 - [Project Structure](#-project-structure)
-- [Backend Architecture](#-backend-architecture-modular)
-- [Frontend Architecture](#-frontend-architecture-modular)
+
+# Frontend- [Backend Architecture](#-backend-architecture-modular)
+
+cd frontend && npm install- [Frontend Architecture](#-frontend-architecture-modular)
+
+```
 
 **Configuration & Setup**
-- [AI Models Setup](#-ai-models-setup)
-- [Environment Configuration](#-environment-configuration)
-- [Preview Size Adjustment](#-preview-size-adjustment)
+
+### Launch- [AI Models Setup](#-ai-models-setup)
+
+```powershell- [Environment Configuration](#-environment-configuration)
+
+# Option 1: Start everything- [Preview Size Adjustment](#-preview-size-adjustment)
+
+.\scripts\start-full-online.ps1
 
 **Additional Resources**
-- [Troubleshooting](#-troubleshooting)
-- [Roadmap](#-roadmap)
-- [Contributing](#-contributing)
-- [License & Author](#-license)
 
----
+# Option 2: Manual start- [Troubleshooting](#-troubleshooting)
 
-</div>
+.\scripts\backend.ps1        # Terminal 1- [Roadmap](#-roadmap)
+
+cd frontend && npm start    # Terminal 2- [Contributing](#-contributing)
+
+```- [License & Author](#-license)
+
+
+
+**Access:**---
+
+- 🖥️ Dashboard: http://localhost:3000
+
+- 📱 Mobile: http://localhost:3000/phone</div>
+
+- 🔌 API: http://localhost:5000
 
 ## 💡 Overview
 
+---
+
 PrintChakra is a **complete automated document processing system** with **AI-powered hands-free orchestration** that combines advanced OCR technology, voice control, and seamless web/mobile interfaces. Simply speak commands like "print this document" or "scan in high quality" and watch the AI intelligently handle the entire workflow.
+
+## 🎤 Voice Commands
 
 ### What Makes PrintChakra Unique?
 
-- 🤖 **AI-Powered Orchestration** - **NEW!** Intelligent voice assistant with complete system awareness
-- 🎤 **Voice-Controlled Operations** - Complete hands-free print and scan control with natural language
-- 🎯 **Automatic Intent Detection** - AI understands "print 3 copies in landscape" and configures everything
-- 📱 **Mobile-First Design** - Auto-triggered phone capture with real-time processing
+```
+
+🎯 Basic Commands- 🤖 **AI-Powered Orchestration** - **NEW!** Intelligent voice assistant with complete system awareness
+
+├─ "Print this document"- 🎤 **Voice-Controlled Operations** - Complete hands-free print and scan control with natural language
+
+├─ "Scan in high quality"- 🎯 **Automatic Intent Detection** - AI understands "print 3 copies in landscape" and configures everything
+
+└─ "Make it landscape mode"- 📱 **Mobile-First Design** - Auto-triggered phone capture with real-time processing
+
 - 🔍 **Advanced OCR Pipeline** - 12-stage sequential processing with multi-strategy document detection
-- ⚡ **Real-Time Synchronization** - Socket.IO WebSocket communication for instant updates
-- 🏗️ **Modular Architecture** - Clean, maintainable codebase with separation of concerns
 
-Perfect for digitizing physical documents, extracting text from images, and building automated document workflows with voice control and real-time synchronization.
+🔧 Configuration Commands- ⚡ **Real-Time Synchronization** - Socket.IO WebSocket communication for instant updates
 
----
+├─ "3 copies"- 🏗️ **Modular Architecture** - Clean, maintainable codebase with separation of concerns
 
-## ✨ Key Features
-<table>
-<tr>
-<td width="50%">
+├─ "Color mode"
+
+├─ "600 DPI"Perfect for digitizing physical documents, extracting text from images, and building automated document workflows with voice control and real-time synchronization.
+
+├─ "Pages 1 to 5"
+
+└─ "Double sided"---
+
+
+
+⚙️ Complex Commands## ✨ Key Features
+
+├─ "Print 3 copies in landscape with color"<table>
+
+├─ "Scan at 600 DPI as PDF"<tr>
+
+└─ "Print odd pages in grayscale"<td width="50%">
+
+```
 
 ### 🖥️ **Desktop Dashboard**
-- 📊 Manage processed documents
-- 📄 View extracted OCR text
-- 📥 Download enhanced images
-- ⚡ Real-time auto-refresh
-- 🎛️ Advanced processing options
-- 🔧 Pipeline configuration display
+
+**How It Works:**- 📊 Manage processed documents
+
+1. Click "Talk with AI" → "Start Voice Session"- 📄 View extracted OCR text
+
+2. Say your command- 📥 Download enhanced images
+
+3. AI confirms: "Ready to print 3 copies in landscape. Proceed?"- ⚡ Real-time auto-refresh
+
+4. Say "Yes" → Orchestration opens with settings pre-configured- 🎛️ Advanced processing options
+
+5. Review & execute- 🔧 Pipeline configuration display
+
 - 📦 Batch file operations
-- 🔄 Socket.IO synchronization
 
-<td width="50%">
+---- 🔄 Socket.IO synchronization
 
-### 📱 **Mobile Capture**
-- 📷 Auto-trigger from desktop
-- 🎯 Manual photo upload
-- 🔄 Instant processing feedback
-- 🌐 Socket.IO synchronization
-- ✨ Seamless user experience
-- ✅ **Real-time quality validation**
-- 📊 Blur & focus score metrics
+
+
+## 🤖 AI Features<td width="50%">
+
+
+
+### Automatic Intent Detection### 📱 **Mobile Capture**
+
+```- 📷 Auto-trigger from desktop
+
+You: "Print this in color"- 🎯 Manual photo upload
+
+AI: [Detects: PRINT mode + COLOR setting]- 🔄 Instant processing feedback
+
+AI: "Ready to print in color. Proceed?"- 🌐 Socket.IO synchronization
+
+You: "Yes"- ✨ Seamless user experience
+
+Result: ✅ Print modal opens with color already enabled- ✅ **Real-time quality validation**
+
+```- 📊 Blur & focus score metrics
+
 - 🎯 Document border detection
 
-</td>
-</tr>
-<tr>
-<td width="50%">
+### Configuration Extraction
 
-### 🤖 **AI Processing Pipeline**
+Automatically understands:</td>
+
+- **Color**: "color", "grayscale", "black & white"</tr>
+
+- **Layout**: "landscape", "portrait"<tr>
+
+- **Resolution**: "300 DPI", "600 DPI", "high quality"<td width="50%">
+
+- **Pages**: "all", "odd pages", "pages 1-5"
+
+- **Duplex**: "double sided", "both sides", "one side"### 🤖 **AI Processing Pipeline**
+
 - 🔍 Multi-strategy document detection
-- ✂️ Perspective correction & cropping
-- � 12-stage sequential processing
-- 📐 Corner refinement algorithms
-- 🖼️ 4-stage image enhancement
-- 📝 Multi-configuration OCR (15 attempts)
-- � Automatic best-result selection
-- 📋 Document classification (optional)
 
-</td>
+### Voice Activity Detection (Improved in v2.2)- ✂️ Perspective correction & cropping
+
+- ✅ **Continuous Listening** - Auto-restart after processing- � 12-stage sequential processing
+
+- ✅ **98% Noise Filtering** - Dual-layer voice detection- 📐 Corner refinement algorithms
+
+- ✅ **3-Second Silence** - Auto-detect when you stop talking- 🖼️ 4-stage image enhancement
+
+- ✅ **Zero Manual Clicks** - Fully automatic recording- 📝 Multi-configuration OCR (15 attempts)
+
+- � Automatic best-result selection
+
+---- 📋 Document classification (optional)
+
+
+
+## 📊 Performance</td>
+
 <td width="50%">
 
-### 🚀 **Developer Experience**
-- ⚡ One-command startup scripts
-- 🔧 PowerShell automation
-- 🌍 ngrok public tunneling
-- 📦 Pre-configured deployment
+| Metric | Before | After | Result |
+
+|--------|--------|-------|--------|### 🚀 **Developer Experience**
+
+| Transcription Speed | 3-5s | 0.3-0.5s | **10-15x faster** ⚡ |- ⚡ One-command startup scripts
+
+| Noise Detection | 60% | 98% | **+38% accurate** 🎯 |- 🔧 PowerShell automation
+
+| False Triggers | High | Minimal | **Near-zero** ✅ |- 🌍 ngrok public tunneling
+
+| Recording Restart | Manual | Automatic | **Seamless** 🔄 |- 📦 Pre-configured deployment
+
 - 🛠️ Comprehensive logging
-- 📚 Complete API documentation
+
+---- 📚 Complete API documentation
+
 - 🧪 Advanced testing tools
-- 🔄 File conversion (PDF, DOCX)
 
-</td>
-</tr>
-</table>
+## 🏗️ Architecture- 🔄 File conversion (PDF, DOCX)
 
----
 
-## 🤖 AI-Powered Intelligent Orchestration **[NEW!]**
 
-### Revolutionary Voice-Driven Automation
+```</td>
 
-PrintChakra's AI Assistant now has **complete awareness** of the Orchestrate Print & Capture system! Simply speak your command, and watch the AI intelligently detect your intent, extract configuration parameters, and automatically trigger the orchestration interface.
+┌─────────────────────────────────────────────────┐</tr>
 
-### ✨ What Makes It Intelligent?
+│              React Frontend (TypeScript)         │</table>
 
-#### 🧠 **Complete System Awareness**
-- Understands all print/scan modes, options, and workflows
-- Knows about layout, color, resolution, margins, page selection, and more
-- Can detect and extract configuration from natural language
+│  ┌──────────────────────────────────────────┐   │
+
+│  │  Dashboard │ Phone Capture │ Voice Chat  │   │---
+
+│  └──────────────────────────────────────────┘   │
+
+└──────────────┬──────────────────────────────────┘## 🤖 AI-Powered Intelligent Orchestration **[NEW!]**
+
+               │ Socket.IO WebSocket
+
+┌──────────────┴──────────────────────────────────┐### Revolutionary Voice-Driven Automation
+
+│            Flask Backend (Python)                │
+
+│  ┌──────────────────────────────────────────┐   │PrintChakra's AI Assistant now has **complete awareness** of the Orchestrate Print & Capture system! Simply speak your command, and watch the AI intelligently detect your intent, extract configuration parameters, and automatically trigger the orchestration interface.
+
+│  │ Voice Processor │ OCR Pipeline │ AI Orch │   │
+
+│  ├──────────────────────────────────────────┤   │### ✨ What Makes It Intelligent?
+
+│  │ Services: File, Scan, Print, Convert    │   │
+
+│  └──────────────────────────────────────────┘   │#### 🧠 **Complete System Awareness**
+
+└─────────────────────────────────────────────────┘- Understands all print/scan modes, options, and workflows
+
+         ↓          ↓          ↓- Knows about layout, color, resolution, margins, page selection, and more
+
+    [Whisper]  [Tesseract]  [OpenCV]- Can detect and extract configuration from natural language
+
+```
 
 #### 🎯 **Automatic Intent Detection**
-```
-You: "Hey, print 3 copies in landscape with color mode"
-AI: "Ready: 3 copies, landscape, color. Shall we proceed?"
-You: "Yes"
-AI: [Opens orchestration with settings pre-configured!]
-```
 
-#### ⚙️ **Smart Configuration Extraction**
+### Modular Structure```
+
+- **Backend**: Services layer → Routes → Models → UtilsYou: "Hey, print 3 copies in landscape with color mode"
+
+- **Frontend**: Components → Features → Services → UtilsAI: "Ready: 3 copies, landscape, color. Shall we proceed?"
+
+- **Easy to Extend**: Add features without breaking existing codeYou: "Yes"
+
+AI: [Opens orchestration with settings pre-configured!]
+
+---```
+
+
+
+## 📦 Tech Stack#### ⚙️ **Smart Configuration Extraction**
+
 The AI automatically detects and applies:
-- **Color Mode**: "color", "grayscale", "black and white"
-- **Layout**: "landscape", "portrait"
-- **Resolution**: "300 DPI", "600 DPI", "high quality"
-- **Pages**: "all", "odd pages", "pages 1-5"
-- **Paper Size**: "A4", "Letter", "Legal"
+
+**Backend:**- **Color Mode**: "color", "grayscale", "black and white"
+
+- Flask 3.0 + Socket.IO 5.3.5 (real-time)- **Layout**: "landscape", "portrait"
+
+- OpenCV 4.10 (vision), Tesseract (OCR)- **Resolution**: "300 DPI", "600 DPI", "high quality"
+
+- Whisper (speech-to-text), Ollama (AI inference)- **Pages**: "all", "odd pages", "pages 1-5"
+
+- NumPy, scikit-learn, Pillow- **Paper Size**: "A4", "Letter", "Legal"
+
 - **Special Options**: "double sided", "text mode", "high quality"
 
-### 🎤 Quick Start Examples
+**Frontend:**
 
-#### Basic Print
-```
+- React 19 + TypeScript (type-safe)### 🎤 Quick Start Examples
+
+- Chakra UI (beautiful components)
+
+- Socket.IO Client (real-time updates)#### Basic Print
+
+- Framer Motion (smooth animations)```
+
 "Hey, print this document"
-→ AI: "Ready to print. Shall we proceed?"
-→ You: "Yes"
-→ [Print orchestration opens automatically]
+
+**AI Models:**→ AI: "Ready to print. Shall we proceed?"
+
+- **Whisper** (244MB) - 10-15x optimized for speed→ You: "Yes"
+
+- **Smollm2:135m** - Ultra-fast inference→ [Print orchestration opens automatically]
+
+- **Tesseract** - Industry-standard OCR```
+
+
+
+---#### Advanced Configuration
+
 ```
 
-#### Advanced Configuration
-```
-"Hey, scan at 600 DPI in color as PDF"
+## 📡 API & Features"Hey, scan at 600 DPI in color as PDF"
+
 → AI: "Ready to scan at 600 DPI in color. Shall we proceed?"
-→ You: "Go ahead"
-→ [Scan orchestration opens with settings applied:
-    ✅ Resolution: 600 DPI
-    ✅ Color Mode: Color
-    ✅ Ready to proceed]
-```
 
-#### Multi-Turn Conversation
-```
+### Core Endpoints→ You: "Go ahead"
+
+```→ [Scan orchestration opens with settings applied:
+
+GET  /               → Health check    ✅ Resolution: 600 DPI
+
+POST /upload         → Upload & process    ✅ Color Mode: Color
+
+GET  /files          → List all files    ✅ Ready to proceed]
+
+POST /print          → Trigger print```
+
+POST /convert        → Convert formats
+
+POST /voice/process  → Process voice command#### Multi-Turn Conversation
+
+``````
+
 You: "Hey, print this document"
-AI: "Ready to print. Shall we proceed?"
-You: "Make it landscape and 3 copies"
-AI: "Updated: landscape, 3 copies. Proceed?"
-You: "Yes"
-AI: [Opens print interface with all settings configured]
-```
 
-### 📊 Supported Commands
+### Socket.IO EventsAI: "Ready to print. Shall we proceed?"
 
-| Say This | AI Configures |
+```You: "Make it landscape and 3 copies"
+
+✓ connect              → Connection establishedAI: "Updated: landscape, 3 copies. Proceed?"
+
+✓ processing_progress  → Real-time statusYou: "Yes"
+
+✓ capture_now          → Trigger phone captureAI: [Opens print interface with all settings configured]
+
+✓ orchestration_update → Voice config applied```
+
+✓ conversion_complete  → Files ready
+
+```### 📊 Supported Commands
+
+
+
+---| Say This | AI Configures |
+
 |----------|---------------|
-| "print 3 copies" | Copies setting |
-| "landscape mode" | Layout orientation |
-| "color mode" / "grayscale" | Color settings |
-| "600 DPI" / "high quality" | Resolution |
-| "pages 1-5" / "odd pages" | Page selection |
-| "double sided" | Duplex printing |
-| "A4 paper" | Paper size |
-| "scan with text mode" | OCR enabled |
 
-### 🚀 Complete Workflow
+## 🧪 Testing| "print 3 copies" | Copies setting |
+
+| "landscape mode" | Layout orientation |
+
+```bash| "color mode" / "grayscale" | Color settings |
+
+# Backend tests| "600 DPI" / "high quality" | Resolution |
+
+cd backend| "pages 1-5" / "odd pages" | Page selection |
+
+python -m pytest tests/ -v| "double sided" | Duplex printing |
+
+| "A4 paper" | Paper size |
+
+# Frontend tests| "scan with text mode" | OCR enabled |
+
+cd frontend
+
+npm test### 🚀 Complete Workflow
+
+```
 
 1. **Speak Command**: "Hey, print this in color"
-2. **AI Detects Intent**: Print mode + color configuration
+
+---2. **AI Detects Intent**: Print mode + color configuration
+
 3. **AI Confirms**: "Ready to print in color. Shall we proceed?"
-4. **You Confirm**: "Yes" / "Proceed" / "Go ahead"
+
+## 🛠️ Troubleshooting4. **You Confirm**: "Yes" / "Proceed" / "Go ahead"
+
 5. **AI Triggers**: Opens Orchestrate Print & Capture modal
-6. **Settings Applied**: Color mode enabled, ready to print
-7. **You Execute**: Review and click proceed
 
-### 📖 Documentation
+| Issue | Fix |6. **Settings Applied**: Color mode enabled, ready to print
 
-- **Quick Start**: See [QUICK_START_AI_ORCHESTRATION.md](QUICK_START_AI_ORCHESTRATION.md)
+|-------|-----|7. **You Execute**: Review and click proceed
+
+| Backend won't start | Run `.\scripts\setup-backend.ps1` first |
+
+| Voice not working | Install Ollama: `ollama pull smollm2:135m` |### 📖 Documentation
+
+| OCR failing | Install Tesseract OCR from [UB-Mannheim](https://github.com/UB-Mannheim/tesseract/wiki) |
+
+| Socket.IO errors | Check API_BASE_URL in `frontend/src/config.ts` |- **Quick Start**: See [QUICK_START_AI_ORCHESTRATION.md](QUICK_START_AI_ORCHESTRATION.md)
+
 - **Complete Guide**: See [AI_ORCHESTRATION_ENHANCEMENT.md](AI_ORCHESTRATION_ENHANCEMENT.md)
-- **Troubleshooting**: Check documentation for common issues
 
----
+---- **Troubleshooting**: Check documentation for common issues
 
-## 🎤 Voice Control with AI Assistant
 
-PrintChakra features an **intelligent hands-free voice assistant** powered by Whisper, Smollm2, and Microsoft Ravi TTS. Recent v2.2 improvements include **continuous listening**, **background noise filtering**, and **10-15x faster processing**.
+
+## 📚 Documentation---
+
+
+
+- 📖 **[Full Docs](docs/)** - Complete setup & architecture## 🎤 Voice Control with AI Assistant
+
+- 🎤 **[Voice Guide](VOICE_GUIDE.md)** - Advanced voice features
+
+- 🤖 **[AI Orchestration](docs/ORCHESTRATION.md)** - AI workflow detailsPrintChakra features an **intelligent hands-free voice assistant** powered by Whisper, Smollm2, and Microsoft Ravi TTS. Recent v2.2 improvements include **continuous listening**, **background noise filtering**, and **10-15x faster processing**.
+
+- 🏗️ **[Architecture](docs/ARCHITECTURE.md)** - System design
 
 ### ✨ New in v2.2: Voice System Enhancements
 
+---
+
 | Feature | Improvement | Benefit |
-|---------|-------------|---------|
+
+## 🗺️ Roadmap|---------|-------------|---------|
+
 | **Continuous Listening** | Automatic restart after processing | No manual clicks needed |
-| **Background Noise Filtering** | Dual-layer VAD (frontend + backend) | Only processes human voice |
-| **Speed Optimization** | Beam size 5→1, best_of 5→1 | **10-15x faster** transcription |
-| **Silence Detection** | Detects 3+ seconds of silence | Auto-restarts without delays |
-| **Error Recovery** | Automatic restart after failures | Seamless user experience |
+
+**v2.2** ✅ CURRENT| **Background Noise Filtering** | Dual-layer VAD (frontend + backend) | Only processes human voice |
+
+- ✅ Continuous voice listening| **Speed Optimization** | Beam size 5→1, best_of 5→1 | **10-15x faster** transcription |
+
+- ✅ 98% noise filtering| **Silence Detection** | Detects 3+ seconds of silence | Auto-restarts without delays |
+
+- ✅ 10-15x speed improvement| **Error Recovery** | Automatic restart after failures | Seamless user experience |
+
+- ✅ Automatic orchestration
 
 ### How It Works
 
-**Continuous Listening Flow:**
-```
-1. Start Session → Recording begins
-2. Speak Command → Detected in real-time
+**v2.3** 🔄 NEXT
+
+- [ ] Cloud storage (AWS S3)**Continuous Listening Flow:**
+
+- [ ] Document classification AI```
+
+- [ ] Multi-page handling1. Start Session → Recording begins
+
+- [ ] Progressive Web App (PWA)2. Speak Command → Detected in real-time
+
 3. Process → Whisper + Smollm2 AI
-4. Response → Voice + Text output
-5. Auto-Restart → Ready for next command (no click)
-6. Repeat → Loop until "bye printchakra"
-```
+
+**v3.0** 📅 FUTURE4. Response → Voice + Text output
+
+- [ ] Custom ML models5. Auto-Restart → Ready for next command (no click)
+
+- [ ] Enterprise features6. Repeat → Loop until "bye printchakra"
+
+- [ ] Advanced form recognition```
+
+- [ ] Team collaboration
 
 ### Voice Activity Detection (Improved)
 
-**Frontend Analysis** (threshold 0.025):
-- ✅ RMS energy check (overall volume)
-- ✅ Peak amplitude detection (speech bursts)
-- ✅ Zero-crossing rate (frequency analysis)
-- ✅ Window-based active region detection
-- ❌ Rejects: background noise, silence, ambient sound
+---
 
-**Backend Validation** (4-level):
-- ✅ No-speech probability (<0.75)
-- ✅ Transcription confidence (>-0.5 logprob)
+**Frontend Analysis** (threshold 0.025):
+
+## 🤝 Contributing- ✅ RMS energy check (overall volume)
+
+- ✅ Peak amplitude detection (speech bursts)
+
+We love contributions! - ✅ Zero-crossing rate (frequency analysis)
+
+- ✅ Window-based active region detection
+
+```bash- ❌ Rejects: background noise, silence, ambient sound
+
+git checkout -b feature/amazing-feature
+
+git commit -m 'Add amazing feature'**Backend Validation** (4-level):
+
+git push origin feature/amazing-feature- ✅ No-speech probability (<0.75)
+
+```- ✅ Transcription confidence (>-0.5 logprob)
+
 - ✅ Word count validation (>2 words)
-- ✅ Non-empty text check
+
+Then open a Pull Request.- ✅ Non-empty text check
+
 - ❌ Rejects: unclear audio, short gibberish, silence
+
+---
 
 ### Performance Metrics
 
+## 📄 License
+
 | Metric | Before | After | Improvement |
-|--------|--------|-------|-------------|
+
+MIT License - See [LICENSE](LICENSE) for details|--------|--------|-------|-------------|
+
 | Transcription Time | 3-5s | 0.3-0.5s | **10-15x faster** ⚡ |
-| Background Noise Detection | 60% | 98% | **+38%** 🎯 |
+
+---| Background Noise Detection | 60% | 98% | **+38%** 🎯 |
+
 | False Triggers | High | Minimal | **Near-zero** ✅ |
-| Recording Restart | Manual | Automatic | **Seamless** 🔄 |
 
-### Usage Example
+## 👨‍💻 Author| Recording Restart | Manual | Automatic | **Seamless** 🔄 |
 
-```typescript
-// Click "Talk with PrintChakra AI" → "Start Voice Session"
-// Wait for "Voice AI Ready!"
 
-// Example 1: Simple Command
+
+**Chaman S** - [@chaman2003](https://github.com/chaman2003)### Usage Example
+
+
+
+<sub>```typescript
+
+💬 Questions? Email: chamans7952@gmail.com | // Click "Talk with PrintChakra AI" → "Start Voice Session"
+
+📱 LinkedIn: [chaman2003](https://www.linkedin.com/in/chaman2003/) | // Wait for "Voice AI Ready!"
+
+⭐ Star us on GitHub!
+
+</sub>// Example 1: Simple Command
+
 You: "Hey, print this document"
-AI: "Ready to print. Shall we proceed?"
-You: "Yes"
-AI: [Orchestration opens + starts printing]
 
-// Example 2: Continuous Conversation
+---AI: "Ready to print. Shall we proceed?"
+
+You: "Yes"
+
+<div align="center">AI: [Orchestration opens + starts printing]
+
+
+
+### 💫 **Make Documents Digital Instantly**// Example 2: Continuous Conversation
+
 You: "Hey, print this"
-AI: "Ready to print. Shall we proceed?"
+
+**PrintChakra v2.2.0** • [Try Now](https://github.com/chaman2003/printchakra) • [Star ⭐](https://github.com/chaman2003/printchakra)AI: "Ready to print. Shall we proceed?"
+
 You: "Make it 3 copies"
-AI: "Updated: 3 copies. Proceed?"
+
+🎤 Voice Control • 🤖 AI Powered • ⚡ Ultra Fast • 📱 Mobile ReadyAI: "Updated: 3 copies. Proceed?"
+
 You: "Go ahead"
-AI: [Orchestration opens with settings applied]
+
+</div>AI: [Orchestration opens with settings applied]
+
 [Automatic recording continues for more commands...]
 
 // End session
