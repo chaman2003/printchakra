@@ -449,6 +449,43 @@ const Dashboard: React.FC = () => {
       setProcessingProgress(null);
     });
 
+    // Listen for orchestration updates from voice commands
+    socket.on('orchestration_update', (data: any) => {
+      console.log('🎯 Orchestration update received:', data);
+      
+      if (data.type === 'voice_configuration_updated') {
+        // Update orchestration options based on voice command
+        const updates = data.updates || {};
+        const actionType = data.action_type;
+        
+        if (actionType === 'print') {
+          setOrchestrateOptions(prev => ({
+            ...prev,
+            printColorMode: updates.color_mode || prev.printColorMode,
+            printLayout: updates.orientation || prev.printLayout,
+            printPaperSize: updates.paper_size || prev.printPaperSize,
+            printMargins: updates.margins || prev.printMargins,
+            printScale: updates.scale || prev.printScale,
+          }));
+        } else if (actionType === 'scan') {
+          setOrchestrateOptions(prev => ({
+            ...prev,
+            scanColorMode: updates.color_mode || prev.scanColorMode,
+            scanLayout: updates.orientation || prev.scanLayout,
+            scanResolution: updates.resolution?.toString() || prev.scanResolution,
+            scanPaperSize: updates.paper_size || prev.scanPaperSize,
+          }));
+        }
+        
+        toast({
+          title: 'Settings Updated',
+          description: `Voice command applied: ${Object.keys(updates).join(', ')}`,
+          status: 'success',
+          duration: 3000,
+        });
+      }
+    });
+
     loadFiles();
     loadConvertedFiles(); // Load converted files on component mount
 
@@ -494,6 +531,7 @@ const Dashboard: React.FC = () => {
       socket.off('processing_progress');
       socket.off('processing_complete');
       socket.off('processing_error');
+      socket.off('orchestration_update');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, filesCacheRef]);
@@ -600,7 +638,11 @@ const Dashboard: React.FC = () => {
   };
 
   const reopenOrchestrateModal = () => {
-    setOrchestrationContext('manual');
+    // If it was triggered by voice, reopen voice chat as well
+    if (orchestrationContext === 'voice') {
+      setIsChatVisible(true);
+    }
+    
     // Reopen with current mode and step 2 (keep same settings)
     if (orchestrateMode) {
       setOrchestrateStep(2);
@@ -615,8 +657,10 @@ const Dashboard: React.FC = () => {
     console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
 
     setOrchestrationContext('voice');
-    if (!isChatVisible) {
-      setIsChatVisible(true);
+    
+    // Close the voice chat drawer when modal opens
+    if (isChatVisible) {
+      setIsChatVisible(false);
     }
 
     setOrchestrateMode(mode);

@@ -50,7 +50,7 @@ def _init_tts_engine():
                 if preference in voice.name.lower():
                     selected_voice = voice
                     if not _tts_initialized_once:
-                        logger.info(f"✅ Found preferred voice: {voice.name}")
+                        logger.info(f"[OK] Found preferred voice: {voice.name}")
                     break
             if selected_voice:
                 break
@@ -59,7 +59,7 @@ def _init_tts_engine():
         if not selected_voice and voices:
             selected_voice = voices[0]
             if not _tts_initialized_once:
-                logger.warning(f"⚠️ Preferred voices not found. Using: {voices[0].name}")
+                logger.warning(f"[WARN] Preferred voices not found. Using: {voices[0].name}")
                 logger.warning(
                     f"   To install Microsoft Ravi: Settings > Time & Language > Speech > Add voices"
                 )
@@ -68,27 +68,25 @@ def _init_tts_engine():
             engine.setProperty("voice", selected_voice.id)
         else:
             if not _tts_initialized_once:
-                logger.error("❌ No TTS voices available on system!")
+                logger.error("[ERROR] No TTS voices available on system!")
 
-        # Fast speech settings for responsive TTS
-        engine.setProperty("rate", 280)  # Faster speech rate (default is 150)
-        engine.setProperty("volume", 1.0)  # Max volume
+        engine.setProperty("rate", 200)
+        engine.setProperty("volume", 0.9)
 
         _tts_engine = engine
         TTS_AVAILABLE = True
 
         # Only log initialization details once at startup
         if not _tts_initialized_once:
-            logger.info("✅ Text-to-Speech initialized successfully")
+            logger.info("[OK] Text-to-Speech initialized successfully")
             logger.info(f"   Engine: Windows SAPI (pyttsx3)")
-            logger.info(f"   Speed: 280 wpm (fast)")
             logger.info(f"   Mode: Offline & Lightweight")
             _tts_initialized_once = True
 
         return True
 
     except Exception as e:
-        logger.error(f"❌ TTS initialization failed: {e}")
+        logger.error(f"[ERROR] TTS initialization failed: {e}")
         import traceback
 
         logger.error(traceback.format_exc())
@@ -99,7 +97,7 @@ def _init_tts_engine():
 def speak_text(text: str) -> bool:
     """
     Speak text using TTS (blocking call)
-    INTERRUPTS any currently playing TTS to speak new text immediately
+    Tries Windows OneCore voices first (for Ravi), then falls back to SAPI5
 
     Args:
         text: Text to speak
@@ -107,65 +105,120 @@ def speak_text(text: str) -> bool:
     Returns:
         bool: True if speech was successful
     """
-    global _tts_lock, _tts_engine
-    import traceback
-    import sys
+    global _tts_lock
 
-    logger.debug(f"[SPEAK_TEXT] Attempting to acquire lock (non-blocking)...")
-    # Try to acquire lock with timeout - if TTS is already speaking, interrupt it
-    lock_acquired = _tts_lock.acquire(blocking=False)
-    
-    if not lock_acquired:
-        # TTS is currently speaking - interrupt it by stopping the engine
-        logger.info(f"⚠️ [SPEAK_TEXT] TTS already playing - interrupting to speak new text: '{text[:40]}...'")
+    # Ensure only one TTS call at a time
+    with _tts_lock:
+        # Method 1: Try C# PowerShell for OneCore Ravi
         try:
-            if _tts_engine:
-                logger.debug("[SPEAK_TEXT] Calling engine.stop()...")
-                _tts_engine.stop()  # Stop current speech
-                logger.info("[SPEAK_TEXT] Engine stopped successfully")
-                sys.stdout.flush()
-                sys.stderr.flush()
+            temp_wav = os.path.join(tempfile.gettempdir(), f"ravi_tts_{int(time.time()*1000)}.wav")
+
+            # Escape for PowerShell
+            safe_text = text.replace("'", "''")
+            safe_path = temp_wav.replace("\\", "/")
+
+            ps_code = f"""
+$OutputEncoding = [Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName 'System.Runtime.WindowsRuntime'
+[Windows.Media.SpeechSynthesis.SpeechSynthesizer,Windows.Media.SpeechSynthesis,ContentType=WindowsRuntime] > $null
+$synth = New-Object Windows.Media.SpeechSynthesis.SpeechSynthesizer
+
+$ravi = [Windows.Media.SpeechSynthesis.SpeechSynthesizer]::AllVoices | Where {{ $_.DisplayName -match 'Ravi' }} | Select -First 1
+if (-not $ravi) {{ Write-Output 'NO_RAVI'; exit 1 }}
+
+$synth.Voice = $ravi
+$task = $synth.SynthesizeTextToStreamAsync('{safe_text}')
+
+$task.AsTask().Wait()
+$stream = $task.GetResults()
+
+$fs = [IO.File]::Create('{safe_path}')
+$stream.AsStreamForRead().CopyTo($fs)
+$fs.Close()
+$stream.Dispose()
+$synth.Dispose()
+
+Write-Output 'SUCCESS'
+"""
+
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_code],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+            )
+
+            if (
+                "SUCCESS" in result.stdout
+                and os.path.exists(temp_wav)
+                and os.path.getsize(temp_wav) > 0
+            ):
+                try:
+                    import winsound
+
+                    winsound.PlaySound(temp_wav, winsound.SND_FILENAME)
+                    return True
+                finally:
+                    try:
+                        os.remove(temp_wav)
+                    except:
+                        pass
+
         except Exception as e:
-            logger.warning(f"⚠️ [SPEAK_TEXT] Could not stop TTS: {e}")
-        
-        # Now acquire the lock (should be released after stop)
-        logger.debug("[SPEAK_TEXT] Acquiring lock (blocking) after stop...")
-        _tts_lock.acquire(blocking=True)
-        logger.debug("[SPEAK_TEXT] Lock acquired")
-    else:
-        logger.debug("[SPEAK_TEXT] Lock acquired on first try")
-    
-    try:
-        # Ensure TTS engine is initialized
-        _init_tts_engine()
-        
-        if _tts_engine is None:
-            logger.error("❌ [SPEAK_TEXT] TTS engine not available")
-            return False
+            pass  # Silently fail to fallback
 
-        # Use pre-initialized engine (faster than reinitializing)
+        # Method 2 Fallback: pyttsx3 with SAPI5 (David/Zira)
         try:
-            logger.debug(f"[SPEAK_TEXT] Calling engine.say('{text[:40]}...')")
-            _tts_engine.say(text)
-            logger.debug("[SPEAK_TEXT] Calling engine.runAndWait()...")
-            _tts_engine.runAndWait()
-            logger.info(f"✅ [SPEAK_TEXT] TTS complete: '{text[:50]}...'")
-            sys.stdout.flush()
-            sys.stderr.flush()
+            import gc
+
+            gc.collect()
+
+            import pyttsx3
+
+            engine = pyttsx3.init("sapi5", debug=False)
+
+            voices = engine.getProperty("voices")
+            selected_voice = None
+
+            voice_preferences = ["ravi", "david", "zira"]
+
+            for preference in voice_preferences:
+                for voice in voices:
+                    if preference in voice.name.lower():
+                        selected_voice = voice
+                        break
+                if selected_voice:
+                    break
+
+            if not selected_voice and voices:
+                selected_voice = voices[0]
+
+            if selected_voice:
+                engine.setProperty("voice", selected_voice.id)
+
+            engine.setProperty("rate", 220)
+            engine.setProperty("volume", 0.9)
+
+            engine.say(text)
+            engine.runAndWait()
+
+            try:
+                engine.stop()
+            except:
+                pass
+
+            del engine
+            gc.collect()
+
             return True
+
         except Exception as e:
-            logger.error(f"❌ [SPEAK_TEXT] TTS error during say/runAndWait: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            sys.stdout.flush()
-            sys.stderr.flush()
+            logger.error(f"[ERROR] TTS error: {e}")
+            import traceback
+
+            logger.error(traceback.format_exc())
             return False
-    finally:
-        try:
-            _tts_lock.release()
-            logger.debug("[SPEAK_TEXT] Lock released")
-            sys.stdout.flush()
-        except Exception as e:
-            logger.warning(f"⚠️ [SPEAK_TEXT] Error releasing lock: {e}")
 
 
 class WhisperTranscriptionService:
@@ -200,7 +253,7 @@ class WhisperTranscriptionService:
             self.is_loaded = True
             self.use_whisper_cpp = True
             if not hasattr(self, "_logged_load"):  # Only log once
-                logger.info("✅ Whisper GGML model loaded successfully with whisper.cpp")
+                logger.info("[OK] Whisper GGML model loaded successfully with whisper.cpp")
                 self._logged_load = True
             return True
         except Exception as e:
@@ -216,12 +269,12 @@ class WhisperTranscriptionService:
             # Check GPU availability
             if torch.cuda.is_available():
                 if not hasattr(self, "_logged_load"):  # Only log once
-                    logger.info(f"✅ GPU detected: {torch.cuda.get_device_name(0)}")
+                    logger.info(f"[OK] GPU detected: {torch.cuda.get_device_name(0)}")
                     logger.info(f"   CUDA Version: {torch.version.cuda}")
                 device = "cuda"
             else:
                 if not hasattr(self, "_logged_load"):  # Only log once
-                    logger.warning("⚠️ GPU not available, using CPU")
+                    logger.warning("[WARN] GPU not available, using CPU")
                 device = "cpu"
 
             # Use small model for better accuracy (461MB, good balance)
@@ -232,12 +285,12 @@ class WhisperTranscriptionService:
             self.use_whisper_cpp = False
             self.device = device
             if not hasattr(self, "_logged_load"):  # Only log once
-                logger.info(f"✅ Whisper small model loaded successfully on {device.upper()}")
+                logger.info(f"[OK] Whisper small model loaded successfully on {device.upper()}")
                 logger.info(f"   Model optimized for accuracy (461MB, better transcription)")
                 self._logged_load = True
             return True
         except Exception as e:
-            logger.error(f"❌ Failed to load base model: {str(e)}")
+            logger.error(f"[ERROR] Failed to load base model: {str(e)}")
             import traceback
 
             logger.error(traceback.format_exc())
@@ -258,12 +311,12 @@ class WhisperTranscriptionService:
                 self.use_whisper_cpp = False
                 self.device = device
                 if not hasattr(self, "_logged_load"):  # Only log once
-                    logger.info(f"✅ Whisper base model loaded successfully on {device.upper()}")
+                    logger.info(f"[OK] Whisper base model loaded successfully on {device.upper()}")
                     logger.info(f"   Model with balanced performance (244MB)")
                     self._logged_load = True
                 return True
             except Exception as fallback_error:
-                logger.error(f"❌ Failed to load fallback model: {str(fallback_error)}")
+                logger.error(f"[ERROR] Failed to load fallback model: {str(fallback_error)}")
                 import traceback
 
                 logger.error(traceback.format_exc())
@@ -290,7 +343,7 @@ class WhisperTranscriptionService:
             return self._try_load_with_openai_whisper()
 
         except Exception as e:
-            logger.error(f"❌ Failed to load Whisper model: {str(e)}")
+            logger.error(f"[ERROR] Failed to load Whisper model: {str(e)}")
             self.is_loaded = False
             return False
 
@@ -318,12 +371,12 @@ class WhisperTranscriptionService:
                 return {"success": False, "error": "Audio data too small to process", "text": ""}
 
             # Validate WAV format
-            logger.info(f"📝 Audio data size: {len(audio_data)} bytes")
+            logger.info(f"[INFO] Audio data size: {len(audio_data)} bytes")
 
             # Check WAV header
             if audio_data[:4] != b"RIFF":
                 logger.warning(
-                    f"⚠️ Audio doesn't start with RIFF header. First 4 bytes: {audio_data[:4]}"
+                    f"[WARN] Audio doesn't start with RIFF header. First 4 bytes: {audio_data[:4]}"
                 )
                 # Try to convert or handle non-WAV format
                 if audio_data[:4] == b"\x1aE\xdf\xa3":  # WebM signature
@@ -332,7 +385,7 @@ class WhisperTranscriptionService:
                 elif audio_data[:2] == b"\xff\xfb":  # MP3 signature
                     logger.info("Detected MP3 format, attempting conversion...")
             else:
-                logger.info("✅ Valid RIFF/WAV header detected")
+                logger.info("[OK] Valid RIFF/WAV header detected")
 
             # Save audio to temporary file with proper extension
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
@@ -356,7 +409,7 @@ class WhisperTranscriptionService:
             with open(temp_audio_path, "rb") as f:
                 file_header = f.read(4)
                 if file_header != b"RIFF":
-                    logger.error(f"❌ Corrupted WAV file! Header is {file_header}, not RIFF")
+                    logger.error(f"[ERROR] Corrupted WAV file! Header is {file_header}, not RIFF")
                     logger.error(f"   First 20 bytes: {audio_data[:20]}")
                     os.unlink(temp_audio_path)
                     return {
@@ -398,7 +451,7 @@ class WhisperTranscriptionService:
                     except TypeError as te:
                         # Handle version compatibility issues (e.g., vad_filter)
                         if "vad_filter" in str(te) or "DecodingOptions" in str(te):
-                            logger.warning(f"⚠️ Transcription parameter compatibility issue: {te}")
+                            logger.warning(f"[WARN] Transcription parameter compatibility issue: {te}")
                             logger.info("Retrying with minimal parameters...")
                             # Fallback: Use minimal parameters only
                             result = self.model.transcribe(
@@ -424,7 +477,7 @@ class WhisperTranscriptionService:
                         # RELAXED: Only reject if VERY HIGH confidence it's noise (avg > 0.85 OR max > 0.95)
                         # This allows quiet/distant speech, accents, and background noise during speech
                         if avg_no_speech_prob > 0.85 or max_no_speech_prob > 0.95:
-                            logger.warning(f"⚠️ Background noise detected (avg: {avg_no_speech_prob:.2f}, max: {max_no_speech_prob:.2f})")
+                            logger.warning(f"[WARN] Background noise detected (avg: {avg_no_speech_prob:.2f}, max: {max_no_speech_prob:.2f})")
                             os.unlink(temp_audio_path)
                             return {
                                 "success": False,
@@ -441,7 +494,7 @@ class WhisperTranscriptionService:
                         # This accepts normal speech with accents, quiet speech, or some background noise
                         # -1.08 (your case) will now PASS and be transcribed
                         if avg_logprob < -1.5:
-                            logger.warning(f"⚠️ Very low confidence transcription (avg_logprob: {avg_logprob:.2f}) - likely background noise")
+                            logger.warning(f"[WARN] Very low confidence transcription (avg_logprob: {avg_logprob:.2f}) - likely background noise")
                             os.unlink(temp_audio_path)
                             return {
                                 "success": False,
@@ -452,7 +505,7 @@ class WhisperTranscriptionService:
                             }
                         else:
                             # Log acceptance for debugging
-                            logger.info(f"✅ Speech accepted (no_speech: avg={avg_no_speech_prob:.2f}, max={max_no_speech_prob:.2f}, logprob={avg_logprob:.2f})")
+                            logger.info(f"[OK] Speech accepted (no_speech: avg={avg_no_speech_prob:.2f}, max={max_no_speech_prob:.2f}, logprob={avg_logprob:.2f})")
                     
                     # Level 3: Check if transcribed text is too short or gibberish (RELAXED)
                     if text:
@@ -460,7 +513,7 @@ class WhisperTranscriptionService:
                         # RELAXED: Accept even single words (e.g., "print", "scan", "yes", "no")
                         # Only reject completely empty or very suspicious results
                         if word_count < 1:
-                            logger.warning(f"⚠️ Transcription too short ({word_count} words): '{text}' - likely background noise")
+                            logger.warning(f"[WARN] Transcription too short ({word_count} words): '{text}' - likely background noise")
                             os.unlink(temp_audio_path)
                             return {
                                 "success": False,
@@ -471,11 +524,11 @@ class WhisperTranscriptionService:
                             }
                         
                         # Log what we transcribed
-                        logger.info(f"📝 Transcribed: '{text}' ({word_count} words)")
+                        logger.info(f"[INFO] Transcribed: '{text}' ({word_count} words)")
                     
                     # Level 4: Check for empty or whitespace-only transcription
                     if not text or text.isspace():
-                        logger.warning(f"⚠️ Empty transcription - background noise only")
+                        logger.warning(f"[WARN] Empty transcription - background noise only")
                         os.unlink(temp_audio_path)
                         return {
                             "success": False,
@@ -486,7 +539,7 @@ class WhisperTranscriptionService:
                         }
                     
             except Exception as transcribe_error:
-                logger.error(f"❌ Whisper transcription failed: {str(transcribe_error)}")
+                logger.error(f"[ERROR] Whisper transcription failed: {str(transcribe_error)}")
                 logger.error(f"   Error type: {type(transcribe_error).__name__}")
 
                 # Check if it's a file access error
@@ -515,7 +568,7 @@ class WhisperTranscriptionService:
                 except:
                     logger.debug(f"Could not delete temp file: {temp_audio_path}")
 
-            # logger.info(f"✅ Transcription: {text[:100]}...")
+            # logger.info(f"[OK] Transcription: {text[:100]}...")
 
             return {
                 "success": True,
@@ -526,7 +579,7 @@ class WhisperTranscriptionService:
             }
 
         except Exception as e:
-            logger.error(f"❌ Transcription error: {str(e)}")
+            logger.error(f"[ERROR] Transcription error: {str(e)}")
             logger.error(f"   Error type: {type(e).__name__}")
             # Try to clean up temp file if it exists
             try:
@@ -577,7 +630,7 @@ class Smollm2ChatService:
         
         self.system_prompt = """You are PrintChakra AI - a direct, action-focused assistant.
 
-⚠️ CRITICAL: The system handles print/scan intents automatically. You should NEVER see messages about printing or scanning - they are intercepted before reaching you.
+[WARN] CRITICAL: The system handles print/scan intents automatically. You should NEVER see messages about printing or scanning - they are intercepted before reaching you.
 
 YOUR ROLE:
 - Answer general questions about PrintChakra features (OCR, file conversion, voice commands)
@@ -586,15 +639,15 @@ YOUR ROLE:
 - If somehow print/scan slips through, immediately say: "Opening interface now!"
 
 TOPICS YOU HANDLE:
-✅ "What can PrintChakra do?" → "OCR, file conversion, printing, scanning, voice commands!"
-✅ "What formats do you support?" → "PDF, DOCX, images, text files, and more!"
-✅ "How does voice work?" → "Just speak naturally - no wake words needed!"
+[OK] "What can PrintChakra do?" → "OCR, file conversion, printing, scanning, voice commands!"
+[OK] "What formats do you support?" → "PDF, DOCX, images, text files, and more!"
+[OK] "How does voice work?" → "Just speak naturally - no wake words needed!"
 
 NEVER ASK QUESTIONS LIKE:
-❌ "What kind of document?"
-❌ "Academic or business?"
-❌ "What details do you need?"
-❌ "Tell me more about..."
+[NO] "What kind of document?"
+[NO] "Academic or business?"
+[NO] "What details do you need?"
+[NO] "Tell me more about..."
 
 BE DIRECT:
 - User: "thanks" → You: "You're welcome!"
@@ -649,7 +702,7 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 for keyword in keywords:
                     # Exact match gets highest confidence
                     if user_lower == keyword:
-                        logger.info(f"✅ EXACT MATCH: '{user_message}' → {command_type}")
+                        logger.info(f"[OK] EXACT MATCH: '{user_message}' → {command_type}")
                         return command_type, 1.0
                     
                     # Substring match within message (contains keyword)
@@ -658,7 +711,7 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                         if confidence > best_confidence:
                             best_command = command_type
                             best_confidence = confidence
-                        logger.info(f"🎯 SUBSTRING MATCH: '{user_message}' contains '{keyword}' → {command_type} (confidence: {confidence})")
+                        logger.info(f"[MATCH] SUBSTRING MATCH: '{user_message}' contains '{keyword}' → {command_type} (confidence: {confidence})")
                         continue
                     
                     # Fuzzy match (similarity score)
@@ -670,10 +723,10 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                         logger.info(f"🔀 FUZZY MATCH: '{user_message}' ≈ '{keyword}' → {command_type} (confidence: {similarity:.2f})")
             
             if best_command and best_confidence > 0.6:
-                logger.info(f"✅ COMMAND INTERPRETED: {best_command} (confidence: {best_confidence:.2f})")
+                logger.info(f"[OK] COMMAND INTERPRETED: {best_command} (confidence: {best_confidence:.2f})")
                 return best_command, best_confidence
             
-            logger.info(f"❓ NO COMMAND MATCH: '{user_message}' (best match: {best_command} @ {best_confidence:.2f})")
+            logger.info(f"[NO MATCH] NO COMMAND MATCH: '{user_message}' (best match: {best_command} @ {best_confidence:.2f})")
             return None, 0.0
             
         except Exception as e:
@@ -696,13 +749,13 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
 
             user_lower = user_message.lower().strip()
             
-            logger.info(f"🔍 Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
+            logger.info(f"[SEARCH] Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
 
             # PRIORITY 0: Try to interpret as a voice command (navigation, control)
             command_type, confidence = self.interpret_voice_command(user_message)
             if command_type and confidence > 0.7:  # High confidence command match
                 ai_response = f"VOICE_COMMAND:{command_type} Executing {command_type}!"
-                logger.info(f"✅ VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f})")
+                logger.info(f"[OK] VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f})")
                 
                 # Add to history
                 self.conversation_history.append({"role": "user", "content": user_message})
@@ -729,7 +782,7 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                     self.pending_orchestration = None  # Clear pending state
                     
                     ai_response = f"TRIGGER_ORCHESTRATION:{mode} Opening {mode} interface now!"
-                    logger.info(f"✅ TRIGGERING ORCHESTRATION: {mode}")
+                    logger.info(f"[OK] TRIGGERING ORCHESTRATION: {mode}")
                     
                     # Add to history
                     self.conversation_history.append({"role": "user", "content": user_message})
@@ -745,14 +798,21 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                     }
                 else:
                     # User said something else - clear pending and continue conversation
-                    logger.info(f"⚠️ User response not a confirmation, clearing pending state")
+                    logger.info(f"[WARN] User response not a confirmation, clearing pending state")
                     self.pending_orchestration = None
             
             # PRIORITY 2: Check for DIRECT print/scan commands - TRIGGER IMMEDIATELY
-            if "print" in user_lower and not any(word in user_lower for word in ["what", "can", "do", "help", "how", "tell"]):
+            # Look for print intent
+            print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper"]
+            is_print_command = any(keyword in user_lower for keyword in print_keywords)
+            
+            # Filter out questions/help requests about printing
+            is_question = any(word in user_lower for word in ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"])
+            
+            if is_print_command and not is_question:
                 # Direct print command detected
                 ai_response = f"TRIGGER_ORCHESTRATION:print Opening print interface now!"
-                logger.info(f"🖨️ DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY")
+                logger.info(f"[PRINT] DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -768,10 +828,14 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                     "orchestration_mode": "print",
                 }
             
-            if ("scan" in user_lower or "capture" in user_lower) and not any(word in user_lower for word in ["what", "can", "do", "help", "how", "tell"]):
+            # Look for scan intent
+            scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
+            is_scan_command = any(keyword in user_lower for keyword in scan_keywords)
+            
+            if is_scan_command and not is_question:
                 # Direct scan command detected
                 ai_response = f"TRIGGER_ORCHESTRATION:scan Opening scan interface now!"
-                logger.info(f"📷 DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY")
+                logger.info(f"[SCAN] DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -846,7 +910,7 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
 
                 # Filter out gibberish or single-word responses
                 if len(words) < 2 or not any(c.isalpha() for c in ai_response):
-                    logger.warning(f"⚠️ Invalid response detected: '{ai_response}'")
+                    logger.warning(f"[WARN] Invalid response detected: '{ai_response}'")
                     ai_response = "I'm here to help with document scanning and printing!"
 
                 # Add assistant response to history
@@ -856,7 +920,7 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 if len(self.conversation_history) > 16:
                     self.conversation_history = self.conversation_history[-16:]
 
-                # logger.info(f"✅ AI Response ({len(words)} words): {ai_response}")
+                # logger.info(f"[OK] AI Response ({len(words)} words): {ai_response}")
 
                 # Return response FIRST (so frontend displays it immediately)
                 # TTS will be triggered separately by frontend
@@ -877,7 +941,7 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 }
 
         except Exception as e:
-            logger.error(f"❌ Chat generation error: {str(e)}")
+            logger.error(f"[ERROR] Chat generation error: {str(e)}")
             return {"success": False, "error": str(e), "response": ""}
 
     def reset_conversation(self):
@@ -923,7 +987,7 @@ class VoiceAIOrchestrator:
             self.chat_service.reset_conversation()
             self.session_active = True
 
-            # logger.info("✅ Voice AI session started")
+            # logger.info("[OK] Voice AI session started")
             return {
                 "success": True,
                 "message": "Voice AI session started",
@@ -932,7 +996,7 @@ class VoiceAIOrchestrator:
             }
 
         except Exception as e:
-            logger.error(f"❌ Session start error: {str(e)}")
+            logger.error(f"[ERROR] Session start error: {str(e)}")
             return {"success": False, "error": str(e)}
 
     def process_voice_input(self, audio_data: bytes) -> Dict[str, Any]:
@@ -971,7 +1035,7 @@ class VoiceAIOrchestrator:
                     "requires_keyword": True,
                 }
 
-            logger.info(f"📝 Transcribed text: {user_text}")
+            logger.info(f"[INFO] Transcribed text: {user_text}")
 
             # Remove optional wake words from beginning (if present)
             wake_words = ["hey", "hi", "hello", "okay"]
@@ -982,11 +1046,11 @@ class VoiceAIOrchestrator:
                     # Remove wake word from beginning
                     user_text = user_text[len(wake_word) :].strip()
                     user_text_lower = user_text.lower()
-                    logger.info(f"✅ Removed wake word, processing: {user_text}")
+                    logger.info(f"[OK] Removed wake word, processing: {user_text}")
                     break
 
             # Process all speech input (no wake word required)
-            logger.info(f"✅ Processing speech: {user_text}")
+            logger.info(f"[OK] Processing speech: {user_text}")
 
             # Check for exit keyword
             if "bye printchakra" in user_text_lower or "goodbye" in user_text_lower:
@@ -1052,7 +1116,7 @@ class VoiceAIOrchestrator:
             }
 
         except Exception as e:
-            logger.error(f"❌ Voice input processing error: {str(e)}")
+            logger.error(f"[ERROR] Voice input processing error: {str(e)}")
             return {"success": False, "error": str(e), "stage": "unknown", "requires_keyword": True}
 
     def _extract_config_parameters(self, text: str) -> Dict[str, Any]:
@@ -1138,94 +1202,33 @@ class VoiceAIOrchestrator:
         self.chat_service.reset_conversation()
         logger.info("Voice AI session ended")
 
-    def _speak_text_background(self, text: str):
+    def speak_text_response(self, text: str) -> Dict[str, Any]:
         """
-        Background worker for TTS (runs in separate thread)
-        Non-blocking TTS execution
-        
-        Args:
-            text: Text to speak
-        """
-        import traceback
-        import sys
-        try:
-            logger.info(f"🔊 [BACKGROUND] Starting TTS for: '{text[:50]}...'")
-            sys.stdout.flush()
-            sys.stderr.flush()
-            
-            speak_success = speak_text(text)
-            
-            if speak_success:
-                logger.info(f"✅ [BACKGROUND] TTS completed: '{text[:50]}...'")
-            else:
-                logger.warning(f"⚠️ [BACKGROUND] TTS returned False for: '{text[:50]}...'")
-                
-            sys.stdout.flush()
-            sys.stderr.flush()
-        except Exception as e:
-            logger.error(f"❌ [BACKGROUND] TTS error: {e}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            sys.stdout.flush()
-            sys.stderr.flush()
-
-    def speak_text_response(self, text: str, background: bool = False) -> Dict[str, Any]:
-        """
-        Speak text using TTS (BLOCKING by default for reliability)
+        Speak text using TTS (blocking call)
         Used to play TTS after message is displayed
 
         Args:
             text: Text to speak
-            background: If True, run TTS in background thread (non-blocking)
-                       If False, run BLOCKING (wait for TTS to complete) - DEFAULT
 
         Returns:
-            dict: Status of TTS operation with duration estimate
+            dict: Status of TTS operation
         """
         try:
             if not TTS_AVAILABLE:
                 return {"success": False, "error": "TTS not available"}
 
-            # Estimate TTS duration: ~3 words per second at 280 wpm
-            word_count = len(text.split())
-            estimated_duration_seconds = max(1.0, word_count / 3.0)  # Minimum 1 second
+            # logger.info("🔊 Starting TTS (blocking)...")
+            speak_success = speak_text(text)
 
-            if background:
-                # NON-BLOCKING: Start TTS in background thread and return immediately
-                logger.info(f"📝 Creating background TTS thread for: '{text[:50]}...'")
-                tts_thread = threading.Thread(
-                    target=self._speak_text_background,
-                    args=(text,),
-                    daemon=False,  # Non-daemon so we can ensure TTS finishes
-                    name=f"TTS-{int(time.time()*1000)}"
-                )
-                tts_thread.start()
-                logger.info(f"🚀 Background TTS thread started: {tts_thread.name}")
-                
-                # Return immediately with duration estimate so frontend knows how long to wait
-                return {
-                    "success": True,
-                    "spoken": False,  # Will be spoken asynchronously
-                    "async": True,
-                    "estimated_duration": estimated_duration_seconds,
-                    "message": "TTS queued for playback"
-                }
+            if speak_success:
+                # logger.info("[OK] TTS completed successfully")
+                return {"success": True, "spoken": True}
             else:
-                # BLOCKING: Wait for TTS to complete before returning (ensures frontend waits)
-                speak_success = speak_text(text)
-
-                if speak_success:
-                    return {
-                        "success": True,
-                        "spoken": True,
-                        "async": False,
-                        "estimated_duration": estimated_duration_seconds
-                    }
-                else:
-                    logger.warning("⚠️ TTS returned False")
-                    return {"success": False, "error": "TTS failed to speak"}
+                logger.warning("[WARN] TTS returned False")
+                return {"success": False, "error": "TTS failed to speak"}
 
         except Exception as e:
-            logger.error(f"❌ TTS error: {e}")
+            logger.error(f"[ERROR] TTS error: {e}")
             import traceback
 
             logger.error(traceback.format_exc())

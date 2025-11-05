@@ -48,49 +48,49 @@ def test_whisper_transcription():
         
         # Create service
         service = WhisperTranscriptionService()
-        print("✅ WhisperTranscriptionService created")
+        print("[OK] WhisperTranscriptionService created")
         
         # Load model
-        print("\n📥 Loading Whisper model (this may take a moment)...")
+        print("\n[LOAD] Loading Whisper model (this may take a moment)...")
         if service.load_model():
-            print("✅ Whisper model loaded successfully")
+            print("[OK] Whisper model loaded successfully")
         else:
-            print("❌ Failed to load Whisper model")
+            print("[ERROR] Failed to load Whisper model")
             return False
         
         # Create test audio
-        print("\n🎵 Creating test audio...")
+        print("\n[AUDIO] Creating test audio...")
         audio_data = create_test_audio()
-        print(f"✅ Test audio created: {len(audio_data)} bytes")
+        print(f"[OK] Test audio created: {len(audio_data)} bytes")
         
         # Test transcription (this will likely fail to transcribe a sine wave, but should not crash)
-        print("\n🎤 Testing transcription (expecting background noise detection)...")
+        print("\n[TEST] Testing transcription (expecting background noise detection)...")
         result = service.transcribe_audio(audio_data)
         
-        print("\n📊 TRANSCRIPTION RESULT:")
+        print("\n[RESULT] TRANSCRIPTION RESULT:")
         print(f"   Success: {result.get('success')}")
         if result.get('success'):
             print(f"   Text: {result.get('text')}")
         else:
             print(f"   Error: {result.get('error')}")
             if "background noise" in result.get('error', '').lower() or "no speech" in result.get('error', '').lower():
-                print("\n✅ EXPECTED: Sine wave detected as background noise (this is correct!)")
-                print("✅ The fix is working - no vad_filter error!")
+                print("\n[OK] EXPECTED: Sine wave detected as background noise (this is correct!)")
+                print("[OK] The fix is working - no vad_filter error!")
                 return True
         
-        print("\n✅ TEST COMPLETED - No vad_filter error occurred!")
-        print("✅ Voice transcription fix is working correctly!")
+        print("\n[OK] TEST COMPLETED - No vad_filter error occurred!")
+        print("[OK] Voice transcription fix is working correctly!")
         return True
         
     except TypeError as e:
         if "vad_filter" in str(e) or "DecodingOptions" in str(e):
-            print(f"\n❌ FAIL: vad_filter error still occurring: {e}")
+            print(f"\n[ERROR] FAIL: vad_filter error still occurring: {e}")
             return False
         else:
-            print(f"\n⚠️ Different TypeError occurred: {e}")
+            print(f"\n[WARN] Different TypeError occurred: {e}")
             raise
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\n[ERROR] Unexpected error: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -104,9 +104,9 @@ if __name__ == "__main__":
     
     print("\n" + "=" * 70)
     if success:
-        print("✅ ALL TESTS PASSED - Voice transcription fix is working!")
+        print("[OK] ALL TESTS PASSED - Voice transcription fix is working!")
     else:
-        print("❌ TEST FAILED - Voice transcription still has issues")
+        print("[ERROR] TEST FAILED - Voice transcription still has issues")
     print("=" * 70 + "\n")
     
     sys.exit(0 if success else 1)

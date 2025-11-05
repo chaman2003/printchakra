@@ -62,7 +62,7 @@ class PrintScanOrchestrator:
         self.workflow_history = []
         self.state_lock = threading.Lock()
 
-        logger.info("🤖 AI Orchestrator initialized")
+        logger.info("[ORCHESTRATOR] AI Orchestrator initialized")
 
     def _default_configuration(self) -> Dict[str, Any]:
         """Get default print/scan configuration"""
@@ -188,7 +188,7 @@ class PrintScanOrchestrator:
         with self.state_lock:
             intent, parameters = self.detect_intent(user_input)
 
-            logger.info(f"🎯 Detected intent: {intent.value}, Parameters: {parameters}")
+            logger.info(f"[ORCHESTRATOR] Detected intent: {intent.value}, Parameters: {parameters}")
 
             # Route to appropriate handler
             if intent == IntentType.PRINT:
@@ -481,7 +481,7 @@ class PrintScanOrchestrator:
                 return result
 
             except Exception as e:
-                logger.error(f"❌ Action execution failed: {e}")
+                logger.error(f"[ERROR] Action execution failed: {e}")
                 self.current_state = WorkflowState.FAILED
                 return {"success": False, "error": str(e), "action": self.pending_action}
 
@@ -503,7 +503,7 @@ class PrintScanOrchestrator:
 
     def _execute_print(self) -> Dict[str, Any]:
         """Execute print operation"""
-        logger.info("🖨️  Executing print operation...")
+        logger.info("[PRINT] Executing print operation...")
 
         document = self.pending_action.get("document")
         config = self.pending_action.get("configuration")

@@ -138,7 +138,7 @@ sys.stderr = NgrokStderrFilter(original_stderr)
 
 # Check GPU availability
 logger.info("=" * 60)
-logger.info("🚀 PrintChakra Backend Startup")
+logger.info("[STARTUP] PrintChakra Backend Startup")
 logger.info("=" * 60)
 
 try:
@@ -148,19 +148,19 @@ try:
     if gpu_available:
         gpu_name = torch.cuda.get_device_name(0)
         cuda_version = torch.version.cuda
-        logger.info(f"✅ GPU ACCELERATION ENABLED")
+        logger.info(f"[OK] GPU ACCELERATION ENABLED")
         logger.info(f"   GPU: {gpu_name}")
         logger.info(f"   CUDA Version: {cuda_version}")
         logger.info(
             f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB"
         )
     else:
-        logger.warning("⚠️  GPU not detected - using CPU (slower)")
+        logger.warning("[WARN] GPU not detected - using CPU (slower)")
         logger.warning("   Install CUDA and PyTorch with CUDA support for GPU acceleration")
 except ImportError:
-    logger.warning("⚠️  PyTorch not installed - GPU detection unavailable")
+    logger.warning("[WARN] PyTorch not installed - GPU detection unavailable")
 except Exception as e:
-    logger.warning(f"⚠️  GPU detection failed: {e}")
+    logger.warning(f"[WARN] GPU detection failed: {e}")
 
 logger.info("=" * 60)
 
@@ -170,25 +170,17 @@ try:
     from modules.document import DocumentDetector, detect_and_serialize
 
     MODULES_AVAILABLE = True
-    print("✅ All modules loaded successfully")
+    print("[OK] All modules loaded successfully")
 except ImportError as ie:
     MODULES_AVAILABLE = False
-    print(f"⚠️ Module import failed: {ie}")
+    print(f"[WARN] Module import failed: {ie}")
     print("   This is OK - basic processing will work, advanced features disabled")
 except Exception as e:
     MODULES_AVAILABLE = False
-    print(f"⚠️ Unexpected module error: {e}")
+    print(f"[WARN] Unexpected module error: {e}")
     import traceback
 
     traceback.print_exc()
-
-# Pre-initialize TTS engine for faster response
-try:
-    from modules.voice import _init_tts_engine
-    _init_tts_engine()
-    logger.info("✅ TTS engine pre-initialized at startup")
-except Exception as e:
-    logger.warning(f"⚠️ TTS pre-initialization warning: {e}")
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -303,15 +295,15 @@ if MODULES_AVAILABLE and create_default_pipeline is not None:
             "storage_dir": PROCESSED_DIR,
         }
         doc_pipeline = create_default_pipeline(storage_dir=PROCESSED_DIR)
-        print("✅ New modular pipeline initialized successfully")
+        print("[OK] New modular pipeline initialized successfully")
     except Exception as e:
-        print(f"⚠️ Pipeline initialization error: {e}")
+        print(f"[WARN] Pipeline initialization error: {e}")
         doc_pipeline = None
         MODULES_AVAILABLE = False
 else:
     doc_pipeline = None
     if MODULES_AVAILABLE and create_default_pipeline is None:
-        print("⚠️ Pipeline not available (optional module disabled)")
+        print("[WARN] Pipeline not available (optional module disabled)")
         MODULES_AVAILABLE = False
 
 # Tesseract configuration (update path if needed)
@@ -784,7 +776,7 @@ def process_document_image(input_path, output_path, filename=None):
             print(f"  ✓ Document detected and warped: {warped.shape}")
         else:
             warped = original_image.copy()
-            print(f"  ⚠ No document detected, using original image")
+            print(f"  [WARN] No document detected, using original image")
 
         # Step 3: Grayscale Conversion
         print(f"[STEP 3/12] Grayscale Conversion")
@@ -901,7 +893,7 @@ def process_document_image(input_path, output_path, filename=None):
             print(f"  ✓ OCR complete: {best_length} characters extracted ({best_config})")
 
         except Exception as ocr_error:
-            print(f"  ⚠ OCR failed: {ocr_error}")
+            print(f"  [WARN] OCR failed: {ocr_error}")
             text = ""
 
         # Step 12: Save Output
@@ -924,7 +916,7 @@ def process_document_image(input_path, output_path, filename=None):
             print(f"  ✓ Text saved: {text_output_path}")
 
         print(f"\n{'='*60}")
-        print(f"✅ PROCESSING COMPLETE!")
+        print(f"[OK] PROCESSING COMPLETE!")
         print(f"   Input: {input_path}")
         print(f"   Output: {output_path}")
         print(f"   Text extracted: {len(text)} characters")
@@ -946,7 +938,7 @@ def process_document_image(input_path, output_path, filename=None):
         return True, text
 
     except Exception as e:
-        print(f"❌ Processing error: {str(e)}")
+        print(f"[ERROR] Processing error: {str(e)}")
         error_data = {"error": str(e), "message": "Processing failed"}
         socketio.emit("processing_error", error_data)
         if filename:
@@ -1087,11 +1079,11 @@ def upload_file():
         file = request.files.get("file") or request.files.get("photo")
 
         if not file:
-            print("❌ Upload error: No file in request")
+            print("[ERROR] Upload error: No file in request")
             return jsonify({"error": "No file provided", "success": False}), 400
 
         if file.filename == "":
-            print("❌ Upload error: Empty filename")
+            print("[ERROR] Upload error: Empty filename")
             return jsonify({"error": "Empty filename", "success": False}), 400
 
         # Generate unique filename
@@ -1104,7 +1096,7 @@ def upload_file():
         processed_filename = f"processed_{filename}"
 
         print(f"\n{'='*70}")
-        print(f"📤 UPLOAD INITIATED")
+        print(f"[UPLOAD] UPLOAD INITIATED")
         print(f"  Filename: {filename}")
         print(f"  Size: {len(file.read())} bytes")
         file.seek(0)  # Reset file pointer
@@ -1114,12 +1106,12 @@ def upload_file():
         print("\n[UPLOAD] Saving uploaded file...")
         upload_path = os.path.join(UPLOAD_DIR, filename)
         file.save(upload_path)
-        print(f"  ✓ File saved: {upload_path}")
+        print(f"  [OK] File saved: {upload_path}")
 
         # Validate file exists and is readable
         if not os.path.exists(upload_path):
             error_msg = "File upload failed - file not found on disk"
-            print(f"  ❌ {error_msg}")
+            print(f"  [ERROR] {error_msg}")
             return jsonify({"error": error_msg, "success": False}), 500
 
         file_size = os.path.getsize(upload_path)
@@ -1154,7 +1146,7 @@ def upload_file():
             )
             print(f"  ✓ Socket.IO notification sent for instant display")
         except Exception as socket_error:
-            print(f"  ⚠ Warning: Socket.IO notification failed: {str(socket_error)}")
+            print(f"  [WARN] Warning: Socket.IO notification failed: {str(socket_error)}")
 
         # Start background processing
         def background_process():
@@ -1186,7 +1178,7 @@ def upload_file():
                         f.write(text_or_error)
                     print(f"  ✓ Text saved: {text_path}")
                 except Exception as text_error:
-                    print(f"  ⚠ Warning: Failed to save text file: {str(text_error)}")
+                    print(f"  [WARN] Warning: Failed to save text file: {str(text_error)}")
 
                 # Mark as complete
                 update_processing_status(processed_filename, 12, 12, "Complete", is_complete=True)
@@ -1201,14 +1193,14 @@ def upload_file():
                     },
                 )
 
-                print(f"\n✅ Background processing completed for {processed_filename}")
+                print(f"\n[OK] Background processing completed for {processed_filename}")
 
                 # Clear status after 60 seconds
                 threading.Timer(60.0, lambda: clear_processing_status(processed_filename)).start()
 
             except Exception as e:
                 error_msg = f"Background processing error: {str(e)}"
-                print(f"❌ {error_msg}")
+                print(f"[ERROR] {error_msg}")
                 update_processing_status(
                     processed_filename, 12, 12, "Error", is_complete=True, error=error_msg
                 )
@@ -1221,12 +1213,12 @@ def upload_file():
         thread.daemon = True
         thread.start()
 
-        print(f"\n✅ Upload response sent, processing started in background")
+        print(f"\n[OK] Upload response sent, processing started in background")
         return jsonify(response)
 
     except Exception as e:
         error_msg = f"Unexpected error: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         import traceback
 
         print(traceback.format_exc())
@@ -1244,17 +1236,17 @@ def upload_file():
             "text_length": len(text_or_error),
             "text_preview": text_or_error[:200] if len(text_or_error) > 200 else text_or_error,
         }
-        print(f"  ✓ Response built")
+        print(f"  [OK] Response built")
 
         print(f"\n{'='*70}")
-        print(f"✅ UPLOAD COMPLETED SUCCESSFULLY")
+        print(f"[OK] UPLOAD COMPLETED SUCCESSFULLY")
         print(f"{'='*70}\n")
 
         return jsonify(response)
 
     except Exception as e:
         error_msg = f"Unexpected error: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         import traceback
 
         print(traceback.format_exc())
@@ -1296,7 +1288,7 @@ def list_files():
                 file_path = os.path.join(PROCESSED_DIR, filename)
                 # Verify file still exists (it may have been deleted)
                 if not os.path.exists(file_path):
-                    print(f"⚠️ File listed but doesn't exist: {file_path}")
+                    print(f"[WARN] File listed but doesn't exist: {file_path}")
                     continue
                 file_stat = os.stat(file_path)
 
@@ -1378,10 +1370,10 @@ def get_processed_file(filename):
         # Check if file exists
         file_path = os.path.join(PROCESSED_DIR, filename)
         if not os.path.exists(file_path):
-            print(f"❌ File not found: {file_path}")
+            print(f"[ERROR] File not found: {file_path}")
             return jsonify({"error": "File not found"}), 404
 
-        print(f"✅ Serving processed file: {filename}")
+        print(f"[OK] Serving processed file: {filename}")
         response = send_from_directory(PROCESSED_DIR, filename)
 
         # Add comprehensive CORS and cache headers
@@ -1404,7 +1396,7 @@ def get_processed_file(filename):
 
         return response
     except Exception as e:
-        print(f"❌ File serving error: {str(e)}")
+        print(f"[ERROR] File serving error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"File serving error: {str(e)}"}), 500
 
@@ -1441,7 +1433,7 @@ def get_thumbnail(filename):
                 break
 
         if not file_path:
-            print(f"❌ Thumbnail source file not found: {filename}")
+            print(f"[ERROR] Thumbnail source file not found: {filename}")
             return jsonify({"error": "File not found"}), 404
 
         # Generate thumbnail based on file type
@@ -1464,7 +1456,7 @@ def get_thumbnail(filename):
                         thumbnail_data = thumb_io.getvalue()
                 except ImportError:
                     # Fallback: return a placeholder
-                    print(f"⚠️  pdf2image not available, using placeholder for {filename}")
+                    print(f"[WARN] pdf2image not available, using placeholder for {filename}")
                     placeholder = Image.new('RGB', (200, 250), color=(100, 100, 100))
                     thumb_io = io.BytesIO()
                     placeholder.save(thumb_io, format='JPEG', quality=85)
@@ -1503,7 +1495,7 @@ def get_thumbnail(filename):
                 thumbnail_data = thumb_io.getvalue()
 
         except Exception as e:
-            print(f"⚠️  Error generating thumbnail: {str(e)}")
+            print(f"[WARN] Error generating thumbnail: {str(e)}")
             # Return a gray placeholder on error
             placeholder = Image.new('RGB', (200, 250), color=(180, 180, 180))
             thumb_io = io.BytesIO()
@@ -1524,7 +1516,7 @@ def get_thumbnail(filename):
         return jsonify({"error": "Failed to generate thumbnail"}), 500
 
     except Exception as e:
-        print(f"❌ Thumbnail generation error: {str(e)}")
+        print(f"[ERROR] Thumbnail generation error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"Thumbnail generation error: {str(e)}"}), 500
 
@@ -1554,10 +1546,10 @@ def get_upload_file(filename):
         # Check if file exists
         file_path = os.path.join(UPLOAD_DIR, upload_filename)
         if not os.path.exists(file_path):
-            print(f"❌ Upload file not found: {file_path}")
+            print(f"[ERROR] Upload file not found: {file_path}")
             return jsonify({"error": "File not found"}), 404
 
-        print(f"✅ Serving upload file: {upload_filename}")
+        print(f"[OK] Serving upload file: {upload_filename}")
         response = send_from_directory(UPLOAD_DIR, upload_filename)
 
         # Add comprehensive CORS headers
@@ -1580,7 +1572,7 @@ def get_upload_file(filename):
 
         return response
     except Exception as e:
-        print(f"❌ Upload file serving error: {str(e)}")
+        print(f"[ERROR] Upload file serving error: {str(e)}")
         traceback.print_exc()
         return jsonify({"error": f"File serving error: {str(e)}"}), 500
 
@@ -1794,7 +1786,7 @@ def advanced_process():
     Expects: multipart/form-data with 'file' and optional processing options
     """
     if not MODULES_AVAILABLE or doc_pipeline is None:
-        print("❌ Advanced processing not available")
+        print("[ERROR] Advanced processing not available")
         return (
             jsonify(
                 {
@@ -1809,7 +1801,7 @@ def advanced_process():
     try:
         file = request.files.get("file")
         if not file:
-            print("❌ No file provided")
+            print("[ERROR] No file provided")
             return jsonify({"error": "No file provided", "success": False}), 400
 
         # Get processing options from form data
@@ -1824,7 +1816,7 @@ def advanced_process():
         }
 
         print(f"\n{'='*70}")
-        print(f"🚀 ADVANCED PROCESSING INITIATED")
+        print(f"[PROCESSING] ADVANCED PROCESSING INITIATED")
         print(f"  Options: {options}")
         print(f"{'='*70}")
 
@@ -1858,19 +1850,19 @@ def advanced_process():
                 )
                 print(f"  ✓ Notification sent")
             except Exception as e:
-                print(f"  ⚠ Socket.IO notification failed: {e}")
+                print(f"  [WARN] Socket.IO notification failed: {e}")
         else:
-            print(f"\n❌ Processing failed: {result.get('error')}")
+            print(f"\n[ERROR] Processing failed: {result.get('error')}")
 
         print(f"\n{'='*70}")
-        print(f"✅ ADVANCED PROCESSING COMPLETED")
+        print(f"[OK] ADVANCED PROCESSING COMPLETED")
         print(f"{'='*70}\n")
 
         return jsonify(result)
 
     except Exception as e:
         error_msg = f"Advanced processing error: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         print(traceback.format_exc())
         return (
             jsonify({"success": False, "error": error_msg, "traceback": traceback.format_exc()}),
@@ -2068,7 +2060,7 @@ def detect_document_borders():
 
         # Check if detection is available
         if not MODULES_AVAILABLE:
-            print("⚠️ Detection not available - performing basic detection")
+            print("[WARN] Detection not available - performing basic detection")
             # Basic fallback: just detect if there's content
             return jsonify(
                 {
@@ -2084,7 +2076,7 @@ def detect_document_borders():
             result = detect_and_serialize(file_bytes)
             return jsonify(result)
         except Exception as detection_error:
-            print(f"❌ Detection error: {str(detection_error)}")
+            print(f"[ERROR] Detection error: {str(detection_error)}")
             # Return success anyway to not break UI
             return jsonify(
                 {
@@ -2182,7 +2174,7 @@ def batch_process():
                 upload_paths.append(upload_path)
                 print(f"  [{i}/{len(files)}] ✓ Saved: {filename}")
             except Exception as save_error:
-                print(f"  [{i}/{len(files)}] ❌ Failed to save: {str(save_error)}")
+                print(f"  [{i}/{len(files)}] [ERROR] Failed to save: {str(save_error)}")
 
         if not upload_paths:
             return (
@@ -2216,14 +2208,14 @@ def batch_process():
 
         print(f"  ✓ Summary: {successful} successful, {failed} failed")
         print(f"\n{'='*70}")
-        print(f"✅ BATCH PROCESSING COMPLETED")
+        print(f"[OK] BATCH PROCESSING COMPLETED")
         print(f"{'='*70}\n")
 
         return jsonify(response)
 
     except Exception as e:
         error_msg = f"Batch processing error: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         print(traceback.format_exc())
         return (
             jsonify({"success": False, "error": error_msg, "traceback": traceback.format_exc()}),
@@ -2282,7 +2274,7 @@ def convert_files():
         # Validate files exist
         missing_files = [f for f, p in zip(files, input_paths) if not os.path.exists(p)]
         if missing_files:
-            print(f"❌ Missing files: {missing_files}")
+            print(f"[ERROR] Missing files: {missing_files}")
             print(f"   Looking in: {PROCESSED_DIR}")
             return (
                 jsonify(
@@ -2323,7 +2315,7 @@ def convert_files():
             success, message = exporter.merge_images_to_pdf(input_paths, merged_path)
 
             print(f"\n{'='*70}")
-            print(f"✅ MERGE CONVERSION COMPLETED")
+            print(f"[OK] MERGE CONVERSION COMPLETED")
             print(f"  Status: {'Success' if success else 'Failed'}")
             print(f"{'='*70}\n")
 
@@ -2344,7 +2336,7 @@ def convert_files():
                         {"success_count": 1, "fail_count": 0, "total": len(files), "merged": True},
                     )
                 except Exception as socket_error:
-                    print(f"⚠️ Socket.IO emit failed: {socket_error}")
+                    print(f"[WARN] Socket.IO emit failed: {socket_error}")
 
                 return jsonify(
                     {
@@ -2366,7 +2358,7 @@ def convert_files():
         )
 
         print(f"\n{'='*70}")
-        print(f"✅ CONVERSION COMPLETED")
+        print(f"[OK] CONVERSION COMPLETED")
         print(f"  Success: {success_count}")
         print(f"  Failed: {fail_count}")
         print(f"{'='*70}\n")
@@ -2378,7 +2370,7 @@ def convert_files():
                 {"success_count": success_count, "fail_count": fail_count, "total": len(files)},
             )
         except Exception as socket_error:
-            print(f"⚠️ Socket.IO emit failed: {socket_error}")
+            print(f"[WARN] Socket.IO emit failed: {socket_error}")
 
         return jsonify(
             {
@@ -2392,7 +2384,7 @@ def convert_files():
 
     except Exception as e:
         error_msg = f"Conversion error: {str(e)}"
-        print(f"\n❌ {error_msg}")
+        print(f"\n[ERROR] {error_msg}")
         print(traceback.format_exc())
         return (
             jsonify({"success": False, "error": error_msg, "traceback": traceback.format_exc()}),
@@ -2472,12 +2464,12 @@ def delete_converted_file(filename):
 
         # Delete the file
         os.remove(file_path)
-        print(f"✅ Deleted converted file: {filename}")
+        print(f"[OK] Deleted converted file: {filename}")
 
         return jsonify({"success": True, "message": f"Successfully deleted {filename}"})
 
     except Exception as e:
-        print(f"❌ Error deleting converted file: {e}")
+        print(f"[ERROR] Error deleting converted file: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -2504,11 +2496,11 @@ def validate_wifi_connection():
         # (HTTP request successfully reached the backend)
         connected_clients = len(socketio.server.manager.rooms.get("", {})) if hasattr(socketio.server, 'manager') else 0
 
-        logger.info(f"✅ WiFi validation successful - HTTP POST received | Clients: {connected_clients}")
+        logger.info(f"[OK] WiFi validation successful - HTTP POST received | Clients: {connected_clients}")
 
         return jsonify({
             "connected": True,
-            "message": "✅ Phone and Laptop on same network",
+            "message": "[OK] Phone and Laptop on same network",
             "ip": "Network established",
             "timestamp": timestamp,
             "clients": connected_clients
@@ -2518,7 +2510,7 @@ def validate_wifi_connection():
         logger.error(f"WiFi validation error: {str(e)}")
         return jsonify({
             "connected": False,
-            "message": f"❌ WiFi check failed: {str(e)}"
+            "message": f"[ERROR] WiFi check failed: {str(e)}"
         }), 200
 
 
@@ -2543,26 +2535,26 @@ def validate_camera_capturing():
         
         camera_active = is_capturing
         
-        logger.info(f"📷 Camera validation - Capturing: {camera_active}")
+        logger.info(f"[CAMERA] Camera validation - Capturing: {camera_active}")
 
         if camera_active:
             return jsonify({
                 "capturing": True,
-                "message": "✅ Camera is actively capturing frames",
+                "message": "[OK] Camera is actively capturing frames",
                 "timestamp": timestamp,
                 "frameRate": "30fps"
             }), 200
         else:
             return jsonify({
                 "capturing": False,
-                "message": "❌ Camera not currently capturing"
+                "message": "[ERROR] Camera not currently capturing"
             }), 200
 
     except Exception as e:
         logger.error(f"Camera validation error: {str(e)}")
         return jsonify({
             "capturing": False,
-            "message": f"❌ Camera check failed: {str(e)}"
+            "message": f"[ERROR] Camera check failed: {str(e)}"
         }), 200
 
 
@@ -2626,13 +2618,13 @@ def validate_printer_connection():
                         except:
                             pass
                         
-                        logger.info(f"✅ Test print sent to {printer_name}")
+                        logger.info(f"[OK] Test print sent to {printer_name}")
                     except Exception as print_err:
                         logger.warning(f"Test print failed: {print_err}")
                         # Printer exists even if test print failed
                         printer_ready = True
                 
-                logger.info(f"✅ Printer validation successful - {printer_name}")
+                logger.info(f"[OK] Printer validation successful - {printer_name}")
 
         except Exception as printer_err:
             logger.warning(f"Printer check error: {printer_err}")
@@ -2641,7 +2633,7 @@ def validate_printer_connection():
         if printer_ready:
             return jsonify({
                 "connected": True,
-                "message": f"✅ Printer ready: {printer_model}",
+                "message": f"[OK] Printer ready: {printer_model}",
                 "model": printer_model,
                 "timestamp": timestamp,
                 "testPrintSent": test_print
@@ -2649,14 +2641,14 @@ def validate_printer_connection():
         else:
             return jsonify({
                 "connected": False,
-                "message": "❌ No printer found or printer offline"
+                "message": "[ERROR] No printer found or printer offline"
             }), 200
 
     except Exception as e:
         logger.error(f"Printer validation error: {str(e)}")
         return jsonify({
             "connected": False,
-            "message": f"❌ Printer check failed: {str(e)}"
+            "message": f"[ERROR] Printer check failed: {str(e)}"
         }), 200
 
 
@@ -2841,7 +2833,7 @@ def check_camera_ready():
 @socketio.on("connect")
 def handle_connect():
     """Handle client connection - keep it absolutely simple"""
-    print(f"✅ Socket connected: {request.sid}")
+    print(f"[OK] Socket connected: {request.sid}")
     return True
 
 
@@ -2881,10 +2873,10 @@ def start_voice_session():
         result = voice_ai_orchestrator.start_session()
 
         if result.get("success"):
-            logger.info("✅ Voice AI session started successfully")
+            logger.info("[OK] Voice AI session started successfully")
             return jsonify(result), 200
         else:
-            logger.error(f"❌ Voice AI session start failed: {result.get('error')}")
+            logger.error(f"[ERROR] Voice AI session start failed: {result.get('error')}")
             return jsonify(result), 503
 
     except ImportError as e:
@@ -2935,10 +2927,10 @@ def transcribe_voice():
         transcription = voice_ai_orchestrator.whisper_service.transcribe_audio(audio_data)
 
         if transcription.get("success"):
-            logger.info(f"✅ Transcription: {transcription.get('text')}")
+            logger.info(f"[OK] Transcription: {transcription.get('text')}")
             return jsonify(transcription), 200
         else:
-            logger.error(f"❌ Transcription failed: {transcription.get('error')}")
+            logger.error(f"[ERROR] Transcription failed: {transcription.get('error')}")
             return jsonify(transcription), 500
 
     except ImportError:
@@ -2979,7 +2971,7 @@ def chat_with_ai():
 
         if response.get("success"):
             ai_response = response.get("response", "")
-            logger.info(f"🤖 AI response (raw): {ai_response}")
+            logger.info(f"[ORCHESTRATOR] AI response (raw): {ai_response}")
             
             # Check for orchestration triggers - FIRST check if response already has them
             orchestration_trigger = response.get("orchestration_trigger")
@@ -3005,7 +2997,7 @@ def chat_with_ai():
                     # Remove trigger from response (clean display text)
                     ai_response = ai_response.replace(trigger_text, "").strip()
                     response["response"] = ai_response
-                    logger.info(f"🎯 ORCHESTRATION DETECTED! Mode: {orchestration_mode}, Trigger removed from response")
+                    logger.info(f"[TRIGGER] ORCHESTRATION DETECTED! Mode: {orchestration_mode}, Trigger removed from response")
             
             # Extract configuration parameters from user text
             config_params = voice_ai_orchestrator._extract_config_parameters(user_message.lower())
@@ -3015,15 +3007,15 @@ def chat_with_ai():
             response["orchestration_mode"] = orchestration_mode
             response["config_params"] = config_params
             
-            logger.info(f"✅ Final AI response: {ai_response}")
+            logger.info(f"[OK] Final AI response: {ai_response}")
             if orchestration_trigger:
-                logger.info(f"🎯🎯🎯 Orchestration will trigger: {orchestration_mode} with params: {config_params}")
+                logger.info(f"[TRIGGER] Orchestration will trigger: {orchestration_mode} with params: {config_params}")
             else:
-                logger.info(f"ℹ️ No orchestration trigger in this response")
+                logger.info(f"[INFO] No orchestration trigger in this response")
             
             return jsonify(response), 200
         else:
-            logger.error(f"❌ Chat failed: {response.get('error')}")
+            logger.error(f"[ERROR] Chat failed: {response.get('error')}")
             return jsonify(response), 500
 
     except ImportError:
@@ -3036,10 +3028,8 @@ def chat_with_ai():
 @app.route("/voice/speak", methods=["POST"])
 def speak_text():
     """
-    Speak text using TTS (BLOCKING - waits for TTS to complete)
-    TTS plays synchronously on the backend
+    Speak text using TTS (blocking call)
     Expects: JSON with 'text' field
-    Returns after TTS finishes
     """
     try:
         from modules.voice import voice_ai_orchestrator
@@ -3048,28 +3038,20 @@ def speak_text():
         text = data.get("text", "").strip()
 
         if not text:
-            logger.warning("⚠️ TTS endpoint called with no text")
             return jsonify({"success": False, "error": "No text provided"}), 400
 
-        logger.info(f"🔊 TTS endpoint called: '{text[:50]}...' ({len(text.split())} words)")
-
-        # Run TTS BLOCKING (waits for completion) - ensures we hear it
-        # This is slower but ensures TTS actually completes before returning
-        result = voice_ai_orchestrator.speak_text_response(text, background=False)
-
-        logger.info(f"✅ TTS completed: duration {result.get('estimated_duration', 0):.2f}s")
+        # Speak text (blocking)
+        result = voice_ai_orchestrator.speak_text_response(text)
 
         if result.get("success"):
             return jsonify(result), 200
         else:
-            logger.error(f"❌ TTS failed: {result.get('error', 'Unknown error')}")
             return jsonify(result), 500
 
     except ImportError:
-        logger.error("❌ Voice AI module not available for TTS")
         return jsonify({"success": False, "error": "Voice AI module not available"}), 503
     except Exception as e:
-        logger.error(f"❌ TTS error: {str(e)}")
+        logger.error(f"TTS error: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3115,21 +3097,72 @@ def process_voice_complete():
 
         # Check for RIFF header
         if audio_data[:4] != b"RIFF":
-            logger.warning(f"⚠️ Audio file doesn't have RIFF header! Got: {audio_data[:4]}")
+            logger.warning(f"[WARN] Audio file doesn't have RIFF header! Got: {audio_data[:4]}")
             logger.warning(f"   This may cause FFmpeg errors during transcription")
         else:
-            logger.info("✅ Audio file has valid RIFF header")
+            logger.info("[OK] Audio file has valid RIFF header")
 
         # Process through complete pipeline
         result = voice_ai_orchestrator.process_voice_input(audio_data)
 
         if result.get("success"):
-            logger.info(f"✅ Voice processing complete")
+            logger.info(f"[OK] Voice processing complete")
             logger.info(f"   User: {result.get('user_text')}")
             logger.info(f"   AI: {result.get('ai_response')}")
 
+            # FALLBACK: Check if orchestration trigger wasn't detected by LLM
+            # This ensures print/scan commands always work even if LLM missed them
+            if not result.get("orchestration_trigger"):
+                user_text_lower = result.get("user_text", "").lower()
+                
+                # Check for print intent
+                print_keywords = ["print", "printing", "printout", "print doc", "print file"]
+                is_print_command = any(kw in user_text_lower for kw in print_keywords)
+                is_not_question = not any(w in user_text_lower for w in ["what", "can you", "how", "help", "tell me", "can i"])
+                
+                if is_print_command and is_not_question:
+                    logger.info(f"[FALLBACK] Print command detected: '{result.get('user_text')}'")
+                    result["orchestration_trigger"] = True
+                    result["orchestration_mode"] = "print"
+                    result["ai_response"] = "Opening print interface!"
+                
+                # Check for scan intent
+                scan_keywords = ["scan", "scanning", "capture", "scan doc", "capture document"]
+                is_scan_command = any(kw in user_text_lower for kw in scan_keywords)
+                
+                if is_scan_command and is_not_question:
+                    logger.info(f"[FALLBACK] Scan command detected: '{result.get('user_text')}'")
+                    result["orchestration_trigger"] = True
+                    result["orchestration_mode"] = "scan"
+                    result["ai_response"] = "Opening scan interface!"
+
             # Check if user text contains orchestration commands
             user_text = result.get("user_text", "")
+            
+            # If orchestration was just triggered, set up orchestrator state
+            if result.get("orchestration_trigger") and ORCHESTRATION_AVAILABLE and orchestrator:
+                from services.orchestration_service import IntentType
+                
+                mode = result.get("orchestration_mode")
+                if mode in ["print", "scan"]:
+                    logger.info(f"[ORCHESTRATOR] Setting up {mode} orchestration state")
+                    
+                    # Add voice_triggered flag to trigger CONFIGURING state
+                    intent_text = f"{mode} a document with voice control"
+                    intent, params = orchestrator.detect_intent(intent_text)
+                    
+                    if params is None:
+                        params = {}
+                    params["voice_triggered"] = True
+                    
+                    # Process command to set orchestrator state
+                    orchestration_result = orchestrator.process_command(intent_text)
+                    
+                    # Store orchestration result for later use
+                    result["orchestration_state_setup"] = True
+                    result["orchestration_workflow_state"] = orchestrator.current_state.value
+                    
+                    logger.info(f"[ORCHESTRATOR] State set to: {orchestrator.current_state.value}")
             if ORCHESTRATION_AVAILABLE and orchestrator and user_text:
                 # Check current orchestration state
                 current_state = orchestrator.current_state.value
@@ -3138,7 +3171,7 @@ def process_voice_complete():
                 if current_state == "configuring" and orchestrator.pending_action:
                     action_type = orchestrator.pending_action.get("type")
                     if action_type:
-                        logger.info(f"🎤 Parsing voice configuration for {action_type}")
+                        logger.info(f"[VOICE] Parsing voice configuration for {action_type}")
                         parsed_config = orchestrator.parse_voice_configuration(
                             user_text, action_type
                         )
@@ -3200,7 +3233,7 @@ def process_voice_complete():
 
                     # If valid orchestration intent detected, process it
                     if intent in [IntentType.PRINT, IntentType.SCAN]:
-                        logger.info(f"🎯 Orchestration intent detected: {intent.value}")
+                        logger.info(f"[TRIGGER] Orchestration intent detected: {intent.value}")
 
                         # Add voice_triggered flag to parameters
                         if params is None:
@@ -3253,7 +3286,7 @@ def process_voice_complete():
 
             return jsonify(result), 200
         else:
-            logger.error(f"❌ Voice processing failed: {result.get('error')}")
+            logger.error(f"[ERROR] Voice processing failed: {result.get('error')}")
             logger.error(f"   Error stage: {result.get('stage', 'unknown')}")
             return jsonify(result), 500
 
@@ -3282,7 +3315,7 @@ def end_voice_session():
 
         voice_ai_orchestrator.end_session()
 
-        logger.info("✅ Voice AI session ended")
+        logger.info("[OK] Voice AI session ended")
 
         return jsonify({"success": True, "message": "Voice AI session ended"}), 200
 
@@ -3529,11 +3562,11 @@ try:
 
     ORCHESTRATION_AVAILABLE = True
     orchestrator = get_orchestrator(DATA_DIR)
-    logger.info("✅ AI Orchestration service initialized")
+    logger.info("[OK] AI Orchestration service initialized")
 except ImportError as e:
     ORCHESTRATION_AVAILABLE = False
     orchestrator = None
-    logger.warning(f"⚠️ AI Orchestration not available: {e}")
+    logger.warning(f"[WARN] AI Orchestration not available: {e}")
 
 
 @app.route("/orchestrate/command", methods=["POST"])
@@ -3552,7 +3585,7 @@ def orchestrate_command():
         if not command:
             return jsonify({"success": False, "error": "No command provided"}), 400
 
-        logger.info(f"🎯 Orchestration command: {command}")
+        logger.info(f"[ORCHESTRATOR] Orchestration command: {command}")
 
         # Process command
         result = orchestrator.process_command(command)
@@ -3571,7 +3604,7 @@ def orchestrate_command():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration command error: {e}")
+        logger.error(f"[ERROR] Orchestration command error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3600,7 +3633,7 @@ def orchestrate_confirm():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration confirm error: {e}")
+        logger.error(f"[ERROR] Orchestration confirm error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3622,7 +3655,7 @@ def orchestrate_cancel():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration cancel error: {e}")
+        logger.error(f"[ERROR] Orchestration cancel error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3637,7 +3670,7 @@ def orchestrate_status():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration status error: {e}")
+        logger.error(f"[ERROR] Orchestration status error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3652,7 +3685,7 @@ def orchestrate_documents():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration documents error: {e}")
+        logger.error(f"[ERROR] Orchestration documents error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3688,7 +3721,7 @@ def orchestrate_select():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration select error: {e}")
+        logger.error(f"[ERROR] Orchestration select error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3726,7 +3759,7 @@ def orchestrate_configure():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration configure error: {e}")
+        logger.error(f"[ERROR] Orchestration configure error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3796,7 +3829,7 @@ def orchestrate_voice_config():
             )
 
     except Exception as e:
-        logger.error(f"❌ Voice configuration parsing error: {e}")
+        logger.error(f"[ERROR] Voice configuration parsing error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3817,7 +3850,7 @@ def orchestrate_reset():
         return jsonify(result)
 
     except Exception as e:
-        logger.error(f"❌ Orchestration reset error: {e}")
+        logger.error(f"[ERROR] Orchestration reset error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -3834,7 +3867,7 @@ def orchestrate_history():
         return jsonify({"success": True, "history": history, "count": len(history)})
 
     except Exception as e:
-        logger.error(f"❌ Orchestration history error: {e}")
+        logger.error(f"[ERROR] Orchestration history error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
