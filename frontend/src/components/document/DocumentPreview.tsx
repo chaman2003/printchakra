@@ -19,6 +19,7 @@ import {
   Spinner,
   Badge,
   Tooltip,
+  SimpleGrid,
 } from '@chakra-ui/react';
 import Iconify from '../common/Iconify';
 
@@ -73,6 +74,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [rotation, setRotation] = useState(0);
+  const [viewMode, setViewMode] = useState<'single' | 'all'>('single'); // New: toggle between single page and all pages
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -84,6 +86,9 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
   const currentDoc = documents[currentDocIndex];
   const totalPages = currentDoc?.pages?.length || 1;
+  
+  // Calculate total pages across ALL documents
+  const totalPagesAllDocs = documents.reduce((sum, doc) => sum + (doc.pages?.length || 1), 0);
 
   // Get current page URL (if pages exist, use page-specific URL, otherwise use document thumbnail)
   const getCurrentPageUrl = () => {
@@ -95,6 +100,33 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   };
 
   const currentPageUrl = getCurrentPageUrl();
+  
+  // Get all pages across all documents for "all pages" view
+  const getAllPages = () => {
+    const allPages: Array<{ docIndex: number; pageNumber: number; url: string; filename: string }> = [];
+    documents.forEach((doc, docIndex) => {
+      if (doc.pages && doc.pages.length > 0) {
+        doc.pages.forEach(page => {
+          allPages.push({
+            docIndex,
+            pageNumber: page.pageNumber,
+            url: page.thumbnailUrl || page.fullUrl || doc.thumbnailUrl || '',
+            filename: doc.filename,
+          });
+        });
+      } else {
+        allPages.push({
+          docIndex,
+          pageNumber: 1,
+          url: doc.thumbnailUrl || '',
+          filename: doc.filename,
+        });
+      }
+    });
+    return allPages;
+  };
+  
+  const allPages = getAllPages();
 
   // Determine paper orientation and size based on settings
   const layout = previewSettings?.layout || 'portrait';
@@ -143,6 +175,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     setZoomLevel(100);
     setRotation(0);
     setCurrentPage(1);
+    setViewMode('single'); // Reset to single page view
   }, [documents]);
 
   // Reset to page 1 when switching documents
@@ -264,9 +297,42 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               {currentDocIndex + 1}/{documents.length}
             </Badge>
           )}
+          {totalPagesAllDocs > 1 && (
+            <Badge colorScheme="cyan" fontSize="xs" flexShrink={0}>
+              {totalPagesAllDocs} {totalPagesAllDocs === 1 ? 'page' : 'pages'} total
+            </Badge>
+          )}
         </HStack>
 
-        <HStack spacing={1} flexShrink={0}>
+        <HStack spacing={1} flexShrink={0} flexWrap="wrap">
+          {/* View Mode Toggle */}
+          {totalPagesAllDocs > 1 && (
+            <ButtonGroup size="sm" isAttached variant="outline">
+              <Tooltip label="Single Page View">
+                <IconButton
+                  aria-label="Single page view"
+                  icon={<Iconify icon="solar:document-bold" width={14} height={14} />}
+                  onClick={() => setViewMode('single')}
+                  bg={viewMode === 'single' ? 'brand.500' : 'whiteAlpha.200'}
+                  color="white"
+                  _hover={{ bg: viewMode === 'single' ? 'brand.600' : 'whiteAlpha.300' }}
+                  borderColor={viewMode === 'single' ? 'brand.500' : 'whiteAlpha.300'}
+                />
+              </Tooltip>
+              <Tooltip label="All Pages View">
+                <IconButton
+                  aria-label="All pages view"
+                  icon={<Iconify icon="solar:documents-bold" width={14} height={14} />}
+                  onClick={() => setViewMode('all')}
+                  bg={viewMode === 'all' ? 'brand.500' : 'whiteAlpha.200'}
+                  color="white"
+                  _hover={{ bg: viewMode === 'all' ? 'brand.600' : 'whiteAlpha.300' }}
+                  borderColor={viewMode === 'all' ? 'brand.500' : 'whiteAlpha.300'}
+                />
+              </Tooltip>
+            </ButtonGroup>
+          )}
+
           <ButtonGroup size="sm" isAttached variant="outline">
             <Tooltip label="Zoom Out">
               <IconButton
@@ -306,21 +372,23 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
           </ButtonGroup>
 
           {/* Rotate Button */}
-          <Tooltip label="Rotate 90°">
-            <IconButton
-              aria-label="Rotate"
-              icon={<Iconify icon="solar:refresh-bold" width={14} height={14} />}
-              size="sm"
-              onClick={handleRotate}
-              bg="whiteAlpha.200"
-              color="white"
-              _hover={{ bg: 'whiteAlpha.300' }}
-              _dark={{ bg: 'whiteAlpha.100' }}
-            />
-          </Tooltip>
+          {viewMode === 'single' && (
+            <Tooltip label="Rotate 90°">
+              <IconButton
+                aria-label="Rotate"
+                icon={<Iconify icon="solar:refresh-bold" width={14} height={14} />}
+                size="sm"
+                onClick={handleRotate}
+                bg="whiteAlpha.200"
+                color="white"
+                _hover={{ bg: 'whiteAlpha.300' }}
+                _dark={{ bg: 'whiteAlpha.100' }}
+              />
+            </Tooltip>
+          )}
 
-          {/* Document Navigation (if multiple documents) */}
-          {documents.length > 1 && (
+          {/* Document Navigation (if multiple documents) - Only in single page mode */}
+          {documents.length > 1 && viewMode === 'single' && (
             <ButtonGroup size="sm" isAttached variant="outline" ml={2}>
               <Tooltip label="Previous Document">
                 <IconButton
@@ -363,8 +431,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
             </ButtonGroup>
           )}
 
-          {/* Page Navigation (if multiple pages in current document) */}
-          {totalPages > 1 && (
+          {/* Page Navigation (if multiple pages in current document) - Only in single page mode */}
+          {totalPages > 1 && viewMode === 'single' && (
             <ButtonGroup size="sm" isAttached variant="outline" ml={2}>
               <Tooltip label="Previous Page">
                 <IconButton
@@ -478,15 +546,117 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
           justify="center"
           p="1rem"
           minH={PREVIEW_SIZE.containerMinHeight}
-          overflow="hidden"
+          overflow="auto"
           bg={bgColor}
+          css={{
+            '&::-webkit-scrollbar': { width: '8px', height: '8px' },
+            '&::-webkit-scrollbar-track': { background: 'transparent' },
+            '&::-webkit-scrollbar-thumb': {
+              background: 'rgba(121,95,238,0.4)',
+              borderRadius: '10px',
+            },
+            '&::-webkit-scrollbar-thumb:hover': {
+              background: 'rgba(121,95,238,0.6)',
+            },
+          }}
         >
           {isLoading ? (
             <VStack spacing={4}>
               <Spinner size="xl" color="brand.500" thickness="4px" />
               <Text color="text.muted">Loading preview...</Text>
             </VStack>
+          ) : viewMode === 'all' ? (
+            // ALL PAGES VIEW - Show all pages in a grid
+            <VStack spacing={6} w="100%" maxW="1200px" p={4}>
+              <Text fontSize="lg" fontWeight="600" color="whiteAlpha.900" alignSelf="start">
+                All Pages ({allPages.length})
+              </Text>
+              <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={6} w="100%">
+                {allPages.map((page, index) => (
+                  <Box
+                    key={`${page.docIndex}-${page.pageNumber}`}
+                    borderRadius="md"
+                    overflow="hidden"
+                    bg={paperBg}
+                    boxShadow="0 2px 12px rgba(0,0,0,0.1)"
+                    border="2px solid"
+                    borderColor="whiteAlpha.300"
+                    transition="all 0.3s"
+                    _hover={{
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 8px 24px rgba(121,95,238,0.3)',
+                      borderColor: 'brand.400',
+                    }}
+                    cursor="pointer"
+                    onClick={() => {
+                      setCurrentDocIndex(page.docIndex);
+                      setCurrentPage(page.pageNumber);
+                      setViewMode('single');
+                    }}
+                  >
+                    <Box position="relative" w="100%" h="350px" bg="gray.100">
+                      {page.url ? (
+                        <img
+                          src={page.url}
+                          alt={`${page.filename} - Page ${page.pageNumber}`}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            filter:
+                              previewSettings?.colorMode === 'grayscale'
+                                ? 'grayscale(100%)'
+                                : previewSettings?.colorMode === 'bw'
+                                  ? 'grayscale(100%) contrast(2)'
+                                  : 'none',
+                          }}
+                        />
+                      ) : (
+                        <Flex align="center" justify="center" h="100%">
+                          <VStack spacing={2}>
+                            <Iconify
+                              icon="solar:document-bold"
+                              width={48}
+                              height={48}
+                              color="gray.300"
+                            />
+                            <Text color="gray.500" fontSize="sm">
+                              Preview not available
+                            </Text>
+                          </VStack>
+                        </Flex>
+                      )}
+                      <Badge
+                        position="absolute"
+                        top={2}
+                        left={2}
+                        colorScheme="brand"
+                        fontSize="xs"
+                        px={2}
+                        py={1}
+                      >
+                        Page {index + 1}
+                      </Badge>
+                    </Box>
+                    <Box p={3} bg="whiteAlpha.100">
+                      <Text fontSize="sm" fontWeight="600" noOfLines={1} color="whiteAlpha.900">
+                        {page.filename}
+                      </Text>
+                      <HStack spacing={2} mt={1}>
+                        <Badge colorScheme="purple" fontSize="xs">
+                          Doc {page.docIndex + 1}
+                        </Badge>
+                        <Badge colorScheme="cyan" fontSize="xs">
+                          Page {page.pageNumber}
+                        </Badge>
+                      </HStack>
+                    </Box>
+                  </Box>
+                ))}
+              </SimpleGrid>
+            </VStack>
           ) : (
+            // SINGLE PAGE VIEW - Show one page at a time
             <Box
               width={paperDimensions.width}
               height={paperDimensions.height}
