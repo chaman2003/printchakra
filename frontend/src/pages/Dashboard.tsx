@@ -382,6 +382,42 @@ const Dashboard: React.FC = () => {
     });
   };
 
+  // Fetch document info including pages for PDFs
+  const fetchDocumentInfo = async (filename: string) => {
+    try {
+      const response = await apiClient.get(`/document/info/${filename}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching document info:', error);
+      // Return basic structure as fallback
+      return {
+        filename: filename,
+        file_type: filename.split('.').pop()?.toLowerCase() || 'unknown',
+        pages: [{
+          pageNumber: 1,
+          thumbnailUrl: `/api/thumbnail/${filename}`
+        }]
+      };
+    }
+  };
+
+  // Enhance selected documents with page information
+  const enhanceDocumentsWithPages = async (docs: any[]) => {
+    const enhanced = await Promise.all(
+      docs.map(async (doc) => {
+        const docInfo = await fetchDocumentInfo(doc.filename);
+        return {
+          ...doc,
+          pages: docInfo.pages || [{
+            pageNumber: 1,
+            thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}/thumbnail/${doc.filename}`
+          }]
+        };
+      })
+    );
+    return enhanced;
+  };
+
   // File cache system - stores file metadata and counts
   const [filesCacheRef, setFilesCacheRef] = useState<{
     data: any[] | null;
@@ -2168,6 +2204,11 @@ const Dashboard: React.FC = () => {
                               thumbnailUrl:
                                 doc.thumbnailUrl ||
                                 `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                              pages: doc.pages || [{
+                                pageNumber: 1,
+                                thumbnailUrl: doc.thumbnailUrl ||
+                                  `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`
+                              }]
                             }))
                           : []
                       }
@@ -2744,6 +2785,11 @@ const Dashboard: React.FC = () => {
                               thumbnailUrl:
                                 doc.thumbnailUrl ||
                                 `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                              pages: doc.pages || [{
+                                pageNumber: 1,
+                                thumbnailUrl: doc.thumbnailUrl ||
+                                  `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`
+                              }]
                             }))
                           : []
                       }
@@ -3649,8 +3695,10 @@ const Dashboard: React.FC = () => {
       <DocumentSelector
         isOpen={documentSelectorModal.isOpen}
         onClose={documentSelectorModal.onClose}
-        onSelect={docs => {
-          setSelectedDocuments(docs);
+        onSelect={async (docs) => {
+          // Enhance documents with page information before setting
+          const enhancedDocs = await enhanceDocumentsWithPages(docs);
+          setSelectedDocuments(enhancedDocs);
           documentSelectorModal.onClose();
         }}
         currentDocuments={files.map(file => ({

@@ -1401,6 +1401,169 @@ def get_processed_file(filename):
         return jsonify({"error": f"File serving error: {str(e)}"}), 500
 
 
+@app.route("/document/info/<path:filename>", methods=["GET", "OPTIONS"])
+def get_document_info(filename):
+    """Get document information including page count for PDFs"""
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, ngrok-skip-browser-warning"
+        )
+        response.headers["Access-Control-Max-Age"] = "3600"
+        return response, 200
+
+    try:
+        # Security: prevent directory traversal
+        if ".." in filename or "/" in filename.replace("\\", "/"):
+            return jsonify({"error": "Invalid filename"}), 400
+
+        # Check different directories for the file
+        possible_paths = [
+            os.path.join(PROCESSED_DIR, filename),
+            os.path.join(CONVERTED_DIR, filename),
+            os.path.join(UPLOAD_DIR, filename),
+        ]
+
+        file_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                file_path = path
+                break
+
+        if not file_path:
+            return jsonify({"error": "File not found"}), 404
+
+        file_ext = os.path.splitext(filename)[1].lower()
+        doc_info = {
+            "filename": filename,
+            "file_type": file_ext[1:] if file_ext else "unknown",
+            "pages": []
+        }
+
+        # Get page count and thumbnails for PDFs
+        if file_ext == '.pdf':
+            try:
+                import PyPDF2
+                with open(file_path, 'rb') as pdf_file:
+                    pdf_reader = PyPDF2.PdfReader(pdf_file)
+                    page_count = len(pdf_reader.pages)
+                    
+                    # Generate page info with thumbnail URLs
+                    for page_num in range(1, page_count + 1):
+                        doc_info["pages"].append({
+                            "pageNumber": page_num,
+                            "thumbnailUrl": f"/api/document/page/{filename}/{page_num}"
+                        })
+            except Exception as e:
+                print(f"[WARN] Error reading PDF pages: {str(e)}")
+                # Fallback: assume single page
+                doc_info["pages"] = [{
+                    "pageNumber": 1,
+                    "thumbnailUrl": f"/api/thumbnail/{filename}"
+                }]
+        else:
+            # For images, single page
+            doc_info["pages"] = [{
+                "pageNumber": 1,
+                "thumbnailUrl": f"/api/thumbnail/{filename}"
+            }]
+
+        response = jsonify(doc_info)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Cache-Control"] = "public, max-age=3600"
+        return response
+
+    except Exception as e:
+        print(f"[ERROR] Document info error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": f"Document info error: {str(e)}"}), 500
+
+
+@app.route("/document/page/<path:filename>/<int:page_num>", methods=["GET", "OPTIONS"])
+def get_pdf_page_thumbnail(filename, page_num):
+    """Generate and serve thumbnail for a specific PDF page"""
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, ngrok-skip-browser-warning"
+        )
+        response.headers["Access-Control-Max-Age"] = "3600"
+        return response, 200
+
+    try:
+        # Security: prevent directory traversal
+        if ".." in filename or "/" in filename.replace("\\", "/"):
+            return jsonify({"error": "Invalid filename"}), 400
+
+        # Check different directories for the file
+        possible_paths = [
+            os.path.join(PROCESSED_DIR, filename),
+            os.path.join(CONVERTED_DIR, filename),
+            os.path.join(UPLOAD_DIR, filename),
+        ]
+
+        file_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                file_path = path
+                break
+
+        if not file_path:
+            return jsonify({"error": "File not found"}), 404
+
+        file_ext = os.path.splitext(filename)[1].lower()
+        
+        if file_ext != '.pdf':
+            return jsonify({"error": "Not a PDF file"}), 400
+
+        # Generate thumbnail for specific page
+        try:
+            from pdf2image import convert_from_path
+            images = convert_from_path(
+                file_path, 
+                first_page=page_num, 
+                last_page=page_num, 
+                dpi=150  # Higher DPI for better quality
+            )
+            
+            if images:
+                img = images[0]
+                # Resize to larger thumbnail for preview
+                img.thumbnail((800, 1132), Image.Resampling.LANCZOS)  # A4 ratio
+                
+                # Convert to bytes
+                thumb_io = io.BytesIO()
+                img.save(thumb_io, format='JPEG', quality=90)
+                thumbnail_data = thumb_io.getvalue()
+                
+                response = app.response_class(
+                    response=thumbnail_data,
+                    status=200,
+                    mimetype="image/jpeg"
+                )
+                response.headers["Access-Control-Allow-Origin"] = "*"
+                response.headers["Cache-Control"] = "public, max-age=86400"
+                response.headers["Content-Type"] = "image/jpeg"
+                return response
+            else:
+                return jsonify({"error": "Could not extract page"}), 500
+                
+        except ImportError:
+            return jsonify({"error": "pdf2image not available"}), 500
+        except Exception as e:
+            print(f"[ERROR] PDF page extraction error: {str(e)}")
+            return jsonify({"error": f"Page extraction error: {str(e)}"}), 500
+
+    except Exception as e:
+        print(f"[ERROR] PDF page thumbnail error: {str(e)}")
+        traceback.print_exc()
+        return jsonify({"error": f"Page thumbnail error: {str(e)}"}), 500
+
+
 @app.route("/thumbnail/<path:filename>", methods=["GET", "OPTIONS"])
 def get_thumbnail(filename):
     """Generate and serve thumbnail images for documents and PDFs"""
