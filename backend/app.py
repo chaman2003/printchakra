@@ -1454,20 +1454,20 @@ def get_document_info(filename):
                     for page_num in range(1, page_count + 1):
                         doc_info["pages"].append({
                             "pageNumber": page_num,
-                            "thumbnailUrl": f"/api/document/page/{filename}/{page_num}"
+                            "thumbnailUrl": f"/document/page/{filename}/{page_num}"
                         })
             except Exception as e:
                 print(f"[WARN] Error reading PDF pages: {str(e)}")
                 # Fallback: assume single page
                 doc_info["pages"] = [{
                     "pageNumber": 1,
-                    "thumbnailUrl": f"/api/thumbnail/{filename}"
+                    "thumbnailUrl": f"/thumbnail/{filename}"
                 }]
         else:
             # For images, single page
             doc_info["pages"] = [{
                 "pageNumber": 1,
-                "thumbnailUrl": f"/api/thumbnail/{filename}"
+                "thumbnailUrl": f"/thumbnail/{filename}"
             }]
 
         response = jsonify(doc_info)

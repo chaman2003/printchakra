@@ -394,7 +394,7 @@ const Dashboard: React.FC = () => {
         file_type: filename.split('.').pop()?.toLowerCase() || 'unknown',
         pages: [{
           pageNumber: 1,
-          thumbnailUrl: `/api/thumbnail/${filename}`
+          thumbnailUrl: `${API_BASE_URL}/thumbnail/${filename}`
         }]
       };
     }
