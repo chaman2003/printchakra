@@ -204,9 +204,15 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
               objectFit="contain" 
               w="100%" 
               h="100%"
+              loading="eager"
+              crossOrigin="anonymous"
               onError={(e) => {
+                console.error(`Failed to load thumbnail for ${doc.filename}:`, doc.thumbnailUrl);
                 // If thumbnail fails to load, show fallback icon
                 e.currentTarget.style.display = 'none';
+              }}
+              onLoad={() => {
+                console.log(`Successfully loaded thumbnail for ${doc.filename}`);
               }}
               fallback={
                 <Flex align="center" justify="center" h="100%" bg="gray.700">
