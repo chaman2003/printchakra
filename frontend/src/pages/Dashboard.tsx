@@ -385,7 +385,19 @@ const Dashboard: React.FC = () => {
   const fetchDocumentInfo = async (filename: string) => {
     try {
       const response = await apiClient.get(`/document/info/${filename}`);
-      return response.data;
+      const docInfo = response.data;
+      
+      // Prepend API_BASE_URL to thumbnail URLs if they're relative paths
+      if (docInfo.pages) {
+        docInfo.pages = docInfo.pages.map((page: any) => ({
+          ...page,
+          thumbnailUrl: page.thumbnailUrl.startsWith('http') 
+            ? page.thumbnailUrl 
+            : `${API_BASE_URL}${page.thumbnailUrl}`
+        }));
+      }
+      
+      return docInfo;
     } catch (error) {
       console.error('Error fetching document info:', error);
       // Return basic structure as fallback
