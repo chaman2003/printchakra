@@ -164,6 +164,21 @@ except Exception as e:
 
 logger.info("=" * 60)
 
+# Configure Poppler path for pdf2image
+POPPLER_PATH = None
+try:
+    poppler_bin = os.path.join(os.path.dirname(__file__), 'poppler', 'Library', 'bin')
+    if os.path.exists(poppler_bin):
+        POPPLER_PATH = poppler_bin
+        logger.info(f"[OK] Poppler found at: {poppler_bin}")
+    else:
+        logger.warning("[WARN] Poppler not found - PDF thumbnail generation will fail")
+        logger.warning(f"   Expected location: {poppler_bin}")
+except Exception as e:
+    logger.warning(f"[WARN] Poppler detection failed: {e}")
+
+logger.info("=" * 60)
+
 # Import new modular pipeline
 try:
     from modules import DocumentPipeline, create_default_pipeline, validate_image_file
@@ -1527,7 +1542,8 @@ def get_pdf_page_thumbnail(filename, page_num):
                 file_path, 
                 first_page=page_num, 
                 last_page=page_num, 
-                dpi=150  # Higher DPI for better quality
+                dpi=150,  # Higher DPI for better quality
+                poppler_path=POPPLER_PATH
             )
             
             if images:
@@ -1608,7 +1624,7 @@ def get_thumbnail(filename):
                 # For PDFs, try to convert first page to image using pdf2image or similar
                 try:
                     from pdf2image import convert_from_path
-                    images = convert_from_path(file_path, first_page=1, last_page=1, dpi=100)
+                    images = convert_from_path(file_path, first_page=1, last_page=1, dpi=100, poppler_path=POPPLER_PATH)
                     if images:
                         img = images[0]
                         # Resize to thumbnail size
