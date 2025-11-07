@@ -140,7 +140,6 @@ const useImageWithHeaders = (imageUrl: string) => {
 
         const response = await fetch(imageUrl, {
           headers,
-          credentials: 'include',
         });
 
         if (!response.ok) {
