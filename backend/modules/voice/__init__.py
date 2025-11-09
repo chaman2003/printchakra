@@ -1021,6 +1021,29 @@ class VoiceAIOrchestrator:
 
             logger.info(f"[INFO] Transcribed text: {user_text}")
 
+            # Filter out filler speech / accidental triggers to prevent unwanted processing
+            filler_phrases = [
+                "thank you", "thanks", "thank", "okay", "alright", "all right",
+                "sure", "fine", "great", "cool", "nice", "good", "perfect",
+                "hmm", "umm", "uh", "huh", "yeah yeah", "yep yep",
+                "i see", "got it", "makes sense", "understood"
+            ]
+            
+            user_text_stripped = user_text_lower.strip().strip(".,!?")
+            
+            # Check if entire input is just filler speech
+            if user_text_stripped in filler_phrases or len(user_text_stripped) < 3:
+                logger.info(f"[SKIP] Filler speech detected, ignoring: '{user_text}'")
+                return {
+                    "success": True,
+                    "user_text": user_text,
+                    "ai_response": "You're welcome!" if "thank" in user_text_lower else "👍",
+                    "filler_speech_detected": True,
+                    "auto_retry": True,  # Signal frontend to continue listening
+                    "session_ended": False,
+                    "requires_keyword": False,
+                }
+
             # Remove optional wake words from beginning (if present)
             wake_words = ["hey", "hi", "hello", "okay"]
             user_text_lower = user_text.lower()

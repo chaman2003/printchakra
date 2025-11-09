@@ -705,9 +705,10 @@ const Dashboard: React.FC = () => {
 
     setOrchestrationContext('voice');
     
-    // Close the voice chat drawer when modal opens
-    if (isChatVisible) {
-      setIsChatVisible(false);
+    // Keep the voice chat drawer OPEN during orchestration for Jarvis-like experience
+    // User can interact with AI while configuring print/scan settings
+    if (!isChatVisible) {
+      setIsChatVisible(true);
     }
 
     setOrchestrateMode(mode);

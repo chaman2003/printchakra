@@ -7,6 +7,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 
+from backend.services import file_service
 from models.scan_config import ScanConfig
 
 scan_bp = Blueprint("scan", __name__)

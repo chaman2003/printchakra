@@ -99,9 +99,44 @@ class PrintScanOrchestrator:
         user_input_lower = user_input.lower()
         parameters = {}
 
+        # Check for mode switching commands
+        switch_keywords = ["switch to", "change to", "go to", "open", "show me"]
+        if any(keyword in user_input_lower for keyword in switch_keywords):
+            if "print" in user_input_lower and ("config" in user_input_lower or "settings" in user_input_lower or "mode" in user_input_lower):
+                parameters["switch_mode"] = "print"
+                parameters["voice_triggered"] = True
+                return IntentType.PRINT, parameters
+            elif "scan" in user_input_lower and ("config" in user_input_lower or "settings" in user_input_lower or "mode" in user_input_lower):
+                parameters["switch_mode"] = "scan"
+                parameters["voice_triggered"] = True
+                return IntentType.SCAN, parameters
+
         # Print intent patterns
         print_keywords = ["print", "printing", "printout", "hard copy", "paper copy"]
         if any(keyword in user_input_lower for keyword in print_keywords):
+            # Check for document selection patterns
+            doc_patterns = [
+                r"(?:print|printing)\s+(?:the\s+)?(?:last|latest|newest|most recent)\s+(\d+)\s+(?:documents?|files?)",
+                r"(?:print|printing)\s+(?:the\s+)?(?:first|oldest)\s+(\d+)\s+(?:documents?|files?)",
+                r"(?:print|printing)\s+(?:the\s+)?(?:last|latest|newest|recent)\s+(?:document|file|one)",
+            ]
+            
+            for pattern in doc_patterns:
+                match = re.search(pattern, user_input_lower)
+                if match:
+                    if match.lastindex and match.lastindex >= 1:
+                        # Found number pattern like "last 2 documents"
+                        count = int(match.group(1))
+                        parameters["document_selection"] = "relative"
+                        parameters["document_count"] = count
+                        parameters["document_position"] = "last" if "last" in match.group(0) or "latest" in match.group(0) or "newest" in match.group(0) or "recent" in match.group(0) else "first"
+                    else:
+                        # Found single document pattern like "last document"
+                        parameters["document_selection"] = "relative"
+                        parameters["document_count"] = 1
+                        parameters["document_position"] = "last"
+                    break
+            
             # Extract parameters
             if "color" in user_input_lower:
                 parameters["color_mode"] = "color"
@@ -240,9 +275,29 @@ class PrintScanOrchestrator:
                 "message": "No documents available to print. Please upload or scan a document first.",
                 "requires_action": "upload_or_scan",
             }
+        
+        # Handle relative document selection (e.g., "print last 2 documents")
+        if parameters.get("document_selection") == "relative":
+            doc_count = parameters.get("document_count", 1)
+            doc_position = parameters.get("document_position", "last")
+            
+            if doc_position == "last":
+                selected_docs = documents[:doc_count]
+            else:  # first
+                selected_docs = documents[-doc_count:][::-1]
+            
+            # For multiple documents, store list; for single, store the document
+            if len(selected_docs) == 1:
+                self.selected_document = selected_docs[0]
+            else:
+                # Multiple document handling - for now, select the most recent
+                self.selected_document = selected_docs[0]
+                parameters["multiple_documents"] = [doc["filename"] for doc in selected_docs]
+            
+            logger.info(f"[ORCHESTRATOR] Selected {len(selected_docs)} document(s): {[d['filename'] for d in selected_docs]}")
 
-        # If only one document, select it automatically
-        if len(documents) == 1:
+        # If only one document available, select it automatically
+        elif len(documents) == 1:
             self.selected_document = documents[0]
 
         # Update configuration with parameters
@@ -704,7 +759,7 @@ class PrintScanOrchestrator:
         }
 
     def _get_available_documents(self) -> List[Dict[str, Any]]:
-        """Get list of available processed documents"""
+        """Get list of available processed documents with index positions"""
         if not os.path.exists(self.processed_dir):
             return []
 
@@ -725,8 +780,54 @@ class PrintScanOrchestrator:
 
         # Sort by creation time (newest first)
         documents.sort(key=lambda x: x["created"], reverse=True)
+        
+        # Add index positions (1-based for user-friendly references)
+        for idx, doc in enumerate(documents):
+            doc["index"] = idx + 1
+            doc["position"] = idx  # 0-based position
 
         return documents
+    
+    def get_documents_by_relative_position(self, position_desc: str) -> List[Dict[str, Any]]:
+        """
+        Get documents by relative position descriptions like 'last 2', 'first 3', 'latest'
+        
+        Args:
+            position_desc: Description like 'last', 'last 2', 'first', 'first 3', 'latest', etc.
+        
+        Returns:
+            List of matching documents
+        """
+        documents = self._get_available_documents()
+        
+        if not documents:
+            return []
+        
+        position_lower = position_desc.lower().strip()
+        
+        # Single document references
+        if position_lower in ["last", "latest", "newest", "most recent", "recent"]:
+            return [documents[0]]  # First in list (sorted newest first)
+        
+        if position_lower in ["first", "oldest", "earliest"]:
+            return [documents[-1]]  # Last in list
+        
+        # Multiple document references with numbers
+        import re
+        
+        # Match patterns like "last 2", "first 3", "latest 5"
+        last_match = re.search(r"(?:last|latest|recent|newest)\s+(\d+)", position_lower)
+        if last_match:
+            count = int(last_match.group(1))
+            return documents[:min(count, len(documents))]
+        
+        first_match = re.search(r"(?:first|oldest|earliest)\s+(\d+)", position_lower)
+        if first_match:
+            count = int(first_match.group(1))
+            return documents[-min(count, len(documents)):][::-1]  # Reverse to maintain chronological order
+        
+        # Default: return empty if no match
+        return []
 
     def _get_status_message(self) -> str:
         """Generate human-readable status message"""

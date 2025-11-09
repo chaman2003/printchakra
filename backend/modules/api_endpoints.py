@@ -1,6 +1,6 @@
 """
 Enhanced Processing API Endpoints - for integration with notebook pipeline
-Add these to app.py to enable notebook-aligned processing
+
 """
 
 import logging
