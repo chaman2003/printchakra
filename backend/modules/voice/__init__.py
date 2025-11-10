@@ -1021,6 +1021,9 @@ class VoiceAIOrchestrator:
 
             logger.info(f"[INFO] Transcribed text: {user_text}")
 
+            # Convert to lowercase for processing
+            user_text_lower = user_text.lower()
+
             # Filter out filler speech / accidental triggers to prevent unwanted processing
             filler_phrases = [
                 "thank you", "thanks", "thank", "okay", "alright", "all right",
@@ -1046,7 +1049,6 @@ class VoiceAIOrchestrator:
 
             # Remove optional wake words from beginning (if present)
             wake_words = ["hey", "hi", "hello", "okay"]
-            user_text_lower = user_text.lower()
 
             for wake_word in wake_words:
                 if user_text_lower.startswith(wake_word):
