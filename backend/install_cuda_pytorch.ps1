@@ -27,7 +27,12 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 Write-Host ""
 Write-Host "Installing Coqui TTS for GPU-accelerated voice..." -ForegroundColor Yellow
-pip install TTS>=0.22.0
+Write-Host "Note: Coqui TTS requires Python <3.9. Will fall back to SAPI5 on Python 3.13" -ForegroundColor Gray
+pip install TTS 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[WARN] Coqui TTS installation failed (Python version incompatible)" -ForegroundColor Yellow
+    Write-Host "       Using Windows SAPI5 TTS fallback" -ForegroundColor Yellow
+}
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
