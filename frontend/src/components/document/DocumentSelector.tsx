@@ -162,6 +162,7 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
 
   const renderDocumentCard = (doc: Document, index: number, allDocs: Document[]) => {
     const isSelected = selectedDocs.has(doc.filename);
+    const documentIndex = index + 1;
 
     return (
       <Box
@@ -181,6 +182,20 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
         }}
         onClick={e => handleDocumentClick(doc.filename, index, e.shiftKey, allDocs)}
       >
+        {/* Document order badge */}
+        <Badge
+          position="absolute"
+          top={3}
+          left={3}
+          colorScheme="purple"
+          borderRadius="full"
+          px={3}
+          py={1}
+          zIndex={2}
+        >
+          #{documentIndex}
+        </Badge>
+
         {isSelected && (
           <Box
             position="absolute"

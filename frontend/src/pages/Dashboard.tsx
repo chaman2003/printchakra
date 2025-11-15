@@ -1450,6 +1450,7 @@ const Dashboard: React.FC = () => {
               <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={6}>
                 {files.map((file: FileInfo, index: number) => {
                   const isSelected = selectedFiles.includes(file.filename);
+                  const documentIndex = index + 1;
                   return (
                     <MotionCard
                       key={file.filename}
@@ -1492,9 +1493,14 @@ const Dashboard: React.FC = () => {
 
                       <CardHeader>
                         <Stack spacing={2}>
-                          <Heading size="sm" noOfLines={1} title={file.filename}>
-                            {file.filename}
-                          </Heading>
+                          <HStack spacing={2} align="center">
+                            <Badge colorScheme="purple" borderRadius="full" px={2} py={0.5}>
+                              #{documentIndex}
+                            </Badge>
+                            <Heading size="sm" noOfLines={1} title={file.filename}>
+                              {file.filename}
+                            </Heading>
+                          </HStack>
                           <Text fontSize="xs" color="text.muted">
                             {formatFileSize(file.size)} · {formatDate(file.created)}
                           </Text>
@@ -1736,8 +1742,10 @@ const Dashboard: React.FC = () => {
                   border="1px solid rgba(121,95,238,0.2)"
                 >
                   <Stack spacing={2} fontSize="sm">
-                    {selectedFiles.map((filename: string) => (
-                      <Text key={filename}>{filename}</Text>
+                    {selectedFiles.map((filename: string, index: number) => (
+                      <Text key={filename}>
+                        #{index + 1} · {filename}
+                      </Text>
                     ))}
                   </Stack>
                 </Box>
@@ -1862,21 +1870,28 @@ const Dashboard: React.FC = () => {
               </Flex>
             ) : (
               <Stack spacing={4}>
-                {convertedFiles.map((file: any) => (
-                  <Card
-                    key={file.filename}
-                    borderRadius="xl"
-                    border="1px solid rgba(69,202,255,0.18)"
-                  >
-                    <CardBody>
-                      <Stack spacing={3}>
-                        <Stack spacing={1}>
-                          <Heading size="sm">{file.filename}</Heading>
-                          <Text fontSize="xs" color="text.muted">
-                            {(file.size / 1024).toFixed(2)} KB ·{' '}
-                            {new Date(file.created).toLocaleString()}
-                          </Text>
-                        </Stack>
+                {convertedFiles.map((file: any, index: number) => {
+                  const convertedIndex = index + 1;
+                  return (
+                    <Card
+                      key={file.filename}
+                      borderRadius="xl"
+                      border="1px solid rgba(69,202,255,0.18)"
+                    >
+                      <CardBody>
+                        <Stack spacing={3}>
+                          <Stack spacing={1}>
+                            <HStack spacing={2} align="center">
+                              <Badge colorScheme="cyan" borderRadius="full" px={2} py={0.5}>
+                                #{convertedIndex}
+                              </Badge>
+                              <Heading size="sm">{file.filename}</Heading>
+                            </HStack>
+                            <Text fontSize="xs" color="text.muted">
+                              {(file.size / 1024).toFixed(2)} KB ·{' '}
+                              {new Date(file.created).toLocaleString()}
+                            </Text>
+                          </Stack>
                         <Flex gap={2} wrap="wrap">
                           <Button
                             variant="ghost"
@@ -1948,8 +1963,9 @@ const Dashboard: React.FC = () => {
                         </Flex>
                       </Stack>
                     </CardBody>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </Stack>
             )}
           </DrawerBody>
@@ -3211,9 +3227,11 @@ const Dashboard: React.FC = () => {
                         </Text>
                       ) : (
                         <VStack spacing={2}>
-                          {convertedFiles.map((file: any) => (
-                            <Box
-                              key={file.filename}
+                          {convertedFiles.map((file: any, index: number) => {
+                            const convertedIndex = index + 1;
+                            return (
+                              <Box
+                                key={file.filename}
                               p={2}
                               borderRadius="md"
                               border="1px"
@@ -3238,16 +3256,17 @@ const Dashboard: React.FC = () => {
                                   ? 'rgba(121,95,238,0.1)'
                                   : 'transparent'
                               }
-                            >
-                              <Checkbox
-                                isChecked={orchestrateOptions.printConvertedFiles.includes(
-                                  file.filename
-                                )}
-                              >
-                                {file.filename} ({(file.size / 1024).toFixed(2)} KB)
-                              </Checkbox>
-                            </Box>
-                          ))}
+                                >
+                                  <Checkbox
+                                    isChecked={orchestrateOptions.printConvertedFiles.includes(
+                                      file.filename
+                                    )}
+                                  >
+                                    #{convertedIndex} · {file.filename} ({(file.size / 1024).toFixed(2)} KB)
+                                  </Checkbox>
+                                </Box>
+                            );
+                          })}
                         </VStack>
                       )}
                     </Box>
