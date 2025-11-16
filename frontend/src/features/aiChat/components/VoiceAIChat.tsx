@@ -240,7 +240,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           // Check for voice activity before processing
           const { hasVoiceActivity, hasHighPitchSound } = await import('../../../utils/audioUtils');
-          const hasVoice = await hasVoiceActivity(audioBlob, 0.015);
+          const hasVoice = await hasVoiceActivity(audioBlob, 0.008); // MORE LENIENT: reduced from 0.015 to 0.008
 
           if (!hasVoice) {
             console.log('⏭️ No voice detected in audio - skipping processing');
@@ -254,7 +254,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           }
 
           // Check for high-pitch speech sound (human voice frequency range)
-          const hasHighPitch = await hasHighPitchSound(audioBlob, 0.15);
+          const hasHighPitch = await hasHighPitchSound(audioBlob, 0.08); // MORE LENIENT: reduced from 0.15 to 0.08
           if (!hasHighPitch) {
             console.log('⏭️ No high-pitch speech detected - sounds like background noise only');
             // Don't process low-pitch noise (machinery, rumbling, etc.)

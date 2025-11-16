@@ -3,10 +3,10 @@
 $backendDir = "C:\Users\chama\OneDrive\Desktop\printchakra\backend"
 $venvDir = Join-Path $backendDir "venv"
 
-# if (-not (Test-Path $venvDir)) {
-#     Write-Host "Virtual environment not found!" -ForegroundColor Red
-#     exit 1
-# }
+if (-not (Test-Path $venvDir)) {
+    Write-Host "Virtual environment not found!" -ForegroundColor Red
+    exit 1
+}
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "PrintChakra Flask Backend" -ForegroundColor Green
@@ -25,5 +25,5 @@ Write-Host ""
 # Activate venv and run Flask
 cd $backendDir          
 $env:PYTHONIOENCODING = 'utf-8'
-# & '.\venv\Scripts\Activate.ps1'
+& '.\venv\Scripts\Activate.ps1'
 python app.py

@@ -202,15 +202,13 @@ export async function getAudioDuration(audioBlob: Blob): Promise<number> {
  */
 export async function hasVoiceActivity(
   audioBlob: Blob,
-  threshold: number = 0.020 // BALANCED: 0.020 for good detection while filtering background noise
+  threshold: number = 0.008 // MORE LENIENT: reduced from 0.020 to 0.008 for better voice detection
 ): Promise<boolean> {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-    // Get first channel data
-    const channelData = audioBuffer.getChannelData(0);
     const sampleRate = audioBuffer.sampleRate;
 
     // Calculate RMS (Root Mean Square) for overall energy
@@ -272,22 +270,22 @@ export async function hasVoiceActivity(
     const activeRatio = activeWindows / windowCount;
     const peakRatio = peakWindows / windowCount;
 
-    // BALANCED multi-criteria voice detection - filters noise while accepting real speech
+    // BALANCED multi-criteria voice detection - MORE LENIENT for better acceptance
     const hasEnergy = rms > threshold; // Overall energy check
-    const hasSufficientPeaks = maxAmplitude > threshold * 4; // BALANCED: relaxed from 5x to 4x
-    const hasVoicePattern = activeRatio > 0.12; // BALANCED: relaxed from 0.15 to 0.12
-    const hasSpeechBursts = peakRatio > 0.06; // BALANCED: relaxed from 0.08 to 0.06
-    const properZCR = zcr > 0.01 && zcr < 0.5; // BALANCED: relaxed range for varied speech patterns
+    const hasSufficientPeaks = maxAmplitude > threshold * 3; // MORE LENIENT: reduced from 4x to 3x
+    const hasVoicePattern = activeRatio > 0.08; // MORE LENIENT: reduced from 0.12 to 0.08
+    const hasSpeechBursts = peakRatio > 0.04; // MORE LENIENT: reduced from 0.06 to 0.04
+    const properZCR = zcr > 0.005 && zcr < 0.6; // MORE LENIENT: relaxed range
     
     // Balanced detection: filters background noise but accepts real speech
     const isVoice = hasEnergy && hasSufficientPeaks && (hasVoicePattern || hasSpeechBursts) && properZCR;
 
     console.log(`🎙️ Voice Activity Detection (Human Voice Only Mode):`);
     console.log(`   RMS: ${rms.toFixed(4)} (threshold: ${threshold}) - ${hasEnergy ? '✅' : '❌'}`);
-    console.log(`   Peak Amplitude: ${maxAmplitude.toFixed(4)} (min: ${(threshold * 5).toFixed(4)}) - ${hasSufficientPeaks ? '✅' : '❌'}`);
-    console.log(`   Active Windows: ${(activeRatio * 100).toFixed(1)}% (min: 15%) - ${hasVoicePattern ? '✅' : '❌'}`);
-    console.log(`   Peak Windows: ${(peakRatio * 100).toFixed(1)}% (min: 8%) - ${hasSpeechBursts ? '✅' : '❌'}`);
-    console.log(`   Zero Crossing Rate: ${zcr.toFixed(4)} (range: 0.015-0.45) - ${properZCR ? '✅' : '❌'}`);
+    console.log(`   Peak Amplitude: ${maxAmplitude.toFixed(4)} (min: ${(threshold * 3).toFixed(4)}) - ${hasSufficientPeaks ? '✅' : '❌'}`);
+    console.log(`   Active Windows: ${(activeRatio * 100).toFixed(1)}% (min: 8%) - ${hasVoicePattern ? '✅' : '❌'}`);
+    console.log(`   Peak Windows: ${(peakRatio * 100).toFixed(1)}% (min: 4%) - ${hasSpeechBursts ? '✅' : '❌'}`);
+    console.log(`   Zero Crossing Rate: ${zcr.toFixed(4)} (range: 0.005-0.6) - ${properZCR ? '✅' : '❌'}`);
     console.log(`   Result: ${isVoice ? '✅ HUMAN VOICE DETECTED' : '❌ BACKGROUND NOISE/SILENCE REJECTED'}`);
 
     return isVoice;
@@ -304,7 +302,7 @@ export async function hasVoiceActivity(
  */
 export async function hasHighPitchSound(
   audioBlob: Blob,
-  frequencyThreshold: number = 0.15 // Threshold for high-frequency energy (0.15-0.25 = speech range)
+  frequencyThreshold: number = 0.08 // MORE LENIENT: reduced from 0.15 to 0.08 for better speech detection
 ): Promise<boolean> {
   try {
     const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -325,8 +323,9 @@ export async function hasHighPitchSound(
     source.connect(analyser);
     analyser.connect(offlineContext.destination);
     
-    source.start(0);
-    await offlineContext.startRendering();
+      source.start(0);
+      const renderedBuffer = await offlineContext.startRendering();
+      await capturePromise;
 
     // Get frequency data
     const frequencyData = new Uint8Array(analyser.frequencyBinCount);
@@ -375,18 +374,18 @@ export async function hasHighPitchSound(
     // - Significant mid and high frequency content (not just low rumble)
     // - High frequency energy present (speech characteristics)
     // - Ratio indicates speech vs background noise
-    const hasHighPitch = highEnergy > frequencyThreshold * 128 && // Threshold in 0-255 scale
-                         highToLowRatio > 0.3 && // High frequencies stronger than low
-                         midToLowRatio > 0.3 && // Mid frequencies also present
-                         speechLikePattern > 0.4; // Overall speech pattern detected
+    const hasHighPitch = highEnergy > frequencyThreshold * 128 && // MORE LENIENT: reduced threshold
+                         highToLowRatio > 0.2 && // MORE LENIENT: reduced from 0.3 to 0.2
+                         midToLowRatio > 0.2 && // MORE LENIENT: reduced from 0.3 to 0.2
+                         speechLikePattern > 0.3; // MORE LENIENT: reduced from 0.4 to 0.3
 
     console.log(`🎵 High-Pitch Sound Detection (Speech Frequency Analysis):`);
     console.log(`   Low Band (0-500Hz): ${lowEnergy.toFixed(1)} dB`);
     console.log(`   Mid Band (500-2kHz): ${midEnergy.toFixed(1)} dB`);
     console.log(`   High Band (2-8kHz): ${highEnergy.toFixed(1)} dB`);
-    console.log(`   High-to-Low Ratio: ${highToLowRatio.toFixed(2)} (threshold: 0.3+)`);
-    console.log(`   Mid-to-Low Ratio: ${midToLowRatio.toFixed(2)} (threshold: 0.3+)`);
-    console.log(`   Speech-Like Pattern: ${speechLikePattern.toFixed(2)} (threshold: 0.4+)`);
+    console.log(`   High-to-Low Ratio: ${highToLowRatio.toFixed(2)} (threshold: 0.2+)`);
+    console.log(`   Mid-to-Low Ratio: ${midToLowRatio.toFixed(2)} (threshold: 0.2+)`);
+    console.log(`   Speech-Like Pattern: ${speechLikePattern.toFixed(2)} (threshold: 0.3+)`);
     console.log(`   Result: ${hasHighPitch ? '✅ HIGH-PITCH SPEECH DETECTED' : '❌ LOW-PITCH/NOISE REJECTED'}`);
 
     return hasHighPitch;

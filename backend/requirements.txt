@@ -33,6 +33,7 @@ pywin32>=307
 
 # Voice AI & Audio
 openai-whisper>=20240930
+# whisper-cpp-python>=0.2.0  # For GGML model support (requires C++ build tools on Windows - install manually if needed)
 # PyTorch with CUDA support - Install separately with:
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 torch>=2.0.0
