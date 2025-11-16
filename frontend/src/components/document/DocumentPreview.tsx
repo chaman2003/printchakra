@@ -61,12 +61,24 @@ interface DocumentPreviewProps {
     paperSize?: string;
   };
   isLoading?: boolean;
+  activeDocIndex?: number;
+  activePage?: number;
+  focusToken?: number;
+  highlightSource?: 'manual' | 'voice';
+  onRequestDocChange?: (nextIndex: number) => void;
+  onRequestPageChange?: (nextPage: number) => void;
 }
 
 const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   documents,
   previewSettings,
   isLoading = false,
+  activeDocIndex,
+  activePage,
+  focusToken,
+  highlightSource = 'manual',
+  onRequestDocChange,
+  onRequestPageChange,
 }) => {
   const [currentDocIndex, setCurrentDocIndex] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -75,6 +87,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const [showThumbnails, setShowThumbnails] = useState(false);
   const [rotation, setRotation] = useState(0);
   const [viewMode, setViewMode] = useState<'single' | 'all'>('single'); // New: toggle between single page and all pages
+  const [focusBadgeVisible, setFocusBadgeVisible] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -83,6 +96,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const thumbnailBg = useColorModeValue('rgba(30, 34, 50, 0.5)', 'rgba(30, 34, 50, 0.9)');
   const paperBg = useColorModeValue('white', '#ffffff');
   const toolbarBg = useColorModeValue('rgba(12,16,35,0.7)', 'rgba(12,16,35,0.95)');
+  const hasActiveDoc = typeof activeDocIndex === 'number';
+  const hasActivePage = typeof activePage === 'number';
 
   const currentDoc = documents[currentDocIndex];
   const totalPages = currentDoc?.pages?.length || 1;
@@ -147,6 +162,16 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
   // Check if rotated sideways (90° or 270°)
   const isRotatedSideways = rotation === 90 || rotation === 270;
+  const focusBorderColor = focusBadgeVisible
+    ? highlightSource === 'voice'
+      ? 'brand.300'
+      : 'cyan.200'
+    : 'gray.200';
+  const focusShadow = focusBadgeVisible
+    ? highlightSource === 'voice'
+      ? '0 0 20px rgba(121,95,238,0.35), 0 4px 20px rgba(0,0,0,0.2)'
+      : '0 0 20px rgba(56,189,248,0.25), 0 4px 20px rgba(0,0,0,0.2)'
+    : '0 4px 20px rgba(0,0,0,0.15), 0 1px 4px rgba(0,0,0,0.1)';
 
   const handleZoomIn = useCallback(() => {
     setZoomLevel(v => Math.min(v + 10, 200));
@@ -170,6 +195,65 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
     setRotation(prev => (prev + 90) % 360);
   }, []);
 
+  const updateDocIndex = useCallback(
+    (next: number | ((prev: number) => number)) => {
+      setCurrentDocIndex(prev => {
+        const target = typeof next === 'function' ? next(prev) : next;
+        const clamped = Math.max(0, Math.min(documents.length ? documents.length - 1 : 0, target));
+        onRequestDocChange?.(clamped);
+        return clamped;
+      });
+    },
+    [documents.length, onRequestDocChange]
+  );
+
+  const updatePageNumber = useCallback(
+    (next: number | ((prev: number) => number)) => {
+      setCurrentPage(prev => {
+        const target = typeof next === 'function' ? next(prev) : next;
+        const clamped = Math.max(1, Math.min(totalPages || 1, target));
+        onRequestPageChange?.(clamped);
+        return clamped;
+      });
+    },
+    [onRequestPageChange, totalPages]
+  );
+
+  useEffect(() => {
+    if (!documents.length) {
+      setCurrentDocIndex(0);
+      setCurrentPage(1);
+      return;
+    }
+    if (hasActiveDoc) {
+      return;
+    }
+    setCurrentDocIndex(prev => Math.min(prev, documents.length - 1));
+  }, [documents.length, hasActiveDoc]);
+
+  useEffect(() => {
+    if (!hasActiveDoc || !documents.length) {
+      return;
+    }
+    const safeIndex = Math.max(0, Math.min(activeDocIndex!, documents.length - 1));
+    setCurrentDocIndex(safeIndex);
+  }, [activeDocIndex, documents.length, hasActiveDoc]);
+
+  useEffect(() => {
+    if (hasActivePage) {
+      return;
+    }
+    setCurrentPage(prev => Math.min(prev, totalPages));
+  }, [totalPages, hasActivePage]);
+
+  useEffect(() => {
+    if (!hasActivePage || !documents.length) {
+      return;
+    }
+    const safePage = Math.max(1, Math.min(activePage!, totalPages));
+    setCurrentPage(safePage);
+  }, [activePage, totalPages, hasActivePage, documents.length]);
+
   // Reset zoom and rotation when documents change
   useEffect(() => {
     setZoomLevel(100);
@@ -180,33 +264,45 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
   // Reset to page 1 when switching documents
   useEffect(() => {
+    if (hasActivePage) {
+      return;
+    }
     setCurrentPage(1);
-  }, [currentDocIndex]);
+  }, [currentDocIndex, hasActivePage]);
+
+  useEffect(() => {
+    if (!focusToken) {
+      return;
+    }
+    setFocusBadgeVisible(true);
+    const timeoutId = setTimeout(() => setFocusBadgeVisible(false), 2400);
+    return () => clearTimeout(timeoutId);
+  }, [focusToken]);
 
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Arrow keys for page navigation
       if (e.key === 'ArrowLeft' && currentPage > 1) {
-        setCurrentPage(prev => prev - 1);
+        updatePageNumber(prev => prev - 1);
       } else if (e.key === 'ArrowRight' && currentPage < totalPages) {
-        setCurrentPage(prev => prev + 1);
+        updatePageNumber(prev => prev + 1);
       }
       // Ctrl/Cmd + Arrow keys for document navigation
       else if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowLeft' && currentDocIndex > 0) {
-        setCurrentDocIndex(prev => prev - 1);
+        updateDocIndex(prev => prev - 1);
       } else if (
         (e.ctrlKey || e.metaKey) &&
         e.key === 'ArrowRight' &&
         currentDocIndex < documents.length - 1
       ) {
-        setCurrentDocIndex(prev => prev + 1);
+        updateDocIndex(prev => prev + 1);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPage, totalPages, currentDocIndex, documents.length]);
+  }, [currentPage, totalPages, currentDocIndex, documents.length, updatePageNumber, updateDocIndex]);
 
   if (documents.length === 0) {
     return (
@@ -302,6 +398,15 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               {totalPagesAllDocs} {totalPagesAllDocs === 1 ? 'page' : 'pages'} total
             </Badge>
           )}
+          {focusBadgeVisible && (
+            <Badge
+              colorScheme={highlightSource === 'voice' ? 'pink' : 'blue'}
+              fontSize="xs"
+              flexShrink={0}
+            >
+              {highlightSource === 'voice' ? 'Voice selection' : 'Selection updated'}
+            </Badge>
+          )}
         </HStack>
 
         <HStack spacing={1} flexShrink={0} flexWrap="wrap">
@@ -394,7 +499,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                 <IconButton
                   aria-label="Previous document"
                   icon={<Iconify icon="solar:alt-arrow-left-bold" width={14} height={14} />}
-                  onClick={() => setCurrentDocIndex(prev => Math.max(0, prev - 1))}
+                  onClick={() => updateDocIndex(prev => Math.max(0, prev - 1))}
                   isDisabled={currentDocIndex === 0}
                   bg="whiteAlpha.200"
                   color="white"
@@ -419,7 +524,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                   aria-label="Next document"
                   icon={<Iconify icon="solar:alt-arrow-right-bold" width={14} height={14} />}
                   onClick={() =>
-                    setCurrentDocIndex(prev => Math.min(documents.length - 1, prev + 1))
+                    updateDocIndex(prev => Math.min(documents.length - 1, prev + 1))
                   }
                   isDisabled={currentDocIndex === documents.length - 1}
                   bg="whiteAlpha.200"
@@ -438,7 +543,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                 <IconButton
                   aria-label="Previous page"
                   icon={<Iconify icon="solar:alt-arrow-left-bold" width={14} height={14} />}
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                  onClick={() => updatePageNumber(prev => Math.max(1, prev - 1))}
                   isDisabled={currentPage === 1}
                   bg="whiteAlpha.200"
                   color="white"
@@ -462,7 +567,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                 <IconButton
                   aria-label="Next page"
                   icon={<Iconify icon="solar:alt-arrow-right-bold" width={14} height={14} />}
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                  onClick={() => updatePageNumber(prev => Math.min(totalPages, prev + 1))}
                   isDisabled={currentPage === totalPages}
                   bg="whiteAlpha.200"
                   color="white"
@@ -502,7 +607,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                 key={page.pageNumber}
                 w="100%"
                 cursor="pointer"
-                onClick={() => setCurrentPage(page.pageNumber)}
+                onClick={() => updatePageNumber(page.pageNumber)}
+                
                 border="2px solid"
                 borderColor={currentPage === page.pageNumber ? 'brand.400' : 'transparent'}
                 borderRadius="md"
@@ -589,8 +695,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                     }}
                     cursor="pointer"
                     onClick={() => {
-                      setCurrentDocIndex(page.docIndex);
-                      setCurrentPage(page.pageNumber);
+                      updateDocIndex(page.docIndex);
+                      updatePageNumber(page.pageNumber);
                       setViewMode('single');
                     }}
                   >
@@ -662,12 +768,12 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               height={paperDimensions.height}
               maxW="100%"
               maxH="100%"
-              transition="width 0.3s ease, height 0.3s ease"
+              transition="width 0.3s ease, height 0.3s ease, border-color 0.2s ease, box-shadow 0.2s ease"
               borderRadius="sm"
-              boxShadow="0 4px 20px rgba(0,0,0,0.15), 0 1px 4px rgba(0,0,0,0.1)"
+              boxShadow={focusShadow}
               bg={paperBg}
               border="1px solid"
-              borderColor="gray.200"
+              borderColor={focusBorderColor}
               position="relative"
               display="flex"
               alignItems="center"

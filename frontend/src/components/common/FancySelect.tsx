@@ -49,6 +49,7 @@ const FancySelect: React.FC<FancySelectProps> = ({
   const selectedBg = useColorModeValue('brand.100', 'rgba(121,95,238,0.2)');
   const borderColor = useColorModeValue('brand.200', 'rgba(121,95,238,0.3)');
   const menuBg = useColorModeValue('white', 'rgba(12, 16, 35, 0.95)');
+  const buttonBg = useColorModeValue('white', 'rgba(20, 24, 45, 0.6)');
 
   const selectedOption = options.find(opt => opt.value === value);
   const displayValue = isCustom ? customValue : selectedOption?.label || placeholder;
@@ -73,7 +74,7 @@ const FancySelect: React.FC<FancySelectProps> = ({
           justifyContent="space-between"
           variant="outline"
           borderColor={borderColor}
-          bg={useColorModeValue('white', 'rgba(20, 24, 45, 0.6)')}
+          bg={buttonBg}
           _hover={{ bg: hoverBg }}
           _active={{ bg: selectedBg }}
           transition="all 0.2s"

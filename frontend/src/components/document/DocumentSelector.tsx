@@ -4,7 +4,13 @@
  * Features: Current Documents, Converted Documents, Local Upload
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -36,7 +42,7 @@ import {
 import { FiFile, FiUpload, FiCheck } from 'react-icons/fi';
 import Iconify from '../common/Iconify';
 
-interface Document {
+export interface Document {
   filename: string;
   size: number;
   type: string;
@@ -44,7 +50,7 @@ interface Document {
   isProcessed?: boolean;
 }
 
-interface DocumentSelectorProps {
+export interface DocumentSelectorProps {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (documents: Document[]) => void;
@@ -54,20 +60,34 @@ interface DocumentSelectorProps {
   mode: 'scan' | 'print';
 }
 
-const DocumentSelector: React.FC<DocumentSelectorProps> = ({
-  isOpen,
-  onClose,
-  onSelect,
-  currentDocuments = [],
-  convertedDocuments = [],
-  allowMultiple = true,
-  mode,
-}) => {
+export interface DocumentSelectorHandle {
+  focusSection: (section: 'current' | 'converted' | 'upload') => void;
+  selectDocumentByIndex: (section: 'current' | 'converted', position: number) => Document | null;
+  clearSelections: () => void;
+}
+
+const TAB_INDEX: Record<'current' | 'converted' | 'upload', number> = {
+  current: 0,
+  converted: 1,
+  upload: 2,
+};
+
+const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProps>(
+  ({
+    isOpen,
+    onClose,
+    onSelect,
+    currentDocuments = [],
+    convertedDocuments = [],
+    allowMultiple = true,
+    mode,
+  }, ref) => {
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<Document[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<number>(0);
 
   const bgColor = useColorModeValue('white', 'rgba(12, 16, 35, 0.95)');
   const hoverBg = useColorModeValue('gray.50', 'whiteAlpha.100');
@@ -274,6 +294,33 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
     );
   };
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusSection: section => {
+        if (TAB_INDEX[section] !== undefined) {
+          setActiveTab(TAB_INDEX[section]);
+        }
+      },
+      selectDocumentByIndex: (section, position) => {
+        const docs = section === 'current' ? currentDocuments : convertedDocuments;
+        const target = docs[position - 1];
+        if (!target) {
+          return null;
+        }
+        setActiveTab(TAB_INDEX[section]);
+        setSelectedDocs(new Set([target.filename]));
+        setLastClickedIndex(position - 1);
+        return target;
+      },
+      clearSelections: () => {
+        setSelectedDocs(new Set());
+        setLastClickedIndex(null);
+      },
+    }),
+    [currentDocuments, convertedDocuments]
+  );
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
       <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(10px)" />
@@ -297,7 +344,12 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
         <ModalCloseButton size="lg" />
 
         <ModalBody py={6}>
-          <Tabs colorScheme="brand" variant="enclosed">
+          <Tabs
+            colorScheme="brand"
+            variant="enclosed"
+            index={activeTab}
+            onChange={index => setActiveTab(index)}
+          >
             <TabList>
               <Tab>
                 <HStack spacing={2}>
@@ -453,9 +505,11 @@ const DocumentSelector: React.FC<DocumentSelectorProps> = ({
             </Button>
           </HStack>
         </ModalFooter>
-      </ModalContent>
-    </Modal>
+        </ModalContent>
+      </Modal>
   );
-};
+});
+
+DocumentSelector.displayName = 'DocumentSelector';
 
 export default DocumentSelector;

@@ -1,5 +1,5 @@
 // ==================== MODAL & PREVIEW CONFIGURATION ====================
-// 📐 ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
+// ≡ƒôÉ ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
 //
 // If the preview is cut off or you want to change the modal size:
 // 1. Adjust modal.maxHeight/maxWidth to change the overall modal size
@@ -20,7 +20,40 @@ const MODAL_CONFIG = {
 };
 // =======================================================================
 
-import React, { useEffect, useState, useCallback } from 'react';
+const includeIfDefined = (value: any, key: string) =>
+  value === undefined || value === null ? {} : { [key]: value };
+
+const describeVoiceUpdates = (updates: Record<string, any>) => {
+  if (!updates) {
+    return '';
+  }
+
+  const labels: Record<string, string> = {
+    color_mode: 'Color Mode',
+    orientation: 'Orientation',
+    paper_size: 'Paper Size',
+    page_size: 'Page Size',
+    margins: 'Margins',
+    scale: 'Scale',
+    copies: 'Copies',
+    duplex: 'Duplex',
+    quality: 'Quality',
+    resolution: 'Resolution',
+    format: 'Format',
+  };
+
+  return Object.entries(updates)
+    .map(([key, value]) => {
+      const label = labels[key] || key;
+      if (typeof value === 'boolean') {
+        return `${label}: ${value ? 'On' : 'Off'}`;
+      }
+      return `${label}: ${value}`;
+    })
+    .join(', ');
+};
+
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
 import {
@@ -81,14 +114,19 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import { Iconify, FancySelect, ConnectionValidator } from '../components/common';
-import { VoiceAIChat, DocumentSelector, DocumentPreview } from '../components';
+import { VoiceAIChat, DocumentPreview } from '../components';
+import DocumentSelector, {
+  DocumentSelectorHandle,
+} from '../components/document/DocumentSelector';
+import PageShell from '../components/layout/PageShell';
+import SurfaceCard from '../components/layout/SurfaceCard';
 
 // Motion components
-const MotionBox = motion(Box);
-const MotionCard = motion(Card);
-const MotionModalContent = motion(ModalContent);
-const MotionButton = motion(Button);
-const MotionFlex = motion(Flex);
+const MotionBox = motion.create(Box);
+const MotionCard = motion.create(Card);
+const MotionModalContent = motion.create(ModalContent);
+const MotionButton = motion.create(Button);
+const MotionFlex = motion.create(Flex);
 
 interface ProcessingProgress {
   step: number;
@@ -112,6 +150,17 @@ interface FileInfo {
   processing_progress?: number;
   thumbnail?: string;
 }
+
+type PreviewControlSource = 'manual' | 'voice';
+
+interface PreviewControlState {
+  docIndex: number;
+  page: number;
+  source: PreviewControlSource;
+  token: number;
+}
+
+type OrchestrationAction = 'print' | 'scan';
 
 const useImageWithHeaders = (imageUrl: string) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -207,7 +256,7 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
       >
         <Spinner size="lg" color="brand.400" />
         <Text mt={3} fontSize="sm" color="text.muted">
-          Loading preview…
+          Loading previewΓÇª
         </Text>
       </Flex>
     );
@@ -254,6 +303,7 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
       borderRadius="lg"
     />
   );
+
 };
 
 const Dashboard: React.FC = () => {
@@ -279,6 +329,30 @@ const Dashboard: React.FC = () => {
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
 
+  const currentDocumentOptions = useMemo(
+    () =>
+      files.map(file => ({
+        filename: file.filename,
+        size: file.size,
+        type: file.mime_type?.includes('pdf') ? 'pdf' : 'image',
+        thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
+        isProcessed: file.has_text,
+      })),
+    [files]
+  );
+
+  const convertedDocumentOptions = useMemo(
+    () =>
+      convertedFiles.map((file: any) => ({
+        filename: file.filename,
+        size: file.size || 0,
+        type: 'pdf',
+        thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
+        isProcessed: true,
+      })),
+    [convertedFiles]
+  );
+
   // Smart selection state - simple multi-select
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
   const [rangeStart, setRangeStart] = useState<number | null>(null);
@@ -299,6 +373,7 @@ const Dashboard: React.FC = () => {
     scanResolution: '300' as string,
     scanResolutionCustom: '',
     scanColorMode: 'color' as 'color' | 'grayscale' | 'bw',
+    scanFormat: 'pdf' as string,
     // Print options
     printPages: 'all' as 'all' | 'odd' | 'even' | 'custom',
     printCustomRange: '',
@@ -313,6 +388,9 @@ const Dashboard: React.FC = () => {
     printMarginsCustom: '',
     printPagesPerSheet: '1' as string,
     printPagesPerSheetCustom: '',
+    printCopies: '1' as string,
+    printDuplex: false,
+    printQuality: 'normal' as string,
     printFiles: [] as File[],
     printConvertedFiles: [] as string[],
     // Default settings
@@ -328,12 +406,224 @@ const Dashboard: React.FC = () => {
 
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
+  const [previewControl, setPreviewControl] = useState<PreviewControlState>(() => ({
+    docIndex: 0,
+    page: 1,
+    source: 'manual',
+    token: Date.now(),
+  }));
+
+  const bumpPreviewFocus = useCallback(
+    (updates: Partial<Omit<PreviewControlState, 'token'>>) => {
+      setPreviewControl(prev => ({
+        docIndex: updates.docIndex ?? prev.docIndex,
+        page: updates.page ?? prev.page,
+        source: updates.source ?? prev.source,
+        token: Date.now(),
+      }));
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (selectedDocuments.length === 0) {
+      setPreviewControl({
+        docIndex: 0,
+        page: 1,
+        source: 'manual',
+        token: Date.now(),
+      });
+      return;
+    }
+
+    setPreviewControl(prev => {
+      if (prev.docIndex <= selectedDocuments.length - 1) {
+        return prev;
+      }
+      return {
+        ...prev,
+        docIndex: 0,
+        page: 1,
+        token: Date.now(),
+      };
+    });
+  }, [selectedDocuments.length]);
 
   // Connection status modal state
   const connectivityModal = useDisclosure();
 
   // Ref for scrolling the modal body
   const modalBodyRef = React.useRef<HTMLDivElement>(null);
+  const voiceOrchestrationTriggerRef = React.useRef<
+    ((mode: OrchestrationAction, config?: any) => void) | null
+  >(null);
+  const lastOrchestrationUpdateRef = React.useRef<string | null>(null);
+  const documentSelectorRef = React.useRef<DocumentSelectorHandle | null>(null);
+  const voiceDocumentSelectionRef = React.useRef<{ section: 'current' | 'converted'; index: number }>(
+    {
+      section: 'current',
+      index: 1,
+    }
+  );
+
+  const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
+  const [orchestrationContext, setOrchestrationContext] = useState<'manual' | 'voice'>('manual');
+  const isVoiceOrchestration = orchestrationContext === 'voice';
+
+  useEffect(() => {
+    if (!orchestrateModal.isOpen && orchestrationContext === 'voice') {
+      setOrchestrationContext('manual');
+    }
+  }, [orchestrateModal.isOpen, orchestrationContext]);
+
+  const normalizeVoiceUpdates = useCallback(
+    (actionType: OrchestrationAction | undefined, updates: Record<string, any> = {}) => {
+      if (!actionType || !updates) {
+        return {};
+      }
+
+      if (actionType === 'print') {
+        return {
+          ...includeIfDefined(updates.color_mode, 'printColorMode'),
+          ...includeIfDefined(updates.orientation, 'printLayout'),
+          ...includeIfDefined(updates.paper_size, 'printPaperSize'),
+          ...includeIfDefined(updates.margins, 'printMargins'),
+          ...includeIfDefined(
+            updates.scale !== undefined && updates.scale !== null
+              ? String(updates.scale)
+              : undefined,
+            'printScale'
+          ),
+          ...includeIfDefined(
+            updates.copies !== undefined && updates.copies !== null
+              ? String(updates.copies)
+              : undefined,
+            'printCopies'
+          ),
+          ...includeIfDefined(
+            typeof updates.duplex === 'boolean' ? updates.duplex : undefined,
+            'printDuplex'
+          ),
+          ...includeIfDefined(updates.quality, 'printQuality'),
+        };
+      }
+
+      return {
+        ...includeIfDefined(updates.color_mode, 'scanColorMode'),
+        ...includeIfDefined(updates.orientation, 'scanLayout'),
+        ...includeIfDefined(
+          updates.resolution !== undefined && updates.resolution !== null
+            ? String(updates.resolution)
+            : undefined,
+          'scanResolution'
+        ),
+        ...includeIfDefined(updates.page_size || updates.paper_size, 'scanPaperSize'),
+        ...includeIfDefined(updates.format, 'scanFormat'),
+      };
+    },
+    []
+  );
+
+  const applyVoiceConfigurationUpdates = useCallback(
+    (actionType: OrchestrationAction | undefined, updates: Record<string, any>) => {
+      if (!actionType || !updates || Object.keys(updates).length === 0) {
+        return false;
+      }
+
+      const normalized = normalizeVoiceUpdates(actionType, updates);
+      if (Object.keys(normalized).length === 0) {
+        return false;
+      }
+
+      setOrchestrateOptions(prev => ({
+        ...prev,
+        ...normalized,
+      }));
+
+      const summary = describeVoiceUpdates(updates);
+      if (summary) {
+        setVoiceAdjustmentLog(prev => {
+          const next = [
+            {
+              timestamp: new Date().toISOString(),
+              summary,
+              action: actionType,
+            },
+            ...prev,
+          ];
+          return next.slice(0, 6);
+        });
+      }
+
+      return true;
+    },
+    [normalizeVoiceUpdates, setOrchestrateOptions]
+  );
+
+  const handleOrchestrationUpdate = useCallback(
+    (payload: any) => {
+      if (!payload?.type) {
+        return;
+      }
+
+      const eventId =
+        payload.timestamp || `${payload.type}-${JSON.stringify(payload.updates ?? payload.result ?? '')}`;
+      if (lastOrchestrationUpdateRef.current === eventId) {
+        return;
+      }
+      lastOrchestrationUpdateRef.current = eventId;
+
+      switch (payload.type) {
+        case 'voice_configuration_updated': {
+          const actionType = payload.action_type as OrchestrationAction | undefined;
+          const updates = payload.updates || {};
+          const applied = applyVoiceConfigurationUpdates(actionType, updates);
+          if (applied) {
+            if (!orchestrateModal.isOpen) {
+              orchestrateModal.onOpen();
+            }
+            const described = describeVoiceUpdates(updates) || 'settings updated';
+            toast({
+              title: 'Voice Settings Applied',
+              description: `Updated via voice: ${described}`,
+              status: 'success',
+              duration: 3000,
+            });
+          }
+          break;
+        }
+        case 'configuration_complete': {
+          setOrchestrateStep(3);
+          if (!orchestrateModal.isOpen) {
+            orchestrateModal.onOpen();
+          }
+          toast({
+            title: 'Configuration Complete',
+            description: 'Voice assistant finished adjusting your settings.',
+            status: 'info',
+            duration: 3000,
+          });
+          break;
+        }
+        case 'voice_command_detected': {
+          const mode = payload.intent as OrchestrationAction | undefined;
+          if (mode === 'print' || mode === 'scan') {
+            const shouldOpen = payload.open_ui ?? payload.result?.open_ui;
+            if (shouldOpen && voiceOrchestrationTriggerRef.current) {
+              voiceOrchestrationTriggerRef.current(mode, payload.result?.configuration);
+            }
+            if (payload.skip_mode_selection || payload.result?.skip_mode_selection) {
+              setOrchestrateStep(2);
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    },
+    [applyVoiceConfigurationUpdates, orchestrateModal, setOrchestrateStep, toast]
+  );
 
   // Load saved defaults from localStorage on mount
   useEffect(() => {
@@ -363,6 +653,7 @@ const Dashboard: React.FC = () => {
       scanPageMode: orchestrateOptions.scanPageMode,
       scanLayout: orchestrateOptions.scanLayout,
       scanPaperSize: orchestrateOptions.scanPaperSize,
+      scanFormat: orchestrateOptions.scanFormat,
       scanResolution: orchestrateOptions.scanResolution,
       scanColorMode: orchestrateOptions.scanColorMode,
       printPages: orchestrateOptions.printPages,
@@ -370,6 +661,9 @@ const Dashboard: React.FC = () => {
       printPaperSize: orchestrateOptions.printPaperSize,
       printScale: orchestrateOptions.printScale,
       printMargins: orchestrateOptions.printMargins,
+      printCopies: orchestrateOptions.printCopies,
+      printDuplex: orchestrateOptions.printDuplex,
+      printQuality: orchestrateOptions.printQuality,
     };
     localStorage.setItem('printchakra_orchestrate_defaults', JSON.stringify(settingsToSave));
     toast({
@@ -382,7 +676,7 @@ const Dashboard: React.FC = () => {
   };
 
   // Fetch document info including pages for PDFs
-  const fetchDocumentInfo = async (filename: string) => {
+  const fetchDocumentInfo = useCallback(async (filename: string) => {
     try {
       const response = await apiClient.get(`/document/info/${filename}`);
       const docInfo = response.data;
@@ -410,10 +704,10 @@ const Dashboard: React.FC = () => {
         }]
       };
     }
-  };
+  }, []);
 
   // Enhance selected documents with page information
-  const enhanceDocumentsWithPages = async (docs: any[]) => {
+  const enhanceDocumentsWithPages = useCallback(async (docs: any[]) => {
     const enhanced = await Promise.all(
       docs.map(async (doc) => {
         const docInfo = await fetchDocumentInfo(doc.filename);
@@ -427,34 +721,368 @@ const Dashboard: React.FC = () => {
       })
     );
     return enhanced;
-  };
+  }, [fetchDocumentInfo]);
 
   // File cache system - stores file metadata and counts
-  const [filesCacheRef, setFilesCacheRef] = useState<{
-    data: any[] | null;
-    lastCount: number;
-    timestamp: number;
-  }>({
-    data: null,
-    lastCount: 0,
-    timestamp: 0,
-  });
+  // Use refs to avoid rerunning useEffect hooks when cache metadata updates
+  const filesCacheRef = React.useRef<{ data: any[] | null; lastCount: number; timestamp: number }>(
+    {
+      data: null,
+      lastCount: 0,
+      timestamp: 0,
+    }
+  );
 
-  const [convertedFilesCacheRef, setConvertedFilesCacheRef] = useState<{
-    data: any[] | null;
-    lastCount: number;
-    timestamp: number;
-  }>({
-    data: null,
-    lastCount: 0,
-    timestamp: 0,
-  });
+  const convertedFilesCacheRef = React.useRef<{ data: any[] | null; lastCount: number; timestamp: number }>(
+    {
+      data: null,
+      lastCount: 0,
+      timestamp: 0,
+    }
+  );
+
+  const [voiceAdjustmentLog, setVoiceAdjustmentLog] = useState<
+    Array<{ timestamp: string; summary: string; action: OrchestrationAction }>
+  >([]);
+
+  const renderVoiceAdjustmentPanel = useCallback(
+    (mode: OrchestrationAction) => {
+      const entries = voiceAdjustmentLog
+        .filter(entry => entry.action === mode)
+        .slice(0, 4);
+
+      if (entries.length === 0) {
+        return null;
+      }
+
+      return (
+        <Box
+          border="1px solid"
+          borderColor="rgba(121,95,238,0.35)"
+          bg="rgba(121,95,238,0.08)"
+          borderRadius="xl"
+          p={4}
+          mb={4}
+        >
+          <HStack justify="space-between" mb={3}>
+            <Heading size="sm">Recent AI adjustments</Heading>
+            <Badge colorScheme="brand" variant="subtle">
+              {mode === 'print' ? 'Print' : 'Scan'}
+            </Badge>
+          </HStack>
+          <Stack spacing={2}>
+            {entries.map(entry => (
+              <Flex
+                key={`${entry.timestamp}-${entry.summary}`}
+                align="baseline"
+                justify="space-between"
+                gap={4}
+              >
+                <Text fontSize="sm" flex={1} color="text.muted">
+                  {entry.summary}
+                </Text>
+                <Text fontSize="xs" color="text.secondary">
+                  {new Date(entry.timestamp).toLocaleTimeString()}
+                </Text>
+              </Flex>
+            ))}
+          </Stack>
+        </Box>
+      );
+    },
+    [voiceAdjustmentLog]
+  );
+
+  const getSectionFromParam = useCallback((section?: string): 'current' | 'converted' | 'upload' => {
+    if (!section) {
+      return 'current';
+    }
+    const normalized = section.toLowerCase();
+    if (normalized.includes('convert')) {
+      return 'converted';
+    }
+    if (normalized.includes('upload')) {
+      return 'upload';
+    }
+    return 'current';
+  }, []);
+
+  const selectDocumentForVoice = useCallback(
+    async (section: 'current' | 'converted', documentNumber?: number) => {
+      if (!documentNumber || Number.isNaN(documentNumber) || documentNumber < 1) {
+        return false;
+      }
+
+      const docs = section === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
+      const targetDoc = docs[documentNumber - 1];
+      if (!targetDoc) {
+        toast({
+          title: 'Document not found',
+          description: `Section ${section} does not have item #${documentNumber}.`,
+          status: 'warning',
+          duration: 3000,
+        });
+        return false;
+      }
+
+      documentSelectorModal.onOpen();
+      documentSelectorRef.current?.focusSection(section);
+      documentSelectorRef.current?.selectDocumentByIndex(section, documentNumber);
+      voiceDocumentSelectionRef.current = { section, index: documentNumber };
+
+      const enhancedDocs = await enhanceDocumentsWithPages([targetDoc]);
+      setSelectedDocuments(enhancedDocs);
+      bumpPreviewFocus({ docIndex: 0, page: 1, source: 'voice' });
+
+      toast({
+        title: 'Document ready',
+        description: `${targetDoc.filename} selected via voice`,
+        status: 'success',
+        duration: 2500,
+      });
+      return true;
+    },
+    [
+      convertedDocumentOptions,
+      currentDocumentOptions,
+      documentSelectorModal,
+      enhanceDocumentsWithPages,
+      bumpPreviewFocus,
+      toast,
+    ]
+  );
+
+  const handleDockedChatClose = useCallback(() => {
+    setIsChatVisible(false);
+    if (orchestrationContext === 'voice') {
+      setOrchestrationContext('manual');
+    }
+  }, [orchestrationContext]);
+
+  const handleVoiceCommand = useCallback(
+    async (data: any) => {
+      const { command, params } = data;
+      console.log(`Handling voice command: ${command}`, params);
+
+      const sectionParam = getSectionFromParam(params?.section);
+      const parsedDocumentNumber = params?.document_number
+        ? parseInt(params.document_number, 10)
+        : undefined;
+
+      switch (command) {
+        case 'select_document': {
+          if (sectionParam === 'upload') {
+            documentSelectorModal.onOpen();
+            documentSelectorRef.current?.focusSection('upload');
+            toast({
+              title: 'Upload',
+              description: 'Switching to upload tab.',
+              status: 'info',
+              duration: 2000,
+            });
+            break;
+          }
+
+          const targetSection = sectionParam as 'current' | 'converted';
+          documentSelectorModal.onOpen();
+          documentSelectorRef.current?.focusSection(targetSection);
+
+          if (parsedDocumentNumber) {
+            await selectDocumentForVoice(targetSection, parsedDocumentNumber);
+          } else {
+            voiceDocumentSelectionRef.current = { section: targetSection, index: 1 };
+            toast({
+              title: 'Document Selection',
+              description: `Browsing ${targetSection} documents`,
+              status: 'info',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'switch_section': {
+          documentSelectorModal.onOpen();
+          documentSelectorRef.current?.focusSection(sectionParam);
+          if (sectionParam !== 'upload') {
+            voiceDocumentSelectionRef.current = {
+              section: sectionParam,
+              index: 1,
+            };
+          }
+          toast({
+            title: 'Section Switch',
+            description: `Switching to ${sectionParam} section`,
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'next_document': {
+          const ctx = voiceDocumentSelectionRef.current;
+          const docs = ctx.section === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
+          if (docs.length === 0) {
+            toast({
+              title: 'No documents',
+              description: `No documents available in ${ctx.section} section`,
+              status: 'warning',
+              duration: 2000,
+            });
+            break;
+          }
+          const nextIndex = Math.min(docs.length, ctx.index + 1);
+          await selectDocumentForVoice(ctx.section, nextIndex);
+          break;
+        }
+
+        case 'previous_document': {
+          const ctx = voiceDocumentSelectionRef.current;
+          const docs = ctx.section === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
+          if (docs.length === 0) {
+            toast({
+              title: 'No documents',
+              description: `No documents available in ${ctx.section} section`,
+              status: 'warning',
+              duration: 2000,
+            });
+            break;
+          }
+          const prevIndex = Math.max(1, ctx.index - 1);
+          await selectDocumentForVoice(ctx.section, prevIndex);
+          break;
+        }
+
+        case 'upload_document': {
+          const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+          if (fileInput) {
+            fileInput.click();
+          }
+          toast({
+            title: 'Upload',
+            description: 'Opening upload dialog...',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'confirm': {
+          if (orchestrateMode === 'print') {
+            executePrintJob();
+          } else if (orchestrateMode === 'scan') {
+            executeScanJob();
+          }
+          toast({
+            title: 'Executing',
+            description: `Starting ${orchestrateMode} operation...`,
+            status: 'success',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'cancel': {
+          orchestrateModal.onClose();
+          toast({
+            title: 'Cancelled',
+            description: 'Operation cancelled',
+            status: 'warning',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'status': {
+          toast({
+            title: 'Current Status',
+            description: orchestrateMode
+              ? `${orchestrateMode.toUpperCase()} mode active`
+              : 'No active operation',
+            status: 'info',
+            duration: 3000,
+          });
+          break;
+        }
+
+        case 'repeat_settings': {
+          const currentSettings = orchestrateMode === 'print'
+            ? `Print settings: ${orchestrateOptions.printColorMode}, ${orchestrateOptions.printLayout}, ${orchestrateOptions.printPaperSize}`
+            : orchestrateMode === 'scan'
+              ? `Scan settings: ${orchestrateOptions.scanColorMode}, ${orchestrateOptions.scanLayout}, ${orchestrateOptions.scanResolution} DPI`
+              : 'No settings configured';
+
+          toast({
+            title: 'Current Settings',
+            description: currentSettings,
+            status: 'info',
+            duration: 4000,
+          });
+          break;
+        }
+
+        case 'stop_recording': {
+          if (isChatVisible) {
+            handleDockedChatClose();
+          }
+          toast({
+            title: 'Voice Stopped',
+            description: 'Recording stopped',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        default:
+          console.warn(`Unknown voice command: ${command}`);
+      }
+    },
+    [
+      convertedDocumentOptions,
+      currentDocumentOptions,
+      documentSelectorModal,
+      documentSelectorRef,
+      getSectionFromParam,
+      handleDockedChatClose,
+      isChatVisible,
+      orchestrateMode,
+      orchestrateOptions.printColorMode,
+      orchestrateOptions.printLayout,
+      orchestrateOptions.printPaperSize,
+      orchestrateOptions.scanColorMode,
+      orchestrateOptions.scanLayout,
+      orchestrateOptions.scanResolution,
+      orchestrateModal,
+      selectDocumentForVoice,
+      toast,
+    ]
+  );
+
+  const handleOrchestrationUpdateRef = React.useRef(handleOrchestrationUpdate);
+  useEffect(() => {
+    handleOrchestrationUpdateRef.current = handleOrchestrationUpdate;
+  }, [handleOrchestrationUpdate]);
+
+  const handleVoiceCommandRef = React.useRef(handleVoiceCommand);
+  useEffect(() => {
+    handleVoiceCommandRef.current = handleVoiceCommand;
+  }, [handleVoiceCommand]);
 
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
   const dockedChatBg = useColorModeValue('rgba(248, 250, 255, 0.95)', 'rgba(9, 14, 26, 0.96)');
   const dockedBorderColor = useColorModeValue('rgba(121,95,238,0.12)', 'rgba(121,95,238,0.35)');
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
+
+  // Derived color values to avoid calling hooks conditionally inside JSX
+  const systemModalBgGradient = useColorModeValue(
+    'linear-gradient(135deg, #ffffff 0%, #f8f7ff 100%)',
+    'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)'
+  );
+  const validatorBoxBg = useColorModeValue('rgba(255,255,255,0.5)', 'rgba(0,0,0,0.2)');
+  const chatSidebarBg = useColorModeValue('white', 'gray.800');
+  const chatSidebarBorderColor = useColorModeValue('gray.200', 'gray.700');
 
   const { socket, connected: socketConnected } = useSocket();
 
@@ -463,81 +1091,54 @@ const Dashboard: React.FC = () => {
   }, [socketConnected]);
 
   useEffect(() => {
-    console.log('🔌 Dashboard: Setting up Socket.IO event listeners');
-
     if (!socket) {
-      console.log('⚠️ Socket not available yet');
       return;
     }
 
-    socket.on('new_file', (data: any) => {
+    const newFileListener = (data: any) => {
       console.log('New file uploaded:', data);
       loadFiles(false); // Background refresh, no loading spinner
-    });
+    };
+    socket.on('new_file', newFileListener);
 
-    socket.on('file_deleted', (data: any) => {
+    const fileDeletedListener = (data: any) => {
       console.log('File deleted:', data);
       loadFiles(false);
-    });
+    };
+    socket.on('file_deleted', fileDeletedListener);
 
-    socket.on('processing_progress', (data: ProcessingProgress) => {
-      console.log(`📊 Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
+    const processingProgressListener = (data: ProcessingProgress) => {
+      console.log(`Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
       setProcessingProgress(data);
-    });
+    };
+    socket.on('processing_progress', processingProgressListener);
 
-    socket.on('processing_complete', (data: any) => {
-      console.log('✅ Processing complete:', data);
+    const processingCompleteListener = (data: any) => {
+      console.log('Processing complete:', data);
       setProcessingProgress(null);
       setTimeout(() => loadFiles(false), 500); // Refresh after processing
-    });
+    };
+    socket.on('processing_complete', processingCompleteListener);
 
-    socket.on('processing_error', (data: any) => {
-      console.error('❌ Processing error:', data);
+    const processingErrorListener = (data: any) => {
+      console.error('Processing error:', data);
       setProcessingProgress(null);
-    });
+    };
+    socket.on('processing_error', processingErrorListener);
 
     // Listen for orchestration updates from voice commands
-    socket.on('orchestration_update', (data: any) => {
-      console.log('🎯 Orchestration update received:', data);
-      
-      if (data.type === 'voice_configuration_updated') {
-        // Update orchestration options based on voice command
-        const updates = data.updates || {};
-        const actionType = data.action_type;
-        
-        if (actionType === 'print') {
-          setOrchestrateOptions(prev => ({
-            ...prev,
-            printColorMode: updates.color_mode || prev.printColorMode,
-            printLayout: updates.orientation || prev.printLayout,
-            printPaperSize: updates.paper_size || prev.printPaperSize,
-            printMargins: updates.margins || prev.printMargins,
-            printScale: updates.scale || prev.printScale,
-          }));
-        } else if (actionType === 'scan') {
-          setOrchestrateOptions(prev => ({
-            ...prev,
-            scanColorMode: updates.color_mode || prev.scanColorMode,
-            scanLayout: updates.orientation || prev.scanLayout,
-            scanResolution: updates.resolution?.toString() || prev.scanResolution,
-            scanPaperSize: updates.paper_size || prev.scanPaperSize,
-          }));
-        }
-        
-        toast({
-          title: 'Settings Updated',
-          description: `Voice command applied: ${Object.keys(updates).join(', ')}`,
-          status: 'success',
-          duration: 3000,
-        });
-      }
-    });
+    const orchestrationUpdateListener = (payload: any) => {
+      handleOrchestrationUpdateRef.current?.(payload);
+    };
+    socket.on('orchestration_update', orchestrationUpdateListener);
 
     // Listen for voice commands (document selector control)
-    socket.on('voice_command', (data: any) => {
-      console.log('🎙️ Voice command received:', data);
-      handleVoiceCommand(data);
-    });
+    const voiceCommandListener = (data: any) => {
+      console.log('Voice command received:', data);
+      void handleVoiceCommandRef.current?.(data);
+    };
+
+    socket.on('voice_command', voiceCommandListener);
 
     loadFiles();
     loadConvertedFiles(); // Load converted files on component mount
@@ -545,21 +1146,23 @@ const Dashboard: React.FC = () => {
     let pollInterval = 60000;
     const maxInterval = 300000;
     let timeoutId: ReturnType<typeof setTimeout>;
+    // local counter removed - avoid poll debug logging in production
 
     const startPolling = () => {
+      // -- startPolling invoked
       timeoutId = setTimeout(async () => {
-        console.log('📋 Safety net polling for new files...');
+        console.log('Safety net polling for new files...');
         try {
           await loadFiles(false);
           if (pollInterval > 60000) {
-            console.log('✅ Connection restored, resetting poll interval');
+            console.log('Connection restored, resetting poll interval');
             pollInterval = 60000;
             setConnectionRetries(0);
           }
         } catch (err) {
           pollInterval = Math.min(pollInterval * 1.5, maxInterval);
           setConnectionRetries((prev: number) => prev + 1);
-          console.log(`⚠️ Poll failed, backing off to ${pollInterval}ms`);
+          console.log(`Poll failed, backing off to ${pollInterval}ms`);
         }
         startPolling();
       }, pollInterval);
@@ -569,7 +1172,7 @@ const Dashboard: React.FC = () => {
 
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        console.log('📋 Page became visible - refreshing files');
+        console.log('Page became visible - refreshing files');
         loadFiles(false);
       }
     };
@@ -579,18 +1182,33 @@ const Dashboard: React.FC = () => {
     return () => {
       clearTimeout(timeoutId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      socket.off('new_file');
-      socket.off('file_deleted');
-      socket.off('processing_progress');
-      socket.off('processing_complete');
-      socket.off('processing_error');
-      socket.off('orchestration_update');
-      socket.off('voice_command');
+      socket.off('new_file', newFileListener);
+      socket.off('file_deleted', fileDeletedListener);
+      socket.off('processing_progress', processingProgressListener);
+      socket.off('processing_complete', processingCompleteListener);
+      socket.off('processing_error', processingErrorListener);
+      socket.off('orchestration_update', orchestrationUpdateListener);
+      socket.off('voice_command', voiceCommandListener);
+      // -- startPolling cleaned up
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, filesCacheRef]);
+  }, [socket]);
 
-  const loadFiles = async (showLoading = true) => {
+  const lastLoadFilesRunRef = React.useRef<number>(0);
+  const minLoadFilesInterval = 1000; // ms - minimum interval between calls
+
+  const loadFiles = useCallback(async (showLoading = true) => {
+    const now = Date.now();
+    if (now - lastLoadFilesRunRef.current < minLoadFilesInterval) {
+      console.log('Skipping loadFiles due to rate limit');
+      return;
+    }
+    lastLoadFilesRunRef.current = now;
+    // Prevent overlapping calls that can cause duplicate requests
+    if ((loadFiles as any)._isRunning) {
+      console.log('loadFiles: already running - skipping');
+      return;
+    }
+    (loadFiles as any)._isRunning = true;
     try {
       if (showLoading) {
         setLoading(true);
@@ -602,21 +1220,21 @@ const Dashboard: React.FC = () => {
 
       // Smart cache: only update if file count changed
       const newCount = filesData.length;
-      if (newCount !== filesCacheRef.lastCount) {
+      if (newCount !== filesCacheRef.current.lastCount) {
         console.log(
-          `📁 File count changed: ${filesCacheRef.lastCount} → ${newCount}, updating cache`
+          `File count changed: ${filesCacheRef.current.lastCount} → ${newCount}, updating cache`
         );
         setFiles(filesData);
-        setFilesCacheRef({
+        filesCacheRef.current = {
           data: filesData,
           lastCount: newCount,
           timestamp: Date.now(),
-        });
+        };
       } else {
-        console.log(`📁 File count unchanged (${newCount}), using cached data`);
+        console.log(`File count unchanged (${newCount}), using cached data`);
         // Use cached data if available
-        if (filesCacheRef.data) {
-          setFiles(filesCacheRef.data);
+        if (filesCacheRef.current.data) {
+          setFiles(filesCacheRef.current.data);
         } else {
           setFiles(filesData);
         }
@@ -626,7 +1244,7 @@ const Dashboard: React.FC = () => {
       console.error('Failed to load files:', err);
       const errorMsg =
         err.code === 'ERR_NETWORK' || err.code === 'ERR_CONNECTION_CLOSED'
-          ? '⚠️ Backend connection lost. Retrying...'
+          ? 'Backend connection lost. Retrying...'
           : err.message || 'Failed to load files';
       setError(errorMsg);
 
@@ -635,11 +1253,12 @@ const Dashboard: React.FC = () => {
         setTimeout(() => setError(null), 5000); // Clear error after 5s
       }
     } finally {
+      (loadFiles as any)._isRunning = false;
       if (showLoading) {
         setLoading(false);
       }
     }
-  };
+  }, []);
 
   const deleteFile = async (filename: string) => {
     if (!window.confirm('Are you sure you want to delete this file?')) {
@@ -707,8 +1326,8 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleVoiceOrchestrationTrigger = (mode: 'print' | 'scan', config?: any) => {
-    console.log('🎯 Dashboard: Orchestration triggered', { mode, config });
+  const handleVoiceOrchestrationTrigger = (mode: OrchestrationAction, config?: any) => {
+    console.log('Dashboard: Orchestration triggered', { mode, config });
 
     setOrchestrationContext('voice');
     
@@ -759,152 +1378,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleDockedChatClose = () => {
-    setIsChatVisible(false);
-    if (orchestrationContext === 'voice') {
-      setOrchestrationContext('manual');
-    }
-  };
-
-  const handleVoiceCommand = (data: any) => {
-    const { command, params } = data;
-    console.log(`🎙️ Handling voice command: ${command}`, params);
-
-    switch (command) {
-      case 'select_document':
-        // Open document selector modal
-        documentSelectorModal.onOpen();
-        
-        // If section and document number specified, pre-select
-        if (params.section && params.document_number) {
-          // Will be handled by DocumentSelector component state
-          toast({
-            title: 'Document Selection',
-            description: `Selecting ${params.section} #${params.document_number}`,
-            status: 'info',
-            duration: 2000,
-          });
-        }
-        break;
-
-      case 'switch_section':
-        // Open document selector and switch section
-        if (params.section) {
-          documentSelectorModal.onOpen();
-          toast({
-            title: 'Section Switch',
-            description: `Switching to ${params.section} section`,
-            status: 'info',
-            duration: 2000,
-          });
-        }
-        break;
-
-      case 'next_document':
-        // Navigate to next document in current section
-        toast({
-          title: 'Navigation',
-          description: 'Moving to next document',
-          status: 'info',
-          duration: 1500,
-        });
-        break;
-
-      case 'previous_document':
-        // Navigate to previous document in current section
-        toast({
-          title: 'Navigation',
-          description: 'Moving to previous document',
-          status: 'info',
-          duration: 1500,
-        });
-        break;
-
-      case 'upload_document':
-        // Trigger file upload dialog
-        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
-        if (fileInput) {
-          fileInput.click();
-        }
-        toast({
-          title: 'Upload',
-          description: 'Opening upload dialog...',
-          status: 'info',
-          duration: 2000,
-        });
-        break;
-
-      case 'confirm':
-        // Execute current operation (print/scan)
-        if (orchestrateMode === 'print') {
-          executePrintJob();
-        } else if (orchestrateMode === 'scan') {
-          executeScanJob();
-        }
-        toast({
-          title: 'Executing',
-          description: `Starting ${orchestrateMode} operation...`,
-          status: 'success',
-          duration: 2000,
-        });
-        break;
-
-      case 'cancel':
-        // Cancel current operation
-        orchestrateModal.onClose();
-        toast({
-          title: 'Cancelled',
-          description: 'Operation cancelled',
-          status: 'warning',
-          duration: 2000,
-        });
-        break;
-
-      case 'status':
-        // Show current workflow status
-        toast({
-          title: 'Current Status',
-          description: orchestrateMode
-            ? `${orchestrateMode.toUpperCase()} mode active`
-            : 'No active operation',
-          status: 'info',
-          duration: 3000,
-        });
-        break;
-
-      case 'repeat_settings':
-        // Read back current settings
-        const currentSettings = orchestrateMode === 'print'
-          ? `Print settings: ${orchestrateOptions.printColorMode}, ${orchestrateOptions.printLayout}, ${orchestrateOptions.printPaperSize}`
-          : orchestrateMode === 'scan'
-          ? `Scan settings: ${orchestrateOptions.scanColorMode}, ${orchestrateOptions.scanLayout}, ${orchestrateOptions.scanResolution} DPI`
-          : 'No settings configured';
-        
-        toast({
-          title: 'Current Settings',
-          description: currentSettings,
-          status: 'info',
-          duration: 4000,
-        });
-        break;
-
-      case 'stop_recording':
-        // Close voice AI chat
-        if (isChatVisible) {
-          handleDockedChatClose();
-        }
-        toast({
-          title: 'Voice Stopped',
-          description: 'Recording stopped',
-          status: 'info',
-          duration: 2000,
-        });
-        break;
-
-      default:
-        console.warn(`Unknown voice command: ${command}`);
-    }
-  };
+  voiceOrchestrationTriggerRef.current = handleVoiceOrchestrationTrigger;
 
   const executePrintJob = async () => {
     try {
@@ -1190,23 +1664,25 @@ const Dashboard: React.FC = () => {
       setConverting(true);
       setConversionProgress('Starting conversion...');
 
-      const response = await apiClient.post('/convert', {
+      const payload = {
         files: selectedFiles,
         format: targetFormat,
-        merge_pdf: mergePdf && targetFormat === 'pdf', // Only merge if format is PDF
-        filename: customFilename.trim() || undefined, // Pass custom filename if provided
-      });
+        merge_pdf: mergePdf && targetFormat === 'pdf',
+        filename: customFilename.trim() || undefined,
+      };
+      console.log('Sending convert request', payload);
+      const response = await apiClient.post('/convert', payload);
 
       if (response.data.success) {
         const { success_count, fail_count, results, merged } = response.data;
 
         if (merged) {
           setConversionProgress(
-            `✅ Merged into single PDF!\n${selectedFiles.length} files combined`
+            `Merged into single PDF!\n${selectedFiles.length} files combined`
           );
         } else {
           setConversionProgress(
-            `✅ Conversion complete!\nSuccess: ${success_count}\nFailed: ${fail_count}`
+            `Conversion complete!\nSuccess: ${success_count}\nFailed: ${fail_count}`
           );
         }
 
@@ -1229,38 +1705,62 @@ const Dashboard: React.FC = () => {
           }, 1500);
         }
       } else {
-        setConversionProgress(`❌ Conversion failed: ${response.data.error}`);
+        setConversionProgress(`Conversion failed: ${response.data.error}`);
       }
     } catch (err: any) {
       console.error('Conversion error:', err);
-      setConversionProgress(`❌ Conversion error: ${err.message}`);
+      // Surface more detailed server error message if available
+      const serverMessage =
+        err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Unknown error';
+      setConversionProgress(`Conversion error: ${serverMessage}`);
+      // Also display a toast for user visibility
+      toast({
+        title: 'Conversion error',
+        description: serverMessage,
+        status: 'error',
+        duration: 6000,
+      });
     } finally {
       setConverting(false);
     }
   };
 
   // Load converted files
-  const loadConvertedFiles = async () => {
+  const lastLoadConvertedRunRef = React.useRef<number>(0);
+  const minLoadConvertedInterval = 1000; // ms
+
+  const loadConvertedFiles = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastLoadConvertedRunRef.current < minLoadConvertedInterval) {
+      console.log('Skipping loadConvertedFiles due to rate limit');
+      return;
+    }
+    lastLoadConvertedRunRef.current = now;
+    if ((loadConvertedFiles as any)._isRunning) {
+      console.log('loadConvertedFiles: already running - skipping');
+      return;
+    }
+    (loadConvertedFiles as any)._isRunning = true;
     try {
       const response = await apiClient.get('/get-converted-files');
       if (response.data.files) {
         // Smart cache: only update if file count changed
         const newCount = response.data.files.length;
-        if (newCount !== convertedFilesCacheRef.lastCount) {
+        if (newCount !== convertedFilesCacheRef.current.lastCount) {
           console.log(
-            `📄 Converted file count changed: ${convertedFilesCacheRef.lastCount} → ${newCount}, updating cache`
+            `Converted file count changed: ${convertedFilesCacheRef.current.lastCount} → ${newCount}, updating cache`    
           );
           setConvertedFiles(response.data.files);
-          setConvertedFilesCacheRef({
+          convertedFilesCacheRef.current = {
             data: response.data.files,
             lastCount: newCount,
             timestamp: Date.now(),
-          });
+          };
         } else {
-          console.log(`📄 Converted file count unchanged (${newCount}), using cached data`);
+          console.log(`Converted file count unchanged (${newCount}), using cached data`);
           // Use cached data if available
-          if (convertedFilesCacheRef.data) {
-            setConvertedFiles(convertedFilesCacheRef.data);
+          if (convertedFilesCacheRef.current.data) {
+            setConvertedFiles(convertedFilesCacheRef.current.data);
           } else {
             setConvertedFiles(response.data.files);
           }
@@ -1269,209 +1769,205 @@ const Dashboard: React.FC = () => {
     } catch (err) {
       console.error('Failed to load converted files:', err);
     }
-  };
-
-  const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
-  const [orchestrationContext, setOrchestrationContext] = useState<'manual' | 'voice'>('manual');
-  const isVoiceOrchestration = orchestrationContext === 'voice';
-
-  useEffect(() => {
-    if (!orchestrateModal.isOpen && orchestrationContext === 'voice') {
-      setOrchestrationContext('manual');
+    finally {
+      (loadConvertedFiles as any)._isRunning = false;
     }
-  }, [orchestrateModal.isOpen, orchestrationContext]);
-
+  }, []);
   // Prevent scrolling when chat visibility changes
   return (
     <Box position="relative" minH="100vh">
       {/* Main Content Area */}
       <Box 
-        mr={isChatVisible && !isVoiceOrchestration ? "35vw" : "0"}
+        mr={isChatVisible ? "35vw" : "0"}
         transition="margin-right 0.3s ease-out"
         minH="100vh"
         pt={2}
         px={3}
         pb={2}
-        pr={isChatVisible && !isVoiceOrchestration ? "0" : "3"}
+        pr={isChatVisible ? "0" : "3"}
       >
-        <VStack align="stretch" spacing={4} pb={4}>
-          
-          <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
-        <Stack spacing={2}>
-          <Heading size="lg" display="flex" alignItems="center" gap={3}>
-            📊 Dashboard
-          </Heading>
-          <Text color="text.muted" maxW="lg">
-            Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in
-            real time.
-          </Text>
-        </Stack>
+        <VStack align="stretch" spacing={5} pb={6}>
+          <SurfaceCard>
+            <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
+              <Stack spacing={2}>
+                <Heading size="lg" display="flex" alignItems="center" gap={3}>
+                  📊 Dashboard
+                </Heading>
+                <Text color="text.muted" maxW="lg">
+                  Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in
+                  real time.
+                </Text>
+              </Stack>
 
-        <Stack direction="row" spacing={3} align="center">
-          <Flex
-            align="center"
-            gap={2}
-            px={4}
-            py={2}
-            borderRadius="full"
-            bg="surface.blur"
-            border="1px solid"
-            borderColor="rgba(121,95,238,0.2)"
-          >
-            <Box
-              w={3}
-              h={3}
-              borderRadius="full"
-              bg={error ? 'orange.400' : statusDotColor}
-              boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`}
-            />
-            <Text fontWeight="600" color={statusTextColor}>
-              {error
-                ? `Connection issues (retry ${connectionRetries})`
-                : connected
-                  ? 'Live link established'
-                  : 'Disconnected'}
-            </Text>
-          </Flex>
-          <IconButton
-            aria-label="Refresh files"
-            icon={<Iconify icon={FiRefreshCw} boxSize={5} />}
-            onClick={handleRefreshClick}
-            variant="ghost"
-            colorScheme="brand"
-            size="lg"
-          />
-        </Stack>
-      </Flex>
-
-      <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
-        <MotionBox
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-        >
-          <Button
-            size="lg"
-            colorScheme="brand"
-            variant="solid"
-            onClick={triggerPrint}
-            leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
-            boxShadow="0 4px 14px rgba(121,95,238,0.4)"
-            _hover={{ boxShadow: '0 6px 20px rgba(121,95,238,0.6)' }}
-            transition="all 0.3s"
-          >
-            Orchestrate Print Capture
-          </Button>
-        </MotionBox>
-        <MotionBox
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-        >
-          <Button
-            size="lg"
-            colorScheme="purple"
-            variant="solid"
-            onClick={() => setIsChatVisible(!isChatVisible)}
-            leftIcon={<Iconify icon={FiMic} boxSize={5} />}
-            boxShadow="0 4px 14px rgba(147,51,234,0.4)"
-            _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
-            transition="all 0.3s"
-          >
-            {isChatVisible ? 'Hide' : 'Show'} AI Chat
-          </Button>
-        </MotionBox>
-        <MotionBox
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-        >
-          <Button
-            size="lg"
-            variant={selectionMode ? 'solid' : 'ghost'}
-            colorScheme={selectionMode ? 'orange' : 'brand'}
-            onClick={toggleSelectionMode}
-          >
-            {selectionMode ? 'Cancel Selection' : 'Select Files'}
-          </Button>
-        </MotionBox>
-        {selectionMode && selectedFiles.length > 0 && (
-          <MotionBox
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.05, y: -3 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Button size="lg" colorScheme="brand" variant="outline" onClick={openConversionModal}>
-              Convert {selectedFiles.length} Selected
-            </Button>
-          </MotionBox>
-        )}
-        {/* Check Connectivity Button */}
-        <MotionBox
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-        >
-          <Button
-            size="lg"
-            colorScheme="cyan"
-            variant="solid"
-            onClick={connectivityModal.onOpen}
-            leftIcon={<Iconify icon={FiWifiOff} boxSize={5} />}
-            boxShadow="0 4px 14px rgba(34,211,238,0.4)"
-            _hover={{ boxShadow: '0 6px 20px rgba(34,211,238,0.6)' }}
-            transition="all 0.3s"
-            position="relative"
-            overflow="hidden"
-          >
-            Check Connectivity
-          </Button>
-        </MotionBox>
-        <MotionBox
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-        >
-          <Button
-            size="lg"
-            variant="ghost"
-            onClick={() => {
-              if (!convertedDrawer.isOpen) {
-                loadConvertedFiles();
-              }
-              convertedDrawer.onToggle();
-            }}
-          >
-            {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
-          </Button>
-        </MotionBox>
-        {orchestrateMode && !orchestrateModal.isOpen && (
-          <MotionBox
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.05, y: -3 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Button
-              size="lg"
-              colorScheme="brand"
-              variant="outline"
-              onClick={reopenOrchestrateModal}
-              leftIcon={
-                <Iconify
-                  icon="solar:redo-bold-duotone"
-                  boxSize={5}
+              <Stack direction="row" spacing={3} align="center">
+                <Flex
+                  align="center"
+                  gap={2}
+                  px={4}
+                  py={2}
+                  borderRadius="full"
+                  bg="surface.blur"
+                  border="1px solid"
+                  borderColor="rgba(121,95,238,0.2)"
+                >
+                  <Box
+                    w={3}
+                    h={3}
+                    borderRadius="full"
+                    bg={error ? 'orange.400' : statusDotColor}
+                    boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`}
+                  />
+                  <Text fontWeight="600" color={statusTextColor}>
+                    {error
+                      ? `Connection issues (retry ${connectionRetries})`
+                      : connected
+                        ? 'Live link established'
+                        : 'Disconnected'}
+                  </Text>
+                </Flex>
+                <IconButton
+                  aria-label="Refresh files"
+                  icon={<Iconify icon={FiRefreshCw} boxSize={5} />}
+                  onClick={handleRefreshClick}
+                  variant="ghost"
+                  colorScheme="brand"
+                  size="lg"
                 />
-              }
-            >
-              Re-open {orchestrateMode === 'print' ? 'Print' : 'Scan'} Configuration
-            </Button>
-          </MotionBox>
-        )}
-      </Stack>
+              </Stack>
+            </Flex>
+          </SurfaceCard>
+
+          <SurfaceCard>
+            <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
+              <MotionBox
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+              >
+                <Button
+                  size="lg"
+                  colorScheme="brand"
+                  variant="solid"
+                  onClick={triggerPrint}
+                  leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
+                  boxShadow="0 4px 14px rgba(121,95,238,0.4)"
+                  _hover={{ boxShadow: '0 6px 20px rgba(121,95,238,0.6)' }}
+                  transition="all 0.3s"
+                >
+                  Orchestrate Print Capture
+                </Button>
+              </MotionBox>
+              <MotionBox
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+              >
+                <Button
+                  size="lg"
+                  colorScheme="purple"
+                  variant="solid"
+                  onClick={() => setIsChatVisible(!isChatVisible)}
+                  leftIcon={<Iconify icon={FiMic} boxSize={5} />}
+                  boxShadow="0 4px 14px rgba(147,51,234,0.4)"
+                  _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
+                  transition="all 0.3s"
+                >
+                  {isChatVisible ? 'Hide' : 'Show'} AI Chat
+                </Button>
+              </MotionBox>
+              <MotionBox
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+              >
+                <Button
+                  size="lg"
+                  variant={selectionMode ? 'solid' : 'ghost'}
+                  colorScheme={selectionMode ? 'orange' : 'brand'}
+                  onClick={toggleSelectionMode}
+                >
+                  {selectionMode ? 'Cancel Selection' : 'Select Files'}
+                </Button>
+              </MotionBox>
+              {selectionMode && selectedFiles.length > 0 && (
+                <MotionBox
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  whileHover={{ scale: 1.05, y: -3 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button size="lg" colorScheme="brand" variant="outline" onClick={openConversionModal}>
+                    Convert {selectedFiles.length} Selected
+                  </Button>
+                </MotionBox>
+              )}
+              {/* Check Connectivity Button */}
+              <MotionBox
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+              >
+                <Button
+                  size="lg"
+                  colorScheme="cyan"
+                  variant="solid"
+                  onClick={connectivityModal.onOpen}
+                  leftIcon={<Iconify icon={FiWifiOff} boxSize={5} />}
+                  boxShadow="0 4px 14px rgba(34,211,238,0.4)"
+                  _hover={{ boxShadow: '0 6px 20px rgba(34,211,238,0.6)' }}
+                  transition="all 0.3s"
+                  position="relative"
+                  overflow="hidden"
+                >
+                  Check Connectivity
+                </Button>
+              </MotionBox>
+              <MotionBox
+                whileHover={{ scale: 1.05, y: -3 }}
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+              >
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  onClick={() => {
+                    if (!convertedDrawer.isOpen) {
+                      loadConvertedFiles();
+                    }
+                    convertedDrawer.onToggle();
+                  }}
+                >
+                  {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
+                </Button>
+              </MotionBox>
+              {orchestrateMode && !orchestrateModal.isOpen && (
+                <MotionBox
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  whileHover={{ scale: 1.05, y: -3 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  <Button
+                    size="lg"
+                    colorScheme="brand"
+                    variant="outline"
+                    onClick={reopenOrchestrateModal}
+                    leftIcon={
+                      <Iconify
+                        icon="solar:redo-bold-duotone"
+                        boxSize={5}
+                      />
+                    }
+                  >
+                    Re-open {orchestrateMode === 'print' ? 'Print' : 'Scan'} Configuration
+                  </Button>
+                </MotionBox>
+              )}
+            </Stack>
+          </SurfaceCard>
+        </VStack>
 
       {error && (
         <Box
@@ -1639,19 +2135,16 @@ const Dashboard: React.FC = () => {
                       )}
 
                       <CardHeader>
-                        <Stack spacing={2}>
-                          <HStack spacing={2} align="center">
-                            <Badge colorScheme="purple" borderRadius="full" px={2} py={0.5}>
-                              #{documentIndex}
-                            </Badge>
-                            <Heading size="sm" noOfLines={1} title={file.filename}>
-                              {file.filename}
-                            </Heading>
-                          </HStack>
-                          <Text fontSize="xs" color="text.muted">
-                            {formatFileSize(file.size)} · {formatDate(file.created)}
-                          </Text>
-                        </Stack>
+                          <Stack spacing={2}>
+                            <HStack spacing={2} align="center">
+                              <Badge colorScheme="purple" borderRadius="full" px={2} py={0.5}>
+                                #{documentIndex}
+                              </Badge>
+                              <Heading size="sm" noOfLines={1} title={file.filename}>
+                                {file.filename}
+                              </Heading>
+                            </HStack>
+                          </Stack>
                       </CardHeader>
 
                       <CardBody>
@@ -2356,6 +2849,8 @@ const Dashboard: React.FC = () => {
                   },
                 }}
               >
+                {renderVoiceAdjustmentPanel('scan')}
+                {renderVoiceAdjustmentPanel('print')}
                 <Grid
                   templateColumns={{ base: '1fr', lg: '1fr 1fr' }}
                   gap="1.5rem"
@@ -2379,11 +2874,14 @@ const Dashboard: React.FC = () => {
                               thumbnailUrl:
                                 doc.thumbnailUrl ||
                                 `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
-                              pages: doc.pages || [{
-                                pageNumber: 1,
-                                thumbnailUrl: doc.thumbnailUrl ||
-                                  `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`
-                              }]
+                              pages: doc.pages || [
+                                {
+                                  pageNumber: 1,
+                                  thumbnailUrl:
+                                    doc.thumbnailUrl ||
+                                    `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                                },
+                              ]
                             }))
                           : []
                       }
@@ -2392,6 +2890,16 @@ const Dashboard: React.FC = () => {
                         paperSize: orchestrateOptions.scanPaperSize,
                         colorMode: orchestrateOptions.scanColorMode,
                       }}
+                      activeDocIndex={previewControl.docIndex}
+                      activePage={previewControl.page}
+                      focusToken={previewControl.token}
+                      highlightSource={previewControl.source}
+                      onRequestDocChange={nextIndex =>
+                        bumpPreviewFocus({ docIndex: nextIndex, page: 1, source: 'manual' })
+                      }
+                      onRequestPageChange={nextPage =>
+                        bumpPreviewFocus({ page: nextPage, source: 'manual' })
+                      }
                     />
                   </Box>
 
@@ -2960,11 +3468,14 @@ const Dashboard: React.FC = () => {
                               thumbnailUrl:
                                 doc.thumbnailUrl ||
                                 `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
-                              pages: doc.pages || [{
-                                pageNumber: 1,
-                                thumbnailUrl: doc.thumbnailUrl ||
-                                  `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`
-                              }]
+                              pages: doc.pages || [
+                                {
+                                  pageNumber: 1,
+                                  thumbnailUrl:
+                                    doc.thumbnailUrl ||
+                                    `${API_BASE_URL}${API_ENDPOINTS.processed}/${doc.filename}`,
+                                },
+                              ]
                             }))
                           : []
                       }
@@ -2974,6 +3485,16 @@ const Dashboard: React.FC = () => {
                         paperSize: orchestrateOptions.printPaperSize,
                         colorMode: orchestrateOptions.printColorMode,
                       }}
+                      activeDocIndex={previewControl.docIndex}
+                      activePage={previewControl.page}
+                      focusToken={previewControl.token}
+                      highlightSource={previewControl.source}
+                      onRequestDocChange={nextIndex =>
+                        bumpPreviewFocus({ docIndex: nextIndex, page: 1, source: 'manual' })
+                      }
+                      onRequestPageChange={nextPage =>
+                        bumpPreviewFocus({ page: nextPage, source: 'manual' })
+                      }
                     />
                   </Box>
 
@@ -3842,61 +4363,29 @@ const Dashboard: React.FC = () => {
             </>
           )}
             </Box>
-            {isVoiceOrchestration && (
-              <Box
-                w={{ base: '100%', xl: '32rem' }}
-                maxW="32rem"
-                flexShrink={0}
-                borderLeft={{ base: 'none', xl: '1px solid' }}
-                borderTop={{ base: '1px solid', xl: 'none' }}
-                borderColor={dockedBorderColor}
-                bg={dockedChatBg}
-                backdropFilter="blur(12px)"
-                display="flex"
-                flexDirection="column"
-                maxH="100%"
-              >
-                <VoiceAIChat
-                  isOpen={isChatVisible}
-                  onClose={handleDockedChatClose}
-                  onOrchestrationTrigger={handleVoiceOrchestrationTrigger}
-                  isMinimized={false}
-                  onToggleMinimize={handleDockedChatClose}
-                />
-              </Box>
-            )}
           </Flex>
         </MotionModalContent>
       </Modal>
 
       {/* Document Selector Modal */}
       <DocumentSelector
+        ref={documentSelectorRef}
         isOpen={documentSelectorModal.isOpen}
         onClose={documentSelectorModal.onClose}
         onSelect={async (docs) => {
           // Enhance documents with page information before setting
           const enhancedDocs = await enhanceDocumentsWithPages(docs);
           setSelectedDocuments(enhancedDocs);
+          if (enhancedDocs.length > 0) {
+            bumpPreviewFocus({ docIndex: 0, page: 1, source: 'manual' });
+          }
           documentSelectorModal.onClose();
         }}
-        currentDocuments={files.map(file => ({
-          filename: file.filename,
-          size: file.size,
-          type: 'image',
-          thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
-          isProcessed: file.has_text,
-        }))}
-        convertedDocuments={convertedFiles.map((file: any) => ({
-          filename: file.filename,
-          size: file.size,
-          type: 'pdf',
-          thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
-          isProcessed: true,
-        }))}
+        currentDocuments={currentDocumentOptions}
+        convertedDocuments={convertedDocumentOptions}
         allowMultiple={true}
         mode={orchestrateMode || 'print'}
       />
-        </VStack>
       </Box>
 
       {/* Connectivity Status Modal */}
@@ -3912,10 +4401,7 @@ const Dashboard: React.FC = () => {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.8 }}
           transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          bg={useColorModeValue(
-            'linear-gradient(135deg, #ffffff 0%, #f8f7ff 100%)',
-            'linear-gradient(135deg, #1a202c 0%, #2d3748 100%)'
-          )}
+          bg={systemModalBgGradient}
           borderRadius="2xl"
           border="1px solid"
           borderColor="rgba(121,95,238,0.2)"
@@ -3954,7 +4440,7 @@ const Dashboard: React.FC = () => {
 
               {/* Connection Validator Component */}
               <Box
-                bg={useColorModeValue('rgba(255,255,255,0.5)', 'rgba(0,0,0,0.2)')}
+                bg={validatorBoxBg}
                 backdropFilter="blur(10px)"
                 borderRadius="xl"
                 p={6}
@@ -4035,20 +4521,20 @@ const Dashboard: React.FC = () => {
         </MotionModalContent>
       </Modal>
 
-  {/* AI Chat Sidebar - Independent Fixed Position */}
-  {isChatVisible && !isVoiceOrchestration && (
+      {/* AI Chat Sidebar - Independent Fixed Position */}
+      {isChatVisible && (
         <Box
           position="fixed"
           top="0"
           right="0"
           w="35vw"
           h="100vh"
-          bg={useColorModeValue('white', 'gray.800')}
+          bg={chatSidebarBg}
           boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
           display="flex"
           flexDirection="column"
           borderLeft="1px solid"
-          borderColor={useColorModeValue('gray.200', 'gray.700')}
+          borderColor={chatSidebarBorderColor}
           overflowY="auto"
           zIndex={1000}
           transition="transform 0.3s ease-out"

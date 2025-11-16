@@ -3,20 +3,17 @@
 const getApiBaseUrl = () => {
   // 1. Check environment variable (highest priority)
   if (process.env.REACT_APP_API_URL) {
-    console.log('✅ Using REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     return process.env.REACT_APP_API_URL;
   }
 
   // 2. Check if running locally (development)
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    console.log('✅ Using local development URL: http://localhost:5000');
     return 'http://localhost:5000';
   }
 
   // 3. Production fallback - using ngrok tunnel
   // Update this URL when your ngrok tunnel changes
   const prodUrl = 'https://ostensible-unvibrant-clarisa.ngrok-free.dev';
-  console.log('✅ Using production URL (ngrok):', prodUrl);
   return prodUrl;
 };
 
@@ -125,7 +122,7 @@ export const API_ENDPOINTS = {
   orchestrateHistory: '/orchestrate/history',
 };
 
-console.log('🔧 API Configuration:', {
+console.log('API Configuration:', {
   API_BASE_URL,
   hostname: window.location.hostname,
   SOCKET_IO_ENABLED,

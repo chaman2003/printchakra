@@ -207,10 +207,4 @@ pdfs/*
 processed/*
 processed_text/*
 uploads/*
-
-#extras
-prompt.txt
-error.txt
-log.txt
-backend_overview.txt
-frontend_overview.txt
+txt/*

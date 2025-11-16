@@ -2429,6 +2429,7 @@ def convert_files():
 
     try:
         from modules.document import ExportModule
+        from modules.document.converter import FileConverter
 
         data = request.get_json()
         files = data.get("files", [])
@@ -2439,8 +2440,9 @@ def convert_files():
         if not files:
             return jsonify({"success": False, "error": "No files provided"}), 400
 
-        converter = ExportModule()
-        if not converter.is_supported_format(target_format):
+        # Use FileConverter to validate supported formats (ExportModule handles export/merge)
+        # Do not instantiate ExportModule just to validate formats
+        if not FileConverter.is_supported_format(target_format):
             return (
                 jsonify({"success": False, "error": f"Unsupported target format: {target_format}"}),
                 400,
@@ -2493,8 +2495,8 @@ def convert_files():
             merged_path = os.path.join(converted_dir, merged_filename)
 
             # Merge all images into single PDF
-            exporter = ExportModule()
-            success, message = exporter.merge_images_to_pdf(input_paths, merged_path)
+            # Use FileConverter for merging images into a PDF
+            success, message = FileConverter.merge_images_to_pdf(input_paths, merged_path)
 
             print(f"\n{'='*70}")
             print(f"[OK] MERGE CONVERSION COMPLETED")
@@ -2535,7 +2537,8 @@ def convert_files():
                 return jsonify({"success": False, "error": message}), 500
 
         # Regular batch convert (separate files)
-        success_count, fail_count, results = exporter.batch_convert(
+        # Use FileConverter for batch conversion
+        success_count, fail_count, results = FileConverter.batch_convert(
             input_paths, converted_dir, target_format
         )
 

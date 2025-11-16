@@ -570,10 +570,9 @@ const Phone: React.FC = () => {
   }, [socketConnected]);
 
   useEffect(() => {
-    console.log('🔌 Phone: Setting up Socket.IO event listeners');
+    console.log('Setting up Socket.IO event listeners');
 
     if (!socket) {
-      console.log('⚠️ Socket not available yet');
       return;
     }
 

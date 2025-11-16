@@ -24,12 +24,12 @@ export async function convertToWAV(audioBlob: Blob): Promise<Blob> {
 
       // Create WAV file
       const wavBlob = encodeWAV(audioBuffer);
-      console.log(`✅ Successfully converted to WAV: ${wavBlob.size} bytes`);
+      console.log(`Successfully converted to WAV: ${wavBlob.size} bytes`);
       return wavBlob;
     } catch (decodeError) {
       console.error('Error decoding audio data:', decodeError);
       // If decode fails, try to create WAV from raw blob
-      console.log('⚠️ Falling back to raw audio encoding');
+      console.log('Falling back to raw audio encoding');
       return createWAVFromRaw(arrayBuffer);
     }
   } catch (error) {
@@ -107,7 +107,7 @@ function createWAVFromRaw(arrayBuffer: ArrayBuffer): Blob {
   // Try to detect if it's already WAV format
   const header = String.fromCharCode(view[0], view[1], view[2], view[3]);
   if (header === 'RIFF') {
-    console.log('🎵 Audio is already in WAV format');
+    console.log('Audio is already in WAV format');
     return new Blob([arrayBuffer], { type: 'audio/wav' });
   }
 
@@ -282,13 +282,13 @@ export async function hasVoiceActivity(
     // Balanced detection: filters background noise but accepts real speech
     const isVoice = hasEnergy && hasSufficientPeaks && (hasVoicePattern || hasSpeechBursts) && properZCR;
 
-    console.log(`🎙️ Voice Activity Detection (Human Voice Only Mode):`);
-    console.log(`   RMS: ${rms.toFixed(4)} (threshold: ${threshold}) - ${hasEnergy ? '✅' : '❌'}`);
-    console.log(`   Peak Amplitude: ${maxAmplitude.toFixed(4)} (min: ${(threshold * 3).toFixed(4)}) - ${hasSufficientPeaks ? '✅' : '❌'}`);
-    console.log(`   Active Windows: ${(activeRatio * 100).toFixed(1)}% (min: 8%) - ${hasVoicePattern ? '✅' : '❌'}`);
-    console.log(`   Peak Windows: ${(peakRatio * 100).toFixed(1)}% (min: 4%) - ${hasSpeechBursts ? '✅' : '❌'}`);
-    console.log(`   Zero Crossing Rate: ${zcr.toFixed(4)} (range: 0.005-0.6) - ${properZCR ? '✅' : '❌'}`);
-    console.log(`   Result: ${isVoice ? '✅ HUMAN VOICE DETECTED' : '❌ BACKGROUND NOISE/SILENCE REJECTED'}`);
+    console.log(`Voice Activity Detection (Human Voice Only Mode):`);
+    console.log(`   RMS: ${rms.toFixed(4)} (threshold: ${threshold}) - ${hasEnergy ? 'YES' : 'NO'}`);
+    console.log(`   Peak Amplitude: ${maxAmplitude.toFixed(4)} (min: ${(threshold * 3).toFixed(4)}) - ${hasSufficientPeaks ? 'YES' : 'NO'}`);
+    console.log(`   Active Windows: ${(activeRatio * 100).toFixed(1)}% (min: 8%) - ${hasVoicePattern ? 'YES' : 'NO'}`);
+    console.log(`   Peak Windows: ${(peakRatio * 100).toFixed(1)}% (min: 4%) - ${hasSpeechBursts ? 'YES' : 'NO'}`);
+    console.log(`   Zero Crossing Rate: ${zcr.toFixed(4)} (range: 0.005-0.6) - ${properZCR ? 'YES' : 'NO'}`);
+    console.log(`   Result: ${isVoice ? 'HUMAN VOICE DETECTED' : 'BACKGROUND NOISE/SILENCE REJECTED'}`);
 
     return isVoice;
   } catch (error) {
@@ -338,11 +338,11 @@ export async function hasHighPitchSound(
     const hasHighPitch = avgHighDiff > relaxedHighDiff && highRatio > 0.9;
     const quietSpeechFallback = avgHighDiff > relaxedHighDiff && zeroCrossRate > 0.005;
 
-    console.log(`🎵 High-Pitch Sound Detection (Time-Domain Heuristic):`);
+    console.log(`High-Pitch Sound Detection (Time-Domain Heuristic):`);
     console.log(`   Avg High Diff: ${avgHighDiff.toFixed(4)} (threshold: ${(frequencyThreshold * 0.25).toFixed(4)})`);
     console.log(`   High/Low Ratio: ${highRatio.toFixed(2)} (threshold: 1.1)`);
     console.log(`   Zero Crossing Rate: ${zeroCrossRate.toFixed(3)} (threshold: 0.02)`);
-    console.log(`   Result: ${hasHighPitch ? '✅ HIGH-PITCH SPEECH DETECTED' : '❌ LOW-PITCH/NOISE REJECTED'}`);
+    console.log(`   Result: ${hasHighPitch ? 'HIGH-PITCH SPEECH DETECTED' : 'LOW-PITCH/NOISE REJECTED'}`);
 
     return hasHighPitch || quietSpeechFallback || zeroCrossRate > 0.004;
   } catch (error) {
@@ -362,7 +362,7 @@ export async function detectKeyword(
   try {
     // This is a placeholder - requires backend processing for accuracy
     // Frontend Web Speech API has limitations for offline keyword detection
-    console.log(`🔍 Keyword detection requested: "${keyword}"`);
+    console.log(`Keyword detection requested: "${keyword}"`);
     return { detected: false, confidence: 0 };
   } catch (error) {
     console.error('Error detecting keyword:', error);

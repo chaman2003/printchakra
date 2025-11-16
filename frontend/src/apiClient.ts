@@ -19,14 +19,10 @@ apiClient.interceptors.request.use(
       config.headers.set(key, defaultHeaders[key]);
     });
 
-    console.log(`🔄 API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-      headers: config.headers,
-    });
-
     return config;
   },
   error => {
-    console.error('❌ Request interceptor error:', error);
+    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
@@ -35,7 +31,7 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   response => {
     console.log(
-      `✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
+      `API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`,
       {
         status: response.status,
       }
@@ -44,17 +40,17 @@ apiClient.interceptors.response.use(
   },
   error => {
     if (error.response) {
-      console.error(`❌ API Error Response: ${error.response.status}`, {
+      console.error(`API Error Response: ${error.response.status}`, {
         url: error.config?.url,
         data: error.response.data,
       });
     } else if (error.request) {
-      console.error('❌ API No Response:', {
+      console.error('API No Response:', {
         url: error.config?.url,
         message: error.message,
       });
     } else {
-      console.error('❌ API Request Setup Error:', error.message);
+      console.error('API Request Setup Error:', error.message);
     }
     return Promise.reject(error);
   }

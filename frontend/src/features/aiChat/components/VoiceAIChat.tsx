@@ -56,6 +56,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   const chatInputRef = useRef<HTMLInputElement>(null);
   const sessionStartedRef = useRef<boolean>(false);
   const toastIdRef = useRef<string | number | undefined>(undefined);
+  const recordingRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isSpeakingRef = useRef(false);
+  const isSessionActiveRef = useRef(false);
 
   const toast = useToast();
 
@@ -81,8 +84,24 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
         }
       }
+      if (recordingRestartTimeoutRef.current) {
+        clearTimeout(recordingRestartTimeoutRef.current);
+        recordingRestartTimeoutRef.current = null;
+      }
     };
   }, []);
+
+  useEffect(() => {
+    isSpeakingRef.current = isSpeaking;
+  }, [isSpeaking]);
+
+  useEffect(() => {
+    isSessionActiveRef.current = isSessionActive;
+    if (!isSessionActive && recordingRestartTimeoutRef.current) {
+      clearTimeout(recordingRestartTimeoutRef.current);
+      recordingRestartTimeoutRef.current = null;
+    }
+  }, [isSessionActive]);
 
   // Start voice AI session when drawer opens
   useEffect(() => {
@@ -106,69 +125,25 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
     setMessages(prev => addMessageWithDedup(prev, type, text));
   }, []);
 
-  const startSession = async () => {
-    try {
-      setSessionStatus('Loading Whisper AI model (smaller model, faster loading)...');
-
-      // Use longer timeout for session start (Whisper model loading)
-      const response = await apiClient.post(
-        '/voice/start',
-        {},
-        {
-          timeout: 120000, // 2 minutes for model loading
-        }
-      );
-
-      if (response.data.success) {
-        setIsSessionActive(true);
-        setSessionStatus('Ready - Just speak naturally');
-        addMessage(
-          'system',
-          'Voice AI Ready! Just speak naturally - no wake words needed. Say "bye printchakra" to end.'
-        );
-
-        // Close previous toast if exists
-        if (toastIdRef.current) {
-          toast.close(toastIdRef.current);
-        }
-
-        toastIdRef.current = toast({
-          title: 'Voice AI Ready',
-          description: 'Just speak naturally',
-          status: 'success',
-          duration: 4000,
-          isClosable: true,
-        });
-
-        // Auto-start recording after session starts
-        setTimeout(() => startRecording(), 500);
-      } else {
-        throw new Error(response.data.error || 'Failed to start session');
-      }
-    } catch (error: any) {
-      console.error('Session start error:', error);
-      setSessionStatus('Failed');
-
-      // Close previous toast if exists
-      if (toastIdRef.current) {
-        toast.close(toastIdRef.current);
-      }
-
-      toastIdRef.current = toast({
-        title: 'Session Start Failed',
-        description:
-          error.response?.data?.error || error.message || 'Could not start voice AI session',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    }
-  };
-
   const startRecording = async () => {
-    // Block recording if TTS is currently speaking
-    if (isSpeaking) {
-      console.log('TTS is speaking - blocking recording');
+    if (!isSessionActiveRef.current) {
+      console.log('Voice session inactive - skipping recording start');
+      return;
+    }
+
+    if (recordingRestartTimeoutRef.current) {
+      clearTimeout(recordingRestartTimeoutRef.current);
+      recordingRestartTimeoutRef.current = null;
+    }
+
+    if (isSpeakingRef.current) {
+      console.log('TTS is speaking - delaying recording restart');
+      scheduleRecordingStart(120);
+      return;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      console.log('Recorder already active - keeping current stream');
       return;
     }
 
@@ -182,27 +157,26 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          sampleRate: 48000, // Higher quality for better transcription
-          channelCount: 1, // Mono audio
-          sampleSize: 16, // 16-bit depth
+          sampleRate: 48000,
+          channelCount: 1,
+          sampleSize: 16,
         },
       });
 
-      // Use WAV format if supported, fallback to WebM
       const mimeTypes = ['audio/wav', 'audio/webm', 'audio/webm;codecs=opus', 'audio/mp4'];
 
       let selectedMimeType = 'audio/webm';
       for (const mimeType of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mimeType)) {
           selectedMimeType = mimeType;
-          console.log(`✅ Using MIME type: ${mimeType}`);
+          console.log(`Using MIME type: ${mimeType}`);
           break;
         }
       }
 
       const mediaRecorder = new MediaRecorder(stream, {
         mimeType: selectedMimeType,
-        audioBitsPerSecond: 256000, // Higher bitrate for better quality
+        audioBitsPerSecond: 256000,
       });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -217,7 +191,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         try {
           let audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
 
-          // Validate audio blob
           if (!isValidAudioBlob(audioBlob)) {
             console.error('Invalid audio blob generated');
             throw new Error('Audio blob is invalid');
@@ -225,7 +198,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           console.log(`Raw audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
-          // Convert to WAV if needed
           if (audioBlob.type !== 'audio/wav' && !audioBlob.type.includes('wav')) {
             console.log('Converting audio to WAV format...');
             audioBlob = await convertToWAV(audioBlob);
@@ -234,35 +206,22 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           console.log(`Final audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
-          // Get duration for diagnostics
           const duration = await getAudioDuration(audioBlob);
           console.log(`Audio duration: ${duration.toFixed(2)}s`);
 
-          // Check for voice activity before processing
           const { hasVoiceActivity, hasHighPitchSound } = await import('../../../utils/audioUtils');
-          const hasVoice = await hasVoiceActivity(audioBlob, 0.008); // MORE LENIENT: reduced from 0.015 to 0.008
+          const hasVoice = await hasVoiceActivity(audioBlob, 0.008);
 
           if (!hasVoice) {
-            console.log('⏭️ No voice detected in audio - skipping processing');
-            // Don't show annoying "no voice" message - just silently retry
-
-            // Auto-restart recording for continuous listening
-            if (isSessionActive) {
-              setTimeout(() => startRecording(), 300);
-            }
+            console.log('No voice detected in audio - skipping processing');
+            scheduleRecordingStart(150);
             return;
           }
 
-          // Check for high-pitch speech sound (human voice frequency range)
-          const hasHighPitch = await hasHighPitchSound(audioBlob, 0.08); // MORE LENIENT: reduced from 0.15 to 0.08
+          const hasHighPitch = await hasHighPitchSound(audioBlob, 0.08);
           if (!hasHighPitch) {
-            console.log('⏭️ No high-pitch speech detected - sounds like background noise only');
-            // Don't process low-pitch noise (machinery, rumbling, etc.)
-
-            // Auto-restart recording for continuous listening
-            if (isSessionActive) {
-              setTimeout(() => startRecording(), 300);
-            }
+            console.log('No high-pitch speech detected - sounds like background noise only');
+            scheduleRecordingStart(150);
             return;
           }
 
@@ -276,12 +235,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
             duration: 5000,
           });
 
-          // Auto-restart recording on error
-          if (isSessionActive) {
-            setTimeout(() => startRecording(), 1000);
-          }
+          scheduleRecordingStart(600);
         } finally {
-          // Stop all tracks
           stream.getTracks().forEach(track => track.stop());
         }
       };
@@ -294,12 +249,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           status: 'error',
           duration: 5000,
         });
+        scheduleRecordingStart(600);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
 
-      // Real-time silence detection using Web Audio API
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
@@ -313,8 +268,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       let silenceStart: number | null = null;
       let speechDetected = false;
       let audioContextClosed = false;
-      const SILENCE_THRESHOLD = 15; // Lower threshold for faster detection (was 25)
-      const SILENCE_DURATION = 800; // Stop after 0.8 seconds of silence (was 1500)
+      const SILENCE_THRESHOLD = 15;
+      const SILENCE_DURATION = 500;
 
       const closeAudioContext = () => {
         if (!audioContextClosed && audioContext.state !== 'closed') {
@@ -335,7 +290,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         analyser.getByteTimeDomainData(dataArray);
 
-        // Calculate RMS (Root Mean Square) for audio level
         let sum = 0;
         for (let i = 0; i < bufferLength; i++) {
           const normalized = (dataArray[i] - 128) / 128;
@@ -344,34 +298,28 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         const rms = Math.sqrt(sum / bufferLength);
         const audioLevel = rms * 100;
 
-        // Detect speech vs silence
         if (audioLevel > SILENCE_THRESHOLD) {
           speechDetected = true;
-          silenceStart = null; // Reset silence timer
+          silenceStart = null;
         } else if (speechDetected && audioLevel <= SILENCE_THRESHOLD) {
-          // Silence detected after speech
           if (silenceStart === null) {
             silenceStart = Date.now();
           } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            // Silence lasted long enough - stop recording
-            console.log('✅ Silence detected - stopping recording');
+            console.log('Silence detected - stopping recording');
             stopRecording();
             closeAudioContext();
             return;
           }
         }
 
-        // Continue checking
         requestAnimationFrame(checkAudioLevel);
       };
 
-      // Start monitoring audio levels
       checkAudioLevel();
 
-      // Fallback: Auto-stop after 5 seconds maximum (was 8)
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
-          console.log('⏱️ Max duration reached - stopping recording');
+          console.log('Max duration reached - stopping recording');
           stopRecording();
           closeAudioContext();
         }
@@ -384,6 +332,93 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         status: 'error',
         duration: 5000,
       });
+
+      scheduleRecordingStart(1000);
+    }
+  };
+
+  // Ensure we only have one pending restart timer and we always wait for TTS to finish
+  const scheduleRecordingStart = (delay = 0) => {
+    if (!isSessionActiveRef.current) {
+      return;
+    }
+
+    if (recordingRestartTimeoutRef.current) {
+      clearTimeout(recordingRestartTimeoutRef.current);
+    }
+
+    recordingRestartTimeoutRef.current = setTimeout(() => {
+      recordingRestartTimeoutRef.current = null;
+
+      if (!isSessionActiveRef.current) {
+        return;
+      }
+
+      if (isSpeakingRef.current) {
+        scheduleRecordingStart(150);
+        return;
+      }
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        return;
+      }
+
+      startRecording();
+    }, Math.max(0, delay));
+  };
+
+  const startSession = async () => {
+    try {
+      setSessionStatus('Loading Whisper AI model (smaller model, faster loading)...');
+
+      const response = await apiClient.post(
+        '/voice/start',
+        {},
+        {
+          timeout: 120000,
+        }
+      );
+
+      if (response.data.success) {
+        setIsSessionActive(true);
+        setSessionStatus('Ready - Just speak naturally');
+        addMessage(
+          'system',
+          'Voice AI Ready! Just speak naturally - no wake words needed. Say "bye printchakra" to end.'
+        );
+
+        if (toastIdRef.current) {
+          toast.close(toastIdRef.current);
+        }
+
+        toastIdRef.current = toast({
+          title: 'Voice AI Ready',
+          description: 'Just speak naturally',
+          status: 'success',
+          duration: 4000,
+          isClosable: true,
+        });
+
+        scheduleRecordingStart(400);
+      } else {
+        throw new Error(response.data.error || 'Failed to start session');
+      }
+    } catch (error: any) {
+      console.error('Session start error:', error);
+      setSessionStatus('Failed');
+
+      if (toastIdRef.current) {
+        toast.close(toastIdRef.current);
+      }
+
+      toastIdRef.current = toast({
+        title: 'Session Start Failed',
+        description:
+          error.response?.data?.error || error.message || 'Could not start voice AI session',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
     }
   };
 
@@ -395,10 +430,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
   };
 
   const processAudio = async (audioBlob: Blob) => {
-    // Block processing if TTS is currently speaking
     if (isSpeaking) {
       console.log('TTS is speaking - skipping audio processing');
-      // Auto-restart recording after TTS finishes
+      scheduleRecordingStart(150);
       return;
     }
 
@@ -406,13 +440,13 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       setIsProcessing(true);
       setSessionStatus('Transcribing audio...');
 
-      console.log(`📝 Processing audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
+      console.log(`Processing audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
       // Create form data
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.wav');
 
-      console.log('📤 Sending to backend...');
+      console.log('Sending to backend...');
 
       // Send to backend for processing (Whisper → Smollm2)
       // Use longer timeout for voice processing (model loading can take time)
@@ -423,19 +457,18 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         timeout: 120000, // 2 minutes for voice processing
       });
 
-      console.log('✅ Backend response:', response.data);
+      console.log('Backend response:', response.data);
 
       // Check for no speech detected (auto-retry)
       if (response.data.auto_retry && response.data.no_speech_detected) {
-        console.log('⚠️ No human speech detected - auto-retrying in 1 second');
+        console.log('No human speech detected - auto-retrying in 1 second');
         
         addMessage('system', '⚠️ No human speech detected. Retrying...');
         
         setSessionStatus('No speech detected, retrying...');
         setIsProcessing(false);
 
-        // Auto-retry recording after 1 second
-        setTimeout(() => startRecording(), 1000);
+        scheduleRecordingStart(600);
         return;
       }
 
@@ -466,7 +499,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         // Handle voice commands (document selector control)
         if (voice_command && command_params) {
-          console.log(`🎯 Voice command detected: ${voice_command}`, command_params);
+          console.log(`Voice command detected: ${voice_command}`, command_params);
 
           // Emit voice command to parent via socket
           if (socket) {
@@ -549,14 +582,13 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
             duration: 3000,
           });
         } else {
-          // Continue recording for next input (after TTS finishes)
-          setTimeout(() => startRecording(), 1000);
+          scheduleRecordingStart(200);
         }
       } else {
         throw new Error(response.data.error || 'Processing failed');
       }
     } catch (error: any) {
-      console.error('❌ Audio processing error:', error);
+      console.error('Audio processing error:', error);
 
       // Provide detailed error information
       let errorMessage = error.message || 'Could not process audio';
@@ -570,25 +602,20 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
       // Check if it's a keyword-related error
       if (error.response?.data?.requires_keyword) {
         // Silent retry for keyword errors - don't spam user
-        console.log(`⏭️ Keyword detection error, retrying...`);
+        console.log(`Keyword detection error, retrying...`);
         setSessionStatus('Ready - Just speak naturally');
 
-        // Auto-restart recording after keyword error
-        setTimeout(() => startRecording(), 300);
+        scheduleRecordingStart(300);
       } else {
         // Only show non-retryable errors
         console.error('Transcription error:', errorMessage);
 
         // Don't show file access errors - just retry silently
         if (errorMessage.includes('process cannot access') || errorMessage.includes('being used')) {
-          console.log('⏭️ File access error, retrying...');
+          console.log('File access error, retrying...');
           setSessionStatus('Ready - Just speak naturally');
 
-          setTimeout(() => {
-            if (isSessionActive) {
-              startRecording();
-            }
-          }, 500);
+          scheduleRecordingStart(500);
         } else {
           // Show only critical errors
           toast({
@@ -600,12 +627,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           setSessionStatus('Ready - Just speak naturally');
 
-          // Auto-restart recording after error
-          setTimeout(() => {
-            if (isSessionActive) {
-              startRecording();
-            }
-          }, 1000);
+          scheduleRecordingStart(700);
         }
       }
     } finally {
@@ -681,7 +703,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         const voiceCommand = response.data.voice_command;
         const commandParams = response.data.command_params;
 
-        console.log('🔍 Backend response:', {
+        console.log('Backend response:', {
           aiResponse,
           orchestrationTrigger,
           orchestrationMode,
@@ -694,7 +716,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         // Handle voice commands (document selector control)
         if (voiceCommand && commandParams) {
-          console.log(`🎯 Voice command detected (text): ${voiceCommand}`, commandParams);
+          console.log(`Voice command detected (text): ${voiceCommand}`, commandParams);
 
           // Emit voice command to parent via socket
           if (socket) {
@@ -716,7 +738,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
         // Check for orchestration trigger BEFORE TTS
         if (orchestrationTrigger && orchestrationMode) {
-          console.log(`🎯🎯🎯 Orchestration triggered: ${orchestrationMode}`, configParams || {});
+          console.log(`Orchestration triggered: ${orchestrationMode}`, configParams || {});
 
           // Show notification
           toast({
@@ -759,6 +781,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           setTimeout(() => {
             chatInputRef.current?.focus();
           }, 100);
+          scheduleRecordingStart(200);
         }
       } else {
         setIsProcessing(false);
@@ -781,6 +804,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         status: 'error',
         duration: 5000,
       });
+      scheduleRecordingStart(600);
     } finally {
       setIsTextSending(false);
     }

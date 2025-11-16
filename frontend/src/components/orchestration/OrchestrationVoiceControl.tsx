@@ -54,6 +54,7 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
   const borderColor = useColorModeValue('brand.300', 'brand.600');
   const commandBg = useColorModeValue('purple.50', 'purple.900');
   const responseBg = useColorModeValue('gray.50', 'gray.700');
+  const inputBg = useColorModeValue('white', 'gray.700');
 
   // Start voice AI session when component mounts
   useEffect(() => {
@@ -445,7 +446,7 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
                 onChange={(e) => setTextInput(e.target.value)}
                 onKeyPress={handleKeyPress}
                 isDisabled={isTextSending || isProcessing}
-                bg={useColorModeValue('white', 'gray.700')}
+                bg={inputBg}
                 borderColor="brand.300"
                 _focus={{
                   borderColor: 'brand.500',
