@@ -334,9 +334,9 @@ export async function hasHighPitchSound(
     const zeroCrossRate = zeroCrossings / channelData.length;
     const highRatio = avgHighDiff / Math.max(avgLowDiff, 1e-6);
 
-    const relaxedHighDiff = frequencyThreshold * 0.12;
-    const hasHighPitch = avgHighDiff > relaxedHighDiff && highRatio > 1.1;
-    const quietSpeechFallback = avgHighDiff > relaxedHighDiff && zeroCrossRate > 0.009;
+    const relaxedHighDiff = frequencyThreshold * 0.08;
+    const hasHighPitch = avgHighDiff > relaxedHighDiff && highRatio > 0.9;
+    const quietSpeechFallback = avgHighDiff > relaxedHighDiff && zeroCrossRate > 0.005;
 
     console.log(`🎵 High-Pitch Sound Detection (Time-Domain Heuristic):`);
     console.log(`   Avg High Diff: ${avgHighDiff.toFixed(4)} (threshold: ${(frequencyThreshold * 0.25).toFixed(4)})`);
@@ -344,7 +344,7 @@ export async function hasHighPitchSound(
     console.log(`   Zero Crossing Rate: ${zeroCrossRate.toFixed(3)} (threshold: 0.02)`);
     console.log(`   Result: ${hasHighPitch ? '✅ HIGH-PITCH SPEECH DETECTED' : '❌ LOW-PITCH/NOISE REJECTED'}`);
 
-    return hasHighPitch || quietSpeechFallback || zeroCrossRate > 0.08;
+    return hasHighPitch || quietSpeechFallback || zeroCrossRate > 0.004;
   } catch (error) {
     console.error('Error detecting high-pitch sound:', error);
     return true; // If we can't detect, assume there's speech to avoid dropping valid audio
