@@ -11,6 +11,27 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
+def get_optimal_device() -> str:
+    """
+    Detect optimal device for inference: NVIDIA GPU > CPU
+    
+    Returns:
+        str: 'cuda' if NVIDIA GPU available, else 'cpu'
+    """
+    try:
+        import torch
+        if torch.cuda.is_available():
+            device = 'cuda'
+            logger.info(f"[GPU] Using NVIDIA GPU: {torch.cuda.get_device_name(0)}")
+            return device
+    except Exception as e:
+        logger.debug(f"[DEBUG] GPU check failed: {e}")
+    
+    logger.info("[CPU] GPU not available, using CPU fallback")
+    return 'cpu'
+
+
 # Global GPU state
 _gpu_info = {
     'initialized': False,
@@ -24,14 +45,15 @@ _gpu_lock = threading.Lock()
 
 
 def detect_gpu() -> Dict[str, Any]:
-    """Detect and verify GPU availability with detailed info"""
+    """Detect and verify GPU availability with detailed info - NVIDIA GPU PREFERRED"""
     try:
         import torch
         
         if not torch.cuda.is_available():
-            logger.warning("[WARN] CUDA not available - GPU acceleration disabled")
+            logger.warning("[WARN] NVIDIA GPU not available - using CPU fallback")
             return {
                 'available': False,
+                'device': 'cpu',
                 'gpu_name': None,
                 'cuda_version': None,
                 'device_count': 0,
@@ -43,13 +65,14 @@ def detect_gpu() -> Dict[str, Any]:
         device_count = torch.cuda.device_count()
         total_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
         
-        logger.info(f"[OK] GPU DETECTED: {gpu_name}")
+        logger.info(f"[OK] NVIDIA GPU DETECTED: {gpu_name}")
         logger.info(f"   CUDA Version: {cuda_version}")
         logger.info(f"   GPU Count: {device_count}")
         logger.info(f"   GPU Memory: {total_memory:.1f} GB")
         
         return {
             'available': True,
+            'device': 'cuda',
             'gpu_name': gpu_name,
             'cuda_version': cuda_version,
             'device_count': device_count,

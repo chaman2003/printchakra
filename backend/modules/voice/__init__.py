@@ -23,6 +23,14 @@ from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+# Import SmolLM prompt management
+try:
+    from .smollm_prompt import SmolLMPromptManager
+    SMOLLM_PROMPT_AVAILABLE = True
+except ImportError:
+    SMOLLM_PROMPT_AVAILABLE = False
+    logger.warning("[WARN] SmolLM prompt module not available")
+
 # Import GPU optimization modules
 try:
     from .gpu_optimization import (
@@ -244,17 +252,10 @@ class WhisperTranscriptionService:
         try:
             import torch
             import whisper  # type: ignore
+            from .gpu_optimization import get_optimal_device
 
-            # Check GPU availability
-            if torch.cuda.is_available():
-                if not hasattr(self, "_logged_load"):  # Only log once
-                    logger.info(f"[OK] GPU detected: {torch.cuda.get_device_name(0)}")
-                    logger.info(f"   CUDA Version: {torch.version.cuda}")
-                device = "cuda"
-            else:
-                if not hasattr(self, "_logged_load"):  # Only log once
-                    logger.warning("[WARN] GPU not available, using CPU")
-                device = "cpu"
+            # Use get_optimal_device to prefer NVIDIA GPU
+            device = get_optimal_device()  # Returns 'cuda' if available, else 'cpu'
 
             # Use small model for better accuracy (461MB, good balance)
             if not hasattr(self, "_logged_load"):  # Only log once
@@ -279,11 +280,9 @@ class WhisperTranscriptionService:
                 logger.info("Falling back to base model...")
                 import torch
                 import whisper
+                from .gpu_optimization import get_optimal_device
 
-                if torch.cuda.is_available():
-                    device = "cuda"
-                else:
-                    device = "cpu"
+                device = get_optimal_device()  # Returns 'cuda' if available, else 'cpu'
 
                 self.model = whisper.load_model("base", device=device)
                 self.is_loaded = True
@@ -410,12 +409,17 @@ class WhisperTranscriptionService:
                 else:
                     # Use openai-whisper with SPEED-OPTIMIZED GPU settings
                     import torch
+                    from .gpu_optimization import get_optimal_device
+
+                    # Check GPU availability for FP16 optimization
+                    device = get_optimal_device()  # Returns 'cuda' if available, else 'cpu'
+                    use_fp16 = device == 'cuda'
 
                     # Build transcription options with GPU acceleration
                     transcribe_options = {
                         "language": language,
                         "task": "transcribe",
-                        "fp16": torch.cuda.is_available(),  # Use FP16 on GPU for 2x speedup
+                        "fp16": use_fp16,  # Use FP16 on GPU for 2x speedup
                         "beam_size": 1,  # FAST: Greedy decoding (5→1 = 5x faster)
                         "best_of": 1,  # FAST: Single candidate (5→1 = no extra sampling)
                         "temperature": 0.0,  # FAST: Deterministic, no fallback
@@ -435,7 +439,7 @@ class WhisperTranscriptionService:
                             result = self.model.transcribe(
                                 temp_audio_path,
                                 language=language,
-                                fp16=torch.cuda.is_available(),
+                                fp16=use_fp16,
                                 verbose=False
                             )
                         else:
@@ -599,46 +603,14 @@ class Smollm2ChatService:
         self.conversation_history = []
         self.pending_orchestration = None  # Track if waiting for confirmation (print/scan)
         
-        # Command mappings for intelligent voice navigation
-        self.command_mappings = {
-            # Navigation commands
-            "scroll": ["scroll", "scroll down", "scroll up", "move down", "move up", "swipe", "page down", "page up", "next page", "prev page", "previous page"],
-            "select": ["select", "choose", "pick", "open", "click", "tap", "select it", "this one", "that one"],
-            "confirm": ["yes", "okay", "ok", "confirm", "proceed", "go ahead", "do it", "apply", "submit", "next", "continue"],
-            "cancel": ["no", "cancel", "stop", "exit", "quit", "back", "nope", "don't", "abort"],
-            "next": ["next", "continue", "go to next", "next step", "forward", "ahead"],
-            "back": ["back", "previous", "go back", "prior", "behind", "earlier"],
-            "settings": ["settings", "config", "configure", "change settings", "options", "preferences"],
-            "help": ["help", "assist", "how to", "guide", "help me", "i don't know"],
-        }
-        
-        self.system_prompt = """You are PrintChakra AI - a direct, action-focused assistant.
-
-[WARN] CRITICAL: The system handles print/scan intents automatically. You should NEVER see messages about printing or scanning - they are intercepted before reaching you.
-
-YOUR ROLE:
-- Answer general questions about PrintChakra features (OCR, file conversion, voice commands)
-- Help with document questions ("what formats supported?", "how to use OCR?")
-- Be friendly but concise (under 10 words)
-- If somehow print/scan slips through, immediately say: "Opening interface now!"
-
-TOPICS YOU HANDLE:
-[OK] "What can PrintChakra do?" → "OCR, file conversion, printing, scanning, voice commands!"
-[OK] "What formats do you support?" → "PDF, DOCX, images, text files, and more!"
-[OK] "How does voice work?" → "Just speak naturally - no wake words needed!"
-
-NEVER ASK QUESTIONS LIKE:
-[NO] "What kind of document?"
-[NO] "Academic or business?"
-[NO] "What details do you need?"
-[NO] "Tell me more about..."
-
-BE DIRECT:
-- User: "thanks" → You: "You're welcome!"
-- User: "what do you do?" → You: "I help with printing, scanning, and documents!"
-- User: "great" → You: "Happy to help!"
-
-Remember: Print/scan requests are handled automatically - you won't see them."""
+        # Import command mappings from centralized module
+        if SMOLLM_PROMPT_AVAILABLE:
+            self.command_mappings = SmolLMPromptManager.get_command_mappings()
+            self.system_prompt = SmolLMPromptManager.get_system_prompt()
+        else:
+            # Fallback if prompt manager not available
+            self.command_mappings = {}
+            self.system_prompt = ""
 
     def check_ollama_available(self) -> bool:
         """Check if Ollama is running and model is available"""
@@ -663,6 +635,53 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 logger.error(f"Ollama check failed: {str(e)}")
                 self._logged_ollama_error = True
             return False
+
+    def _parse_command_parameters(self, user_message: str, command_type: str) -> Dict[str, Any]:
+        """
+        Parse parameters from voice command
+        
+        Args:
+            user_message: User's spoken text
+            command_type: Detected command type
+            
+        Returns:
+            Dict with parsed parameters
+        """
+        params = {}
+        text_lower = user_message.lower().strip()
+        
+        # Parse document selection (e.g., "select original number 2")
+        if command_type == "select_document":
+            import re
+            
+            # Extract section (original, converted, uploaded)
+            if "original" in text_lower:
+                params["section"] = "originals"
+            elif "converted" in text_lower:
+                params["section"] = "converted"
+            elif "uploaded" in text_lower:
+                params["section"] = "uploaded"
+            
+            # Extract document number (1-based)
+            number_match = re.search(r'(?:number|#)\s*(\d+)', text_lower)
+            if number_match:
+                params["document_number"] = int(number_match.group(1))
+            else:
+                # Try to find standalone number
+                number_match = re.search(r'\b(\d+)\b', text_lower)
+                if number_match:
+                    params["document_number"] = int(number_match.group(1))
+        
+        # Parse section switching (e.g., "switch to converted")
+        elif command_type == "switch_section":
+            if "original" in text_lower:
+                params["section"] = "originals"
+            elif "converted" in text_lower:
+                params["section"] = "converted"
+            elif "uploaded" in text_lower:
+                params["section"] = "uploaded"
+        
+        return params
 
     def interpret_voice_command(self, user_message: str) -> tuple[Optional[str], float]:
         """
@@ -738,22 +757,41 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
             # PRIORITY 0: Try to interpret as a voice command (navigation, control)
             command_type, confidence = self.interpret_voice_command(user_message)
             if command_type and confidence > 0.7:  # High confidence command match
+                # Parse command parameters for document selector
+                command_params = self._parse_command_parameters(user_message, command_type)
+                
                 ai_response = f"VOICE_COMMAND:{command_type} Executing {command_type}!"
-                logger.info(f"[OK] VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f})")
+                logger.info(f"[OK] VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f}, params: {command_params})")
                 
                 # Add to history
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
+                # Generate friendly response based on command type
+                friendly_responses = {
+                    "select_document": f"Selecting document {command_params.get('document_number', '')}",
+                    "switch_section": f"Switching to {command_params.get('section', '')} section",
+                    "next_document": "Moving to next document",
+                    "previous_document": "Moving to previous document",
+                    "upload_document": "Opening upload dialog",
+                    "confirm": "Executing now!",
+                    "cancel": "Cancelled",
+                    "status": "Checking status...",
+                    "repeat_settings": "Reading settings...",
+                    "help": "Here's what I can do...",
+                    "stop_recording": "Stopping recording",
+                }
+                
                 return {
                     "success": True,
-                    "response": f"Got it! {command_type.capitalize()}.",
+                    "response": friendly_responses.get(command_type, f"Got it! {command_type.replace('_', ' ').title()}."),
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
                     "voice_command": command_type,
                     "command_confidence": confidence,
+                    "command_params": command_params,
                 }
 
             # PRIORITY 1: Check for confirmation if we have pending orchestration
@@ -843,24 +881,29 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 {"role": "system", "content": self.system_prompt}
             ] + self.conversation_history
 
-            # Call Ollama API with speed optimizations
-            # logger.info(f"Generating response for: {user_message[:100]}...")
-            response = requests.post(
-                "http://localhost:11434/api/chat",
-                json={
+            # Call Ollama API with speed optimizations using centralized query builder
+            if SMOLLM_PROMPT_AVAILABLE:
+                query = SmolLMPromptManager.build_ollama_query(self.model_name, messages)
+            else:
+                # Fallback query if prompt manager not available
+                query = {
                     "model": self.model_name,
                     "messages": messages,
                     "stream": False,
                     "options": {
-                        "temperature": 0.7,  # Balanced for natural responses
-                        "top_p": 0.9,  # Allow more natural variation
-                        "top_k": 40,  # Increased for more natural language
-                        "num_predict": 30,  # Short but complete responses
-                        "num_ctx": 1024,  # Enough context for conversation
-                        "repeat_penalty": 1.2,  # Prevent repetition
-                        "stop": ["\n\n", "User:", "Assistant:"],  # Stop at natural breaks
+                        "temperature": 0.7,
+                        "top_p": 0.9,
+                        "top_k": 40,
+                        "num_predict": 30,
+                        "num_ctx": 1024,
+                        "repeat_penalty": 1.2,
+                        "stop": ["\n\n", "User:", "Assistant:"],
                     },
-                },
+                }
+            
+            response = requests.post(
+                "http://localhost:11434/api/chat",
+                json=query,
                 timeout=15,  # Allow time for complete responses
             )
 
@@ -868,34 +911,20 @@ Remember: Print/scan requests are handled automatically - you won't see them."""
                 result = response.json()
                 ai_response = result.get("message", {}).get("content", "").strip()
 
-                # Clean up response - remove any formatting artifacts
-                ai_response = ai_response.replace("**", "").replace("*", "")
-
-                # Take first sentence or two (max 2 sentences for voice)
-                sentences = ai_response.split(". ")
-                if len(sentences) > 2:
-                    ai_response = ". ".join(sentences[:2])
-                    if not ai_response.endswith("."):
+                # Format response using centralized prompt manager
+                if SMOLLM_PROMPT_AVAILABLE:
+                    ai_response = SmolLMPromptManager.format_response(ai_response)
+                else:
+                    # Fallback formatting if prompt manager not available
+                    ai_response = ai_response.replace("**", "").replace("*", "")
+                    words = ai_response.split()
+                    if len(words) > 25:
+                        truncated = " ".join(words[:25])
+                        if truncated and truncated[-1] not in ".!?":
+                            truncated += "."
+                        ai_response = truncated
+                    if ai_response and ai_response[-1] not in ".!?":
                         ai_response += "."
-
-                # Enforce reasonable word limit (max 25 words for natural speech)
-                words = ai_response.split()
-                if len(words) > 25:
-                    # Try to find a natural break point
-                    truncated = " ".join(words[:25])
-                    # Add punctuation if missing
-                    if truncated and truncated[-1] not in ".!?":
-                        truncated += "."
-                    ai_response = truncated
-
-                # Ensure punctuation
-                if ai_response and ai_response[-1] not in ".!?":
-                    ai_response += "."
-
-                # Filter out gibberish or single-word responses
-                if len(words) < 2 or not any(c.isalpha() for c in ai_response):
-                    logger.warning(f"[WARN] Invalid response detected: '{ai_response}'")
-                    ai_response = "I'm here to help with document scanning and printing!"
 
                 # Add assistant response to history
                 self.conversation_history.append({"role": "assistant", "content": ai_response})

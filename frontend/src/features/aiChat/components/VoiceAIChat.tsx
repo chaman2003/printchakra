@@ -26,6 +26,7 @@ import {
 } from '@chakra-ui/react';
 import { FiMic, FiMicOff, FiX, FiSend } from 'react-icons/fi';
 import apiClient from '../../../apiClient';
+import { useSocket } from '../../../context/SocketContext';
 import { convertToWAV, isValidAudioBlob, getAudioDuration, VoiceMessage, addMessageWithDedup } from '../utils';
 import Iconify from '../../../components/common/Iconify';
 
@@ -38,6 +39,7 @@ interface VoiceAIChatProps {
 }
 
 const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrationTrigger, isMinimized = false, onToggleMinimize }) => {
+  const { socket } = useSocket();
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -237,12 +239,25 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           console.log(`Audio duration: ${duration.toFixed(2)}s`);
 
           // Check for voice activity before processing
-          const { hasVoiceActivity } = await import('../../../utils/audioUtils');
+          const { hasVoiceActivity, hasHighPitchSound } = await import('../../../utils/audioUtils');
           const hasVoice = await hasVoiceActivity(audioBlob, 0.015);
 
           if (!hasVoice) {
             console.log('⏭️ No voice detected in audio - skipping processing');
             // Don't show annoying "no voice" message - just silently retry
+
+            // Auto-restart recording for continuous listening
+            if (isSessionActive) {
+              setTimeout(() => startRecording(), 300);
+            }
+            return;
+          }
+
+          // Check for high-pitch speech sound (human voice frequency range)
+          const hasHighPitch = await hasHighPitchSound(audioBlob, 0.15);
+          if (!hasHighPitch) {
+            console.log('⏭️ No high-pitch speech detected - sounds like background noise only');
+            // Don't process low-pitch noise (machinery, rumbling, etc.)
 
             // Auto-restart recording for continuous listening
             if (isSessionActive) {
@@ -434,6 +449,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           orchestration_trigger,
           orchestration_mode,
           config_params,
+          voice_command,
+          command_params,
         } = response.data;
 
         // Add full transcription as system message
@@ -442,10 +459,32 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         // Add user message (command part only)
         addMessage('user', user_text);
 
-        // 1. Display AI response FIRST
-        addMessage('ai', ai_response);
+        // 1. Display AI response FIRST (with SmolLM attribution)
+        addMessage('ai', `[SmolLM]: ${ai_response}`);
 
         setIsProcessing(false);
+
+        // Handle voice commands (document selector control)
+        if (voice_command && command_params) {
+          console.log(`🎯 Voice command detected: ${voice_command}`, command_params);
+
+          // Emit voice command to parent via socket
+          if (socket) {
+            socket.emit('voice_command', {
+              command: voice_command,
+              params: command_params,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          toast({
+            title: `Voice Command: ${voice_command.replace('_', ' ').toUpperCase()}`,
+            description: `Executing: ${JSON.stringify(command_params)}`,
+            status: 'info',
+            duration: 2000,
+            isClosable: true,
+          });
+        }
 
         // Check for orchestration trigger BEFORE TTS
         if (orchestration_trigger && orchestration_mode) {
@@ -639,6 +678,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
         const orchestrationTrigger = response.data.orchestration_trigger;
         const orchestrationMode = response.data.orchestration_mode;
         const configParams = response.data.config_params;
+        const voiceCommand = response.data.voice_command;
+        const commandParams = response.data.command_params;
 
         console.log('🔍 Backend response:', {
           aiResponse,
@@ -647,9 +688,31 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
           configParams,
         });
 
-        // 1. Display AI message FIRST
-        addMessage('ai', aiResponse);
+        // 1. Display AI message FIRST (with SmolLM attribution)
+        addMessage('ai', `[SmolLM]: ${aiResponse}`);
         setIsProcessing(false);
+
+        // Handle voice commands (document selector control)
+        if (voiceCommand && commandParams) {
+          console.log(`🎯 Voice command detected (text): ${voiceCommand}`, commandParams);
+
+          // Emit voice command to parent via socket
+          if (socket) {
+            socket.emit('voice_command', {
+              command: voiceCommand,
+              params: commandParams,
+              timestamp: new Date().toISOString(),
+            });
+          }
+
+          toast({
+            title: `Voice Command: ${voiceCommand.replace('_', ' ').toUpperCase()}`,
+            description: `Executing: ${JSON.stringify(commandParams)}`,
+            status: 'info',
+            duration: 2000,
+            isClosable: true,
+          });
+        }
 
         // Check for orchestration trigger BEFORE TTS
         if (orchestrationTrigger && orchestrationMode) {
@@ -979,7 +1042,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({ isOpen, onClose, onOrchestrat
 
           <VStack spacing={1} mt={2}>
             <Text fontSize="xs" color="gray.500" textAlign="center">
-              Powered by Whisper & Smollm2 + Indian English TTS
+              Powered by Whisper & Smollm2 + English TTS
             </Text>
             <Text fontSize="xs" color="gray.500" textAlign="center">
               Voice: Microsoft Ravi • Hands-free

@@ -143,8 +143,11 @@ logger.info("=" * 60)
 
 try:
     import torch
+    from modules.voice.gpu_optimization import get_optimal_device
 
-    gpu_available = torch.cuda.is_available()
+    device = get_optimal_device()  # Returns 'cuda' if available, else 'cpu'
+    gpu_available = device == 'cuda'
+    
     if gpu_available:
         gpu_name = torch.cuda.get_device_name(0)
         cuda_version = torch.version.cuda
@@ -4065,5 +4068,5 @@ if __name__ == "__main__":
 
     # Run with Socket.IO
     socketio.run(
-        app, host="0.0.0.0", port=5000, debug=True, allow_unsafe_werkzeug=True  # Re-enabled
+        app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True  # Debug disabled for production
     )

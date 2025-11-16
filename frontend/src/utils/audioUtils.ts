@@ -298,6 +298,105 @@ export async function hasVoiceActivity(
 }
 
 /**
+ * Detect if audio contains high-pitch sounds (speech-like frequencies)
+ * Analyzes frequency content to determine if audio has human voice characteristics
+ * Returns true if significant high-frequency content detected (typical of human speech)
+ */
+export async function hasHighPitchSound(
+  audioBlob: Blob,
+  frequencyThreshold: number = 0.15 // Threshold for high-frequency energy (0.15-0.25 = speech range)
+): Promise<boolean> {
+  try {
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const arrayBuffer = await audioBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+    // Get first channel data
+    const channelData = audioBuffer.getChannelData(0);
+    const sampleRate = audioBuffer.sampleRate;
+
+    // Create offline context for FFT analysis
+    const offlineContext = new OfflineAudioContext(1, audioBuffer.length, sampleRate);
+    const source = offlineContext.createBufferSource();
+    source.buffer = audioBuffer;
+    
+    const analyser = offlineContext.createAnalyser();
+    analyser.fftSize = 2048; // 2048-point FFT for frequency analysis
+    source.connect(analyser);
+    analyser.connect(offlineContext.destination);
+    
+    source.start(0);
+    await offlineContext.startRendering();
+
+    // Get frequency data
+    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(frequencyData);
+
+    // Analyze frequency bands
+    // Human speech typically dominates in 80Hz-8000Hz range
+    // Low frequencies (0-500Hz): background noise
+    // Mid frequencies (500-2000Hz): consonants, speech clarity
+    // High frequencies (2000-8000Hz): sibilants, speech identity
+    
+    const nyquist = sampleRate / 2;
+    const total = frequencyData.length;
+
+    // Calculate energy in different frequency bands
+    const lowBandEnd = Math.floor((500 / nyquist) * total); // 0-500Hz
+    const midBandEnd = Math.floor((2000 / nyquist) * total); // 500-2000Hz
+    const highBandEnd = Math.floor((8000 / nyquist) * total); // 2000-8000Hz
+
+    let lowEnergy = 0, midEnergy = 0, highEnergy = 0;
+    
+    // Low band energy (background noise indicator)
+    for (let i = 0; i < lowBandEnd; i++) {
+      lowEnergy += frequencyData[i];
+    }
+    lowEnergy /= lowBandEnd || 1;
+
+    // Mid band energy (speech consonants)
+    for (let i = lowBandEnd; i < midBandEnd; i++) {
+      midEnergy += frequencyData[i];
+    }
+    midEnergy /= (midBandEnd - lowBandEnd) || 1;
+
+    // High band energy (speech sibilants and clarity)
+    for (let i = midBandEnd; i < highBandEnd; i++) {
+      highEnergy += frequencyData[i];
+    }
+    highEnergy /= (highBandEnd - midBandEnd) || 1;
+
+    // Calculate ratios to distinguish speech from pure noise
+    const highToLowRatio = lowEnergy > 0 ? highEnergy / lowEnergy : 0;
+    const midToLowRatio = lowEnergy > 0 ? midEnergy / lowEnergy : 0;
+    const speechLikePattern = (midEnergy + highEnergy) / Math.max(lowEnergy, 1);
+
+    // Speech detection heuristic:
+    // - Significant mid and high frequency content (not just low rumble)
+    // - High frequency energy present (speech characteristics)
+    // - Ratio indicates speech vs background noise
+    const hasHighPitch = highEnergy > frequencyThreshold * 128 && // Threshold in 0-255 scale
+                         highToLowRatio > 0.3 && // High frequencies stronger than low
+                         midToLowRatio > 0.3 && // Mid frequencies also present
+                         speechLikePattern > 0.4; // Overall speech pattern detected
+
+    console.log(`🎵 High-Pitch Sound Detection (Speech Frequency Analysis):`);
+    console.log(`   Low Band (0-500Hz): ${lowEnergy.toFixed(1)} dB`);
+    console.log(`   Mid Band (500-2kHz): ${midEnergy.toFixed(1)} dB`);
+    console.log(`   High Band (2-8kHz): ${highEnergy.toFixed(1)} dB`);
+    console.log(`   High-to-Low Ratio: ${highToLowRatio.toFixed(2)} (threshold: 0.3+)`);
+    console.log(`   Mid-to-Low Ratio: ${midToLowRatio.toFixed(2)} (threshold: 0.3+)`);
+    console.log(`   Speech-Like Pattern: ${speechLikePattern.toFixed(2)} (threshold: 0.4+)`);
+    console.log(`   Result: ${hasHighPitch ? '✅ HIGH-PITCH SPEECH DETECTED' : '❌ LOW-PITCH/NOISE REJECTED'}`);
+
+    return hasHighPitch;
+  } catch (error) {
+    console.error('Error detecting high-pitch sound:', error);
+    return true; // If we can't detect, assume there's speech to avoid dropping valid audio
+  }
+}
+
+/**
  * Check if audio contains the "hey" keyword
  * Uses Web Speech API for basic voice recognition
  */

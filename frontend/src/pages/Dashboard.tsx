@@ -533,6 +533,12 @@ const Dashboard: React.FC = () => {
       }
     });
 
+    // Listen for voice commands (document selector control)
+    socket.on('voice_command', (data: any) => {
+      console.log('🎙️ Voice command received:', data);
+      handleVoiceCommand(data);
+    });
+
     loadFiles();
     loadConvertedFiles(); // Load converted files on component mount
 
@@ -579,6 +585,7 @@ const Dashboard: React.FC = () => {
       socket.off('processing_complete');
       socket.off('processing_error');
       socket.off('orchestration_update');
+      socket.off('voice_command');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, filesCacheRef]);
@@ -756,6 +763,146 @@ const Dashboard: React.FC = () => {
     setIsChatVisible(false);
     if (orchestrationContext === 'voice') {
       setOrchestrationContext('manual');
+    }
+  };
+
+  const handleVoiceCommand = (data: any) => {
+    const { command, params } = data;
+    console.log(`🎙️ Handling voice command: ${command}`, params);
+
+    switch (command) {
+      case 'select_document':
+        // Open document selector modal
+        documentSelectorModal.onOpen();
+        
+        // If section and document number specified, pre-select
+        if (params.section && params.document_number) {
+          // Will be handled by DocumentSelector component state
+          toast({
+            title: 'Document Selection',
+            description: `Selecting ${params.section} #${params.document_number}`,
+            status: 'info',
+            duration: 2000,
+          });
+        }
+        break;
+
+      case 'switch_section':
+        // Open document selector and switch section
+        if (params.section) {
+          documentSelectorModal.onOpen();
+          toast({
+            title: 'Section Switch',
+            description: `Switching to ${params.section} section`,
+            status: 'info',
+            duration: 2000,
+          });
+        }
+        break;
+
+      case 'next_document':
+        // Navigate to next document in current section
+        toast({
+          title: 'Navigation',
+          description: 'Moving to next document',
+          status: 'info',
+          duration: 1500,
+        });
+        break;
+
+      case 'previous_document':
+        // Navigate to previous document in current section
+        toast({
+          title: 'Navigation',
+          description: 'Moving to previous document',
+          status: 'info',
+          duration: 1500,
+        });
+        break;
+
+      case 'upload_document':
+        // Trigger file upload dialog
+        const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+        if (fileInput) {
+          fileInput.click();
+        }
+        toast({
+          title: 'Upload',
+          description: 'Opening upload dialog...',
+          status: 'info',
+          duration: 2000,
+        });
+        break;
+
+      case 'confirm':
+        // Execute current operation (print/scan)
+        if (orchestrateMode === 'print') {
+          executePrintJob();
+        } else if (orchestrateMode === 'scan') {
+          executeScanJob();
+        }
+        toast({
+          title: 'Executing',
+          description: `Starting ${orchestrateMode} operation...`,
+          status: 'success',
+          duration: 2000,
+        });
+        break;
+
+      case 'cancel':
+        // Cancel current operation
+        orchestrateModal.onClose();
+        toast({
+          title: 'Cancelled',
+          description: 'Operation cancelled',
+          status: 'warning',
+          duration: 2000,
+        });
+        break;
+
+      case 'status':
+        // Show current workflow status
+        toast({
+          title: 'Current Status',
+          description: orchestrateMode
+            ? `${orchestrateMode.toUpperCase()} mode active`
+            : 'No active operation',
+          status: 'info',
+          duration: 3000,
+        });
+        break;
+
+      case 'repeat_settings':
+        // Read back current settings
+        const currentSettings = orchestrateMode === 'print'
+          ? `Print settings: ${orchestrateOptions.printColorMode}, ${orchestrateOptions.printLayout}, ${orchestrateOptions.printPaperSize}`
+          : orchestrateMode === 'scan'
+          ? `Scan settings: ${orchestrateOptions.scanColorMode}, ${orchestrateOptions.scanLayout}, ${orchestrateOptions.scanResolution} DPI`
+          : 'No settings configured';
+        
+        toast({
+          title: 'Current Settings',
+          description: currentSettings,
+          status: 'info',
+          duration: 4000,
+        });
+        break;
+
+      case 'stop_recording':
+        // Close voice AI chat
+        if (isChatVisible) {
+          handleDockedChatClose();
+        }
+        toast({
+          title: 'Voice Stopped',
+          description: 'Recording stopped',
+          status: 'info',
+          duration: 2000,
+        });
+        break;
+
+      default:
+        console.warn(`Unknown voice command: ${command}`);
     }
   };
 

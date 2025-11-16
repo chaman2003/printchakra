@@ -64,8 +64,8 @@ class CoquiGPUTTS:
             logger.info("   Expected speedup: 5-10x faster than CPU")
         
         except ImportError:
-            logger.error("[ERROR] Coqui TTS not installed")
-            logger.error("   Install with: pip install TTS")
+            logger.info("[INFO] Coqui TTS not installed (optional GPU enhancement)")
+            logger.info("   Fallback to Windows SAPI5 - install optional package with: pip install TTS")
             self.is_loaded = False
         
         except Exception as e:
@@ -216,8 +216,9 @@ class HybridTTSService:
     def _check_gpu_available() -> bool:
         """Check if GPU is available"""
         try:
-            import torch
-            return torch.cuda.is_available()
+            from .gpu_optimization import get_optimal_device
+            device = get_optimal_device()
+            return device == 'cuda'
         except:
             return False
     
