@@ -311,85 +311,38 @@ export async function hasHighPitchSound(
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
-    // Get first channel data
     const channelData = audioBuffer.getChannelData(0);
     const sampleRate = audioBuffer.sampleRate;
 
-    // Create offline context for FFT analysis
-    const offlineContext = new OfflineAudioContext(1, audioBuffer.length, sampleRate);
-    const source = offlineContext.createBufferSource();
-    source.buffer = audioBuffer;
-    
-    const analyser = offlineContext.createAnalyser();
-    analyser.fftSize = 2048; // 2048-point FFT for frequency analysis
-    source.connect(analyser);
-    analyser.connect(offlineContext.destination);
-    
-    source.start(0);
-    const renderedBuffer = await offlineContext.startRendering();
+    const windowOffset = Math.max(2, Math.min(Math.floor(sampleRate / 6000), channelData.length - 2));
+    let highDiffSum = 0;
+    let lowDiffSum = 0;
+    let zeroCrossings = 0;
 
-    // Get frequency data
-    const frequencyData = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(frequencyData);
-
-    // Analyze frequency bands
-    // Human speech typically dominates in 80Hz-8000Hz range
-    // Low frequencies (0-500Hz): background noise
-    // Mid frequencies (500-2000Hz): consonants, speech clarity
-    // High frequencies (2000-8000Hz): sibilants, speech identity
-    
-    const nyquist = sampleRate / 2;
-    const total = frequencyData.length;
-
-    // Calculate energy in different frequency bands
-    const lowBandEnd = Math.floor((500 / nyquist) * total); // 0-500Hz
-    const midBandEnd = Math.floor((2000 / nyquist) * total); // 500-2000Hz
-    const highBandEnd = Math.floor((8000 / nyquist) * total); // 2000-8000Hz
-
-    let lowEnergy = 0, midEnergy = 0, highEnergy = 0;
-    
-    // Low band energy (background noise indicator)
-    for (let i = 0; i < lowBandEnd; i++) {
-      lowEnergy += frequencyData[i];
+    for (let i = windowOffset; i < channelData.length; i++) {
+      const highDiff = Math.abs(channelData[i] - channelData[i - windowOffset]);
+      const lowDiff = Math.abs(channelData[i] - channelData[i - 1]);
+      highDiffSum += highDiff;
+      lowDiffSum += lowDiff;
+      if (channelData[i] * channelData[i - 1] < 0) {
+        zeroCrossings++;
+      }
     }
-    lowEnergy /= lowBandEnd || 1;
 
-    // Mid band energy (speech consonants)
-    for (let i = lowBandEnd; i < midBandEnd; i++) {
-      midEnergy += frequencyData[i];
-    }
-    midEnergy /= (midBandEnd - lowBandEnd) || 1;
+    const avgHighDiff = highDiffSum / Math.max(channelData.length - windowOffset, 1);
+    const avgLowDiff = lowDiffSum / Math.max(channelData.length - 1, 1);
+    const zeroCrossRate = zeroCrossings / channelData.length;
+    const highRatio = avgHighDiff / Math.max(avgLowDiff, 1e-6);
 
-    // High band energy (speech sibilants and clarity)
-    for (let i = midBandEnd; i < highBandEnd; i++) {
-      highEnergy += frequencyData[i];
-    }
-    highEnergy /= (highBandEnd - midBandEnd) || 1;
+    const hasHighPitch = avgHighDiff > frequencyThreshold * 0.25 && highRatio > 1.1 && zeroCrossRate > 0.02;
 
-    // Calculate ratios to distinguish speech from pure noise
-    const highToLowRatio = lowEnergy > 0 ? highEnergy / lowEnergy : 0;
-    const midToLowRatio = lowEnergy > 0 ? midEnergy / lowEnergy : 0;
-    const speechLikePattern = (midEnergy + highEnergy) / Math.max(lowEnergy, 1);
-
-    // Speech detection heuristic:
-    // - Significant mid and high frequency content (not just low rumble)
-    // - High frequency energy present (speech characteristics)
-    // - Ratio indicates speech vs background noise
-    const hasHighPitch = highEnergy > frequencyThreshold * 128 && // MORE LENIENT: reduced threshold
-                         highToLowRatio > 0.2 && // MORE LENIENT: reduced from 0.3 to 0.2
-                         midToLowRatio > 0.2 && // MORE LENIENT: reduced from 0.3 to 0.2
-                         speechLikePattern > 0.3; // MORE LENIENT: reduced from 0.4 to 0.3
-
-    console.log(`🎵 High-Pitch Sound Detection (Speech Frequency Analysis):`);
-    console.log(`   Low Band (0-500Hz): ${lowEnergy.toFixed(1)} dB`);
-    console.log(`   Mid Band (500-2kHz): ${midEnergy.toFixed(1)} dB`);
-    console.log(`   High Band (2-8kHz): ${highEnergy.toFixed(1)} dB`);
-    console.log(`   High-to-Low Ratio: ${highToLowRatio.toFixed(2)} (threshold: 0.2+)`);
-    console.log(`   Mid-to-Low Ratio: ${midToLowRatio.toFixed(2)} (threshold: 0.2+)`);
-    console.log(`   Speech-Like Pattern: ${speechLikePattern.toFixed(2)} (threshold: 0.3+)`);
+    console.log(`🎵 High-Pitch Sound Detection (Time-Domain Heuristic):`);
+    console.log(`   Avg High Diff: ${avgHighDiff.toFixed(4)} (threshold: ${(frequencyThreshold * 0.25).toFixed(4)})`);
+    console.log(`   High/Low Ratio: ${highRatio.toFixed(2)} (threshold: 1.1)`);
+    console.log(`   Zero Crossing Rate: ${zeroCrossRate.toFixed(3)} (threshold: 0.02)`);
     console.log(`   Result: ${hasHighPitch ? '✅ HIGH-PITCH SPEECH DETECTED' : '❌ LOW-PITCH/NOISE REJECTED'}`);
 
-    return hasHighPitch;
+    return hasHighPitch || zeroCrossRate > 0.08;
   } catch (error) {
     console.error('Error detecting high-pitch sound:', error);
     return true; // If we can't detect, assume there's speech to avoid dropping valid audio
