@@ -209,6 +209,8 @@ export async function hasVoiceActivity(
     const arrayBuffer = await audioBlob.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
+    // Get first channel data
+    const channelData = audioBuffer.getChannelData(0);
     const sampleRate = audioBuffer.sampleRate;
 
     // Calculate RMS (Root Mean Square) for overall energy
@@ -323,9 +325,8 @@ export async function hasHighPitchSound(
     source.connect(analyser);
     analyser.connect(offlineContext.destination);
     
-      source.start(0);
-      const renderedBuffer = await offlineContext.startRendering();
-      await capturePromise;
+    source.start(0);
+    const renderedBuffer = await offlineContext.startRendering();
 
     // Get frequency data
     const frequencyData = new Uint8Array(analyser.frequencyBinCount);
