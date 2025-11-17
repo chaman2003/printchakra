@@ -23,167 +23,60 @@ AI-powered print and scan automation with modular architecture, hands-free voice
 
 ### Prerequisites
 
-- Python 3.8+
-- Node.js 16+
-- Tesseract OCR (add to PATH on Windows)
-- Git
+# PrintChakra
 
-### Installation (Windows PowerShell)
+PrintChakra is an integrated, developer-friendly system for automating print and scan workflows with strong AI and OCR capabilities. It combines a modular Flask backend with a React + TypeScript frontend, real-time synchronization, and voice orchestration so users can operate printing and scanning flows with natural language and minimal manual input.
 
-```powershell
-git clone https://github.com/chaman2003/printchakra.git
-cd printchakra
+Overview of what’s included and recent improvements:
 
-# Backend: creates venv, installs requirements
-.\scripts\setup-backend.ps1
+- Modern frontend using React + TypeScript and Chakra UI for accessible components and responsive layouts.
+- Robust Flask backend with a service-oriented design: clear separation between routes, services, and utility modules.
+- Real-time coordination via Socket.IO to keep the dashboard, mobile capture, and orchestration flows in sync.
+- Improved Dashboard stability: a single shared Socket.IO connection in development to prevent duplicate listeners and repeated GET calls; rate-limited file polling and named listener cleanup to avoid excessive rerenders.
+- Fixed backend conversion reliability: conversion endpoints now call the correct converter utilities, improved logging on conversion payloads, and added test scripts to validate single-file and merged conversions.
+- Large model support added via Git LFS for bundled GGML model files; repository now tracks large binary model files safely.
 
-# Frontend: install dependencies
-cd frontend
-npm install
-cd ..
-```
+This README focuses on the project purpose, structure, recent fixes, and usage guidance without embedding code snippets.
 
-### Launch
+**Why PrintChakra**
 
-```powershell
-# Option A: everything (backend + frontend + ngrok)
-.\scripts\start-full-online.ps1
+- Hands-free voice orchestration: speak commands to configure print/scan jobs (copies, layout, DPI, duplex, color). 
+- High-quality OCR: a multi-stage image enhancement and OCR pipeline produces searchable PDFs and reliable metadata extraction.
+- Extensible modular services: easy to add integrations (cloud storage, classifiers, form recognition).
 
-# Option B: manual control
-.\scripts\backend.ps1
-cd frontend
-npm start
-```
+**Recent Notable Changes (summary)**
 
-**Access**
+- Frontend
+  - `SocketContext` now uses a global singleton in development to eliminate duplicate socket connections and repeated listeners.
+  - `Dashboard` was refactored to use stable callbacks, rate-limiting for file fetches, and named socket listeners to ensure clean unmounts and avoid multiple GET requests.
+  - New layout components were added to improve visual consistency.
 
-- Dashboard: http://localhost:3000
-- Mobile Capture: http://localhost:3000/phone
-- REST API: http://localhost:5000
+- Backend
+  - Conversion endpoints were corrected to use the dedicated file conversion utilities (avoiding incorrect class calls), fixing an AttributeError that occurred during convert/merge operations.
+  - Added small test scripts in `backend/scripts/` to validate conversion and merging flows during development.
+  - Added Git LFS tracking for large model binaries used by local AI workflows.
 
----
+**Project Structure (high level)**
 
-## Core Features
+- `backend/` — Flask app, modular services, routes, and conversion utilities; data folders for uploads, processed outputs, converted files, and generated PDFs.
+- `frontend/` — React + TypeScript app with pages (Dashboard, Phone/mobile capture), features for voice AI chat, and shared UI components.
+- `scripts/` — PowerShell helpers for environment setup and combined startup; developer-focused tools to accelerate local testing.
 
-| Area | Capabilities |
-|------|--------------|
-| Voice Automation | Continuous listening, silence detection, automatic restart |
-| AI Orchestration | Intent parsing, configuration extraction, confirmation loop |
-| OCR Pipeline | 12-stage image enhancement, multi-pass OCR, quality validation |
-| Real-Time Sync | Socket.IO status updates, capture triggers, orchestration events |
-| Developer UX | PowerShell automation scripts, modular services, comprehensive logging |
+**Running and Developing (guidance)**
 
----
+Run backend and frontend locally for development, use the provided PowerShell scripts to create the recommended development environment and to start all components together. The project includes scripts that orchestrate backend services, frontend dev server, and optional tunneling for external testing.
 
-## Architecture Overview
+**Testing and Validation**
 
-```
-React (TypeScript, Chakra UI)
+- Conversion and merge flows include small test scripts to exercise backend conversion endpoints and confirm outputs. These tests were used while resolving conversion-related issues and are helpful for regression checks.
+
+**Contributing**
+
+Contributions are welcome. Please open feature branches, include testing notes, and provide context for changes. Maintainers prefer small, focused pull requests for easier review.
+
+**License & Author**
+
+This repository is published under the MIT License. The project is maintained by Chaman S (GitHub: @chaman2003).
+
+If you need a README variant with quick start commands or developer-run commands included, I can add that as a separate file so this main README remains code-free.
   -> Socket.IO / REST
-Flask (Blueprint routes -> Service layer -> Models -> Utils)
-  -> Processing pipeline (OpenCV, Tesseract, NumPy)
-      -> Storage (uploads, processed, converted, PDFs)
-```
-
-- Backend entrypoints: `backend/app.py` (legacy) and `backend/app_modular.py`
-- Services: file, scan, print, OCR, conversion, orchestration
-- Middleware: CORS, request logging, error handling
-- Frontend features: dashboard, voice AI chat, mobile capture, AI chat components
-
----
-
-## Voice Orchestration
-
-1. User speaks -> browser MediaRecorder streams audio
-2. Frontend voice activity detection filters background noise
-3. Backend Whisper transcription (beam_size=1, best_of=1) generates text in 0.3-0.5 s
-4. AI intent engine (Smollm2 via Ollama) extracts mode, copies, layout, color, DPI, duplex, ranges
-5. Orchestration service emits Socket.IO events to pre-configure UI and confirm execution
-
-**Example Commands**
-
-- "Print 3 copies in landscape with color"
-- "Scan at 600 DPI as searchable PDF"
-- "Reprint the last upload, double sided"
-
----
-
-## API Overview (selected)
-
-| Method | Endpoint | Purpose |
-|--------|----------|---------|
-| GET | `/health` | Runtime and model health check |
-| POST | `/upload` | Upload and process a document |
-| GET | `/files` | List processed documents and metadata |
-| POST | `/convert` | Convert files (PDF, DOCX, images) |
-| POST | `/voice/process` | Transcribe audio + AI orchestration response |
-
-Real-time events (Socket.IO): `processing_progress`, `capture_now`, `orchestration_update`, `voice_detected`, `conversion_complete`.
-
----
-
-## Project Structure (abridged)
-
-```
-printfchakra/
- backend/
-   app.py
-   app_modular.py
-   config/
-   models/
-   routes/
-   services/
-   modules/voice/
-   data/ (uploads, processed, converted, pdfs)
- frontend/
-   src/
-     features/
-     components/
-     pages/
-     utils/
-   public/
- scripts/ (setup-backend.ps1, start-full-online.ps1, backend.ps1, etc.)
- README.md
-```
-
----
-
-## Technology Stack
-
-- Backend: Flask 3.x, Socket.IO 5.x, OpenCV 4.10, Tesseract OCR, Whisper, NumPy, PyMuPDF, FPDF2
-- Frontend: React 19, TypeScript, Chakra UI, React Router, Socket.IO Client, Axios, Framer Motion
-- AI / Voice: Whisper base model, Smollm2:135m via Ollama, pyttsx3 (Microsoft Ravi TTS)
-- Tooling: PowerShell automation, ngrok tunneling, pytest, npm test
-
----
-
-## Roadmap
-
-- v2.2: continuous listening, noise filtering, modular service layer
-- v2.3 (planned): cloud storage integration, document classification, multi-page workflows
-- Future: PWA mode, advanced form recognition, team collaboration features
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-update`
-3. Commit changes: `git commit -m "Describe update"`
-4. Push: `git push origin feature/my-update`
-5. Open a Pull Request with context and testing notes
-
----
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-## Author
-
-**Chaman S**
-GitHub: [@chaman2003](https://github.com/chaman2003)
-Email: [chamans7952@gmail.com](mailto:chamans7952@gmail.com)
-LinkedIn: [chaman2003](https://www.linkedin.com/in/chaman2003/)
