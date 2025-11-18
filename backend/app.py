@@ -80,6 +80,93 @@ class MessageCounter:
 # Global message counter
 _message_counter = MessageCounter()
 
+
+def _build_voice_confirmation(updates: dict) -> str:
+    """Generate concise spoken confirmations for config changes"""
+
+    if not updates:
+        return "Settings updated."
+
+    def orientation_phrase(value: str) -> str:
+        return f"Selected {value.lower()} layout."
+
+    def paper_size_phrase(value: str) -> str:
+        label = value.upper() if len(value) <= 4 else value.title()
+        return f"Paper size {label}."
+
+    def color_mode_phrase(value: str) -> str:
+        mapping = {
+            "color": "Color mode on.",
+            "bw": "Black and white set.",
+            "grayscale": "Grayscale mode on.",
+        }
+        return mapping.get(value, f"Color mode {value}.")
+
+    def duplex_phrase(value: bool) -> str:
+        return "Duplex on." if value else "Single sided." if value is not None else ""
+
+    def pages_phrase(value: str) -> str:
+        mapping = {
+            "odd": "Odd pages only.",
+            "even": "Even pages only.",
+            "all": "All pages ready.",
+            "custom": "Custom page range ready.",
+        }
+        return mapping.get(value, f"Pages set to {value}.")
+
+    def page_mode_phrase(value: str) -> str:
+        mapping = {
+            "odd": "Scanning odd pages.",
+            "even": "Scanning even pages.",
+            "all": "Scanning all pages.",
+            "custom": "Scanning custom range.",
+        }
+        return mapping.get(value, f"Page mode {value}.")
+
+    templates = {
+        "orientation": orientation_phrase,
+        "layout": orientation_phrase,
+        "scanLayout": orientation_phrase,
+        "paper_size": paper_size_phrase,
+        "paperSize": paper_size_phrase,
+        "page_size": paper_size_phrase,
+        "paper_size_custom": lambda v: f"Paper custom {v}.",
+        "color_mode": color_mode_phrase,
+        "colorMode": color_mode_phrase,
+        "scanColorMode": color_mode_phrase,
+        "copies": lambda v: f"{v} copies ready." if v else "",
+        "duplex": duplex_phrase,
+        "pages": pages_phrase,
+        "page_mode": page_mode_phrase,
+        "custom_range": lambda v: f"Range {v}.",
+        "scanCustomRange": lambda v: f"Range {v}.",
+        "pages_per_sheet": lambda v: f"Pages per sheet {v}.",
+        "pagesPerSheet": lambda v: f"Pages per sheet {v}.",
+        "scale": lambda v: f"Scale {v}%.",
+        "resolution": lambda v: f"Resolution {v} DPI.",
+        "format": lambda v: f"Format {v.upper()}.",
+        "quality": lambda v: f"Quality {v}.",
+        "text_mode": lambda v: "OCR on." if v else "OCR off.",
+        "scanTextMode": lambda v: "OCR on." if v else "OCR off.",
+        "mode": lambda v: "Multi-page scan ready." if v == "multi" else "Single scan ready." if v == "single" else f"Scan mode {v}.",
+    }
+
+    phrases = []
+    for key, value in updates.items():
+        if value is None:
+            continue
+        formatter = templates.get(key)
+        try:
+            phrase = formatter(value) if formatter else None
+        except Exception:
+            phrase = None
+        if not phrase:
+            readable_key = key.replace("_", " ").title()
+            phrase = f"{readable_key} {value}."
+        phrases.append(phrase)
+
+    return " ".join(phrases) if phrases else "Settings updated."
+
 # Monkey-patch logger methods to add message counting
 _original_info = logger.info
 _original_warning = logger.warning
@@ -3326,7 +3413,7 @@ def process_voice_complete():
             
             # If orchestration was just triggered, set up orchestrator state
             if result.get("orchestration_trigger") and ORCHESTRATION_AVAILABLE and orchestrator:
-                from services.orchestration_service import IntentType
+                from modules.orchestration import IntentType
                 
                 mode = result.get("orchestration_mode")
                 if mode in ["print", "scan"]:
@@ -3341,7 +3428,10 @@ def process_voice_complete():
                     params["voice_triggered"] = True
                     
                     # Process command to set orchestrator state
-                    orchestration_result = orchestrator.process_command(intent_text)
+                    orchestration_result = orchestrator.process_command(
+                        intent_text,
+                        force_voice_triggered=True,
+                    )
                     
                     # Store orchestration result for later use
                     result["orchestration_state_setup"] = True
@@ -3391,10 +3481,8 @@ def process_voice_complete():
                                 "configuration": update_result.get("configuration"),
                             }
 
-                            update_summary = ", ".join(
-                                [f"{k}: {v}" for k, v in parsed_config.items()]
-                            )
-                            result["ai_response"] = f"Updated {update_summary}. Any other changes?"
+                            confirmation_message = _build_voice_confirmation(parsed_config)
+                            result["ai_response"] = confirmation_message
 
                             socketio.emit(
                                 "orchestration_update",
@@ -3403,6 +3491,8 @@ def process_voice_complete():
                                     "action_type": action_type,
                                     "updates": parsed_config,
                                     "configuration": update_result.get("configuration"),
+                                    "frontend_updates": update_result.get("frontend_updates"),
+                                    "frontend_state": update_result.get("frontend_state"),
                                     "timestamp": datetime.now().isoformat(),
                                 },
                             )
@@ -3412,7 +3502,7 @@ def process_voice_complete():
                             )
                 else:
                     # Try to detect orchestration intent
-                    from services.orchestration_service import IntentType
+                    from modules.orchestration import IntentType
 
                     intent, params = orchestrator.detect_intent(user_text)
 
@@ -3426,7 +3516,10 @@ def process_voice_complete():
                         params["voice_triggered"] = True
 
                         # Process command with voice_triggered flag
-                        orchestration_result = orchestrator.process_command(user_text)
+                        orchestration_result = orchestrator.process_command(
+                            user_text,
+                            force_voice_triggered=True,
+                        )
 
                         # Add orchestration result to response
                         result["orchestration"] = orchestration_result
@@ -3449,6 +3542,7 @@ def process_voice_complete():
                                     "skip_mode_selection": orchestration_result.get(
                                         "skip_mode_selection", False
                                     ),
+                                    "frontend_state": orchestration_result.get("frontend_state"),
                                 },
                             )
                         except Exception as socket_error:
@@ -3743,7 +3837,7 @@ def validate_printer():
 
 # Import orchestration service
 try:
-    from services.orchestration_service import get_orchestrator
+    from modules.orchestration import get_orchestrator
 
     ORCHESTRATION_AVAILABLE = True
     orchestrator = get_orchestrator(DATA_DIR)
@@ -3937,6 +4031,8 @@ def orchestrate_configure():
                     "type": "configuration_updated",
                     "action_type": action_type,
                     "configuration": result.get("configuration"),
+                    "frontend_state": result.get("frontend_state"),
+                    "frontend_updates": result.get("frontend_updates"),
                     "timestamp": datetime.now().isoformat(),
                 },
             )
@@ -3992,6 +4088,8 @@ def orchestrate_voice_config():
                         "action_type": action_type,
                         "updates": parsed_config,
                         "configuration": result.get("configuration"),
+                        "frontend_updates": result.get("frontend_updates"),
+                        "frontend_state": result.get("frontend_state"),
                         "timestamp": datetime.now().isoformat(),
                     },
                 )
@@ -4001,6 +4099,8 @@ def orchestrate_voice_config():
                     "success": True,
                     "updates": parsed_config,
                     "configuration": result.get("configuration"),
+                    "frontend_updates": result.get("frontend_updates"),
+                    "frontend_state": result.get("frontend_state"),
                     "message": f"Updated: {', '.join(parsed_config.keys())}",
                 }
             )

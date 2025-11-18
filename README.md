@@ -62,6 +62,23 @@ This README focuses on the project purpose, structure, recent fixes, and usage g
 - `frontend/` — React + TypeScript app with pages (Dashboard, Phone/mobile capture), features for voice AI chat, and shared UI components.
 - `scripts/` — PowerShell helpers for environment setup and combined startup; developer-focused tools to accelerate local testing.
 
+## Backend Configuration Surface
+
+Two simple touch points now control all backend AI connections and prompts:
+
+- **Environment overrides (`backend/.env`)** – drop a `.env` file next to `backend/app.py` and set any of these keys without touching Python:
+  - `FRONTEND_URL` (CORS allow-list helper)
+  - `BACKEND_PUBLIC_URL` (shareable base URL for clients/tunnels)
+  - `API_CORS_ORIGINS` (comma-delimited override if you need multiple origins)
+  - `OLLAMA_BASE_URL`, `OLLAMA_CHAT_ENDPOINT`, `OLLAMA_TAGS_ENDPOINT`, `OLLAMA_TIMEOUT`, `OLLAMA_VERIFY_SSL`
+  - `VOICE_AI_MODEL` (defaults to `smollm2:135m`)
+  - `PROMPTS_DIR`, `SMOLLM_SYSTEM_PROMPT_FILE`, `SMOLLM_COMMAND_MAPPINGS_FILE` (point to alternate prompt assets)
+- **Prompt assets (`backend/config/prompts/`)** – edit plain-text/JSON files to change LLM behavior:
+  - `system_prompt.txt` holds the entire SmolLM system prompt (English sentences only)
+  - `command_mappings.json` lists wake words, friendly responses, confirmation words, and Ollama sampling knobs
+
+Whenever these files change there is no code reload required—restart the backend and the new connections/prompts are used automatically.
+
 **Running and Developing (guidance)**
 
 Run backend and frontend locally for development, use the provided PowerShell scripts to create the recommended development environment and to start all components together. The project includes scripts that orchestrate backend services, frontend dev server, and optional tunneling for external testing.

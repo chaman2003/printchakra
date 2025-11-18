@@ -208,3 +208,5 @@ processed/*
 processed_text/*
 uploads/*
 txt/*
+pc/*
+logs.txt

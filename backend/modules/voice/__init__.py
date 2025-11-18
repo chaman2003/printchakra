@@ -21,15 +21,53 @@ import wave
 from datetime import datetime
 from typing import Any, Dict, Optional
 
+from config import AI_PROMPT_CONFIG, CONNECTION_CONFIG
+
 logger = logging.getLogger(__name__)
+
+OLLAMA_API_TIMEOUT = 15
+
 
 # Import SmolLM prompt management
 try:
-    from .smollm_prompt import SmolLMPromptManager
+    from .smollm_prompt import SmolLMPromptManager, OLLAMA_API_TIMEOUT as _PM_TIMEOUT
+
+    OLLAMA_API_TIMEOUT = _PM_TIMEOUT
     SMOLLM_PROMPT_AVAILABLE = True
 except ImportError:
+    SmolLMPromptManager = None  # type: ignore
     SMOLLM_PROMPT_AVAILABLE = False
     logger.warning("[WARN] SmolLM prompt module not available")
+except Exception as exc:
+    SmolLMPromptManager = None  # type: ignore
+    SMOLLM_PROMPT_AVAILABLE = False
+    logger.error(f"[ERROR] SmolLM prompt module failed to load: {exc}")
+
+
+def _build_ollama_url(base: str, endpoint: str) -> str:
+    """Normalize Ollama endpoint URLs"""
+
+    if endpoint.startswith("http://") or endpoint.startswith("https://"):
+        return endpoint
+    normalized_base = (base or "http://localhost:11434").rstrip("/")
+    normalized_endpoint = endpoint or ""
+    if not normalized_endpoint.startswith("/"):
+        normalized_endpoint = f"/{normalized_endpoint}"
+    return f"{normalized_base}{normalized_endpoint}"
+
+
+_ollama_settings = CONNECTION_CONFIG.get("ollama", {})
+_ollama_base = (_ollama_settings.get("base_url") or "http://localhost:11434").rstrip("/")
+OLLAMA_TAGS_URL = _build_ollama_url(_ollama_base, _ollama_settings.get("tags_endpoint", "/api/tags"))
+OLLAMA_CHAT_URL = _build_ollama_url(_ollama_base, _ollama_settings.get("chat_endpoint", "/api/chat"))
+
+try:
+    OLLAMA_TIMEOUT = int(_ollama_settings.get("timeout", OLLAMA_API_TIMEOUT))
+except (TypeError, ValueError):
+    OLLAMA_TIMEOUT = OLLAMA_API_TIMEOUT
+
+OLLAMA_VERIFY_SSL = bool(_ollama_settings.get("verify_ssl", False))
+DEFAULT_VOICE_MODEL = AI_PROMPT_CONFIG.get("default_model", "smollm2:135m")
 
 # Import GPU optimization modules
 try:
@@ -592,16 +630,20 @@ class Smollm2ChatService:
     Fast, efficient local inference with intelligent voice command interpretation
     """
 
-    def __init__(self, model_name: str = "smollm2:135m"):
+    def __init__(self, model_name: Optional[str] = None):
         """
         Initialize Smollm2 chat service with full orchestration awareness
 
         Args:
             model_name: Ollama model to use
         """
-        self.model_name = model_name
+        self.model_name = model_name or DEFAULT_VOICE_MODEL
         self.conversation_history = []
         self.pending_orchestration = None  # Track if waiting for confirmation (print/scan)
+        self.ollama_chat_url = OLLAMA_CHAT_URL
+        self.ollama_tags_url = OLLAMA_TAGS_URL
+        self.api_timeout = max(1, OLLAMA_TIMEOUT) if OLLAMA_TIMEOUT else OLLAMA_API_TIMEOUT
+        self.verify_ssl = OLLAMA_VERIFY_SSL
         
         # Import command mappings from centralized module
         if SMOLLM_PROMPT_AVAILABLE:
@@ -617,15 +659,22 @@ class Smollm2ChatService:
         try:
             import requests
 
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
+            timeout = min(5, self.api_timeout or OLLAMA_API_TIMEOUT)
+            response = requests.get(
+                self.ollama_tags_url,
+                timeout=timeout,
+                verify=self.verify_ssl,
+            )
             if response.status_code == 200:
                 models = response.json().get("models", [])
                 model_names = [m.get("name", "") for m in models]
-                # Check if smollm2 or any smollm2 variant is available
-                has_model = any("smollm2" in name.lower() for name in model_names)
+                target_fragment = (self.model_name or "").split(":")[0].lower()
+                has_model = True
+                if target_fragment:
+                    has_model = any(target_fragment in (name or "").lower() for name in model_names)
                 # Only log once at startup
                 if not hasattr(self, "_logged_ollama_check"):
-                    logger.info(f"Ollama available: {has_model}")
+                    logger.info(f"Ollama available via {self.ollama_tags_url}: {has_model}")
                     logger.info(f"Available models: {model_names}")
                     self._logged_ollama_check = True
                 return has_model
@@ -654,16 +703,16 @@ class Smollm2ChatService:
         if command_type == "select_document":
             import re
             
-            # Extract section (original, converted, uploaded)
-            if "original" in text_lower:
-                params["section"] = "originals"
+            # Extract section keywords and normalize to dashboard terms
+            if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
+                params["section"] = "current"
             elif "converted" in text_lower:
                 params["section"] = "converted"
-            elif "uploaded" in text_lower:
-                params["section"] = "uploaded"
+            elif any(keyword in text_lower for keyword in ["uploaded", "upload", "new"]):
+                params["section"] = "upload"
             
             # Extract document number (1-based)
-            number_match = re.search(r'(?:number|#)\s*(\d+)', text_lower)
+            number_match = re.search(r'(?:number|item|file|doc|#)\s*(\d+)', text_lower)
             if number_match:
                 params["document_number"] = int(number_match.group(1))
             else:
@@ -671,15 +720,29 @@ class Smollm2ChatService:
                 number_match = re.search(r'\b(\d+)\b', text_lower)
                 if number_match:
                     params["document_number"] = int(number_match.group(1))
+            
+            if "first" in text_lower:
+                params["document_number"] = 1
+            elif "second" in text_lower:
+                params["document_number"] = 2
+            elif "third" in text_lower:
+                params["document_number"] = 3
+            elif "last" in text_lower:
+                params["document_number"] = -1  # indicate special handling downstream
+            
+            if "section" not in params:
+                params["section"] = "current"
+            if "document_number" not in params:
+                params["document_number"] = 1
         
         # Parse section switching (e.g., "switch to converted")
         elif command_type == "switch_section":
-            if "original" in text_lower:
-                params["section"] = "originals"
+            if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
+                params["section"] = "current"
             elif "converted" in text_lower:
                 params["section"] = "converted"
-            elif "uploaded" in text_lower:
-                params["section"] = "uploaded"
+            elif any(keyword in text_lower for keyword in ["uploaded", "upload", "new"]):
+                params["section"] = "upload"
         
         return params
 
@@ -726,6 +789,21 @@ class Smollm2ChatService:
                         logger.info(f"🔀 FUZZY MATCH: '{user_message}' ≈ '{keyword}' → {command_type} (confidence: {similarity:.2f})")
             
             if best_command and best_confidence > 0.6:
+                if best_command == "select_document":
+                    required = any(keyword in user_lower for keyword in ["document", "file", "doc", "page", "item"])
+                    if not required:
+                        logger.info(
+                            f"[SKIP] Select command lacked document context → '{user_message}'"
+                        )
+                        return None, 0.0
+                if best_command == "switch_section":
+                    required = any(keyword in user_lower for keyword in ["section", "tab", "converted", "original", "upload"])
+                    if not required:
+                        logger.info(
+                            f"[SKIP] Switch section command lacked section keywords → '{user_message}'"
+                        )
+                        return None, 0.0
+
                 logger.info(f"[OK] COMMAND INTERPRETED: {best_command} (confidence: {best_confidence:.2f})")
                 return best_command, best_confidence
             
@@ -759,6 +837,11 @@ class Smollm2ChatService:
             if command_type and confidence > 0.7:  # High confidence command match
                 # Parse command parameters for document selector
                 command_params = self._parse_command_parameters(user_message, command_type)
+                if command_type == "select_document":
+                    command_params.setdefault("section", "current")
+                    command_params.setdefault("document_number", 1)
+                elif command_type == "switch_section":
+                    command_params.setdefault("section", "current")
                 
                 ai_response = f"VOICE_COMMAND:{command_type} Executing {command_type}!"
                 logger.info(f"[OK] VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f}, params: {command_params})")
@@ -767,24 +850,17 @@ class Smollm2ChatService:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
-                # Generate friendly response based on command type
-                friendly_responses = {
-                    "select_document": f"Selecting document {command_params.get('document_number', '')}",
-                    "switch_section": f"Switching to {command_params.get('section', '')} section",
-                    "next_document": "Moving to next document",
-                    "previous_document": "Moving to previous document",
-                    "upload_document": "Opening upload dialog",
-                    "confirm": "Executing now!",
-                    "cancel": "Cancelled",
-                    "status": "Checking status...",
-                    "repeat_settings": "Reading settings...",
-                    "help": "Here's what I can do...",
-                    "stop_recording": "Stopping recording",
-                }
-                
+                if SMOLLM_PROMPT_AVAILABLE:
+                    friendly_response = SmolLMPromptManager.get_friendly_command_response(
+                        command_type,
+                        command_params,
+                    )
+                else:
+                    friendly_response = f"Got it! {command_type.replace('_', ' ').title()}."
+
                 return {
                     "success": True,
-                    "response": friendly_responses.get(command_type, f"Got it! {command_type.replace('_', ' ').title()}."),
+                    "response": friendly_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
@@ -796,9 +872,14 @@ class Smollm2ChatService:
 
             # PRIORITY 1: Check for confirmation if we have pending orchestration
             if self.pending_orchestration:
-                confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye"]
-                is_confirmation = any(user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words)
-                
+                is_confirmation = False
+                if SMOLLM_PROMPT_AVAILABLE:
+                    is_confirmation = SmolLMPromptManager.is_confirmation(user_message)
+                else:
+                    confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye"]
+                    is_confirmation = any(
+                        user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words
+                    )
                 if is_confirmation:
                     mode = self.pending_orchestration
                     self.pending_orchestration = None  # Clear pending state
@@ -825,13 +906,16 @@ class Smollm2ChatService:
             
             # PRIORITY 2: Check for DIRECT print/scan commands - TRIGGER IMMEDIATELY
             # Look for print intent
-            print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper"]
-            is_print_command = any(keyword in user_lower for keyword in print_keywords)
+            is_print_command = False
+            if SMOLLM_PROMPT_AVAILABLE:
+                is_print_command = SmolLMPromptManager.is_print_command(user_message)
+            else:
+                print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper"]
+                question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
+                is_question = any(word in user_lower for word in question_words)
+                is_print_command = any(keyword in user_lower for keyword in print_keywords) and not is_question
             
-            # Filter out questions/help requests about printing
-            is_question = any(word in user_lower for word in ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"])
-            
-            if is_print_command and not is_question:
+            if is_print_command:
                 # Direct print command detected
                 ai_response = f"TRIGGER_ORCHESTRATION:print Opening print interface now!"
                 logger.info(f"[PRINT] DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
@@ -851,10 +935,15 @@ class Smollm2ChatService:
                 }
             
             # Look for scan intent
-            scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
-            is_scan_command = any(keyword in user_lower for keyword in scan_keywords)
+            if SMOLLM_PROMPT_AVAILABLE:
+                is_scan_command = SmolLMPromptManager.is_scan_command(user_message)
+            else:
+                scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
+                question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
+                is_question = any(word in user_lower for word in question_words)
+                is_scan_command = any(keyword in user_lower for keyword in scan_keywords) and not is_question
             
-            if is_scan_command and not is_question:
+            if is_scan_command:
                 # Direct scan command detected
                 ai_response = f"TRIGGER_ORCHESTRATION:scan Opening scan interface now!"
                 logger.info(f"[SCAN] DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
@@ -902,9 +991,10 @@ class Smollm2ChatService:
                 }
             
             response = requests.post(
-                "http://localhost:11434/api/chat",
+                self.ollama_chat_url,
                 json=query,
-                timeout=15,  # Allow time for complete responses
+                timeout=self.api_timeout or OLLAMA_API_TIMEOUT,
+                verify=self.verify_ssl,
             )
 
             if response.status_code == 200:
@@ -1167,71 +1257,146 @@ class VoiceAIOrchestrator:
         Returns:
             Dict with extracted parameters
         """
-        params = {}
-        
-        # Color mode detection
-        if "color" in text and "black" not in text:
-            params["colorMode"] = "color"
-        elif "black and white" in text or "bw" in text or "monochrome" in text:
-            params["colorMode"] = "bw"
-        elif "grayscale" in text or "gray scale" in text or "grey" in text:
-            params["colorMode"] = "grayscale"
-        
-        # Layout detection
-        if "landscape" in text:
-            params["layout"] = "landscape"
-        elif "portrait" in text:
-            params["layout"] = "portrait"
-        
-        # Resolution detection
+        params: Dict[str, Any] = {}
         import re
+
+        def contains_any(phrases):
+            return any(phrase in text for phrase in phrases)
+
+        # Color / mono detection
+        if contains_any(["full color", "color copy", "print in color", "color mode"]):
+            params["colorMode"] = "color"
+        elif contains_any(["black and white", "black & white", "bw", "mono", "monochrome", "greyscale", "gray scale", "grey scale"]):
+            params["colorMode"] = "bw"
+        elif contains_any(["grayscale", "grey scale", "gray mode"]):
+            params["colorMode"] = "grayscale"
+        elif "color" in text and "black" not in text:
+            params["colorMode"] = "color"
+
+        # Layout detection
+        if contains_any(["landscape", "horizontal", "wide"]):
+            params["layout"] = "landscape"
+        elif contains_any(["portrait", "vertical", "tall"]):
+            params["layout"] = "portrait"
+
+        # Resolution detection
         dpi_match = re.search(r'(\d+)\s*dpi', text)
         if dpi_match:
             params["resolution"] = dpi_match.group(1)
-        elif "high quality" in text or "high res" in text:
+        elif contains_any(["ultra quality", "high quality", "high res", "best quality"]):
             params["resolution"] = "600"
-        elif "low quality" in text or "draft" in text:
+            params["quality"] = "high"
+        elif contains_any(["draft quality", "fast draft", "low quality", "low res"]):
             params["resolution"] = "150"
-        
+            params["quality"] = "draft"
+
         # Copies detection (for print)
-        copies_match = re.search(r'(\d+)\s*cop(?:y|ies)', text)
+        copies_match = re.search(r'(\d+)\s*(?:cop(?:y|ies)|prints|pages)', text)
         if copies_match:
             params["copies"] = int(copies_match.group(1))
-        
+        elif contains_any(["single copy", "one copy"]):
+            params["copies"] = 1
+
         # Paper size detection
-        if "a4" in text or "a 4" in text:
+        if contains_any(["a4", "a 4"]):
             params["paperSize"] = "A4"
-        elif "letter" in text and "size" in text:
+        elif contains_any(["letter size", "us letter", "letter paper"]):
             params["paperSize"] = "Letter"
-        elif "legal" in text and "size" in text:
+        elif contains_any(["legal size", "legal paper"]):
             params["paperSize"] = "Legal"
-        
-        # Page range detection
+        elif "a3" in text or "a 3" in text:
+            params["paperSize"] = "A3"
+
+        # Page range detection (print)
         page_range_match = re.search(r'page(?:s)?\s+(\d+)(?:\s*-\s*|\s+to\s+)(\d+)', text)
         if page_range_match:
             params["pages"] = "custom"
             params["customRange"] = f"{page_range_match.group(1)}-{page_range_match.group(2)}"
-        elif "odd pages" in text or "odd page" in text:
+        elif contains_any(["odd pages", "odd page", "only odd", "odd only", "just odd"]):
             params["pages"] = "odd"
-        elif "even pages" in text or "even page" in text:
+        elif contains_any(["even pages", "even page", "only even", "even only", "just even"]):
             params["pages"] = "even"
-        
-        # Double-sided detection
-        if "double sided" in text or "duplex" in text or "both sides" in text:
+        elif "all pages" in text or "entire document" in text:
+            params["pages"] = "all"
+
+        # Pages per sheet detection
+        pages_per_sheet_match = re.search(r'(\d+)\s*(?:per\s*(?:sheet|page|side))', text)
+        if pages_per_sheet_match:
+            params["pagesPerSheet"] = pages_per_sheet_match.group(1)
+
+        # Scale detection
+        scale_match = re.search(r'(\d{2,3})\s*(?:%|percent)', text)
+        if scale_match:
+            params["scale"] = int(scale_match.group(1))
+
+        # Margin detection
+        if contains_any(["no margin", "borderless", "edge to edge", "full bleed"]):
+            params["margins"] = "none"
+        elif contains_any(["narrow margin", "small margin", "thin margin"]):
+            params["margins"] = "narrow"
+        elif contains_any(["default margin", "standard margin", "normal margin"]):
+            params["margins"] = "default"
+
+        # Duplex / simplex detection
+        if contains_any(["double sided", "two sided", "both sides", "duplex"]):
             params["duplex"] = True
-        
+        elif contains_any(["single sided", "one sided", "front only", "simplex"]):
+            params["duplex"] = False
+
+        # Quality detection (explicit phrases)
+        if contains_any(["high quality", "best quality", "premium quality"]):
+            params["quality"] = "high"
+        elif contains_any(["normal quality", "standard quality"]):
+            params["quality"] = "normal"
+        elif contains_any(["draft quality", "eco mode", "economy mode"]):
+            params["quality"] = "draft"
+
         # Text mode detection (for scan)
-        if "text mode" in text or "ocr" in text or "extract text" in text:
+        if contains_any(["text mode", "ocr", "extract text", "enable ocr", "turn on ocr"]):
             params["scanTextMode"] = True
-        
-        # Format detection
+        elif contains_any(["disable ocr", "turn off ocr", "no text mode"]):
+            params["scanTextMode"] = False
+
+        # Format detection (scan/export)
         if "pdf" in text:
             params["format"] = "pdf"
         elif "png" in text:
             params["format"] = "png"
+        elif "tiff" in text or "tif" in text:
+            params["format"] = "tiff"
         elif "jpg" in text or "jpeg" in text:
             params["format"] = "jpg"
-        
+
+        # Scan-specific page mode detection
+        scan_page_match = re.search(r'scan\s+page(?:s)?\s+(\d+)(?:\s*-\s*|\s+to\s+)(\d+)', text)
+        if scan_page_match:
+            params["scanPageMode"] = "custom"
+            params["scanCustomRange"] = f"{scan_page_match.group(1)}-{scan_page_match.group(2)}"
+        elif contains_any(["scan odd", "scan only odd"]):
+            params["scanPageMode"] = "odd"
+        elif contains_any(["scan even", "scan only even"]):
+            params["scanPageMode"] = "even"
+        elif contains_any(["scan everything", "scan all pages"]):
+            params["scanPageMode"] = "all"
+
+        # Scan mode (single vs multi)
+        if contains_any(["batch scan", "multi page", "multiple pages", "continuous scan", "stack feed"]):
+            params["scanMode"] = "multi"
+        elif contains_any(["single page", "one page", "single scan"]):
+            params["scanMode"] = "single"
+
+        # Orientation hints that explicitly mention scan
+        if contains_any(["scan landscape"]):
+            params["scanLayout"] = "landscape"
+        elif contains_any(["scan portrait"]):
+            params["scanLayout"] = "portrait"
+
+        # Paper size hints mentioning scan specifically
+        if contains_any(["scan letter", "scan on letter"]):
+            params["scanPaperSize"] = "Letter"
+        elif contains_any(["scan legal"]):
+            params["scanPaperSize"] = "Legal"
+
         return params
 
     def end_session(self):

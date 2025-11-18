@@ -1,58 +1,3 @@
-// ==================== MODAL & PREVIEW CONFIGURATION ====================
-// ≡ƒôÉ ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
-//
-// If the preview is cut off or you want to change the modal size:
-// 1. Adjust modal.maxHeight/maxWidth to change the overall modal size
-// 2. Adjust modalBody.maxHeight to change scrollable content area
-// 3. Adjust previewBox.maxHeight to change the sticky preview container height
-//
-const MODAL_CONFIG = {
-  modal: {
-    maxHeight: '90vh', // Maximum modal height (increase to make modal taller)
-    maxWidth: '95vw', // Maximum modal width (increase to make modal wider)
-  },
-  modalBody: {
-    maxHeight: '90vh - 10rem', // Modal body max height (leave room for header/footer)
-  },
-  previewBox: {
-    maxHeight: '90vh - 12rem', // Preview box max height (sticky container - increase if preview is cut off)
-  },
-};
-// =======================================================================
-
-const includeIfDefined = (value: any, key: string) =>
-  value === undefined || value === null ? {} : { [key]: value };
-
-const describeVoiceUpdates = (updates: Record<string, any>) => {
-  if (!updates) {
-    return '';
-  }
-
-  const labels: Record<string, string> = {
-    color_mode: 'Color Mode',
-    orientation: 'Orientation',
-    paper_size: 'Paper Size',
-    page_size: 'Page Size',
-    margins: 'Margins',
-    scale: 'Scale',
-    copies: 'Copies',
-    duplex: 'Duplex',
-    quality: 'Quality',
-    resolution: 'Resolution',
-    format: 'Format',
-  };
-
-  return Object.entries(updates)
-    .map(([key, value]) => {
-      const label = labels[key] || key;
-      if (typeof value === 'boolean') {
-        return `${label}: ${value ? 'On' : 'Off'}`;
-      }
-      return `${label}: ${value}`;
-    })
-    .join(', ');
-};
-
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
@@ -114,12 +59,107 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import { Iconify, FancySelect, ConnectionValidator } from '../components/common';
-import { VoiceAIChat, DocumentPreview } from '../components';
+import { VoiceAIChat, DocumentPreview, DashboardHeroCard, DashboardActionPanel } from '../components';
 import DocumentSelector, {
   DocumentSelectorHandle,
 } from '../components/document/DocumentSelector';
 import PageShell from '../components/layout/PageShell';
 import SurfaceCard from '../components/layout/SurfaceCard';
+import { DashboardShell } from '../components/layout/DashboardRegions';
+import { FileInfo } from '../types';
+
+// ==================== MODAL & PREVIEW CONFIGURATION ====================
+// 🔧 ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
+//
+// If the preview is cut off or you want to change the modal size:
+// 1. Adjust modal.maxHeight/maxWidth to change the overall modal size
+// 2. Adjust modalBody.maxHeight to change scrollable content area
+// 3. Adjust previewBox.maxHeight to change the sticky preview container height
+//
+const MODAL_CONFIG = {
+  modal: {
+    maxHeight: '90vh', // Maximum modal height (increase to make modal taller)
+    maxWidth: '95vw', // Maximum modal width (increase to make modal wider)
+  },
+  modalBody: {
+    maxHeight: '90vh - 10rem', // Modal body max height (leave room for header/footer)
+  },
+  previewBox: {
+    maxHeight: '90vh - 12rem', // Preview box max height (sticky container - increase if preview is cut off)
+  },
+};
+// =======================================================================
+
+const includeIfDefined = (value: any, key: string) =>
+  value === undefined || value === null ? {} : { [key]: value };
+
+const describeVoiceUpdates = (updates: Record<string, any>) => {
+  if (!updates) {
+    return '';
+  }
+
+  const labels: Record<string, string> = {
+    color_mode: 'Color Mode',
+    orientation: 'Orientation',
+    paper_size: 'Paper Size',
+    page_size: 'Page Size',
+    paper_size_custom: 'Paper Size',
+    margins: 'Margins',
+    margins_custom: 'Margins',
+    scale: 'Scale',
+    scale_custom: 'Scale',
+    copies: 'Copies',
+    duplex: 'Duplex',
+    quality: 'Quality',
+    resolution: 'Resolution',
+    format: 'Format',
+    custom_range: 'Custom Range',
+    pages: 'Pages',
+    page_mode: 'Pages',
+    pages_per_sheet: 'Pages Per Sheet',
+    pages_per_sheet_custom: 'Pages Per Sheet',
+    mode: 'Scan Mode',
+    text_mode: 'Text Mode',
+    printColorMode: 'Color Mode',
+    printLayout: 'Orientation',
+    printPaperSize: 'Paper Size',
+    printPaperSizeCustom: 'Paper Size',
+    printResolution: 'Resolution',
+    printPages: 'Pages',
+    printCustomRange: 'Custom Range',
+    printScale: 'Scale',
+    printScaleCustom: 'Scale',
+    printMargins: 'Margins',
+    printMarginsCustom: 'Margins',
+    printPagesPerSheet: 'Pages Per Sheet',
+    printPagesPerSheetCustom: 'Pages Per Sheet',
+    printCopies: 'Copies',
+    printDuplex: 'Duplex',
+    printQuality: 'Quality',
+    scanColorMode: 'Color Mode',
+    scanLayout: 'Orientation',
+    scanResolution: 'Resolution',
+    scanResolutionCustom: 'Resolution',
+    scanPaperSize: 'Paper Size',
+    scanPaperSizeCustom: 'Paper Size',
+    scanPageMode: 'Pages',
+    scanCustomRange: 'Custom Range',
+    scanFormat: 'Format',
+    scanTextMode: 'Text Mode',
+    scanMode: 'Scan Mode',
+    scanQuality: 'Quality',
+  };
+
+  return Object.entries(updates)
+    .map(([key, value]) => {
+      const label = labels[key] || key;
+      if (typeof value === 'boolean') {
+        return `${label}: ${value ? 'On' : 'Off'}`;
+      }
+      return `${label}: ${value}`;
+    })
+    .join(', ');
+};
 
 // Motion components
 const MotionBox = motion.create(Box);
@@ -133,22 +173,6 @@ interface ProcessingProgress {
   total_steps: number;
   stage_name: string;
   message?: string;
-}
-
-interface FileInfo {
-  filename: string;
-  size: number;
-  created: string;
-  has_text: boolean;
-  page_count?: number;
-  mime_type?: string;
-  processing?: boolean;
-  processing_step?: number;
-  processing_total?: number;
-  processing_stage?: string;
-  processing_eta?: number;
-  processing_progress?: number;
-  thumbnail?: string;
 }
 
 type PreviewControlSource = 'manual' | 'voice';
@@ -256,7 +280,7 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
       >
         <Spinner size="lg" color="brand.400" />
         <Text mt={3} fontSize="sm" color="text.muted">
-          Loading previewΓÇª
+          Loading preview…
         </Text>
       </Flex>
     );
@@ -303,7 +327,6 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
       borderRadius="lg"
     />
   );
-
 };
 
 const Dashboard: React.FC = () => {
@@ -374,6 +397,7 @@ const Dashboard: React.FC = () => {
     scanResolutionCustom: '',
     scanColorMode: 'color' as 'color' | 'grayscale' | 'bw',
     scanFormat: 'pdf' as string,
+    scanQuality: 'normal' as string,
     // Print options
     printPages: 'all' as 'all' | 'odd' | 'even' | 'custom',
     printCustomRange: '',
@@ -476,6 +500,72 @@ const Dashboard: React.FC = () => {
     }
   }, [orchestrateModal.isOpen, orchestrationContext]);
 
+  useEffect(() => {
+    if (orchestrationContext === 'voice' && !isChatVisible) {
+      setIsChatVisible(true);
+    }
+  }, [orchestrationContext, isChatVisible]);
+
+  const legacyVoiceKeyMap = useMemo<Record<OrchestrationAction, Record<string, string>>>(
+    () => ({
+      print: {
+        colorMode: 'color_mode',
+        color_mode: 'color_mode',
+        layout: 'orientation',
+        orientation: 'orientation',
+        paperSize: 'paper_size',
+        pageSize: 'paper_size',
+        paper_size: 'paper_size',
+        paperSizeCustom: 'paper_size_custom',
+        paper_size_custom: 'paper_size_custom',
+        resolution: 'resolution',
+        pages: 'pages',
+        customRange: 'custom_range',
+        custom_range: 'custom_range',
+        scale: 'scale',
+        scaleCustom: 'scale_custom',
+        scale_custom: 'scale_custom',
+        margins: 'margins',
+        marginsCustom: 'margins_custom',
+        pagesPerSheet: 'pages_per_sheet',
+        pages_per_sheet: 'pages_per_sheet',
+        pagesPerSheetCustom: 'pages_per_sheet_custom',
+        pages_per_sheet_custom: 'pages_per_sheet_custom',
+        copies: 'copies',
+        duplex: 'duplex',
+        quality: 'quality',
+      },
+      scan: {
+        colorMode: 'color_mode',
+        color_mode: 'color_mode',
+        layout: 'orientation',
+        orientation: 'orientation',
+        paperSize: 'paper_size',
+        pageSize: 'paper_size',
+        page_size: 'paper_size',
+        paper_size: 'paper_size',
+        paperSizeCustom: 'paper_size_custom',
+        paper_size_custom: 'paper_size_custom',
+        resolution: 'resolution',
+        scanResolution: 'resolution',
+        resolutionCustom: 'resolution_custom',
+        resolution_custom: 'resolution_custom',
+        format: 'format',
+        scanFormat: 'format',
+        mode: 'mode',
+        scanMode: 'mode',
+        pageMode: 'page_mode',
+        scanPageMode: 'page_mode',
+        customRange: 'custom_range',
+        scanCustomRange: 'custom_range',
+        textMode: 'text_mode',
+        scanTextMode: 'text_mode',
+        quality: 'quality',
+      },
+    }),
+    []
+  );
+
   const normalizeVoiceUpdates = useCallback(
     (actionType: OrchestrationAction | undefined, updates: Record<string, any> = {}) => {
       if (!actionType || !updates) {
@@ -487,13 +577,24 @@ const Dashboard: React.FC = () => {
           ...includeIfDefined(updates.color_mode, 'printColorMode'),
           ...includeIfDefined(updates.orientation, 'printLayout'),
           ...includeIfDefined(updates.paper_size, 'printPaperSize'),
+          ...includeIfDefined(updates.paper_size_custom, 'printPaperSizeCustom'),
           ...includeIfDefined(updates.margins, 'printMargins'),
+          ...includeIfDefined(updates.margins_custom, 'printMarginsCustom'),
           ...includeIfDefined(
             updates.scale !== undefined && updates.scale !== null
               ? String(updates.scale)
               : undefined,
             'printScale'
           ),
+          ...includeIfDefined(updates.scale_custom, 'printScaleCustom'),
+          ...includeIfDefined(
+            updates.resolution !== undefined && updates.resolution !== null
+              ? String(updates.resolution)
+              : undefined,
+            'printResolution'
+          ),
+          ...includeIfDefined(updates.pages, 'printPages'),
+          ...includeIfDefined(updates.custom_range, 'printCustomRange'),
           ...includeIfDefined(
             updates.copies !== undefined && updates.copies !== null
               ? String(updates.copies)
@@ -504,6 +605,13 @@ const Dashboard: React.FC = () => {
             typeof updates.duplex === 'boolean' ? updates.duplex : undefined,
             'printDuplex'
           ),
+          ...includeIfDefined(
+            updates.pages_per_sheet !== undefined && updates.pages_per_sheet !== null
+              ? String(updates.pages_per_sheet)
+              : undefined,
+            'printPagesPerSheet'
+          ),
+          ...includeIfDefined(updates.pages_per_sheet_custom, 'printPagesPerSheetCustom'),
           ...includeIfDefined(updates.quality, 'printQuality'),
         };
       }
@@ -518,20 +626,47 @@ const Dashboard: React.FC = () => {
           'scanResolution'
         ),
         ...includeIfDefined(updates.page_size || updates.paper_size, 'scanPaperSize'),
+        ...includeIfDefined(updates.paper_size_custom, 'scanPaperSizeCustom'),
         ...includeIfDefined(updates.format, 'scanFormat'),
+        ...includeIfDefined(updates.page_mode, 'scanPageMode'),
+        ...includeIfDefined(updates.custom_range, 'scanCustomRange'),
+        ...includeIfDefined(
+          updates.resolution_custom !== undefined && updates.resolution_custom !== null
+            ? String(updates.resolution_custom)
+            : undefined,
+          'scanResolutionCustom'
+        ),
+        ...includeIfDefined(
+          typeof updates.text_mode === 'boolean' ? updates.text_mode : undefined,
+          'scanTextMode'
+        ),
+        ...includeIfDefined(updates.mode, 'scanMode'),
+        ...includeIfDefined(updates.quality, 'scanQuality'),
       };
     },
     []
   );
 
   const applyVoiceConfigurationUpdates = useCallback(
-    (actionType: OrchestrationAction | undefined, updates: Record<string, any>) => {
-      if (!actionType || !updates || Object.keys(updates).length === 0) {
+    (
+      actionType: OrchestrationAction | undefined,
+      updates: Record<string, any>,
+      normalizedOverride?: Record<string, any>
+    ) => {
+      if (
+        !actionType ||
+        ((!updates || Object.keys(updates).length === 0) &&
+          (!normalizedOverride || Object.keys(normalizedOverride).length === 0))
+      ) {
         return false;
       }
 
-      const normalized = normalizeVoiceUpdates(actionType, updates);
-      if (Object.keys(normalized).length === 0) {
+      const normalized =
+        normalizedOverride && Object.keys(normalizedOverride).length > 0
+          ? normalizedOverride
+          : normalizeVoiceUpdates(actionType, updates);
+
+      if (!normalized || Object.keys(normalized).length === 0) {
         return false;
       }
 
@@ -540,7 +675,9 @@ const Dashboard: React.FC = () => {
         ...normalized,
       }));
 
-      const summary = describeVoiceUpdates(updates);
+      const summarySource =
+        updates && Object.keys(updates).length > 0 ? updates : normalized;
+      const summary = describeVoiceUpdates(summarySource);
       if (summary) {
         setVoiceAdjustmentLog(prev => {
           const next = [
@@ -560,6 +697,45 @@ const Dashboard: React.FC = () => {
     [normalizeVoiceUpdates, setOrchestrateOptions]
   );
 
+  const resolveInitialVoiceConfigOptions = useCallback(
+    (mode: OrchestrationAction, config?: any) => {
+      if (!config || typeof config !== 'object') {
+        return {};
+      }
+
+      if (config.options && typeof config.options === 'object') {
+        return config.options;
+      }
+
+      const prefixedKey = Object.keys(config).some(key =>
+        key.startsWith(mode === 'print' ? 'print' : 'scan')
+      );
+      if (prefixedKey) {
+        return config;
+      }
+
+      const mapping = legacyVoiceKeyMap[mode];
+      const snakeSource: Record<string, any> = {};
+
+      Object.entries(config).forEach(([key, value]) => {
+        if (value === undefined || value === null) {
+          return;
+        }
+        const mappedKey = mapping?.[key];
+        if (mappedKey) {
+          snakeSource[mappedKey] = value;
+        }
+      });
+
+      if (Object.keys(snakeSource).length === 0) {
+        return {};
+      }
+
+      return normalizeVoiceUpdates(mode, snakeSource);
+    },
+    [legacyVoiceKeyMap, normalizeVoiceUpdates]
+  );
+
   const handleOrchestrationUpdate = useCallback(
     (payload: any) => {
       if (!payload?.type) {
@@ -577,12 +753,19 @@ const Dashboard: React.FC = () => {
         case 'voice_configuration_updated': {
           const actionType = payload.action_type as OrchestrationAction | undefined;
           const updates = payload.updates || {};
-          const applied = applyVoiceConfigurationUpdates(actionType, updates);
+          const applied = applyVoiceConfigurationUpdates(
+            actionType,
+            updates,
+            payload.frontend_updates
+          );
           if (applied) {
             if (!orchestrateModal.isOpen) {
               orchestrateModal.onOpen();
             }
-            const described = describeVoiceUpdates(updates) || 'settings updated';
+            const described =
+              describeVoiceUpdates(
+                Object.keys(updates).length > 0 ? updates : payload.frontend_updates || {}
+              ) || 'settings updated';
             toast({
               title: 'Voice Settings Applied',
               description: `Updated via voice: ${described}`,
@@ -590,6 +773,13 @@ const Dashboard: React.FC = () => {
               duration: 3000,
             });
           }
+          break;
+        }
+        case 'configuration_updated': {
+          const actionType = payload.action_type as OrchestrationAction | undefined;
+          const normalized =
+            payload.frontend_updates || payload.frontend_state?.options || {};
+          applyVoiceConfigurationUpdates(actionType, payload.updates || {}, normalized);
           break;
         }
         case 'configuration_complete': {
@@ -610,7 +800,11 @@ const Dashboard: React.FC = () => {
           if (mode === 'print' || mode === 'scan') {
             const shouldOpen = payload.open_ui ?? payload.result?.open_ui;
             if (shouldOpen && voiceOrchestrationTriggerRef.current) {
-              voiceOrchestrationTriggerRef.current(mode, payload.result?.configuration);
+              const configPayload =
+                payload.frontend_state ||
+                payload.result?.frontend_state ||
+                payload.result?.configuration;
+              voiceOrchestrationTriggerRef.current(mode, configPayload);
             }
             if (payload.skip_mode_selection || payload.result?.skip_mode_selection) {
               setOrchestrateStep(2);
@@ -852,12 +1046,34 @@ const Dashboard: React.FC = () => {
     ]
   );
 
-  const handleDockedChatClose = useCallback(() => {
+  const forceCloseChat = useCallback(() => {
     setIsChatVisible(false);
+    setOrchestrationContext('manual');
+  }, []);
+
+  const handleDockedChatClose = useCallback(() => {
     if (orchestrationContext === 'voice') {
-      setOrchestrationContext('manual');
+      toast({
+        title: 'Voice assistant active',
+        description: 'Chat stays visible while AI configures your settings.',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+      setIsChatVisible(true);
+      return;
     }
-  }, [orchestrationContext]);
+
+    setIsChatVisible(false);
+  }, [orchestrationContext, toast]);
+
+  const handleChatVisibilityToggle = useCallback(() => {
+    if (isChatVisible) {
+      handleDockedChatClose();
+    } else {
+      setIsChatVisible(true);
+    }
+  }, [handleDockedChatClose, isChatVisible]);
 
   const handleVoiceCommand = useCallback(
     async (data: any) => {
@@ -1023,7 +1239,7 @@ const Dashboard: React.FC = () => {
 
         case 'stop_recording': {
           if (isChatVisible) {
-            handleDockedChatClose();
+            forceCloseChat();
           }
           toast({
             title: 'Voice Stopped',
@@ -1044,6 +1260,7 @@ const Dashboard: React.FC = () => {
       documentSelectorModal,
       documentSelectorRef,
       getSectionFromParam,
+      forceCloseChat,
       handleDockedChatClose,
       isChatVisible,
       orchestrateMode,
@@ -1064,16 +1281,17 @@ const Dashboard: React.FC = () => {
     handleOrchestrationUpdateRef.current = handleOrchestrationUpdate;
   }, [handleOrchestrationUpdate]);
 
-  const handleVoiceCommandRef = React.useRef(handleVoiceCommand);
-  useEffect(() => {
-    handleVoiceCommandRef.current = handleVoiceCommand;
-  }, [handleVoiceCommand]);
-
   const surfaceCard = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
   const dockedChatBg = useColorModeValue('rgba(248, 250, 255, 0.95)', 'rgba(9, 14, 26, 0.96)');
   const dockedBorderColor = useColorModeValue('rgba(121,95,238,0.12)', 'rgba(121,95,238,0.35)');
   const statusDotColor = connected ? 'green.400' : 'red.400';
   const statusTextColor = useColorModeValue('gray.600', 'gray.300');
+  const statusText = error
+    ? `Connection issues (retry ${connectionRetries})`
+    : connected
+      ? 'Live link established'
+      : 'Disconnected';
+  const showReopenOrchestrateButton = Boolean(orchestrateMode && !orchestrateModal.isOpen);
 
   // Derived color values to avoid calling hooks conditionally inside JSX
   const systemModalBgGradient = useColorModeValue(
@@ -1132,14 +1350,6 @@ const Dashboard: React.FC = () => {
     };
     socket.on('orchestration_update', orchestrationUpdateListener);
 
-    // Listen for voice commands (document selector control)
-    const voiceCommandListener = (data: any) => {
-      console.log('Voice command received:', data);
-      void handleVoiceCommandRef.current?.(data);
-    };
-
-    socket.on('voice_command', voiceCommandListener);
-
     loadFiles();
     loadConvertedFiles(); // Load converted files on component mount
 
@@ -1188,7 +1398,6 @@ const Dashboard: React.FC = () => {
       socket.off('processing_complete', processingCompleteListener);
       socket.off('processing_error', processingErrorListener);
       socket.off('orchestration_update', orchestrationUpdateListener);
-      socket.off('voice_command', voiceCommandListener);
       // -- startPolling cleaned up
     };
   }, [socket]);
@@ -1339,28 +1548,11 @@ const Dashboard: React.FC = () => {
 
     setOrchestrateMode(mode);
 
-    if (config) {
+    const resolvedVoiceOptions = resolveInitialVoiceConfigOptions(mode, config);
+    if (Object.keys(resolvedVoiceOptions).length > 0) {
       setOrchestrateOptions(prev => ({
         ...prev,
-        ...(mode === 'scan' && {
-          scanColorMode: config.colorMode || prev.scanColorMode,
-          scanLayout: config.layout || prev.scanLayout,
-          scanResolution: config.resolution || prev.scanResolution,
-          scanPaperSize: config.paperSize || prev.scanPaperSize,
-          scanTextMode:
-            config.scanTextMode !== undefined ? config.scanTextMode : prev.scanTextMode,
-          scanPageMode: config.pages || prev.scanPageMode,
-          scanCustomRange: config.customRange || prev.scanCustomRange,
-        }),
-        ...(mode === 'print' && {
-          printColorMode: config.colorMode || prev.printColorMode,
-          printLayout: config.layout || prev.printLayout,
-          printResolution: config.resolution || prev.printResolution,
-          printPaperSize: config.paperSize || prev.printPaperSize,
-          printPages: config.pages || prev.printPages,
-          printCustomRange: config.customRange || prev.printCustomRange,
-          printScale: config.scale || prev.printScale,
-        }),
+        ...resolvedVoiceOptions,
       }));
     }
 
@@ -1524,8 +1716,10 @@ const Dashboard: React.FC = () => {
     return new Date(dateString).toLocaleString();
   };
 
-  const handleRefreshClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
+  const handleRefreshClick = (e?: React.MouseEvent<HTMLButtonElement>) => {
+    if (e) {
+      e.preventDefault();
+    }
     loadFiles(true);
   };
 
@@ -1773,200 +1967,53 @@ const Dashboard: React.FC = () => {
       (loadConvertedFiles as any)._isRunning = false;
     }
   }, []);
+
+  const handleConvertedDrawerToggle = useCallback(() => {
+    if (!convertedDrawer.isOpen) {
+      loadConvertedFiles();
+    }
+    convertedDrawer.onToggle();
+  }, [convertedDrawer, loadConvertedFiles]);
   // Prevent scrolling when chat visibility changes
   return (
     <Box position="relative" minH="100vh">
-      {/* Main Content Area */}
-      <Box 
-        mr={isChatVisible ? "35vw" : "0"}
-        transition="margin-right 0.3s ease-out"
-        minH="100vh"
-        pt={2}
-        px={3}
-        pb={2}
-        pr={isChatVisible ? "0" : "3"}
-      >
-        <VStack align="stretch" spacing={5} pb={6}>
-          <SurfaceCard>
-            <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
-              <Stack spacing={2}>
-                <Heading size="lg" display="flex" alignItems="center" gap={3}>
-                  📊 Dashboard
-                </Heading>
-                <Text color="text.muted" maxW="lg">
-                  Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in
-                  real time.
-                </Text>
-              </Stack>
+      <PageShell>
+        <DashboardShell
+          styleOverrides={{
+            mr: isChatVisible ? '35vw' : 0,
+            transition: 'margin-right 0.3s ease-out',
+            minH: '100vh',
+            pt: 2,
+            pb: 2,
+            px: 3,
+            pr: isChatVisible ? 0 : 3,
+          }}
+        >
+          {/* Main Content Area */}
+          <VStack align="stretch" spacing={5} pb={6}>
+          <DashboardHeroCard
+            statusDotColor={statusDotColor}
+            statusTextColor={statusTextColor}
+            statusText={statusText}
+            error={error}
+            onRefresh={handleRefreshClick}
+          />
 
-              <Stack direction="row" spacing={3} align="center">
-                <Flex
-                  align="center"
-                  gap={2}
-                  px={4}
-                  py={2}
-                  borderRadius="full"
-                  bg="surface.blur"
-                  border="1px solid"
-                  borderColor="rgba(121,95,238,0.2)"
-                >
-                  <Box
-                    w={3}
-                    h={3}
-                    borderRadius="full"
-                    bg={error ? 'orange.400' : statusDotColor}
-                    boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`}
-                  />
-                  <Text fontWeight="600" color={statusTextColor}>
-                    {error
-                      ? `Connection issues (retry ${connectionRetries})`
-                      : connected
-                        ? 'Live link established'
-                        : 'Disconnected'}
-                  </Text>
-                </Flex>
-                <IconButton
-                  aria-label="Refresh files"
-                  icon={<Iconify icon={FiRefreshCw} boxSize={5} />}
-                  onClick={handleRefreshClick}
-                  variant="ghost"
-                  colorScheme="brand"
-                  size="lg"
-                />
-              </Stack>
-            </Flex>
-          </SurfaceCard>
-
-          <SurfaceCard>
-            <Stack direction={{ base: 'column', lg: 'row' }} spacing={4} wrap="wrap">
-              <MotionBox
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              >
-                <Button
-                  size="lg"
-                  colorScheme="brand"
-                  variant="solid"
-                  onClick={triggerPrint}
-                  leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
-                  boxShadow="0 4px 14px rgba(121,95,238,0.4)"
-                  _hover={{ boxShadow: '0 6px 20px rgba(121,95,238,0.6)' }}
-                  transition="all 0.3s"
-                >
-                  Orchestrate Print Capture
-                </Button>
-              </MotionBox>
-              <MotionBox
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              >
-                <Button
-                  size="lg"
-                  colorScheme="purple"
-                  variant="solid"
-                  onClick={() => setIsChatVisible(!isChatVisible)}
-                  leftIcon={<Iconify icon={FiMic} boxSize={5} />}
-                  boxShadow="0 4px 14px rgba(147,51,234,0.4)"
-                  _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
-                  transition="all 0.3s"
-                >
-                  {isChatVisible ? 'Hide' : 'Show'} AI Chat
-                </Button>
-              </MotionBox>
-              <MotionBox
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              >
-                <Button
-                  size="lg"
-                  variant={selectionMode ? 'solid' : 'ghost'}
-                  colorScheme={selectionMode ? 'orange' : 'brand'}
-                  onClick={toggleSelectionMode}
-                >
-                  {selectionMode ? 'Cancel Selection' : 'Select Files'}
-                </Button>
-              </MotionBox>
-              {selectionMode && selectedFiles.length > 0 && (
-                <MotionBox
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  whileHover={{ scale: 1.05, y: -3 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button size="lg" colorScheme="brand" variant="outline" onClick={openConversionModal}>
-                    Convert {selectedFiles.length} Selected
-                  </Button>
-                </MotionBox>
-              )}
-              {/* Check Connectivity Button */}
-              <MotionBox
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              >
-                <Button
-                  size="lg"
-                  colorScheme="cyan"
-                  variant="solid"
-                  onClick={connectivityModal.onOpen}
-                  leftIcon={<Iconify icon={FiWifiOff} boxSize={5} />}
-                  boxShadow="0 4px 14px rgba(34,211,238,0.4)"
-                  _hover={{ boxShadow: '0 6px 20px rgba(34,211,238,0.6)' }}
-                  transition="all 0.3s"
-                  position="relative"
-                  overflow="hidden"
-                >
-                  Check Connectivity
-                </Button>
-              </MotionBox>
-              <MotionBox
-                whileHover={{ scale: 1.05, y: -3 }}
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              >
-                <Button
-                  size="lg"
-                  variant="ghost"
-                  onClick={() => {
-                    if (!convertedDrawer.isOpen) {
-                      loadConvertedFiles();
-                    }
-                    convertedDrawer.onToggle();
-                  }}
-                >
-                  {convertedDrawer.isOpen ? 'Hide Converted Files' : 'Show Converted Files'}
-                </Button>
-              </MotionBox>
-              {orchestrateMode && !orchestrateModal.isOpen && (
-                <MotionBox
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  whileHover={{ scale: 1.05, y: -3 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button
-                    size="lg"
-                    colorScheme="brand"
-                    variant="outline"
-                    onClick={reopenOrchestrateModal}
-                    leftIcon={
-                      <Iconify
-                        icon="solar:redo-bold-duotone"
-                        boxSize={5}
-                      />
-                    }
-                  >
-                    Re-open {orchestrateMode === 'print' ? 'Print' : 'Scan'} Configuration
-                  </Button>
-                </MotionBox>
-              )}
-            </Stack>
-          </SurfaceCard>
+          <DashboardActionPanel
+            isChatVisible={isChatVisible}
+            selectionMode={selectionMode}
+            selectedFilesCount={selectedFiles.length}
+            orchestrateMode={orchestrateMode}
+            showReopenOrchestrate={showReopenOrchestrateButton}
+            onTriggerPrint={triggerPrint}
+            onToggleChat={handleChatVisibilityToggle}
+            onToggleSelectionMode={toggleSelectionMode}
+            onOpenConversionModal={openConversionModal}
+            onCheckConnectivity={connectivityModal.onOpen}
+            onToggleConvertedDrawer={handleConvertedDrawerToggle}
+            isConvertedDrawerOpen={convertedDrawer.isOpen}
+            onReopenOrchestrate={reopenOrchestrateModal}
+          />
         </VStack>
 
       {error && (
@@ -2079,7 +2126,6 @@ const Dashboard: React.FC = () => {
               >
                 <CardBody>
                   <Stack spacing={3} align="center">
-                    <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
                     <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
                     <Heading size="sm">No files yet</Heading>
                     <Text color="text.muted" maxW="md">
@@ -4386,7 +4432,8 @@ const Dashboard: React.FC = () => {
         allowMultiple={true}
         mode={orchestrateMode || 'print'}
       />
-      </Box>
+        </DashboardShell>
+      </PageShell>
 
       {/* Connectivity Status Modal */}
       <Modal
@@ -4541,10 +4588,11 @@ const Dashboard: React.FC = () => {
         >
           <VoiceAIChat
             isOpen={isChatVisible}
-            onClose={() => setIsChatVisible(false)}
+            onClose={handleDockedChatClose}
             onOrchestrationTrigger={handleVoiceOrchestrationTrigger}
             isMinimized={false}
-            onToggleMinimize={() => setIsChatVisible(false)}
+            onToggleMinimize={handleDockedChatClose}
+            onVoiceCommand={handleVoiceCommand}
           />
         </Box>
       )}

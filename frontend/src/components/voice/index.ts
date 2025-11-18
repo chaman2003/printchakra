@@ -1,2 +1,2 @@
 // Voice Control Components
-export { VoiceAIChat } from '../../features/aiChat';
+export { default as VoiceAIChat } from './VoiceAIChat';

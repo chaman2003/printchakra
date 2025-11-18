@@ -10,17 +10,19 @@ This module contains:
 """
 
 from typing import Dict, Any, List, Optional, Tuple
+import copy
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
+
+from config import AI_PROMPT_CONFIG, COMMAND_MAPPINGS_FILE, SYSTEM_PROMPT_FILE
 
 logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-# SYSTEM PROMPT - Defines SmolLM2 behavior and capabilities
-# ============================================================================
-
-SMOLLM_SYSTEM_PROMPT = """You are PrintChakra AI - a voice-controlled document assistant.
+DEFAULT_SYSTEM_PROMPT = """You are PrintChakra AI - a voice-controlled document assistant.
 
 GREETING (always start with):
 "How can I help you? You can say print a document or scan a document."
@@ -30,30 +32,30 @@ GREETING (always start with):
 YOUR CAPABILITIES:
 
 1. DOCUMENT SELECTOR CONTROL (per-section 1-based numbering):
-   - "select original number 2" → Select doc #2 from Originals
-   - "switch to converted" → Switch to Converted section
-   - "show uploaded" → Switch to Uploaded section
-   - "next document" → Move to next in current section
-   - "previous document" → Move to previous in current section
-   - "upload a document" → Trigger upload modal
+   - "select original number 2" -> Select doc #2 from Originals
+   - "switch to converted" -> Switch to Converted section
+   - "show uploaded" -> Switch to Uploaded section
+   - "next document" -> Move to next in current section
+   - "previous document" -> Move to previous in current section
+   - "upload a document" -> Trigger upload modal
 
 2. PARAMETER MODIFICATION (real-time UI updates):
-   - "switch to grayscale" → Change color mode
-   - "set DPI to 300" → Change resolution
-   - "landscape orientation" → Change layout
-   - "2 copies" → Set copy count
-   - "double sided" → Enable duplex
-   - "turn on OCR" → Enable text mode
+   - "switch to grayscale" -> Change color mode
+   - "set DPI to 300" -> Change resolution
+   - "landscape orientation" -> Change layout
+   - "2 copies" -> Set copy count
+   - "double sided" -> Enable duplex
+   - "turn on OCR" -> Enable text mode
 
 3. GLOBAL COMMANDS:
-   - "cancel" → Cancel current operation
-   - "status" → Report current workflow state
-   - "repeat settings" → Read back current config
-   - "help" → List available commands
-   - "stop recording" → End voice session
+   - "cancel" -> Cancel current operation
+   - "status" -> Report current workflow state
+   - "repeat settings" -> Read back current config
+   - "help" -> List available commands
+   - "stop recording" -> End voice session
 
 4. CONFIRMATION:
-   - "confirm print" / "confirm scan" → Execute operation
+   - "confirm print" / "confirm scan" -> Execute operation
    - Always repeat settings before confirming
 
 5. REAL-TIME UPDATES (announce these):
@@ -67,131 +69,157 @@ BE CONCISE (under 15 words). Answer questions directly.
 Remember: You control the ENTIRE workflow through voice."""
 
 
-# ============================================================================
-# VOICE COMMAND MAPPINGS - Commands that don't need LLM processing
-# ============================================================================
-
-VOICE_COMMAND_MAPPINGS = {
-    # Document selector control
-    "select_document": [
-        "select", "choose", "pick", "open document", 
-        "select original", "select converted", "select uploaded", 
-        "document number", "number"
+DEFAULT_COMMAND_CONFIG = {
+    "voice_commands": {
+        "select_document": [
+            "select document", "choose document", "pick document", "open document",
+            "select original document", "select converted document", "select uploaded document",
+            "document number", "file number", "document", "file"
+        ],
+        "switch_section": [
+            "switch to", "show", "go to", "open section",
+            "switch section", "change to"
+        ],
+        "next_document": [
+            "next", "next document", "next file",
+            "forward", "move forward", "go forward"
+        ],
+        "previous_document": [
+            "previous", "previous document", "previous file",
+            "back", "move back", "go back"
+        ],
+        "upload_document": [
+            "upload", "upload document", "upload file",
+            "add document", "add file", "new document"
+        ],
+        "confirm": [
+            "confirm", "confirm print", "confirm scan",
+            "yes proceed", "execute", "do it", "start", "begin"
+        ],
+        "cancel": [
+            "cancel", "stop", "abort",
+            "don't do it", "nevermind", "forget it"
+        ],
+        "status": [
+            "status", "what's happening", "progress",
+            "where are we", "current state"
+        ],
+        "repeat_settings": [
+            "repeat", "repeat settings", "read settings",
+            "what settings", "show settings", "current settings"
+        ],
+        "help": [
+            "help", "what can you do", "commands",
+            "options", "guide"
+        ],
+        "stop_recording": [
+            "stop recording", "stop listening", "end session",
+            "bye", "goodbye", "stop voice"
+        ],
+    },
+    "friendly_responses": {
+        "select_document": "Selecting document {document_number}",
+        "switch_section": "Switching to {section} section",
+        "next_document": "Moving to next document",
+        "previous_document": "Moving to previous document",
+        "upload_document": "Opening upload dialog",
+        "confirm": "Executing now!",
+        "cancel": "Cancelled",
+        "status": "Checking status...",
+        "repeat_settings": "Reading settings...",
+        "help": "Here's what I can do...",
+        "stop_recording": "Stopping recording",
+    },
+    "confirmation_words": [
+        "yes", "proceed", "go ahead", "okay", "ok",
+        "sure", "yep", "yeah", "ye"
     ],
-    "switch_section": [
-        "switch to", "show", "go to", "open section", 
-        "switch section", "change to"
+    "print_keywords": [
+        "print", "printing", "printout",
+        "print doc", "print file", "print paper"
     ],
-    "next_document": [
-        "next", "next document", "next file", 
-        "forward", "move forward", "go forward"
+    "scan_keywords": [
+        "scan", "scanning", "capture",
+        "scan doc", "scan file", "capture doc", "capture document", "scan document"
     ],
-    "previous_document": [
-        "previous", "previous document", "previous file", 
-        "back", "move back", "go back"
+    "question_words": [
+        "what", "can you", "how do", "help", "how to",
+        "tell me", "can i", "what is", "can print", "help me", "show me"
     ],
-    "upload_document": [
-        "upload", "upload document", "upload file", 
-        "add document", "add file", "new document"
-    ],
-    
-    # Confirmation and control
-    "confirm": [
-        "confirm", "confirm print", "confirm scan", 
-        "yes proceed", "execute", "do it", "start", "begin"
-    ],
-    "cancel": [
-        "cancel", "stop", "abort", 
-        "don't do it", "nevermind", "forget it"
-    ],
-    
-    # Status and info
-    "status": [
-        "status", "what's happening", "progress", 
-        "where are we", "current state"
-    ],
-    "repeat_settings": [
-        "repeat", "repeat settings", "read settings", 
-        "what settings", "show settings", "current settings"
-    ],
-    "help": [
-        "help", "what can you do", "commands", 
-        "options", "guide"
-    ],
-    
-    # Session control
-    "stop_recording": [
-        "stop recording", "stop listening", "end session", 
-        "bye", "goodbye", "stop voice"
-    ],
+    "ollama": {
+        "options": {
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "top_k": 40,
+            "num_predict": 30,
+            "num_ctx": 1024,
+            "repeat_penalty": 1.2,
+            "stop": ["\n\n", "User:", "Assistant:"],
+        },
+        "timeout": 15,
+    },
 }
 
 
-# ============================================================================
-# FRIENDLY RESPONSE MAPPING - User-friendly responses for commands
-# ============================================================================
-
-COMMAND_RESPONSE_MAPPING = {
-    "select_document": "Selecting document {document_number}",
-    "switch_section": "Switching to {section} section",
-    "next_document": "Moving to next document",
-    "previous_document": "Moving to previous document",
-    "upload_document": "Opening upload dialog",
-    "confirm": "Executing now!",
-    "cancel": "Cancelled",
-    "status": "Checking status...",
-    "repeat_settings": "Reading settings...",
-    "help": "Here's what I can do...",
-    "stop_recording": "Stopping recording",
-}
+def _load_system_prompt() -> str:
+    prompt_path = Path(AI_PROMPT_CONFIG.get("system_prompt_file", SYSTEM_PROMPT_FILE))
+    try:
+        if prompt_path.exists():
+            content = prompt_path.read_text(encoding="utf-8").strip()
+            if content:
+                logger.info(f"[OK] Loaded system prompt from {prompt_path}")
+                return content
+            logger.warning(f"[WARN] System prompt file is empty: {prompt_path}")
+        else:
+            logger.warning(f"[WARN] System prompt file not found: {prompt_path}")
+    except Exception as exc:  # pragma: no cover - filesystem edge cases
+        logger.error(f"[ERROR] Failed to load system prompt ({prompt_path}): {exc}")
+    return DEFAULT_SYSTEM_PROMPT
 
 
-# ============================================================================
-# CONFIRMATION WORDS - Words that confirm user intents
-# ============================================================================
-
-CONFIRMATION_WORDS = [
-    "yes", "proceed", "go ahead", "okay", "ok", 
-    "sure", "yep", "yeah", "ye"
-]
-
-
-# ============================================================================
-# PRINT/SCAN KEYWORDS - Keywords for direct orchestration triggering
-# ============================================================================
-
-PRINT_KEYWORDS = [
-    "print", "printing", "printout", 
-    "print doc", "print file", "print paper"
-]
-
-SCAN_KEYWORDS = [
-    "scan", "scanning", "capture", 
-    "scan doc", "scan file", "capture doc", "capture document", "scan document"
-]
-
-# Words that indicate a question rather than a command
-QUESTION_WORDS = [
-    "what", "can you", "how do", "help", "how to", 
-    "tell me", "can i", "what is", "can print", "help me", "show me"
-]
+def _deep_merge(base: dict, override: dict) -> dict:
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(base.get(key), dict):
+            base[key] = _deep_merge(base[key], value)
+        else:
+            base[key] = value
+    return base
 
 
-# ============================================================================
-# OLLAMA QUERY CONFIGURATION - Optimization parameters for SmolLM2
-# ============================================================================
+def _load_command_config() -> dict:
+    config_path = Path(AI_PROMPT_CONFIG.get("command_mappings_file", COMMAND_MAPPINGS_FILE))
+    try:
+        if config_path.exists():
+            with config_path.open("r", encoding="utf-8") as file:
+                payload = json.load(file)
+                if isinstance(payload, dict):
+                    logger.info(f"[OK] Loaded command mappings from {config_path}")
+                    return payload
+                logger.warning(f"[WARN] Command mapping file must contain a JSON object: {config_path}")
+        else:
+            logger.warning(f"[WARN] Command mapping file not found: {config_path}")
+    except json.JSONDecodeError as exc:
+        logger.error(f"[ERROR] Invalid JSON in {config_path}: {exc}")
+    except Exception as exc:  # pragma: no cover - filesystem edge cases
+        logger.error(f"[ERROR] Failed to read {config_path}: {exc}")
+    return {}
 
-OLLAMA_QUERY_OPTIONS = {
-    "temperature": 0.7,       # Balanced for natural responses (0.0-1.0)
-    "top_p": 0.9,            # Allow more natural variation (0.0-1.0)
-    "top_k": 40,             # Increased for more natural language
-    "num_predict": 30,       # Short but complete responses
-    "num_ctx": 1024,         # Enough context for conversation
-    "repeat_penalty": 1.2,   # Prevent repetition
-    "stop": ["\n\n", "User:", "Assistant:"],  # Stop at natural breaks
-}
 
-OLLAMA_API_TIMEOUT = 15  # seconds
+def _build_command_config() -> dict:
+    override_config = _load_command_config()
+    return _deep_merge(copy.deepcopy(DEFAULT_COMMAND_CONFIG), override_config if isinstance(override_config, dict) else {})
+
+
+SMOLLM_SYSTEM_PROMPT = _load_system_prompt()
+COMMAND_CONFIG = _build_command_config()
+VOICE_COMMAND_MAPPINGS = COMMAND_CONFIG["voice_commands"]
+COMMAND_RESPONSE_MAPPING = COMMAND_CONFIG["friendly_responses"]
+CONFIRMATION_WORDS = COMMAND_CONFIG["confirmation_words"]
+PRINT_KEYWORDS = COMMAND_CONFIG["print_keywords"]
+SCAN_KEYWORDS = COMMAND_CONFIG["scan_keywords"]
+QUESTION_WORDS = COMMAND_CONFIG["question_words"]
+OLLAMA_QUERY_OPTIONS = COMMAND_CONFIG["ollama"]["options"]
+OLLAMA_API_TIMEOUT = COMMAND_CONFIG["ollama"].get("timeout", 15)
 
 
 # ============================================================================

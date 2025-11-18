@@ -91,13 +91,7 @@ const Phone: React.FC = () => {
 
   // Theme values with insane visual enhancements
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
-  // const surfaceGlass = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(20,24,45,0.75)');
-  // const borderColor = useColorModeValue('brand.200', 'nebula.700');
-  // const borderSubtle = useColorModeValue('brand.100', 'whiteAlpha.200');
-  // const accentPrimary = useColorModeValue('brand.500', 'nebula.400');
   const muted = useColorModeValue('gray.600', 'whiteAlpha.700');
-  // const textInverse = useColorModeValue('gray.800', 'whiteAlpha.900');
-  // const hoverBg = useColorModeValue('brand.50', 'whiteAlpha.100');
 
   const showMessage = useCallback((msg: string) => {
     setMessage(msg);

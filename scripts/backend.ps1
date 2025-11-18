@@ -2,9 +2,15 @@
 
 $backendDir = "C:\Users\chama\OneDrive\Desktop\printchakra\backend"
 $venvDir = Join-Path $backendDir "venv"
+$pythonExe = Join-Path $venvDir "Scripts\python.exe"
 
 if (-not (Test-Path $venvDir)) {
     Write-Host "Virtual environment not found!" -ForegroundColor Red
+    exit 1
+}
+
+if (-not (Test-Path $pythonExe)) {
+    Write-Host "Python executable not found in venv!" -ForegroundColor Red
     exit 1
 }
 
@@ -22,8 +28,7 @@ Write-Host ""
 Write-Host "TIP: Run ngrok separately with: .\ngrok.ps1" -ForegroundColor Green
 Write-Host ""
 
-# Activate venv and run Flask
-cd $backendDir          
+# Run Flask directly with venv python to avoid spawning extra shells
+cd $backendDir
 $env:PYTHONIOENCODING = 'utf-8'
-& '.\venv\Scripts\Activate.ps1'
-python app.py
+& $pythonExe "app.py"

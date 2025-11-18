@@ -1,8 +1,13 @@
 import React from 'react';
-import { Box, BoxProps, useColorModeValue } from '@chakra-ui/react';
+import { BoxProps, useColorModeValue } from '@chakra-ui/react';
+import { StyledSection } from '../../ui/primitives';
 
-const SurfaceCard = React.forwardRef<HTMLDivElement, BoxProps>((props, ref) => {
-  const { children, ...rest } = props;
+interface SurfaceCardProps extends BoxProps {
+  commands?: string | string[];
+}
+
+const SurfaceCard = React.forwardRef<HTMLDivElement, SurfaceCardProps>((props, ref) => {
+  const { children, commands, ...rest } = props;
   const background = useColorModeValue('rgba(255, 255, 255, 0.95)', 'rgba(12, 16, 35, 0.88)');
   const borderColor = useColorModeValue('rgba(121, 95, 238, 0.18)', 'rgba(69, 202, 255, 0.25)');
   const shadow = useColorModeValue(
@@ -11,19 +16,22 @@ const SurfaceCard = React.forwardRef<HTMLDivElement, BoxProps>((props, ref) => {
   );
 
   return (
-    <Box
+    <StyledSection
       ref={ref}
-      bg={background}
-      borderRadius="24px"
-      border="1px solid"
-      borderColor={borderColor}
-      boxShadow={shadow}
-      p={{ base: 5, md: 6 }}
-      position="relative"
+      componentKey="SurfaceCard.Root"
+      commands={commands}
+      styleOverrides={{
+        bg: background,
+        borderColor,
+        boxShadow: shadow,
+        borderWidth: '1px',
+        p: { base: 5, md: 6 },
+        position: 'relative',
+      }}
       {...rest}
     >
       {children}
-    </Box>
+    </StyledSection>
   );
 });
 

@@ -1,0 +1,168 @@
+{
+  "voice_commands": {
+    "select_document": [
+      "select document",
+      "choose document",
+      "pick document",
+      "open document",
+      "select original document",
+      "select converted document",
+      "select uploaded document",
+      "document number",
+      "file number",
+      "document",
+      "file"
+    ],
+    "switch_section": [
+      "switch to",
+      "show",
+      "go to",
+      "open section",
+      "switch section",
+      "change to"
+    ],
+    "next_document": [
+      "next",
+      "next document",
+      "next file",
+      "forward",
+      "move forward",
+      "go forward"
+    ],
+    "previous_document": [
+      "previous",
+      "previous document",
+      "previous file",
+      "back",
+      "move back",
+      "go back"
+    ],
+    "upload_document": [
+      "upload",
+      "upload document",
+      "upload file",
+      "add document",
+      "add file",
+      "new document"
+    ],
+    "confirm": [
+      "confirm",
+      "confirm print",
+      "confirm scan",
+      "yes proceed",
+      "execute",
+      "do it",
+      "start",
+      "begin"
+    ],
+    "cancel": [
+      "cancel",
+      "stop",
+      "abort",
+      "don't do it",
+      "nevermind",
+      "forget it"
+    ],
+    "status": [
+      "status",
+      "what's happening",
+      "progress",
+      "where are we",
+      "current state"
+    ],
+    "repeat_settings": [
+      "repeat",
+      "repeat settings",
+      "read settings",
+      "what settings",
+      "show settings",
+      "current settings"
+    ],
+    "help": [
+      "help",
+      "what can you do",
+      "commands",
+      "options",
+      "guide"
+    ],
+    "stop_recording": [
+      "stop recording",
+      "stop listening",
+      "end session",
+      "bye",
+      "goodbye",
+      "stop voice"
+    ]
+  },
+  "friendly_responses": {
+    "select_document": "Selecting document {document_number}",
+    "switch_section": "Switching to {section} section",
+    "next_document": "Moving to next document",
+    "previous_document": "Moving to previous document",
+    "upload_document": "Opening upload dialog",
+    "confirm": "Executing now!",
+    "cancel": "Cancelled",
+    "status": "Checking status...",
+    "repeat_settings": "Reading settings...",
+    "help": "Here's what I can do...",
+    "stop_recording": "Stopping recording"
+  },
+  "confirmation_words": [
+    "yes",
+    "proceed",
+    "go ahead",
+    "okay",
+    "ok",
+    "sure",
+    "yep",
+    "yeah",
+    "ye"
+  ],
+  "print_keywords": [
+    "print",
+    "printing",
+    "printout",
+    "print doc",
+    "print file",
+    "print paper"
+  ],
+  "scan_keywords": [
+    "scan",
+    "scanning",
+    "capture",
+    "scan doc",
+    "scan file",
+    "capture doc",
+    "capture document",
+    "scan document"
+  ],
+  "question_words": [
+    "what",
+    "can you",
+    "how do",
+    "help",
+    "how to",
+    "tell me",
+    "can i",
+    "what is",
+    "can print",
+    "help me",
+    "show me"
+  ],
+  "ollama": {
+    "options": {
+      "temperature": 0.7,
+      "top_p": 0.9,
+      "top_k": 40,
+      "num_predict": 30,
+      "num_ctx": 1024,
+      "repeat_penalty": 1.2,
+      "stop": [
+        "\\n\\n",
+        "User:",
+        "Assistant:"
+      ]
+    },
+    "timeout": 15
+  }
+}

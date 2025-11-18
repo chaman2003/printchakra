@@ -3,8 +3,12 @@ Configuration module for PrintChakra backend
 """
 
 from .settings import (
+    AI_PROMPT_CONFIG,
     API_CONFIG,
     BASE_DIR,
+    COMMAND_MAPPINGS_FILE,
+    CONFIG_DIR,
+    CONNECTION_CONFIG,
     CONVERTED_DIR,
     ENHANCEMENT_CONFIG,
     EXPORT_CONFIG,
@@ -16,6 +20,8 @@ from .settings import (
     PRINT_DIR,
     PROCESSED_DIR,
     PROCESSING_CONFIG,
+    PROMPTS_DIR,
+    SYSTEM_PROMPT_FILE,
     TEXT_DIR,
     UPLOAD_DIR,
     VERSION,
@@ -23,6 +29,7 @@ from .settings import (
 
 __all__ = [
     "BASE_DIR",
+    "CONFIG_DIR",
     "UPLOAD_DIR",
     "PROCESSED_DIR",
     "TEXT_DIR",
@@ -30,11 +37,16 @@ __all__ = [
     "CONVERTED_DIR",
     "PRINT_DIR",
     "LOGS_DIR",
+    "PROMPTS_DIR",
+    "SYSTEM_PROMPT_FILE",
+    "COMMAND_MAPPINGS_FILE",
     "PROCESSING_CONFIG",
     "OCR_CONFIG",
     "ENHANCEMENT_CONFIG",
     "EXPORT_CONFIG",
     "API_CONFIG",
+    "CONNECTION_CONFIG",
+    "AI_PROMPT_CONFIG",
     "LOGGING_CONFIG",
     "FEATURES",
     "VERSION",

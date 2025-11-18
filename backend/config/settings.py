@@ -5,10 +5,42 @@ Central configuration for all modules and settings
 
 import os
 from pathlib import Path
+from typing import List
 
-# Base directory
-BASE_DIR = Path(__file__).parent.parent.absolute()
+try:  # Optional dependency, documented in requirements
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - fallback when python-dotenv missing
+    load_dotenv = None
+
+# Base directories
+CONFIG_DIR = Path(__file__).parent
+BASE_DIR = CONFIG_DIR.parent.absolute()
 DATA_DIR = BASE_DIR / "data"
+
+# Optional .env overrides (keeps configuration English-editable)
+ENV_FILE = BASE_DIR / ".env"
+if load_dotenv and ENV_FILE.exists():
+    load_dotenv(ENV_FILE)
+
+
+def env(key: str, default: str | None = None) -> str | None:
+    """Read environment variables with sane defaults"""
+
+    return os.environ.get(key, default)
+
+
+def env_bool(key: str, default: bool = False) -> bool:
+    value = os.environ.get(key)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(key: str, default: List[str] | None = None, separator: str = ",") -> List[str]:
+    raw_value = os.environ.get(key)
+    if raw_value is None:
+        return list(default or [])
+    return [item.strip() for item in raw_value.split(separator) if item.strip()]
 
 # Directory Configuration
 UPLOAD_DIR = DATA_DIR / "uploads"
@@ -31,6 +63,19 @@ for directory in [
     LOGS_DIR,
 ]:
     directory.mkdir(parents=True, exist_ok=True)
+
+# Prompt assets (can be edited without touching Python)
+prompts_dir_override = env("PROMPTS_DIR")
+PROMPTS_DIR = (
+    Path(prompts_dir_override).expanduser()
+    if prompts_dir_override
+    else CONFIG_DIR / "prompts"
+)
+PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+SYSTEM_PROMPT_FILE = Path(env("SMOLLM_SYSTEM_PROMPT_FILE", str(PROMPTS_DIR / "system_prompt.txt")))
+COMMAND_MAPPINGS_FILE = Path(
+    env("SMOLLM_COMMAND_MAPPINGS_FILE", str(PROMPTS_DIR / "command_mappings.json"))
+)
 
 # Processing Configuration
 PROCESSING_CONFIG = {
@@ -66,16 +111,42 @@ ENHANCEMENT_CONFIG = {
 EXPORT_CONFIG = {"jpeg_quality": 95, "pdf_page_size": "A4", "compression_quality": 85}
 
 # API Configuration
+DEFAULT_CORS_ORIGINS = [
+    "https://printchakra.vercel.app",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "*",  # Allow all as fallback
+]
+cors_origins = env_list("API_CORS_ORIGINS", DEFAULT_CORS_ORIGINS)
+
 API_CONFIG = {
-    "cors_origins": [
-        "https://printchakra.vercel.app",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "*",  # Allow all as fallback
-    ],
+    "cors_origins": cors_origins,
     "max_file_size": 10 * 1024 * 1024,  # 10 MB
     "allowed_extensions": {".jpg", ".jpeg", ".png", ".pdf"},
     "socket_io": {"ping_timeout": 120, "ping_interval": 30, "max_http_buffer_size": 1e7},
+}
+
+# Connection + AI runtime configuration
+_ollama_base = (env("OLLAMA_BASE_URL", "http://localhost:11434") or "").rstrip("/")
+if not _ollama_base:
+    _ollama_base = "http://localhost:11434"
+
+CONNECTION_CONFIG = {
+    "frontend_origin": env("FRONTEND_URL", "http://localhost:3000"),
+    "backend_public_url": env("BACKEND_PUBLIC_URL", ""),
+    "ollama": {
+        "base_url": _ollama_base,
+        "chat_endpoint": env("OLLAMA_CHAT_ENDPOINT", "/api/chat"),
+        "tags_endpoint": env("OLLAMA_TAGS_ENDPOINT", "/api/tags"),
+        "timeout": int(env("OLLAMA_TIMEOUT", "15")),
+        "verify_ssl": env_bool("OLLAMA_VERIFY_SSL", False),
+    },
+}
+
+AI_PROMPT_CONFIG = {
+    "default_model": env("VOICE_AI_MODEL", "smollm2:135m"),
+    "system_prompt_file": str(SYSTEM_PROMPT_FILE),
+    "command_mappings_file": str(COMMAND_MAPPINGS_FILE),
 }
 
 # Logging Configuration
