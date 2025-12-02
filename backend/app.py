@@ -223,36 +223,52 @@ sys.stderr = NgrokStderrFilter(original_stderr)
 # Apply stderr filter
 # sys.stderr = ErrorFilter(sys.stderr)  # Disabled for debugging
 
-# Check GPU availability
-logger.info("=" * 60)
-logger.info("[STARTUP] PrintChakra Backend Startup")
-logger.info("=" * 60)
+# ============================================================================
+# GPU INITIALIZATION AND DETECTION
+# ============================================================================
+logger.info("=" * 70)
+logger.info("[STARTUP] PrintChakra Backend Initialization")
+logger.info("=" * 70)
 
 try:
     import torch
-    from modules.voice.gpu_optimization import get_optimal_device
+    from modules.voice.gpu_optimization import detect_gpu, get_optimal_device, initialize_gpu
 
+    # Detect GPU first
+    gpu_info = detect_gpu()
     device = get_optimal_device()  # Returns 'cuda' if available, else 'cpu'
-    gpu_available = device == 'cuda'
     
-    if gpu_available:
-        gpu_name = torch.cuda.get_device_name(0)
-        cuda_version = torch.version.cuda
-        logger.info(f"[OK] GPU ACCELERATION ENABLED")
-        logger.info(f"   GPU: {gpu_name}")
-        logger.info(f"   CUDA Version: {cuda_version}")
-        logger.info(
-            f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB"
-        )
+    # Display GPU status clearly
+    logger.info("")
+    if gpu_info['available']:
+        logger.info("[OK] GPU ACCELERATION ENABLED (CUDA)")
+        logger.info(f"    Device: {gpu_info['gpu_name']}")
+        logger.info(f"    CUDA Version: {gpu_info['cuda_version']}")
+        logger.info(f"    GPU Count: {gpu_info['device_count']}")
+        logger.info(f"    Total Memory: {gpu_info['total_memory_gb']:.2f} GB")
+        logger.info("    Mode: GPU ACCELERATION ACTIVE")
     else:
-        logger.warning("[WARN] GPU not detected - using CPU (slower)")
-        logger.warning("   Install CUDA and PyTorch with CUDA support for GPU acceleration")
+        logger.warning("[!] GPU NOT DETECTED - Using CPU Fallback")
+        logger.warning("    To enable GPU acceleration:")
+        logger.warning("    1. Install NVIDIA CUDA Toolkit")
+        logger.warning("    2. Reinstall PyTorch with CUDA support")
+        logger.warning("    Mode: CPU (Slower performance)")
+    logger.info("")
+    
+    # Initialize GPU if available
+    if gpu_info['available']:
+        try:
+            initialize_gpu()
+            logger.info("[OK] GPU optimizations initialized")
+        except Exception as e:
+            logger.warning(f"[WARN] GPU initialization warning: {e}")
+            
 except ImportError:
-    logger.warning("[WARN] PyTorch not installed - GPU detection unavailable")
+    logger.error("[ERROR] PyTorch not installed - GPU detection unavailable")
 except Exception as e:
-    logger.warning(f"[WARN] GPU detection failed: {e}")
+    logger.error(f"[ERROR] GPU detection failed: {e}")
 
-logger.info("=" * 60)
+logger.info("=" * 70)
 
 # Configure Poppler path for pdf2image
 POPPLER_PATH = None

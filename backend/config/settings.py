@@ -48,6 +48,7 @@ PROCESSED_DIR = DATA_DIR / "processed"
 TEXT_DIR = DATA_DIR / "processed_text"
 PDF_DIR = DATA_DIR / "pdfs"
 CONVERTED_DIR = DATA_DIR / "converted"
+MODELS_DIR = DATA_DIR / "models"
 PRINT_DIR = BASE_DIR / "print_scripts"
 LOGS_DIR = BASE_DIR / "logs"
 
@@ -59,6 +60,7 @@ for directory in [
     TEXT_DIR,
     PDF_DIR,
     CONVERTED_DIR,
+    MODELS_DIR,
     PRINT_DIR,
     LOGS_DIR,
 ]:
@@ -72,9 +74,9 @@ PROMPTS_DIR = (
     else CONFIG_DIR / "prompts"
 )
 PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
-SYSTEM_PROMPT_FILE = Path(env("SMOLLM_SYSTEM_PROMPT_FILE", str(PROMPTS_DIR / "system_prompt.txt")))
+SYSTEM_PROMPT_FILE = Path(env("VOICE_SYSTEM_PROMPT_FILE", str(PROMPTS_DIR / "system_prompt.txt")))
 COMMAND_MAPPINGS_FILE = Path(
-    env("SMOLLM_COMMAND_MAPPINGS_FILE", str(PROMPTS_DIR / "command_mappings.json"))
+    env("VOICE_COMMAND_MAPPINGS_FILE", str(PROMPTS_DIR / "command_mappings.json"))
 )
 
 # Processing Configuration
@@ -144,9 +146,10 @@ CONNECTION_CONFIG = {
 }
 
 AI_PROMPT_CONFIG = {
-    "default_model": env("VOICE_AI_MODEL", "smollm2:135m"),
+    "default_model": env("VOICE_AI_MODEL", "phi3:mini"),
     "system_prompt_file": str(SYSTEM_PROMPT_FILE),
     "command_mappings_file": str(COMMAND_MAPPINGS_FILE),
+    "models_dir": str(MODELS_DIR),
 }
 
 # Logging Configuration

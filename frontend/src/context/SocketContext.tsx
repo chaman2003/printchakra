@@ -26,30 +26,37 @@ interface SocketProviderProps {
 
 export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [connected, setConnected] = useState(false);
-  // Use a module-level singleton to avoid creating multiple socket instances
-  // when React StrictMode remounts the tree during development.
-  // This ensures only a single Socket.IO connection exists.
   const socketRef = useRef<Socket | null>(null);
-  const globalSocketRef = (globalThis as any).__PRINTCHAKRA_SOCKET as Socket | null;
   const connectionAttemptRef = useRef(0);
   const maxRetries = 5;
+  const initializingRef = useRef(false);
 
   useEffect(() => {
     if (!SOCKET_IO_ENABLED) {
-      console.log('Socket.IO disabled - using HTTP polling only');
+      console.log('[Socket] Socket.IO disabled - using HTTP polling only');
       setConnected(true);
       return;
     }
 
-    // Reuse module/global singleton if available
-    if (globalSocketRef && (globalSocketRef as any).connected) {
-      console.log('Reusing existing shared Socket.IO connection');
-      socketRef.current = globalSocketRef;
+    // Check if socket already exists globally (from previous mount)
+    const existingSocket = (globalThis as any).__PRINTCHAKRA_SOCKET as Socket | null;
+    
+    // If socket exists and is still connected, reuse it
+    if (existingSocket && existingSocket.connected) {
+      console.log('[Socket] Reusing existing Socket.IO connection');
+      socketRef.current = existingSocket;
       setConnected(true);
       return;
     }
-
-    console.log('Initializing shared Socket.IO connection to:', API_BASE_URL);
+    
+    // Prevent multiple simultaneous initialization attempts (React StrictMode safety)
+    if (initializingRef.current) {
+      console.log('[Socket] Connection attempt already in progress');
+      return;
+    }
+    
+    initializingRef.current = true;
+    console.log('[Socket] Initializing Socket.IO connection to:', API_BASE_URL);
 
     try {
       const newSocket = io(API_BASE_URL, {
@@ -61,45 +68,49 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       });
 
       newSocket.on('connect', () => {
-        console.log('Connected to server');
-        console.log('Transport:', newSocket.io.engine.transport.name);
+        console.log('[Socket] Connected to server');
         socketRef.current = newSocket;
         setConnected(true);
         connectionAttemptRef.current = 0;
+        initializingRef.current = false;
       });
 
       newSocket.on('disconnect', (reason: string) => {
-        console.log('Disconnected from server:', reason);
+        console.log('[Socket] Disconnected:', reason);
         setConnected(false);
       });
 
       newSocket.on('connect_error', (error: any) => {
         connectionAttemptRef.current++;
-        console.error('Connection error:', error.message || error);
+        console.warn('[Socket] Connection error:', error.message || error);
         if (connectionAttemptRef.current >= maxRetries) {
-          console.error('Max connection attempts reached');
+          console.error('[Socket] Max connection attempts reached');
+          initializingRef.current = false;
         }
       });
 
       newSocket.on('error', (error: any) => {
-        console.error('Socket error:', error);
+        console.error('[Socket] Socket error:', error);
       });
 
       socketRef.current = newSocket;
+      
       // Store globally so remounted providers can reuse the same socket
       try {
         (globalThis as any).__PRINTCHAKRA_SOCKET = newSocket;
       } catch (e) {
-        // ignore if unable to set global
+        console.warn('[Socket] Unable to store socket globally:', e);
       }
     } catch (err) {
-      console.error('Failed to initialize Socket.IO:', err);
+      console.error('[Socket] Failed to initialize:', err);
       setConnected(false);
+      initializingRef.current = false;
     }
 
-    // Cleanup on unmount. Do not disconnect the socket here — keep the shared
-    // connection alive so navigation or StrictMode remounts do not close it.
-    return () => {};
+    // Cleanup: Only disconnect on actual unmount, not on React StrictMode remount
+    return () => {
+      // Don't disconnect - keep the connection alive for reuse
+    };
   }, []);
 
   return (

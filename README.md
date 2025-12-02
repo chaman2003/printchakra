@@ -71,10 +71,10 @@ Two simple touch points now control all backend AI connections and prompts:
   - `BACKEND_PUBLIC_URL` (shareable base URL for clients/tunnels)
   - `API_CORS_ORIGINS` (comma-delimited override if you need multiple origins)
   - `OLLAMA_BASE_URL`, `OLLAMA_CHAT_ENDPOINT`, `OLLAMA_TAGS_ENDPOINT`, `OLLAMA_TIMEOUT`, `OLLAMA_VERIFY_SSL`
-  - `VOICE_AI_MODEL` (defaults to `smollm2:135m`)
-  - `PROMPTS_DIR`, `SMOLLM_SYSTEM_PROMPT_FILE`, `SMOLLM_COMMAND_MAPPINGS_FILE` (point to alternate prompt assets)
+  - `VOICE_AI_MODEL` (defaults to `phi3:mini`)
+  - `PROMPTS_DIR`, `VOICE_SYSTEM_PROMPT_FILE`, `VOICE_COMMAND_MAPPINGS_FILE` (point to alternate prompt assets)
 - **Prompt assets (`backend/config/prompts/`)** – edit plain-text/JSON files to change LLM behavior:
-  - `system_prompt.txt` holds the entire SmolLM system prompt (English sentences only)
+  - `system_prompt.txt` holds the entire Voice AI system prompt (English sentences only)
   - `command_mappings.json` lists wake words, friendly responses, confirmation words, and Ollama sampling knobs
 
 Whenever these files change there is no code reload required—restart the backend and the new connections/prompts are used automatically.

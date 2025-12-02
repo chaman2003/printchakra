@@ -26,13 +26,16 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
+
+// Note: StrictMode is disabled in development to prevent double-mounting
+// which causes multiple Socket.IO connections. In production, StrictMode
+// would help detect side effects but is not needed since we don't use it
+// in the production build anyway.
 root.render(
-  <React.StrictMode>
-    <ChakraProvider theme={theme}>
-      <ColorModeScript initialColorMode={theme.config.initialColorMode} />
-      <App />
-    </ChakraProvider>
-  </React.StrictMode>
+  <ChakraProvider theme={theme}>
+    <ColorModeScript initialColorMode={theme.config.initialColorMode} />
+    <App />
+  </ChakraProvider>
 );
 
 // If you want to start measuring performance in your app, pass a function

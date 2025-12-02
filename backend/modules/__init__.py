@@ -16,7 +16,7 @@ __author__ = "Chaman S"
 # Import from submodules
 from .api_endpoints import create_enhanced_endpoints
 from .ocr import OCRModule, AIEnhancer, DocumentClassifier
-from .voice import VoiceAIOrchestrator, WhisperTranscriptionService, Smollm2ChatService
+from .voice import VoiceAIOrchestrator, WhisperTranscriptionService, VoiceChatService
 from .image import ImageProcessingModule, ImageEnhancer
 from .document import (
     DocumentDetector,
@@ -47,7 +47,7 @@ __all__ = [
     # Voice
     "VoiceAIOrchestrator",
     "WhisperTranscriptionService",
-    "Smollm2ChatService",
+    "VoiceChatService",
     # Image Processing
     "ImageProcessingModule",
     "ImageEnhancer",

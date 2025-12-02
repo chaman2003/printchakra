@@ -1,6 +1,6 @@
 """
-SmolLM2 Chat Service Prompts and Query Logic
-Centralized management of SmolLM2:135m system prompts, command mappings, and response generation
+Voice AI Chat Service Prompts and Query Logic
+Centralized management of Voice AI system prompts, command mappings, and response generation
 
 This module contains:
 1. System prompt for PrintChakra AI context
@@ -210,7 +210,7 @@ def _build_command_config() -> dict:
     return _deep_merge(copy.deepcopy(DEFAULT_COMMAND_CONFIG), override_config if isinstance(override_config, dict) else {})
 
 
-SMOLLM_SYSTEM_PROMPT = _load_system_prompt()
+VOICE_SYSTEM_PROMPT = _load_system_prompt()
 COMMAND_CONFIG = _build_command_config()
 VOICE_COMMAND_MAPPINGS = COMMAND_CONFIG["voice_commands"]
 COMMAND_RESPONSE_MAPPING = COMMAND_CONFIG["friendly_responses"]
@@ -226,18 +226,18 @@ OLLAMA_API_TIMEOUT = COMMAND_CONFIG["ollama"].get("timeout", 15)
 # RESPONSE GENERATION AND FORMATTING
 # ============================================================================
 
-class SmolLMPromptManager:
-    """Manager for SmolLM2 prompts, commands, and query generation"""
+class VoicePromptManager:
+    """Manager for Voice AI prompts, commands, and query generation"""
     
     @staticmethod
     def get_system_prompt() -> str:
         """
-        Get the system prompt for SmolLM2
+        Get the system prompt for Voice AI
         
         Returns:
             System prompt string for Ollama API
         """
-        return SMOLLM_SYSTEM_PROMPT
+        return VOICE_SYSTEM_PROMPT
     
     @staticmethod
     def get_command_mappings() -> Dict[str, List[str]]:
@@ -279,7 +279,7 @@ class SmolLMPromptManager:
             ...     {"role": "system", "content": SMOLLM_SYSTEM_PROMPT},
             ...     {"role": "user", "content": "Print this document"}
             ... ]
-            >>> query = SmolLMPromptManager.build_ollama_query("smollm2:135m", messages)
+            >>> query = VoicePromptManager.build_ollama_query("phi3:mini", messages)
             >>> response = requests.post("http://localhost:11434/api/chat", json=query, timeout=15)
         """
         return {
@@ -308,7 +308,7 @@ class SmolLMPromptManager:
             
         Example:
             >>> raw = "**Opening print interface** now! This will start the printing process."
-            >>> formatted = SmolLMPromptManager.format_response(raw)
+            >>> formatted = VoicePromptManager.format_response(raw)
             >>> print(formatted)
             Opening print interface now.
         """
@@ -360,7 +360,7 @@ class SmolLMPromptManager:
             
         Example:
             >>> params = {"section": "converted", "document_number": 3}
-            >>> response = SmolLMPromptManager.get_friendly_command_response(
+            >>> response = VoicePromptManager.get_friendly_command_response(
             ...     "select_document", params
             ... )
             >>> print(response)
@@ -474,11 +474,11 @@ class SmolLMPromptManager:
 
 if __name__ == "__main__":
     """
-    Example usage of SmolLM prompt manager
+    Example usage of Voice AI prompt manager
     """
     
     # Get system prompt
-    prompt = SmolLMPromptManager.get_system_prompt()
+    prompt = VoicePromptManager.get_system_prompt()
     print(f"System Prompt Length: {len(prompt)} characters\n")
     
     # Build Ollama query
@@ -486,21 +486,21 @@ if __name__ == "__main__":
         {"role": "system", "content": prompt},
         {"role": "user", "content": "How can I help?"}
     ]
-    query = SmolLMPromptManager.build_ollama_query("smollm2:135m", messages)
+    query = VoicePromptManager.build_ollama_query("phi3:mini", messages)
     print(f"Ollama Query Keys: {query.keys()}\n")
     
     # Format response
     raw_response = "**Opening print interface** now! This will start the entire printing workflow immediately."
-    formatted = SmolLMPromptManager.format_response(raw_response)
+    formatted = VoicePromptManager.format_response(raw_response)
     print(f"Original: {raw_response}")
     print(f"Formatted: {formatted}\n")
     
     # Test command responses
     params = {"document_number": 2, "section": "converted"}
-    response = SmolLMPromptManager.get_friendly_command_response("select_document", params)
+    response = VoicePromptManager.get_friendly_command_response("select_document", params)
     print(f"Command Response: {response}\n")
     
     # Test command detection
-    print(f"Is 'print this' a print command? {SmolLMPromptManager.is_print_command('print this')}")
-    print(f"Is 'how to print?' a print command? {SmolLMPromptManager.is_print_command('how to print?')}")
-    print(f"Is 'scan please' a scan command? {SmolLMPromptManager.is_scan_command('scan please')}")
+    print(f"Is 'print this' a print command? {VoicePromptManager.is_print_command('print this')}")
+    print(f"Is 'how to print?' a print command? {VoicePromptManager.is_print_command('how to print?')}")
+    print(f"Is 'scan please' a scan command? {VoicePromptManager.is_scan_command('scan please')}")

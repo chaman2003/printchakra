@@ -1,7 +1,7 @@
 /**
  * VoiceAIChat Component
  * Hands-free voice AI chat interface with automatic transcription and AI responses
- * Uses Whisper Large-v3 Turbo + Smollm2:135m
+ * Uses Whisper Large-v3 Turbo + Voice AI
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -453,7 +453,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       console.log('Sending to backend...');
 
-      // Send to backend for processing (Whisper → Smollm2)
+      // Send to backend for processing (Whisper → Voice AI)
       // Use longer timeout for voice processing (model loading can take time)
       const response = await apiClient.post('/voice/process', formData, {
         headers: {
@@ -498,8 +498,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         // Add user message (command part only)
         addMessage('user', user_text);
 
-        // 1. Display AI response FIRST (with SmolLM attribution)
-        addMessage('ai', `[SmolLM]: ${ai_response}`);
+        // 1. Display AI response FIRST (with Voice AI attribution)
+        addMessage('ai', `[Voice AI]: ${ai_response}`);
 
         setIsProcessing(false);
 
@@ -726,8 +726,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           configParams,
         });
 
-        // 1. Display AI message FIRST (with SmolLM attribution)
-        addMessage('ai', `[SmolLM]: ${aiResponse}`);
+        // 1. Display AI message FIRST (with Voice AI attribution)
+        addMessage('ai', `[Voice AI]: ${aiResponse}`);
         setIsProcessing(false);
 
         // Handle voice commands (document selector control)
@@ -1082,7 +1082,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
           <VStack spacing={1} mt={2}>
             <Text fontSize="xs" color="gray.500" textAlign="center">
-              Powered by Whisper & Smollm2 + English TTS
+              Powered by Whisper & Voice AI + English TTS
             </Text>
             <Text fontSize="xs" color="gray.500" textAlign="center">
               Voice: Microsoft Ravi • Hands-free

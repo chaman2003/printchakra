@@ -28,20 +28,20 @@ logger = logging.getLogger(__name__)
 OLLAMA_API_TIMEOUT = 15
 
 
-# Import SmolLM prompt management
+# Import Voice AI prompt management
 try:
-    from .smollm_prompt import SmolLMPromptManager, OLLAMA_API_TIMEOUT as _PM_TIMEOUT
+    from .voice_prompt import VoicePromptManager, OLLAMA_API_TIMEOUT as _PM_TIMEOUT
 
     OLLAMA_API_TIMEOUT = _PM_TIMEOUT
-    SMOLLM_PROMPT_AVAILABLE = True
+    VOICE_PROMPT_AVAILABLE = True
 except ImportError:
-    SmolLMPromptManager = None  # type: ignore
-    SMOLLM_PROMPT_AVAILABLE = False
-    logger.warning("[WARN] SmolLM prompt module not available")
+    VoicePromptManager = None  # type: ignore
+    VOICE_PROMPT_AVAILABLE = False
+    logger.warning("[WARN] Voice prompt module not available")
 except Exception as exc:
-    SmolLMPromptManager = None  # type: ignore
-    SMOLLM_PROMPT_AVAILABLE = False
-    logger.error(f"[ERROR] SmolLM prompt module failed to load: {exc}")
+    VoicePromptManager = None  # type: ignore
+    VOICE_PROMPT_AVAILABLE = False
+    logger.error(f"[ERROR] Voice prompt module failed to load: {exc}")
 
 
 def _build_ollama_url(base: str, endpoint: str) -> str:
@@ -624,15 +624,15 @@ class WhisperTranscriptionService:
             return {"success": False, "error": str(e), "text": ""}
 
 
-class Smollm2ChatService:
+class VoiceChatService:
     """
-    Service for AI chat responses using Smollm2:135m via Ollama
+    Service for AI chat responses using Voice AI via Ollama
     Fast, efficient local inference with intelligent voice command interpretation
     """
 
     def __init__(self, model_name: Optional[str] = None):
         """
-        Initialize Smollm2 chat service with full orchestration awareness
+        Initialize Voice AI chat service with full orchestration awareness
 
         Args:
             model_name: Ollama model to use
@@ -646,9 +646,9 @@ class Smollm2ChatService:
         self.verify_ssl = OLLAMA_VERIFY_SSL
         
         # Import command mappings from centralized module
-        if SMOLLM_PROMPT_AVAILABLE:
-            self.command_mappings = SmolLMPromptManager.get_command_mappings()
-            self.system_prompt = SmolLMPromptManager.get_system_prompt()
+        if VOICE_PROMPT_AVAILABLE:
+            self.command_mappings = VoicePromptManager.get_command_mappings()
+            self.system_prompt = VoicePromptManager.get_system_prompt()
         else:
             # Fallback if prompt manager not available
             self.command_mappings = {}
@@ -1057,13 +1057,13 @@ class Smollm2ChatService:
 class VoiceAIOrchestrator:
     """
     Orchestrates the complete voice AI workflow:
-    Audio → Whisper → Text → Smollm2 → Response
+    Audio → Whisper → Text → Voice AI → Response
     """
 
     def __init__(self):
         """Initialize voice AI orchestrator"""
         self.whisper_service = WhisperTranscriptionService()
-        self.chat_service = Smollm2ChatService()
+        self.chat_service = VoiceChatService()
         self.session_active = False
 
         # Initialize TTS
