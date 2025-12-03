@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import axios from 'axios';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
 import {
@@ -2385,7 +2386,7 @@ const Dashboard: React.FC = () => {
                 if (!selectedImageFile) return;
                 try {
                   const imageUrl = getImageUrl(API_ENDPOINTS.processed, selectedImageFile);
-                  const response = await apiClient.get(imageUrl, {
+                  const response = await axios.get(imageUrl, {
                     responseType: 'blob',
                   });
 
