@@ -233,7 +233,7 @@ const Phone: React.FC = () => {
   }, [autoCaptureCount, toast]);
 
   // Ref to hold latest captureInBackground function to avoid stale closures in interval
-  const captureInBackgroundRef = useRef<() => Promise<void>>();
+  const captureInBackgroundRef = useRef<(() => Promise<void>) | undefined>();
   
   // Background capture without freezing camera
   const captureInBackground = useCallback(async () => {
