@@ -16,6 +16,9 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from PIL import Image
 
+# Add app folder to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
+
 # Fix Windows console encoding issues
 if sys.platform == "win32":
     try:
