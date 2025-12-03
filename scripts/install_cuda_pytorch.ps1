@@ -1,4 +1,4 @@
-# Install PyTorch with CUDA 11.8 support for NVIDIA RTX 3060
+# Install PyTorch with CUDA 11.8 support for NVIDIA RTX GPU's
 # Run this script to enable GPU acceleration
 
 Write-Host "============================================================" -ForegroundColor Cyan

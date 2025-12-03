@@ -42,17 +42,19 @@ env/
 logs/*.log
 *.log
 
-# Application specific - Data directory
-data/uploads/*
-!data/uploads/.gitkeep
-data/processed/*
-!data/processed/.gitkeep
-data/processed_text/*
-!data/processed_text/.gitkeep
-data/pdfs/*
-!data/pdfs/.gitkeep
-data/converted/*
-!data/converted/.gitkeep
+# Application specific - Public data directory (gitignore these generated/user files)
+public/data/uploads/*
+!public/data/uploads/.gitkeep
+public/data/processed/*
+!public/data/processed/.gitkeep
+public/data/processed_text/*
+!public/data/processed_text/.gitkeep
+public/data/pdfs/*
+!public/data/pdfs/.gitkeep
+public/data/converted/*
+!public/data/converted/.gitkeep
+public/data/models/*
+!public/data/models/.gitkeep
 
 # OS specific
 .DS_Store

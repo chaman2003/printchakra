@@ -273,7 +273,7 @@ logger.info("=" * 70)
 # Configure Poppler path for pdf2image
 POPPLER_PATH = None
 try:
-    poppler_bin = os.path.join(os.path.dirname(__file__), 'poppler', 'poppler-24.08.0', 'Library', 'bin')
+    poppler_bin = os.path.join(os.path.dirname(__file__), 'public', 'poppler', 'poppler-24.08.0', 'Library', 'bin')
     if os.path.exists(poppler_bin):
         POPPLER_PATH = poppler_bin
         logger.info(f"[OK] Poppler found at: {poppler_bin}")
