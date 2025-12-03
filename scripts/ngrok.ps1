@@ -15,11 +15,26 @@ Write-Host "IMPORTANT: Make sure Flask backend is running first!" -ForegroundCol
 Write-Host "  Run in another terminal: .\backend.ps1" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Expected tunnel URL:" -ForegroundColor Cyan
-Write-Host "  https://ostensible-unvibrant-clarisa.ngrok-free.dev" -ForegroundColor Green
+$domainEnv = $env:NGROK_DOMAIN
+if (-not $domainEnv -or $domainEnv -eq '') {
+	$domainEnv = 'biteable-preintelligently-angeles.ngrok-free.dev'
+}
+Write-Host "  $domainEnv" -ForegroundColor Green
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green
 Write-Host ""
 
-# Run ngrok with browser bypass and custom domain
-# Note: CORS is handled by Flask-CORS, don't add duplicate headers here
-ngrok http --log=false --domain=ostensible-unvibrant-clarisa.ngrok-free.dev 5000
+# If NGROK_AUTHTOKEN is provided, register it (idempotent)
+$ngrokToken = $env:NGROK_AUTHTOKEN
+if ($ngrokToken -and $ngrokToken -ne '') {
+	Write-Host "Registering ngrok auth token..." -ForegroundColor Yellow
+	try {
+		ngrok authtoken $ngrokToken | Out-Null
+	} catch {
+		Write-Host "Warning: failed to register ngrok auth token. Continuing..." -ForegroundColor Yellow
+	}
+}
+
+# Run ngrok with provided domain
+Write-Host "Starting ngrok with domain: $domainEnv" -ForegroundColor Cyan
+ngrok http --log=false --domain=$domainEnv 5000

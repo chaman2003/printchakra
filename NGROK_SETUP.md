@@ -61,14 +61,14 @@ cd scripts
 
 You'll see:
 ```
-Forwarding                    https://ostensible-unvibrant-clarisa.ngrok-free.dev -> http://localhost:5000
+Forwarding                    biteable-preintelligently-angeles.ngrok-free.dev -> http://localhost:5000
 ```
 
 **3. Configure Frontend**
 
 Create `frontend/.env.local`:
 ```bash
-REACT_APP_API_URL=https://ostensible-unvibrant-clarisa.ngrok-free.dev
+REACT_APP_API_URL=biteable-preintelligently-angeles.ngrok-free.dev
 ```
 
 **4. Start Frontend (New Terminal)**
