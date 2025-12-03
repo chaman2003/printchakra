@@ -78,20 +78,19 @@ const Phone: React.FC = () => {
   const cameraContainerRef = useRef<HTMLDivElement>(null);
   const [autoCapture, setAutoCapture] = useState(false);
   const [autoCaptureCount, setAutoCaptureCount] = useState(0);
-  const [documentDetection, setDocumentDetection] = useState<any>(null);
-  const [detectionActive, setDetectionActive] = useState(false);
-  const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const autoCaptureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
   const [showControls, setShowControls] = useState(true);
-  const [autoTriggerReady, setAutoTriggerReady] = useState(false);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
+  const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
   const toast = useToast();
   
-  // Continuous capture state - signature-based unique document detection
-  const capturedSignaturesRef = useRef<Set<string>>(new Set());
+  // Frame comparison based auto-capture (no API calls for detection)
+  const lastCapturedImageDataRef = useRef<ImageData | null>(null);
+  const lastFrameImageDataRef = useRef<ImageData | null>(null);
   const isCapturingRef = useRef<boolean>(false);
-  const lastDetectionTimeRef = useRef<number>(0);
-  const stableDocumentRef = useRef<{ signature: string; stableCount: number } | null>(null);
+  const stableFrameCountRef = useRef<number>(0);
+  const comparisonCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Theme values with insane visual enhancements
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
@@ -136,39 +135,72 @@ const Phone: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  // Generate a unique signature for a document based on its corners and coverage
-  const generateDocumentSignature = (corners: any[], coverage: number): string => {
-    if (!corners || corners.length !== 4) return '';
+  // Initialize comparison canvas on mount
+  useEffect(() => {
+    comparisonCanvasRef.current = document.createElement('canvas');
+    return () => {
+      comparisonCanvasRef.current = null;
+    };
+  }, []);
+
+  // Compare two ImageData objects and return difference percentage (0-100)
+  const compareFrames = (frame1: ImageData, frame2: ImageData): number => {
+    if (frame1.width !== frame2.width || frame1.height !== frame2.height) {
+      return 100; // Different sizes = completely different
+    }
     
-    // Create a signature based on corner positions (rounded) and coverage
-    const cornerStr = corners.map(c => 
-      `${Math.round(c.x / 3)},${Math.round(c.y / 3)}`
-    ).join('|');
+    const data1 = frame1.data;
+    const data2 = frame2.data;
+    let diffCount = 0;
+    const pixelCount = data1.length / 4;
     
-    // Include coverage range in signature
-    const coverageRange = Math.floor(coverage / 5) * 5;
+    // Sample every 4th pixel for performance (still accurate enough)
+    for (let i = 0; i < data1.length; i += 16) {
+      const r1 = data1[i], g1 = data1[i + 1], b1 = data1[i + 2];
+      const r2 = data2[i], g2 = data2[i + 1], b2 = data2[i + 2];
+      
+      // Calculate color distance
+      const diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
+      
+      // Threshold for considering a pixel as "different"
+      if (diff > 60) {
+        diffCount++;
+      }
+    }
     
-    return `${cornerStr}:${coverageRange}`;
+    // Return percentage of different pixels
+    return (diffCount / (pixelCount / 4)) * 100;
   };
 
-  // Check if a document signature is unique (not captured before)
-  const isNewDocument = (signature: string): boolean => {
-    if (!signature) return false;
-    return !capturedSignaturesRef.current.has(signature);
+  // Get current frame as ImageData (scaled down for comparison)
+  const getCurrentFrameData = (): ImageData | null => {
+    if (!videoRef.current || !comparisonCanvasRef.current) return null;
+    
+    const video = videoRef.current;
+    const canvas = comparisonCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    if (!ctx || !video.videoWidth) return null;
+    
+    // Use small size for fast comparison (160x120)
+    canvas.width = 160;
+    canvas.height = 120;
+    ctx.drawImage(video, 0, 0, 160, 120);
+    
+    return ctx.getImageData(0, 0, 160, 120);
   };
 
-  // Start continuous auto-capture mode
+  // Start continuous auto-capture mode with frame comparison
   const startAutoCapture = () => {
     setAutoCapture(true);
     setAutoCaptureCount(0);
-    capturedSignaturesRef.current.clear(); // Clear previous session signatures
-    stableDocumentRef.current = null;
-    setAutoTriggerReady(false);
+    lastCapturedImageDataRef.current = null;
+    lastFrameImageDataRef.current = null;
+    stableFrameCountRef.current = 0;
+    setFrameChangeStatus('waiting');
     
-    // Start detection if not already running
-    if (!detectionActive) {
-      startRealTimeDetection();
-    }
+    // Start frame comparison loop
+    startFrameComparisonLoop();
     
     toast({
       title: 'Auto-Capture Enabled',
@@ -180,9 +212,15 @@ const Phone: React.FC = () => {
 
   // Stop continuous auto-capture mode
   const stopAutoCapture = useCallback(() => {
+    if (autoCaptureIntervalRef.current) {
+      clearInterval(autoCaptureIntervalRef.current);
+      autoCaptureIntervalRef.current = null;
+    }
     setAutoCapture(false);
-    setAutoTriggerReady(false);
-    stableDocumentRef.current = null;
+    setFrameChangeStatus('waiting');
+    lastCapturedImageDataRef.current = null;
+    lastFrameImageDataRef.current = null;
+    stableFrameCountRef.current = 0;
     
     if (autoCaptureCount > 0) {
       toast({
@@ -194,11 +232,12 @@ const Phone: React.FC = () => {
     }
   }, [autoCaptureCount, toast]);
 
-  // Background capture without freezing camera - captures current frame silently
-  const captureInBackground = useCallback(async (signature: string) => {
+  // Background capture without freezing camera
+  const captureInBackground = useCallback(async () => {
     if (isCapturingRef.current || !videoRef.current || !canvasRef.current) return;
     
     isCapturingRef.current = true;
+    setFrameChangeStatus('captured');
     
     try {
       const video = videoRef.current;
@@ -210,23 +249,27 @@ const Phone: React.FC = () => {
         return;
       }
       
-      // Capture frame to hidden canvas (doesn't affect video display)
+      // Capture full resolution frame
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0);
       
-      // Convert to blob in background
+      // Store the captured frame for comparison
+      const capturedFrame = getCurrentFrameData();
+      if (capturedFrame) {
+        lastCapturedImageDataRef.current = capturedFrame;
+      }
+      
+      // Convert to blob and upload
       canvas.toBlob(
         async (blob: Blob | null) => {
           if (!blob) {
             isCapturingRef.current = false;
+            setFrameChangeStatus('waiting');
             return;
           }
           
-          // Mark signature as captured BEFORE upload to prevent duplicates
-          capturedSignaturesRef.current.add(signature);
-          
-          // Upload in background without blocking UI
+          // Upload in background
           const formData = new FormData();
           formData.append('file', blob, `auto_capture_${Date.now()}.jpg`);
           formData.append('auto_crop', processingOptions.autoCrop.toString());
@@ -240,7 +283,6 @@ const Phone: React.FC = () => {
             
             setAutoCaptureCount(prev => prev + 1);
             
-            // Brief visual feedback without interrupting camera
             toast({
               title: '📸 Document Captured!',
               description: 'Place next document...',
@@ -249,14 +291,14 @@ const Phone: React.FC = () => {
               position: 'top',
             });
             
-            // Reset stable detection for next document
-            stableDocumentRef.current = null;
-            setAutoTriggerReady(false);
+            // Reset for next document
+            stableFrameCountRef.current = 0;
+            setFrameChangeStatus('waiting');
             
           } catch (err) {
             console.error('Background upload failed:', err);
-            // Remove signature on failure so it can be retried
-            capturedSignaturesRef.current.delete(signature);
+            lastCapturedImageDataRef.current = null; // Allow retry
+            setFrameChangeStatus('waiting');
           }
           
           isCapturingRef.current = false;
@@ -267,196 +309,85 @@ const Phone: React.FC = () => {
     } catch (err) {
       console.error('Background capture error:', err);
       isCapturingRef.current = false;
+      setFrameChangeStatus('waiting');
     }
   }, [processingOptions, toast]);
 
-  const startRealTimeDetection = () => {
-    if (!videoRef.current || !canvasOverlayRef.current) return;
-
-    setDetectionActive(true);
-
-    detectionIntervalRef.current = setInterval(async () => {
-      if (!videoRef.current || !canvasOverlayRef.current) return;
+  // Main frame comparison loop - runs every 500ms
+  const startFrameComparisonLoop = () => {
+    if (autoCaptureIntervalRef.current) {
+      clearInterval(autoCaptureIntervalRef.current);
+    }
+    
+    autoCaptureIntervalRef.current = setInterval(() => {
+      if (isCapturingRef.current || !videoRef.current) return;
       
-      // Skip if currently capturing to prevent race conditions
-      if (isCapturingRef.current) return;
-
-      const video = videoRef.current;
-      const canvas = canvasOverlayRef.current;
-      const context = canvas.getContext('2d');
-
-      if (!context || !video.videoWidth) return;
-
-      // Resize canvas to match video
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-
-      // Draw current frame
-      context.drawImage(video, 0, 0);
-
-      // Get frame as blob
-      canvas.toBlob(
-        async (blob: Blob | null) => {
-          if (!blob) return;
-
-          try {
-            // Send for detection
-            const formData = new FormData();
-            formData.append('file', blob, 'frame.jpg');
-
-            const response = await apiClient.post('/detect/document', formData, {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-
-            if (
-              response.data.success &&
-              response.data.corners &&
-              response.data.corners.length > 0
-            ) {
-              setDocumentDetection(response.data);
-              // Draw detection overlay
-              drawDetectionOverlay(response.data);
-
-              // Continuous auto-capture with signature-based uniqueness
-              if (autoCapture && response.data.coverage && response.data.coverage >= 70) {
-                const signature = generateDocumentSignature(response.data.corners, response.data.coverage);
-                
-                // Check if this is a new document we haven't captured
-                if (isNewDocument(signature)) {
-                  // Track stability - document must be stable for 2 consecutive detections
-                  if (stableDocumentRef.current?.signature === signature) {
-                    stableDocumentRef.current.stableCount++;
-                    
-                    // Document is stable for 2+ frames - capture it!
-                    if (stableDocumentRef.current.stableCount >= 2 && !isCapturingRef.current) {
-                      console.log('📷 New stable document detected - capturing in background...');
-                      setAutoTriggerReady(true);
-                      captureInBackground(signature);
-                    }
-                  } else {
-                    // New document detected, start tracking stability
-                    stableDocumentRef.current = { signature, stableCount: 1 };
-                    setAutoTriggerReady(false);
-                  }
-                } else {
-                  // Document already captured, show ready state
-                  setAutoTriggerReady(false);
-                }
-              } else {
-                // No valid document or coverage too low
-                stableDocumentRef.current = null;
-                setAutoTriggerReady(false);
-              }
-            } else {
-              // No document detected - reset stable tracking
-              setDocumentDetection(null);
-              stableDocumentRef.current = null;
-              setAutoTriggerReady(false);
+      const currentFrame = getCurrentFrameData();
+      if (!currentFrame) return;
+      
+      // First capture: no previous frame to compare
+      if (!lastCapturedImageDataRef.current) {
+        // Wait for document to be stable for 3 consecutive frames
+        if (lastFrameImageDataRef.current) {
+          const frameDiff = compareFrames(currentFrame, lastFrameImageDataRef.current);
+          
+          if (frameDiff < 5) {
+            // Frame is stable (< 5% change)
+            stableFrameCountRef.current++;
+            setFrameChangeStatus('detecting');
+            
+            if (stableFrameCountRef.current >= 3) {
+              // Stable for 1.5 seconds - capture first document
+              console.log('📷 First document stable - capturing...');
+              captureInBackground();
             }
-          } catch (err) {
-            // Silently fail for real-time detection
-            console.error('Detection error:', err);
+          } else {
+            // Frame changed, reset stability counter
+            stableFrameCountRef.current = 0;
+            setFrameChangeStatus('waiting');
           }
-        },
-        'image/jpeg',
-        0.7
-      );
-    }, 400); // Run detection every 400ms for smoother tracking
-  };
-
-  const stopRealTimeDetection = useCallback(() => {
-    if (detectionIntervalRef.current) {
-      clearInterval(detectionIntervalRef.current);
-      detectionIntervalRef.current = null;
-    }
-    setDetectionActive(false);
-    setDocumentDetection(null);
-  }, []);
-
-  const drawDetectionOverlay = (detection: any) => {
-    if (!canvasOverlayRef.current) return;
-
-    const canvas = canvasOverlayRef.current;
-    const context = canvas.getContext('2d');
-    if (!context) return;
-
-    const width = canvas.width;
-    const height = canvas.height;
-
-    // Clear and redraw frame
-    context.clearRect(0, 0, width, height);
-
-    if (videoRef.current && videoRef.current.videoWidth) {
-      context.drawImage(videoRef.current, 0, 0);
-    }
-
-    // Draw border (green)
-    if (detection.corners && detection.corners.length === 4) {
-      context.strokeStyle = '#00FF00';
-      context.lineWidth = 3;
-      context.beginPath();
-
-      // Calculate scaling factors
-      // The detection coordinates are in percentage (0-100)
-      // We need to map them to the canvas dimensions
-      // Note: The canvas size matches the video size (resolution), 
-      // but it is displayed with object-fit: contain.
-      // The overlay canvas should also be displayed with object-fit: contain 
-      // and match the video element's visual dimensions if possible, 
-      // OR we rely on the fact that both video and canvas have the same resolution 
-      // and are both scaled by CSS 'contain' in the same way.
-      
-      // Since we set canvas.width/height to video.videoWidth/Height in startRealTimeDetection,
-      // and both have object-fit: contain (we need to ensure canvas has it too),
-      // they should align visually.
-
-      for (let i = 0; i < detection.corners.length; i++) {
-        const corner = detection.corners[i];
-        const x = (corner.x / 100) * width;
-        const y = (corner.y / 100) * height;
-
-        if (i === 0) {
-          context.moveTo(x, y);
-        } else {
-          context.lineTo(x, y);
         }
+        
+        lastFrameImageDataRef.current = currentFrame;
+        return;
       }
-
-      // Close the path
-      const firstCorner = detection.corners[0];
-      const firstX = (firstCorner.x / 100) * width;
-      const firstY = (firstCorner.y / 100) * height;
-      context.lineTo(firstX, firstY);
-      context.stroke();
-
-      // Draw corner points
-      context.fillStyle = '#00FF00';
-      context.strokeStyle = '#FFFFFF';
-      context.lineWidth = 2;
-
-      for (const corner of detection.corners) {
-        const x = (corner.x / 100) * width;
-        const y = (corner.y / 100) * height;
-
-        // Draw circle
-        context.beginPath();
-        context.arc(x, y, 8, 0, 2 * Math.PI);
-        context.fill();
-        context.stroke();
-
-        // Draw label
-        context.fillStyle = '#00FF00';
-        context.font = 'bold 12px Arial';
-        context.fillText(corner.name, x + 15, y - 15);
+      
+      // Compare current frame with last CAPTURED frame
+      const diffFromCaptured = compareFrames(currentFrame, lastCapturedImageDataRef.current);
+      
+      // Also compare with previous frame to detect stability
+      const diffFromLastFrame = lastFrameImageDataRef.current 
+        ? compareFrames(currentFrame, lastFrameImageDataRef.current) 
+        : 100;
+      
+      // Document changed significantly from captured (> 25% difference)
+      // AND current frame is stable (< 5% change from previous frame)
+      if (diffFromCaptured > 25) {
+        // New document detected
+        if (diffFromLastFrame < 5) {
+          // And it's stable
+          stableFrameCountRef.current++;
+          setFrameChangeStatus('ready');
+          
+          if (stableFrameCountRef.current >= 3) {
+            // New stable document - capture it!
+            console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
+            captureInBackground();
+          }
+        } else {
+          // Document still moving
+          stableFrameCountRef.current = 0;
+          setFrameChangeStatus('detecting');
+        }
+      } else {
+        // Same document as before
+        stableFrameCountRef.current = 0;
+        setFrameChangeStatus('waiting');
       }
-
-      // Draw coverage info
-      if (detection.coverage !== undefined) {
-        context.fillStyle = '#00FF00';
-        context.font = 'bold 16px Arial';
-        context.fillText(`Coverage: ${detection.coverage.toFixed(1)}%`, 20, 30);
-      }
-    }
+      
+      lastFrameImageDataRef.current = currentFrame;
+      
+    }, 500); // Check every 500ms
   };
 
   const startCamera = async () => {
@@ -484,8 +415,13 @@ const Phone: React.FC = () => {
       stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       setStream(null);
     }
-    stopRealTimeDetection();
-  }, [stream, stopRealTimeDetection]);
+    // Stop auto-capture if running
+    if (autoCaptureIntervalRef.current) {
+      clearInterval(autoCaptureIntervalRef.current);
+      autoCaptureIntervalRef.current = null;
+    }
+    setAutoCapture(false);
+  }, [stream]);
 
   const handleCaptureMode = (mode: 'file' | 'camera') => {
     setCaptureMode(mode);
@@ -493,11 +429,8 @@ const Phone: React.FC = () => {
     setQualityCheck(null);
     if (mode === 'camera') {
       startCamera();
-      // Start detection after camera starts
-      setTimeout(() => startRealTimeDetection(), 500);
     } else {
       stopCamera();
-      stopRealTimeDetection();
     }
   };
 
@@ -701,7 +634,6 @@ const Phone: React.FC = () => {
       socket.off('capture_now');
       stopCamera();
       stopAutoCapture();
-      stopRealTimeDetection();
     };
   }, [
     socket,
@@ -710,7 +642,6 @@ const Phone: React.FC = () => {
     showMessage,
     stopAutoCapture,
     stopCamera,
-    stopRealTimeDetection,
     stream,
   ]);
 
@@ -996,20 +927,9 @@ const Phone: React.FC = () => {
                         display: 'block',
                       }}
                     />
-                    <canvas
-                      ref={canvasOverlayRef}
-                      style={{
-                        display: detectionActive ? 'block' : 'none',
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        pointerEvents: 'none',
-                      }}
-                    />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
+                    
+                    {/* Center guide line */}
                     <Box
                       position="absolute"
                       left="50%"
@@ -1042,27 +962,35 @@ const Phone: React.FC = () => {
                       </Button>
                     </Tooltip>
 
-                    {/* Auto-capture ready indicator */}
-                    {autoTriggerReady && (
+                    {/* Auto-capture status indicator */}
+                    {autoCapture && (
                       <Box
                         position="absolute"
                         top={4}
                         left={4}
-                        bg="rgba(34,197,94,0.3)"
-                        border="2px solid rgb(34,197,94)"
-                        borderRadius="full"
-                        p={2}
-                        animation="pulse 0.5s infinite"
-                        _before={{
-                          content: '""',
-                          position: 'absolute',
-                          inset: 0,
-                          borderRadius: 'full',
-                          border: '2px solid rgb(34,197,94)',
-                          animation: 'pulse 1.5s infinite',
-                        }}
+                        bg={
+                          frameChangeStatus === 'captured' ? 'rgba(34,197,94,0.8)' :
+                          frameChangeStatus === 'ready' ? 'rgba(34,197,94,0.5)' :
+                          frameChangeStatus === 'detecting' ? 'rgba(245,158,11,0.5)' :
+                          'rgba(100,100,100,0.5)'
+                        }
+                        border={`2px solid ${
+                          frameChangeStatus === 'captured' ? 'rgb(34,197,94)' :
+                          frameChangeStatus === 'ready' ? 'rgb(34,197,94)' :
+                          frameChangeStatus === 'detecting' ? 'rgb(245,158,11)' :
+                          'rgb(150,150,150)'
+                        }`}
+                        borderRadius="lg"
+                        px={3}
+                        py={1}
+                        color="white"
+                        fontSize="sm"
+                        fontWeight="bold"
                       >
-                        <Box w={2} h={2} bg="green.400" borderRadius="full" />
+                        {frameChangeStatus === 'captured' ? '✓ Captured!' :
+                         frameChangeStatus === 'ready' ? '📸 Ready...' :
+                         frameChangeStatus === 'detecting' ? '👀 Detecting...' :
+                         `📷 ${autoCaptureCount} captured`}
                       </Box>
                     )}
 
@@ -1112,20 +1040,6 @@ const Phone: React.FC = () => {
                         </Tooltip>
                       </VStack>
                     )}
-
-                    {/* Non-fullscreen controls info */}
-                    {!isFullScreen && autoCapture && (
-                      <Tag
-                        position="absolute"
-                        top={4}
-                        left={4}
-                        colorScheme="green"
-                        borderRadius="full"
-                        size="lg"
-                      >
-                        📸 Captured: {autoCaptureCount} | Place next document
-                      </Tag>
-                    )}
                   </Box>
                 </Box>
 
@@ -1155,23 +1069,6 @@ const Phone: React.FC = () => {
                         {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
                       </Button>
                     </Tooltip>
-                    <Tooltip label="Real-time document detection" hasArrow>
-                      <Button
-                        variant={detectionActive ? 'solid' : 'outline'}
-                        colorScheme="purple"
-                        onClick={() => {
-                          if (detectionActive) {
-                            stopRealTimeDetection();
-                          } else {
-                            startRealTimeDetection();
-                          }
-                        }}
-                        isDisabled={!stream}
-                        leftIcon={<Iconify icon={FiCpu} boxSize={5} />}
-                      >
-                        {detectionActive ? 'Detection ON' : 'Detection OFF'}
-                      </Button>
-                    </Tooltip>
                     <Tooltip
                       label={isFullScreen ? 'Exit fullscreen' : 'Fullscreen capture mode'}
                       hasArrow
@@ -1191,8 +1088,8 @@ const Phone: React.FC = () => {
                   </Flex>
                 )}
 
-                {/* Detection Status - Always visible when detection is active */}
-                {detectionActive && documentDetection && showControls && (
+                {/* Auto-Capture Status */}
+                {autoCapture && showControls && (
                   <Flex
                     align="center"
                     gap={3}
@@ -1204,10 +1101,14 @@ const Phone: React.FC = () => {
                   >
                     <Iconify icon={FiCpu} color="brand.300" />
                     <Stack spacing={0}>
-                      <Text fontWeight="600">Document geometry locked</Text>
+                      <Text fontWeight="600">
+                        {frameChangeStatus === 'ready' ? '📸 New document detected - capturing...' :
+                         frameChangeStatus === 'detecting' ? '👀 Waiting for stable document...' :
+                         frameChangeStatus === 'captured' ? '✓ Just captured! Place next document.' :
+                         `📷 Captured ${autoCaptureCount} documents`}
+                      </Text>
                       <Text fontSize="sm" color={muted}>
-                        Coverage {documentDetection.coverage?.toFixed(1) ?? 0}% • Corners detected{' '}
-                        {documentDetection.corners?.length ?? 0}
+                        Place each document in view • Auto-captures when stable
                       </Text>
                     </Stack>
                   </Flex>
