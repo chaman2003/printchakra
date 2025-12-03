@@ -266,6 +266,36 @@ const Phone: React.FC = () => {
   // Ref to hold latest captureInBackground function to avoid stale closures in interval
   const captureInBackgroundRef = useRef<(() => Promise<void>) | null>(null);
   
+  const startAsyncUpload = useCallback((blob: Blob, filename: string, optionsSnapshot: typeof processingOptions) => {
+    (async () => {
+      const formData = new FormData();
+      formData.append('file', blob, filename);
+      formData.append('auto_crop', optionsSnapshot.autoCrop.toString());
+      formData.append('ai_enhance', optionsSnapshot.aiEnhance.toString());
+      formData.append('strict_quality', optionsSnapshot.strictQuality.toString());
+
+      try {
+        await apiClient.post(API_ENDPOINTS.upload, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        setAutoCaptureCount(prev => prev + 1);
+
+        toast({
+          title: '📸 Document Captured!',
+          description: 'Place next document...',
+          status: 'success',
+          duration: 1500,
+          position: 'top',
+        });
+      } catch (err) {
+        console.error('Background upload failed:', err);
+        lastCapturedImageDataRef.current = null; // Allow retry on same document
+        setFrameChangeStatus('waiting');
+      }
+    })();
+  }, [toast]);
+
   // Background capture without freezing camera
   const captureInBackground = useCallback(async () => {
     if (isCapturingRef.current || !videoRef.current || !canvasRef.current) return;
@@ -280,7 +310,6 @@ const Phone: React.FC = () => {
       
       if (!context || !video.videoWidth || video.videoWidth === 0) {
         console.warn('Video not ready for capture, skipping...');
-        isCapturingRef.current = false;
         setFrameChangeStatus('waiting');
         return;
       }
@@ -296,7 +325,7 @@ const Phone: React.FC = () => {
         lastCapturedImageDataRef.current = capturedFrame;
       }
       
-      // Convert to blob and upload
+      // Convert to blob
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(
           (b) => resolve(b),
@@ -307,40 +336,17 @@ const Phone: React.FC = () => {
       
       if (!blob) {
         console.warn('Failed to create blob from canvas');
-        isCapturingRef.current = false;
         setFrameChangeStatus('waiting');
         return;
       }
+
+      const filename = `auto_capture_${Date.now()}.jpg`;
+      const optionsSnapshot = { ...processingOptions };
+
+      // Kick off upload without blocking future captures
+      startAsyncUpload(blob, filename, optionsSnapshot);
       
-      // Upload in background
-      const formData = new FormData();
-      formData.append('file', blob, `auto_capture_${Date.now()}.jpg`);
-      formData.append('auto_crop', processingOptions.autoCrop.toString());
-      formData.append('ai_enhance', processingOptions.aiEnhance.toString());
-      formData.append('strict_quality', processingOptions.strictQuality.toString());
-      
-      try {
-        await apiClient.post(API_ENDPOINTS.upload, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-        
-        setAutoCaptureCount(prev => prev + 1);
-        
-        toast({
-          title: '📸 Document Captured!',
-          description: 'Place next document...',
-          status: 'success',
-          duration: 1500,
-          position: 'top',
-        });
-        
-      } catch (err) {
-        console.error('Background upload failed:', err);
-        lastCapturedImageDataRef.current = null; // Allow retry
-      }
-      
-      // IMPORTANT: Reset captured frame so next loop iteration can detect new documents
-      // Only reset lastFrameImageDataRef to start fresh comparison
+      // Reset frame tracking so next document can be detected immediately
       stableFrameCountRef.current = 0;
       lastFrameImageDataRef.current = null;
       setFrameChangeStatus('waiting');
@@ -350,10 +356,10 @@ const Phone: React.FC = () => {
       lastCapturedImageDataRef.current = null;
       setFrameChangeStatus('waiting');
     } finally {
-      // Always reset capturing flag
+      // Allow next capture immediately (uploads continue async)
       isCapturingRef.current = false;
     }
-  }, [processingOptions, toast]);
+  }, [processingOptions, startAsyncUpload]);
 
   // Keep ref updated with latest captureInBackground
   useEffect(() => {
