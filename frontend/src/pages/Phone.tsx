@@ -77,19 +77,21 @@ const Phone: React.FC = () => {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const cameraContainerRef = useRef<HTMLDivElement>(null);
   const [autoCapture, setAutoCapture] = useState(false);
-  const [autoCaptureCountdown, setAutoCaptureCountdown] = useState(0);
-  const autoCaptureIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [autoCaptureCount, setAutoCaptureCount] = useState(0);
   const [documentDetection, setDocumentDetection] = useState<any>(null);
   const [detectionActive, setDetectionActive] = useState(false);
   const detectionIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
   const [showControls, setShowControls] = useState(true);
   const [autoTriggerReady, setAutoTriggerReady] = useState(false);
-  const autoTriggerCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const toast = useToast();
-  const lastCapturedCornersRef = useRef<any[] | null>(null);
-  const latestDetectionRef = useRef<any>(null);
+  
+  // Continuous capture state - signature-based unique document detection
+  const capturedSignaturesRef = useRef<Set<string>>(new Set());
+  const isCapturingRef = useRef<boolean>(false);
+  const lastDetectionTimeRef = useRef<number>(0);
+  const stableDocumentRef = useRef<{ signature: string; stableCount: number } | null>(null);
 
   // Theme values with insane visual enhancements
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
@@ -134,65 +136,139 @@ const Phone: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const areCornersSimilar = (corners1: any[] | null, corners2: any[] | null) => {
-    if (!corners1 || !corners2 || corners1.length !== corners2.length) return false;
-    let totalDist = 0;
-    for (let i = 0; i < corners1.length; i++) {
-      const dx = corners1[i].x - corners2[i].x;
-      const dy = corners1[i].y - corners2[i].y;
-      totalDist += Math.sqrt(dx * dx + dy * dy);
-    }
-    const avgDist = totalDist / corners1.length;
-    return avgDist < 5; // 5% threshold
+  // Generate a unique signature for a document based on its corners and coverage
+  const generateDocumentSignature = (corners: any[], coverage: number): string => {
+    if (!corners || corners.length !== 4) return '';
+    
+    // Create a signature based on corner positions (rounded) and coverage
+    const cornerStr = corners.map(c => 
+      `${Math.round(c.x / 3)},${Math.round(c.y / 3)}`
+    ).join('|');
+    
+    // Include coverage range in signature
+    const coverageRange = Math.floor(coverage / 5) * 5;
+    
+    return `${cornerStr}:${coverageRange}`;
   };
 
+  // Check if a document signature is unique (not captured before)
+  const isNewDocument = (signature: string): boolean => {
+    if (!signature) return false;
+    return !capturedSignaturesRef.current.has(signature);
+  };
+
+  // Start continuous auto-capture mode
   const startAutoCapture = () => {
     setAutoCapture(true);
-    setAutoCaptureCountdown(3);
+    setAutoCaptureCount(0);
+    capturedSignaturesRef.current.clear(); // Clear previous session signatures
+    stableDocumentRef.current = null;
     setAutoTriggerReady(false);
-    lastCapturedCornersRef.current = null;
-
-    autoCaptureIntervalRef.current = setInterval(() => {
-      setAutoCaptureCountdown((prev: number) => {
-        if (prev <= 1) {
-          if (autoCaptureIntervalRef.current) {
-            clearInterval(autoCaptureIntervalRef.current);
-            autoCaptureIntervalRef.current = null;
-          }
-          // Trigger capture when countdown reaches 0
-          setTimeout(() => {
-            captureFromCamera();
-            // Don't stop auto capture, just reset trigger
-            setAutoTriggerReady(false);
-            if (latestDetectionRef.current && latestDetectionRef.current.corners) {
-              lastCapturedCornersRef.current = latestDetectionRef.current.corners;
-            }
-          }, 300);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    // Start real-time detection for smart auto-capture
+    
+    // Start detection if not already running
     if (!detectionActive) {
       startRealTimeDetection();
     }
+    
+    toast({
+      title: 'Auto-Capture Enabled',
+      description: 'Place documents one by one. Each new document will be captured automatically.',
+      status: 'info',
+      duration: 3000,
+    });
   };
 
+  // Stop continuous auto-capture mode
   const stopAutoCapture = useCallback(() => {
-    if (autoCaptureIntervalRef.current) {
-      clearInterval(autoCaptureIntervalRef.current);
-      autoCaptureIntervalRef.current = null;
-    }
-    if (autoTriggerCountdownRef.current) {
-      clearInterval(autoTriggerCountdownRef.current);
-      autoTriggerCountdownRef.current = null;
-    }
     setAutoCapture(false);
-    setAutoCaptureCountdown(0);
     setAutoTriggerReady(false);
-  }, []);
+    stableDocumentRef.current = null;
+    
+    if (autoCaptureCount > 0) {
+      toast({
+        title: 'Auto-Capture Stopped',
+        description: `Captured ${autoCaptureCount} document(s)`,
+        status: 'success',
+        duration: 3000,
+      });
+    }
+  }, [autoCaptureCount, toast]);
+
+  // Background capture without freezing camera - captures current frame silently
+  const captureInBackground = useCallback(async (signature: string) => {
+    if (isCapturingRef.current || !videoRef.current || !canvasRef.current) return;
+    
+    isCapturingRef.current = true;
+    
+    try {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+      
+      if (!context || !video.videoWidth) {
+        isCapturingRef.current = false;
+        return;
+      }
+      
+      // Capture frame to hidden canvas (doesn't affect video display)
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
+      
+      // Convert to blob in background
+      canvas.toBlob(
+        async (blob: Blob | null) => {
+          if (!blob) {
+            isCapturingRef.current = false;
+            return;
+          }
+          
+          // Mark signature as captured BEFORE upload to prevent duplicates
+          capturedSignaturesRef.current.add(signature);
+          
+          // Upload in background without blocking UI
+          const formData = new FormData();
+          formData.append('file', blob, `auto_capture_${Date.now()}.jpg`);
+          formData.append('auto_crop', processingOptions.autoCrop.toString());
+          formData.append('ai_enhance', processingOptions.aiEnhance.toString());
+          formData.append('strict_quality', processingOptions.strictQuality.toString());
+          
+          try {
+            await apiClient.post(API_ENDPOINTS.upload, formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            
+            setAutoCaptureCount(prev => prev + 1);
+            
+            // Brief visual feedback without interrupting camera
+            toast({
+              title: '📸 Document Captured!',
+              description: 'Place next document...',
+              status: 'success',
+              duration: 1500,
+              position: 'top',
+            });
+            
+            // Reset stable detection for next document
+            stableDocumentRef.current = null;
+            setAutoTriggerReady(false);
+            
+          } catch (err) {
+            console.error('Background upload failed:', err);
+            // Remove signature on failure so it can be retried
+            capturedSignaturesRef.current.delete(signature);
+          }
+          
+          isCapturingRef.current = false;
+        },
+        'image/jpeg',
+        0.9
+      );
+    } catch (err) {
+      console.error('Background capture error:', err);
+      isCapturingRef.current = false;
+    }
+  }, [processingOptions, toast]);
 
   const startRealTimeDetection = () => {
     if (!videoRef.current || !canvasOverlayRef.current) return;
@@ -201,6 +277,9 @@ const Phone: React.FC = () => {
 
     detectionIntervalRef.current = setInterval(async () => {
       if (!videoRef.current || !canvasOverlayRef.current) return;
+      
+      // Skip if currently capturing to prevent race conditions
+      if (isCapturingRef.current) return;
 
       const video = videoRef.current;
       const canvas = canvasOverlayRef.current;
@@ -235,58 +314,44 @@ const Phone: React.FC = () => {
               response.data.corners.length > 0
             ) {
               setDocumentDetection(response.data);
-              latestDetectionRef.current = response.data;
               // Draw detection overlay
               drawDetectionOverlay(response.data);
 
-              // Smart auto-trigger: if document is fully detected and autoCapture is enabled
-              if (autoCapture && response.data.coverage && response.data.coverage >= 75) {
+              // Continuous auto-capture with signature-based uniqueness
+              if (autoCapture && response.data.coverage && response.data.coverage >= 70) {
+                const signature = generateDocumentSignature(response.data.corners, response.data.coverage);
                 
-                // Check if similar to last captured
-                const isSimilar = areCornersSimilar(response.data.corners, lastCapturedCornersRef.current);
-
-                if (isSimilar) {
-                   // Already captured this document position
-                   return;
-                }
-
-                // Document is well-positioned (at least 75% of screen)
-                if (!autoTriggerReady) {
-                  console.log('📸 Document detected! Ready to auto-capture...');
-                  setAutoTriggerReady(true);
-
-                  // Auto-trigger capture after 1 second if still aligned
-                  autoTriggerCountdownRef.current = setTimeout(() => {
-                    const currentDetection = latestDetectionRef.current;
-                    if (autoCapture && currentDetection && currentDetection.coverage >= 75) {
-                      // Check similarity again to be sure
-                      if (!areCornersSimilar(currentDetection.corners, lastCapturedCornersRef.current)) {
-                        console.log('📷 Auto-capturing document...');
-                        captureFromCamera();
-                        // Keep autoCapture ON
-                        setAutoTriggerReady(false);
-                        lastCapturedCornersRef.current = currentDetection.corners;
-                      }
+                // Check if this is a new document we haven't captured
+                if (isNewDocument(signature)) {
+                  // Track stability - document must be stable for 2 consecutive detections
+                  if (stableDocumentRef.current?.signature === signature) {
+                    stableDocumentRef.current.stableCount++;
+                    
+                    // Document is stable for 2+ frames - capture it!
+                    if (stableDocumentRef.current.stableCount >= 2 && !isCapturingRef.current) {
+                      console.log('📷 New stable document detected - capturing in background...');
+                      setAutoTriggerReady(true);
+                      captureInBackground(signature);
                     }
-                  }, 1000);
+                  } else {
+                    // New document detected, start tracking stability
+                    stableDocumentRef.current = { signature, stableCount: 1 };
+                    setAutoTriggerReady(false);
+                  }
+                } else {
+                  // Document already captured, show ready state
+                  setAutoTriggerReady(false);
                 }
-              } else if (
-                autoTriggerReady &&
-                (!response.data.coverage || response.data.coverage < 75)
-              ) {
-                // Document moved out of position
+              } else {
+                // No valid document or coverage too low
+                stableDocumentRef.current = null;
                 setAutoTriggerReady(false);
-                if (autoTriggerCountdownRef.current) {
-                  clearInterval(autoTriggerCountdownRef.current);
-                }
               }
             } else {
-              // No document detected
-              latestDetectionRef.current = null;
+              // No document detected - reset stable tracking
+              setDocumentDetection(null);
+              stableDocumentRef.current = null;
               setAutoTriggerReady(false);
-              if (autoTriggerCountdownRef.current) {
-                clearInterval(autoTriggerCountdownRef.current);
-              }
             }
           } catch (err) {
             // Silently fail for real-time detection
@@ -296,7 +361,7 @@ const Phone: React.FC = () => {
         'image/jpeg',
         0.7
       );
-    }, 500); // Run detection every 500ms
+    }, 400); // Run detection every 400ms for smoother tracking
   };
 
   const stopRealTimeDetection = useCallback(() => {
@@ -909,10 +974,12 @@ const Phone: React.FC = () => {
                   boxShadow="halo"
                   className="camera-container-normal"
                   sx={{
+                    // Fixed stable size for camera preview
                     aspectRatio: '3 / 4',
-                    maxHeight: isFullScreen ? '100vh' : '70vh',
-                    width: '100%',
-                    maxWidth: isFullScreen ? '100%' : '500px',
+                    height: isFullScreen ? '100vh' : '500px',
+                    width: isFullScreen ? '100%' : 'auto',
+                    maxWidth: isFullScreen ? '100%' : '375px',
+                    minWidth: isFullScreen ? '100%' : '300px',
                     mx: 'auto',
                   }}
                 >
@@ -921,6 +988,7 @@ const Phone: React.FC = () => {
                       ref={videoRef}
                       autoPlay
                       playsInline
+                      muted
                       style={{ 
                         width: '100%', 
                         height: '100%', 
@@ -1012,20 +1080,20 @@ const Phone: React.FC = () => {
                         <Tooltip
                           label={
                             autoCapture
-                              ? `Auto capture in ${autoCaptureCountdown}s`
-                              : 'Auto capture on document detection'
+                              ? `Captured ${autoCaptureCount} documents - Place next document`
+                              : 'Enable continuous auto-capture for multiple documents'
                           }
                           hasArrow
                         >
                           <Button
-                            colorScheme={autoCapture ? 'orange' : 'brand'}
+                            colorScheme={autoCapture ? 'green' : 'brand'}
                             size="lg"
                             onClick={autoCapture ? stopAutoCapture : startAutoCapture}
                             isDisabled={!stream || uploading}
                             leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
                             minW="160px"
                           >
-                            {autoCapture ? `Auto (${autoCaptureCountdown}s)` : 'Auto Capture'}
+                            {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
                           </Button>
                         </Tooltip>
                         <Tooltip label="Capture instantly" hasArrow>
@@ -1051,10 +1119,11 @@ const Phone: React.FC = () => {
                         position="absolute"
                         top={4}
                         left={4}
-                        colorScheme="brand"
+                        colorScheme="green"
                         borderRadius="full"
+                        size="lg"
                       >
-                        Auto capture in {autoCaptureCountdown}s
+                        📸 Captured: {autoCaptureCount} | Place next document
                       </Tag>
                     )}
                   </Box>
@@ -1075,15 +1144,15 @@ const Phone: React.FC = () => {
                         Capture
                       </Button>
                     </Tooltip>
-                    <Tooltip label="Auto capture with countdown" hasArrow>
+                    <Tooltip label="Continuous auto-capture for stacked documents" hasArrow>
                       <Button
                         variant={autoCapture ? 'solid' : 'outline'}
-                        colorScheme="orange"
+                        colorScheme={autoCapture ? 'green' : 'orange'}
                         onClick={autoCapture ? stopAutoCapture : startAutoCapture}
                         isDisabled={!stream || uploading}
                         leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
                       >
-                        {autoCapture ? `Cancel (${autoCaptureCountdown}s)` : 'Auto Capture'}
+                        {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
                       </Button>
                     </Tooltip>
                     <Tooltip label="Real-time document detection" hasArrow>
