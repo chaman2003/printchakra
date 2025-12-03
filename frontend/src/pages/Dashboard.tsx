@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import axios from 'axios';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
 import {
@@ -327,6 +326,70 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
       objectFit="cover"
       w="100%"
       h="100%"
+      borderRadius="lg"
+    />
+  );
+};
+
+// Modal image component with proper header-based loading for ngrok/deployment
+interface ModalImageWithHeadersProps {
+  filename: string;
+  alt: string;
+}
+
+const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename, alt }) => {
+  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
+  const { blobUrl, loading, error } = useImageWithHeaders(imageUrl);
+
+  if (loading) {
+    return (
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        minH="200px"
+        minW="200px"
+      >
+        <Spinner size="xl" color="brand.400" thickness="4px" />
+        <Text mt={4} fontSize="md" color="text.muted">
+          Loading image…
+        </Text>
+      </Flex>
+    );
+  }
+
+  if (error || !blobUrl) {
+    return (
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        minH="200px"
+        minW="300px"
+        bg="rgba(0,0,0,0.1)"
+        borderRadius="lg"
+        p={8}
+      >
+        <Text fontSize="lg" color="text.muted" textAlign="center">
+          Image not found or deleted
+        </Text>
+        <Text fontSize="sm" color="text.muted" mt={2}>
+          {filename}
+        </Text>
+      </Flex>
+    );
+  }
+
+  return (
+    <Box
+      as="img"
+      src={blobUrl}
+      alt={alt}
+      maxW="100%"
+      maxH={{ base: 'calc(95vh - 120px)', md: 'calc(90vh - 120px)' }}
+      w="auto"
+      h="auto"
+      objectFit="contain"
       borderRadius="lg"
     />
   );
@@ -2357,21 +2420,9 @@ const Dashboard: React.FC = () => {
             overflow="hidden"
           >
             {selectedImageFile && (
-              <Box
-                as="img"
-                src={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)}
+              <ModalImageWithHeaders
+                filename={selectedImageFile}
                 alt={selectedImageFile}
-                maxW="100%"
-                maxH={{ base: 'calc(95vh - 120px)', md: 'calc(90vh - 120px)' }}
-                w="auto"
-                h="auto"
-                objectFit="contain"
-                borderRadius="lg"
-                onError={(e: any) => {
-                  console.error(`Failed to load image: ${selectedImageFile}`);
-                  e.target.src =
-                    'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="400" height="300"%3E%3Crect fill="%23f0f0f0" width="400" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-family="Arial" font-size="16"%3E Image not found or deleted%3C/text%3E%3C/svg%3E';
-                }}
               />
             )}
           </ModalBody>
@@ -2385,12 +2436,22 @@ const Dashboard: React.FC = () => {
               onClick={async () => {
                 if (!selectedImageFile) return;
                 try {
-                  const imageUrl = getImageUrl(API_ENDPOINTS.processed, selectedImageFile);
-                  const response = await axios.get(imageUrl, {
-                    responseType: 'blob',
-                  });
-
-                  const url = URL.createObjectURL(response.data);
+                  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`;
+                  const headers: Record<string, string> = {};
+                  
+                  // Add ngrok bypass header if using ngrok tunnel
+                  if (API_BASE_URL.includes('ngrok') || API_BASE_URL.includes('loca.lt')) {
+                    headers['ngrok-skip-browser-warning'] = 'true';
+                  }
+                  
+                  const response = await fetch(imageUrl, { headers });
+                  
+                  if (!response.ok) {
+                    throw new Error(`Failed to fetch: ${response.status}`);
+                  }
+                  
+                  const blob = await response.blob();
+                  const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
                   a.href = url;
                   a.download = selectedImageFile;
