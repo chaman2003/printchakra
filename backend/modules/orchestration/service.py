@@ -187,13 +187,13 @@ class PrintScanOrchestrator:
         parameters = {}
 
         # Check for mode switching commands
-        switch_keywords = ["switch to", "change to", "go to", "open", "show me"]
+        switch_keywords = ["switch to", "change to", "go to", "open", "show me", "navigate to"]
         if any(keyword in user_input_lower for keyword in switch_keywords):
-            if "print" in user_input_lower and ("config" in user_input_lower or "settings" in user_input_lower or "mode" in user_input_lower):
+            if "print" in user_input_lower:
                 parameters["switch_mode"] = "print"
                 parameters["voice_triggered"] = True
                 return IntentType.PRINT, parameters
-            elif "scan" in user_input_lower and ("config" in user_input_lower or "settings" in user_input_lower or "mode" in user_input_lower):
+            elif "scan" in user_input_lower:
                 parameters["switch_mode"] = "scan"
                 parameters["voice_triggered"] = True
                 return IntentType.SCAN, parameters

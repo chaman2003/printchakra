@@ -850,8 +850,8 @@ class VoiceChatService:
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
-                if SMOLLM_PROMPT_AVAILABLE:
-                    friendly_response = SmolLMPromptManager.get_friendly_command_response(
+                if VOICE_PROMPT_AVAILABLE:
+                    friendly_response = VoicePromptManager.get_friendly_command_response(
                         command_type,
                         command_params,
                     )
@@ -873,8 +873,8 @@ class VoiceChatService:
             # PRIORITY 1: Check for confirmation if we have pending orchestration
             if self.pending_orchestration:
                 is_confirmation = False
-                if SMOLLM_PROMPT_AVAILABLE:
-                    is_confirmation = SmolLMPromptManager.is_confirmation(user_message)
+                if VOICE_PROMPT_AVAILABLE:
+                    is_confirmation = VoicePromptManager.is_confirmation(user_message)
                 else:
                     confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye"]
                     is_confirmation = any(
@@ -907,8 +907,8 @@ class VoiceChatService:
             # PRIORITY 2: Check for DIRECT print/scan commands - TRIGGER IMMEDIATELY
             # Look for print intent
             is_print_command = False
-            if SMOLLM_PROMPT_AVAILABLE:
-                is_print_command = SmolLMPromptManager.is_print_command(user_message)
+            if VOICE_PROMPT_AVAILABLE:
+                is_print_command = VoicePromptManager.is_print_command(user_message)
             else:
                 print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper"]
                 question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
@@ -935,8 +935,8 @@ class VoiceChatService:
                 }
             
             # Look for scan intent
-            if SMOLLM_PROMPT_AVAILABLE:
-                is_scan_command = SmolLMPromptManager.is_scan_command(user_message)
+            if VOICE_PROMPT_AVAILABLE:
+                is_scan_command = VoicePromptManager.is_scan_command(user_message)
             else:
                 scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
                 question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
@@ -971,8 +971,8 @@ class VoiceChatService:
             ] + self.conversation_history
 
             # Call Ollama API with speed optimizations using centralized query builder
-            if SMOLLM_PROMPT_AVAILABLE:
-                query = SmolLMPromptManager.build_ollama_query(self.model_name, messages)
+            if VOICE_PROMPT_AVAILABLE:
+                query = VoicePromptManager.build_ollama_query(self.model_name, messages)
             else:
                 # Fallback query if prompt manager not available
                 query = {
@@ -1002,8 +1002,8 @@ class VoiceChatService:
                 ai_response = result.get("message", {}).get("content", "").strip()
 
                 # Format response using centralized prompt manager
-                if SMOLLM_PROMPT_AVAILABLE:
-                    ai_response = SmolLMPromptManager.format_response(ai_response)
+                if VOICE_PROMPT_AVAILABLE:
+                    ai_response = VoicePromptManager.format_response(ai_response)
                 else:
                     # Fallback formatting if prompt manager not available
                     ai_response = ai_response.replace("**", "").replace("*", "")

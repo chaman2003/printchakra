@@ -3405,10 +3405,12 @@ def process_voice_complete():
                 
                 # Check for print intent
                 print_keywords = ["print", "printing", "printout", "print doc", "print file"]
+                switch_keywords = ["switch to", "open", "go to", "show me", "navigate to"]
+                is_switch_print = any(sk in user_text_lower for sk in switch_keywords) and "print" in user_text_lower
                 is_print_command = any(kw in user_text_lower for kw in print_keywords)
                 is_not_question = not any(w in user_text_lower for w in ["what", "can you", "how", "help", "tell me", "can i"])
                 
-                if is_print_command and is_not_question:
+                if (is_print_command or is_switch_print) and is_not_question:
                     logger.info(f"[FALLBACK] Print command detected: '{result.get('user_text')}'")
                     result["orchestration_trigger"] = True
                     result["orchestration_mode"] = "print"
@@ -3416,9 +3418,10 @@ def process_voice_complete():
                 
                 # Check for scan intent
                 scan_keywords = ["scan", "scanning", "capture", "scan doc", "capture document"]
+                is_switch_scan = any(sk in user_text_lower for sk in switch_keywords) and "scan" in user_text_lower
                 is_scan_command = any(kw in user_text_lower for kw in scan_keywords)
                 
-                if is_scan_command and is_not_question:
+                if (is_scan_command or is_switch_scan) and is_not_question:
                     logger.info(f"[FALLBACK] Scan command detected: '{result.get('user_text')}'")
                     result["orchestration_trigger"] = True
                     result["orchestration_mode"] = "scan"

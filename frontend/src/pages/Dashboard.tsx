@@ -4583,7 +4583,7 @@ const Dashboard: React.FC = () => {
           borderLeft="1px solid"
           borderColor={chatSidebarBorderColor}
           overflowY="auto"
-          zIndex={1000}
+          zIndex={2000}
           transition="transform 0.3s ease-out"
         >
           <VoiceAIChat
