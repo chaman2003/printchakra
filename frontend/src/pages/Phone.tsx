@@ -146,7 +146,13 @@ const Phone: React.FC = () => {
   // Compare two ImageData objects and return difference percentage (0-100)
   const compareFrames = (frame1: ImageData, frame2: ImageData): number => {
     if (frame1.width !== frame2.width || frame1.height !== frame2.height) {
+      console.warn(`Frame size mismatch: ${frame1.width}x${frame1.height} vs ${frame2.width}x${frame2.height}`);
       return 100; // Different sizes = completely different
+    }
+    
+    if (frame1.data.length === 0 || frame2.data.length === 0) {
+      console.warn('Empty frame data detected');
+      return 100; // Empty = treat as different
     }
     
     const data1 = frame1.data;
@@ -174,20 +180,45 @@ const Phone: React.FC = () => {
 
   // Get current frame as ImageData (scaled down for comparison)
   const getCurrentFrameData = (): ImageData | null => {
-    if (!videoRef.current || !comparisonCanvasRef.current) return null;
-    
-    const video = videoRef.current;
-    const canvas = comparisonCanvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    if (!ctx || !video.videoWidth) return null;
-    
-    // Use small size for fast comparison (160x120)
-    canvas.width = 160;
-    canvas.height = 120;
-    ctx.drawImage(video, 0, 0, 160, 120);
-    
-    return ctx.getImageData(0, 0, 160, 120);
+    try {
+      if (!videoRef.current || !comparisonCanvasRef.current) return null;
+      
+      const video = videoRef.current;
+      const canvas = comparisonCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx || !video.videoWidth || video.paused || video.ended) {
+        if (video.paused) {
+          console.warn('Video paused - attempting resume...');
+          video.play().catch(e => console.warn('Resume failed:', e));
+        }
+        return null;
+      }
+      
+      // Use small size for fast comparison (160x120)
+      canvas.width = 160;
+      canvas.height = 120;
+      
+      try {
+        ctx.drawImage(video, 0, 0, 160, 120);
+      } catch (drawError) {
+        console.warn('Frame draw error:', drawError);
+        return null;
+      }
+      
+      const imageData = ctx.getImageData(0, 0, 160, 120);
+      
+      // Validate frame data
+      if (!imageData || !imageData.data || imageData.data.length === 0) {
+        console.warn('Invalid frame data');
+        return null;
+      }
+      
+      return imageData;
+    } catch (error) {
+      console.error('getCurrentFrameData error:', error);
+      return null;
+    }
   };
 
   // Start continuous auto-capture mode with frame comparison
@@ -308,8 +339,10 @@ const Phone: React.FC = () => {
         lastCapturedImageDataRef.current = null; // Allow retry
       }
       
-      // Reset for next document
+      // IMPORTANT: Reset captured frame so next loop iteration can detect new documents
+      // Only reset lastFrameImageDataRef to start fresh comparison
       stableFrameCountRef.current = 0;
+      lastFrameImageDataRef.current = null;
       setFrameChangeStatus('waiting');
       
     } catch (err) {
@@ -334,80 +367,88 @@ const Phone: React.FC = () => {
     }
     
     autoCaptureIntervalRef.current = setInterval(() => {
-      if (isCapturingRef.current || !videoRef.current) return;
-      
-      // Check if video stream is still active
-      const video = videoRef.current;
-      if (!video.videoWidth || video.videoWidth === 0 || video.paused || video.ended) {
-        console.warn('Video stream not active, waiting...');
-        return;
-      }
-      
-      const currentFrame = getCurrentFrameData();
-      if (!currentFrame) return;
-      
-      // First capture: no previous frame to compare
-      if (!lastCapturedImageDataRef.current) {
-        // Wait for document to be stable for 3 consecutive frames
-        if (lastFrameImageDataRef.current) {
-          const frameDiff = compareFrames(currentFrame, lastFrameImageDataRef.current);
+      try {
+        if (isCapturingRef.current || !videoRef.current) return;
+        
+        // Check if video stream is still active
+        const video = videoRef.current;
+        if (!video.videoWidth || video.videoWidth === 0 || video.paused || video.ended) {
+          if (video.paused) {
+            console.debug('Video paused - attempting resume...');
+            video.play().catch(e => console.warn('Auto-resume failed:', e));
+          }
+          return;
+        }
+        
+        const currentFrame = getCurrentFrameData();
+        if (!currentFrame) return;
+        
+        // First capture: no previous frame to compare
+        if (!lastCapturedImageDataRef.current) {
+          // Wait for document to be stable for 3 consecutive frames
+          if (lastFrameImageDataRef.current) {
+            const frameDiff = compareFrames(currentFrame, lastFrameImageDataRef.current);
+            
+            if (frameDiff < 5) {
+              // Frame is stable (< 5% change)
+              stableFrameCountRef.current++;
+              setFrameChangeStatus('detecting');
+              
+              if (stableFrameCountRef.current >= 3) {
+                // Stable for 1.5 seconds - capture first document
+                console.log('📷 First document stable - capturing...');
+                captureInBackgroundRef.current?.();
+              }
+            } else {
+              // Frame changed, reset stability counter
+              stableFrameCountRef.current = 0;
+              setFrameChangeStatus('waiting');
+            }
+          }
           
-          if (frameDiff < 5) {
-            // Frame is stable (< 5% change)
+          lastFrameImageDataRef.current = currentFrame;
+          return;
+        }
+        
+        // Compare current frame with last CAPTURED frame
+        const diffFromCaptured = compareFrames(currentFrame, lastCapturedImageDataRef.current);
+        
+        // Also compare with previous frame to detect stability
+        const diffFromLastFrame = lastFrameImageDataRef.current 
+          ? compareFrames(currentFrame, lastFrameImageDataRef.current) 
+          : 100;
+        
+        // Document changed significantly from captured (> 25% difference)
+        // AND current frame is stable (< 5% change from previous frame)
+        if (diffFromCaptured > 25) {
+          // New document detected
+          if (diffFromLastFrame < 5) {
+            // And it's stable
             stableFrameCountRef.current++;
-            setFrameChangeStatus('detecting');
+            setFrameChangeStatus('ready');
             
             if (stableFrameCountRef.current >= 3) {
-              // Stable for 1.5 seconds - capture first document
-              console.log('📷 First document stable - capturing...');
+              // New stable document - capture it!
+              console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
               captureInBackgroundRef.current?.();
             }
           } else {
-            // Frame changed, reset stability counter
+            // Document still moving
             stableFrameCountRef.current = 0;
-            setFrameChangeStatus('waiting');
+            setFrameChangeStatus('detecting');
           }
+        } else {
+          // Same document as before
+          stableFrameCountRef.current = 0;
+          setFrameChangeStatus('waiting');
         }
         
         lastFrameImageDataRef.current = currentFrame;
-        return;
+        
+      } catch (error) {
+        console.error('Frame comparison loop error:', error);
+        // Continue loop even on error - don't stop the interval
       }
-      
-      // Compare current frame with last CAPTURED frame
-      const diffFromCaptured = compareFrames(currentFrame, lastCapturedImageDataRef.current);
-      
-      // Also compare with previous frame to detect stability
-      const diffFromLastFrame = lastFrameImageDataRef.current 
-        ? compareFrames(currentFrame, lastFrameImageDataRef.current) 
-        : 100;
-      
-      // Document changed significantly from captured (> 25% difference)
-      // AND current frame is stable (< 5% change from previous frame)
-      if (diffFromCaptured > 25) {
-        // New document detected
-        if (diffFromLastFrame < 5) {
-          // And it's stable
-          stableFrameCountRef.current++;
-          setFrameChangeStatus('ready');
-          
-          if (stableFrameCountRef.current >= 3) {
-            // New stable document - capture it!
-            console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
-            captureInBackgroundRef.current?.();
-          }
-        } else {
-          // Document still moving
-          stableFrameCountRef.current = 0;
-          setFrameChangeStatus('detecting');
-        }
-      } else {
-        // Same document as before
-        stableFrameCountRef.current = 0;
-        setFrameChangeStatus('waiting');
-      }
-      
-      lastFrameImageDataRef.current = currentFrame;
-      
     }, 500); // Check every 500ms
   }, []);
 
