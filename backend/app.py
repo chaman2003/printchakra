@@ -356,7 +356,8 @@ socketio = SocketIO(
 
 # Base directory
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+PUBLIC_DIR = os.path.join(BASE_DIR, "public")
+DATA_DIR = os.path.join(PUBLIC_DIR, "data")
 
 # Directories for file storage
 UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
@@ -364,10 +365,11 @@ PROCESSED_DIR = os.path.join(DATA_DIR, "processed")
 TEXT_DIR = os.path.join(DATA_DIR, "processed_text")
 PDF_DIR = os.path.join(DATA_DIR, "pdfs")
 CONVERTED_DIR = os.path.join(DATA_DIR, "converted")
+STATIC_DIR = os.path.join(PUBLIC_DIR, "static")
 PRINT_DIR = os.path.join(BASE_DIR, "print_scripts")
 
 # Create directories if they don't exist
-for directory in [DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR, CONVERTED_DIR]:
+for directory in [PUBLIC_DIR, DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR, CONVERTED_DIR, STATIC_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 # Processing status tracking (in-memory)
@@ -1115,6 +1117,60 @@ def index():
 def favicon():
     """Serve favicon to prevent 404 errors"""
     return "", 204  # No Content response
+
+
+# Public folder routes for serving data files
+@app.route("/public/processed/<path:filename>", methods=["GET", "OPTIONS"])
+def serve_public_processed(filename):
+    """Serve processed files from public/data/processed directory"""
+    try:
+        response = send_from_directory(PROCESSED_DIR, filename)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+    except Exception as e:
+        logger.error(f"Error serving processed file {filename}: {e}")
+        return jsonify({"error": "File not found"}), 404
+
+
+@app.route("/public/uploads/<path:filename>", methods=["GET", "OPTIONS"])
+def serve_public_uploads(filename):
+    """Serve uploaded files from public/data/uploads directory"""
+    try:
+        response = send_from_directory(UPLOAD_DIR, filename)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+    except Exception as e:
+        logger.error(f"Error serving uploaded file {filename}: {e}")
+        return jsonify({"error": "File not found"}), 404
+
+
+@app.route("/public/converted/<path:filename>", methods=["GET", "OPTIONS"])
+def serve_public_converted(filename):
+    """Serve converted files from public/data/converted directory"""
+    try:
+        response = send_from_directory(CONVERTED_DIR, filename)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+    except Exception as e:
+        logger.error(f"Error serving converted file {filename}: {e}")
+        return jsonify({"error": "File not found"}), 404
+
+
+@app.route("/public/static/<path:filename>", methods=["GET", "OPTIONS"])
+def serve_public_static(filename):
+    """Serve static files from public/static directory"""
+    try:
+        response = send_from_directory(STATIC_DIR, filename)
+        return response
+    except Exception as e:
+        logger.error(f"Error serving static file {filename}: {e}")
+        return jsonify({"error": "File not found"}), 404
 
 
 # Global OPTIONS handler for CORS preflight

@@ -87,8 +87,8 @@ export const API_ENDPOINTS = {
   health: '/health',
   upload: '/upload',
   files: '/files',
-  processed: '/processed',
-  uploads: '/uploads',
+  processed: '/public/processed',
+  uploads: '/public/uploads',
   delete: '/delete',
   ocr: '/ocr',
   print: '/print',
@@ -106,7 +106,7 @@ export const API_ENDPOINTS = {
 
   // File conversion endpoints
   convert: '/convert',
-  converted: '/converted',
+  converted: '/public/converted',
   getConvertedFiles: '/get-converted-files',
   deleteConverted: '/delete-converted',
 
