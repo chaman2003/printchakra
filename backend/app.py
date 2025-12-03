@@ -16,9 +16,6 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from PIL import Image
 
-# Add app folder to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
-
 # Fix Windows console encoding issues
 if sys.platform == "win32":
     try:
@@ -74,7 +71,7 @@ class MessageCounter:
         """Add message to counter and return message with count if repeated"""
         if message in self.message_map:
             self.message_map[message] += 1
-            return f"{message} (×{self.message_map[message]})"
+            return f"{message} (�{self.message_map[message]})"
         else:
             self.message_map[message] = 1
             return message
@@ -235,7 +232,7 @@ logger.info("=" * 70)
 
 try:
     import torch
-    from modules.voice.gpu_optimization import detect_gpu, get_optimal_device, initialize_gpu
+    from app.modules.voice.gpu_optimization import detect_gpu, get_optimal_device, initialize_gpu
 
     # Detect GPU first
     gpu_info = detect_gpu()
@@ -290,8 +287,8 @@ logger.info("=" * 60)
 
 # Import new modular pipeline
 try:
-    from modules import DocumentPipeline, create_default_pipeline, validate_image_file
-    from modules.document import DocumentDetector, detect_and_serialize
+    from app.modules import DocumentPipeline, create_default_pipeline, validate_image_file
+    from app.modules.document import DocumentDetector, detect_and_serialize
 
     MODULES_AVAILABLE = True
     print("[OK] All modules loaded successfully")
@@ -890,7 +887,7 @@ def process_document_image(input_path, output_path, filename=None):
         if original_image is None:
             raise ValueError(f"Could not read image from {input_path}")
 
-        print(f"  ✓ Image loaded: {original_image.shape}")
+        print(f"  ? Image loaded: {original_image.shape}")
 
         # Step 2: Document Detection & Perspective Transform
         print(f"[STEP 2/12] Document Detection & Perspective Transform")
@@ -899,7 +896,7 @@ def process_document_image(input_path, output_path, filename=None):
         doc_contour = find_document_contour(original_image)
         if doc_contour is not None:
             warped = four_point_transform(original_image, doc_contour)
-            print(f"  ✓ Document detected and warped: {warped.shape}")
+            print(f"  ? Document detected and warped: {warped.shape}")
         else:
             warped = original_image.copy()
             print(f"  [WARN] No document detected, using original image")
@@ -909,28 +906,28 @@ def process_document_image(input_path, output_path, filename=None):
         emit_progress(3, "Grayscale Conversion", "Converting to grayscale...")
 
         gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
-        print(f"  ✓ Converted to grayscale: {gray.shape}")
+        print(f"  ? Converted to grayscale: {gray.shape}")
 
         # Step 4: Gaussian Blur
         print(f"[STEP 4/12] Gaussian Blur")
         emit_progress(4, "Gaussian Blur", "Applying blur to reduce noise...")
 
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        print(f"  ✓ Blur applied: {blurred.shape}")
+        print(f"  ? Blur applied: {blurred.shape}")
 
         # Step 5: Edge Detection (Canny)
         print(f"[STEP 5/12] Edge Detection (Canny)")
         emit_progress(5, "Edge Detection", "Finding document edges...")
 
         edges = cv2.Canny(blurred, 50, 150)
-        print(f"  ✓ Edges detected: {np.count_nonzero(edges)} edge pixels")
+        print(f"  ? Edges detected: {np.count_nonzero(edges)} edge pixels")
 
         # Step 6: Binary Thresholding
         print(f"[STEP 6/12] Binary Thresholding")
         emit_progress(6, "Binary Thresholding", "Creating binary image...")
 
         threshold_value, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        print(f"  ✓ Threshold applied (value={threshold_value:.0f}): {binary.shape}")
+        print(f"  ? Threshold applied (value={threshold_value:.0f}): {binary.shape}")
 
         # Step 7: Morphological Operations
         print(f"[STEP 7/12] Morphological Operations")
@@ -939,14 +936,14 @@ def process_document_image(input_path, output_path, filename=None):
         kernel = np.ones((3, 3), np.uint8)
         eroded = cv2.erode(binary, kernel, iterations=1)
         dilated = cv2.dilate(eroded, kernel, iterations=1)
-        print(f"  ✓ Morphology applied: {dilated.shape}")
+        print(f"  ? Morphology applied: {dilated.shape}")
 
         # Step 8: Contour Detection
         print(f"[STEP 8/12] Contour Detection")
         emit_progress(8, "Contour Detection", "Detecting contours...")
 
         contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-        print(f"  ✓ Found {len(contours)} contours")
+        print(f"  ? Found {len(contours)} contours")
 
         # Step 9: Image Resizing
         print(f"[STEP 9/12] Image Resizing")
@@ -957,9 +954,9 @@ def process_document_image(input_path, output_path, filename=None):
             aspect_ratio = target_width / gray.shape[1]
             new_height = int(gray.shape[0] * aspect_ratio)
             gray = cv2.resize(gray, (target_width, new_height), interpolation=cv2.INTER_AREA)
-            print(f"  ✓ Resized to: {gray.shape}")
+            print(f"  ? Resized to: {gray.shape}")
         else:
-            print(f"  ✓ Image already optimal size: {gray.shape}")
+            print(f"  ? Image already optimal size: {gray.shape}")
 
         # Step 10: Brightness & Contrast Enhancement
         print(f"[STEP 10/12] Brightness & Contrast Enhancement")
@@ -988,7 +985,7 @@ def process_document_image(input_path, output_path, filename=None):
 
         # Final blend
         enhanced = cv2.addWeighted(equalized_gentle, 0.5, equalized_clahe, 0.5, 0)
-        print(f"  ✓ Enhancement complete: brightness +{brightness_boost}, contrast improved")
+        print(f"  ? Enhancement complete: brightness +{brightness_boost}, contrast improved")
 
         # Step 11: Advanced OCR
         print(f"[STEP 11/12] Advanced OCR")
@@ -1016,7 +1013,7 @@ def process_document_image(input_path, output_path, filename=None):
             best_config, best_text, best_length = max(ocr_results, key=lambda x: x[2])
             text = best_text
 
-            print(f"  ✓ OCR complete: {best_length} characters extracted ({best_config})")
+            print(f"  ? OCR complete: {best_length} characters extracted ({best_config})")
 
         except Exception as ocr_error:
             print(f"  [WARN] OCR failed: {ocr_error}")
@@ -1028,7 +1025,7 @@ def process_document_image(input_path, output_path, filename=None):
 
         # Save processed image with high quality (matching notebook quality 95)
         cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        print(f"  ✓ Image saved: {output_path}")
+        print(f"  ? Image saved: {output_path}")
 
         # Save extracted text
         if text and text.strip():
@@ -1039,7 +1036,7 @@ def process_document_image(input_path, output_path, filename=None):
             os.makedirs(os.path.dirname(text_output_path), exist_ok=True)
             with open(text_output_path, "w", encoding="utf-8") as f:
                 f.write(text)
-            print(f"  ✓ Text saved: {text_output_path}")
+            print(f"  ? Text saved: {text_output_path}")
 
         print(f"\n{'='*60}")
         print(f"[OK] PROCESSING COMPLETE!")
@@ -1204,7 +1201,7 @@ def health():
     detection_available = False
     try:
         if MODULES_AVAILABLE:
-            from modules.document import DocumentDetector
+            from app.modules.document import DocumentDetector
 
             detection_available = True
     except:
@@ -1295,7 +1292,7 @@ def upload_file():
             return jsonify({"error": error_msg, "success": False}), 500
 
         file_size = os.path.getsize(upload_path)
-        print(f"  ✓ Verified on disk: {file_size} bytes")
+        print(f"  ? Verified on disk: {file_size} bytes")
 
         # Initialize processing status
         update_processing_status(processed_filename, 0, 12, "Initializing", is_complete=False)
@@ -1324,7 +1321,7 @@ def upload_file():
                     "has_text": False,
                 },
             )
-            print(f"  ✓ Socket.IO notification sent for instant display")
+            print(f"  ? Socket.IO notification sent for instant display")
         except Exception as socket_error:
             print(f"  [WARN] Warning: Socket.IO notification failed: {str(socket_error)}")
 
@@ -1356,7 +1353,7 @@ def upload_file():
                 try:
                     with open(text_path, "w", encoding="utf-8") as f:
                         f.write(text_or_error)
-                    print(f"  ✓ Text saved: {text_path}")
+                    print(f"  ? Text saved: {text_path}")
                 except Exception as text_error:
                     print(f"  [WARN] Warning: Failed to save text file: {str(text_error)}")
 
@@ -2172,7 +2169,7 @@ def advanced_process():
 
         print(f"\n[STEP 1] Saving upload...")
         file.save(upload_path)
-        print(f"  ✓ Saved: {upload_path}")
+        print(f"  ? Saved: {upload_path}")
 
         # Process using new pipeline
         print(f"\n[STEP 2] Processing with advanced pipeline...")
@@ -2192,7 +2189,7 @@ def advanced_process():
                         "quality": result.get("quality", {}),
                     },
                 )
-                print(f"  ✓ Notification sent")
+                print(f"  ? Notification sent")
             except Exception as e:
                 print(f"  [WARN] Socket.IO notification failed: {e}")
         else:
@@ -2494,7 +2491,7 @@ def batch_process():
             return jsonify({"error": "No files provided", "success": False}), 400
 
         print(f"\n{'='*70}")
-        print(f"📦 BATCH PROCESSING INITIATED")
+        print(f"?? BATCH PROCESSING INITIATED")
         print(f"  Files: {len(files)}")
         print(f"{'='*70}")
 
@@ -2516,7 +2513,7 @@ def batch_process():
                 upload_path = os.path.join(UPLOAD_DIR, filename)
                 file.save(upload_path)
                 upload_paths.append(upload_path)
-                print(f"  [{i}/{len(files)}] ✓ Saved: {filename}")
+                print(f"  [{i}/{len(files)}] ? Saved: {filename}")
             except Exception as save_error:
                 print(f"  [{i}/{len(files)}] [ERROR] Failed to save: {str(save_error)}")
 
@@ -2550,7 +2547,7 @@ def batch_process():
             "results": results,
         }
 
-        print(f"  ✓ Summary: {successful} successful, {failed} failed")
+        print(f"  ? Summary: {successful} successful, {failed} failed")
         print(f"\n{'='*70}")
         print(f"[OK] BATCH PROCESSING COMPLETED")
         print(f"{'='*70}\n")
@@ -2590,8 +2587,8 @@ def convert_files():
         return response, 200
 
     try:
-        from modules.document import ExportModule
-        from modules.document.converter import FileConverter
+        from app.modules.document import ExportModule
+        from app.modules.document.converter import FileConverter
 
         data = request.get_json()
         files = data.get("files", [])
@@ -2629,11 +2626,11 @@ def convert_files():
                 404,
             )
 
-        print(f"📂 Files validated successfully")
-        print(f"📂 Processed dir: {PROCESSED_DIR}")
+        print(f"?? Files validated successfully")
+        print(f"?? Processed dir: {PROCESSED_DIR}")
 
         print(f"\n{'='*70}")
-        print(f"🔄 FILE CONVERSION STARTED")
+        print(f"?? FILE CONVERSION STARTED")
         print(f"{'='*70}")
         print(f"  Files: {len(files)}")
         print(f"  Target format: {target_format.upper()}")
@@ -2827,7 +2824,7 @@ def delete_converted_file(filename):
 
 @app.route("/connection/validate-wifi", methods=["POST", "OPTIONS"])
 def validate_wifi_connection():
-    """Validate phone ↔ laptop WiFi connection via HTTP request"""
+    """Validate phone ? laptop WiFi connection via HTTP request"""
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
         response.headers["Access-Control-Allow-Origin"] = "*"
@@ -2907,7 +2904,7 @@ def validate_camera_capturing():
 
 @app.route("/connection/validate-printer", methods=["POST", "OPTIONS"])
 def validate_printer_connection():
-    """Validate laptop ↔ printer connection by auto-printing a blank PDF"""
+    """Validate laptop ? printer connection by auto-printing a blank PDF"""
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
         response.headers["Access-Control-Allow-Origin"] = "*"
@@ -3214,7 +3211,7 @@ def start_voice_session():
     Loads Whisper model and checks Ollama availability
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         logger.info("Starting voice AI session...")
         result = voice_ai_orchestrator.start_session()
@@ -3249,7 +3246,7 @@ def transcribe_voice():
     Expects: multipart/form-data with 'audio' field (WAV format)
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         # Check if session is active
         if not voice_ai_orchestrator.session_active:
@@ -3294,7 +3291,7 @@ def chat_with_ai():
     Expects: JSON with 'message' field
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         # Check if session is active
         if not voice_ai_orchestrator.session_active:
@@ -3311,7 +3308,7 @@ def chat_with_ai():
         if not user_message:
             return jsonify({"success": False, "error": "No message provided"}), 400
 
-        logger.info(f"📨 User message: {user_message}")
+        logger.info(f"?? User message: {user_message}")
 
         # Generate response (text only, no TTS)
         response = voice_ai_orchestrator.chat_service.generate_response(user_message)
@@ -3379,7 +3376,7 @@ def speak_text():
     Expects: JSON with 'text' field
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         data = request.get_json()
         text = data.get("text", "").strip()
@@ -3405,12 +3402,12 @@ def speak_text():
 @app.route("/voice/process", methods=["POST"])
 def process_voice_complete():
     """
-    Complete voice processing pipeline: Audio → Transcription → AI Response
+    Complete voice processing pipeline: Audio ? Transcription ? AI Response
     Expects: multipart/form-data with 'audio' field (WAV format)
     Returns: Transcription + AI response + session status
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         # Check if session is active
         if not voice_ai_orchestrator.session_active:
@@ -3491,7 +3488,7 @@ def process_voice_complete():
             
             # If orchestration was just triggered, set up orchestrator state
             if result.get("orchestration_trigger") and ORCHESTRATION_AVAILABLE and orchestrator:
-                from modules.orchestration import IntentType
+                from app.modules.orchestration import IntentType
                 
                 mode = result.get("orchestration_mode")
                 if mode in ["print", "scan"]:
@@ -3580,7 +3577,7 @@ def process_voice_complete():
                             )
                 else:
                     # Try to detect orchestration intent
-                    from modules.orchestration import IntentType
+                    from app.modules.orchestration import IntentType
 
                     intent, params = orchestrator.detect_intent(user_text)
 
@@ -3668,7 +3665,7 @@ def end_voice_session():
     Clears conversation history and resets state
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         voice_ai_orchestrator.end_session()
 
@@ -3689,7 +3686,7 @@ def voice_status():
     Get voice AI system status
     """
     try:
-        from modules.voice import voice_ai_orchestrator
+        from app.modules.voice import voice_ai_orchestrator
 
         return (
             jsonify(
@@ -3915,7 +3912,7 @@ def validate_printer():
 
 # Import orchestration service
 try:
-    from modules.orchestration import get_orchestrator
+    from app.modules.orchestration import get_orchestrator
 
     ORCHESTRATION_AVAILABLE = True
     orchestrator = get_orchestrator(DATA_DIR)
