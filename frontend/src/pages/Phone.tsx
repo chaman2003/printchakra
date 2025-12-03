@@ -88,6 +88,8 @@ const Phone: React.FC = () => {
   const autoTriggerCountdownRef = useRef<NodeJS.Timeout | null>(null);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const toast = useToast();
+  const lastCapturedCornersRef = useRef<any[] | null>(null);
+  const latestDetectionRef = useRef<any>(null);
 
   // Theme values with insane visual enhancements
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
@@ -132,10 +134,23 @@ const Phone: React.FC = () => {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
+  const areCornersSimilar = (corners1: any[] | null, corners2: any[] | null) => {
+    if (!corners1 || !corners2 || corners1.length !== corners2.length) return false;
+    let totalDist = 0;
+    for (let i = 0; i < corners1.length; i++) {
+      const dx = corners1[i].x - corners2[i].x;
+      const dy = corners1[i].y - corners2[i].y;
+      totalDist += Math.sqrt(dx * dx + dy * dy);
+    }
+    const avgDist = totalDist / corners1.length;
+    return avgDist < 5; // 5% threshold
+  };
+
   const startAutoCapture = () => {
     setAutoCapture(true);
     setAutoCaptureCountdown(3);
     setAutoTriggerReady(false);
+    lastCapturedCornersRef.current = null;
 
     autoCaptureIntervalRef.current = setInterval(() => {
       setAutoCaptureCountdown((prev: number) => {
@@ -147,8 +162,11 @@ const Phone: React.FC = () => {
           // Trigger capture when countdown reaches 0
           setTimeout(() => {
             captureFromCamera();
-            setAutoCapture(false);
+            // Don't stop auto capture, just reset trigger
             setAutoTriggerReady(false);
+            if (latestDetectionRef.current && latestDetectionRef.current.corners) {
+              lastCapturedCornersRef.current = latestDetectionRef.current.corners;
+            }
           }, 300);
           return 0;
         }
@@ -217,11 +235,21 @@ const Phone: React.FC = () => {
               response.data.corners.length > 0
             ) {
               setDocumentDetection(response.data);
+              latestDetectionRef.current = response.data;
               // Draw detection overlay
               drawDetectionOverlay(response.data);
 
               // Smart auto-trigger: if document is fully detected and autoCapture is enabled
               if (autoCapture && response.data.coverage && response.data.coverage >= 75) {
+                
+                // Check if similar to last captured
+                const isSimilar = areCornersSimilar(response.data.corners, lastCapturedCornersRef.current);
+
+                if (isSimilar) {
+                   // Already captured this document position
+                   return;
+                }
+
                 // Document is well-positioned (at least 75% of screen)
                 if (!autoTriggerReady) {
                   console.log('📸 Document detected! Ready to auto-capture...');
@@ -229,11 +257,16 @@ const Phone: React.FC = () => {
 
                   // Auto-trigger capture after 1 second if still aligned
                   autoTriggerCountdownRef.current = setTimeout(() => {
-                    if (autoCapture && documentDetection && documentDetection.coverage >= 75) {
-                      console.log('📷 Auto-capturing document...');
-                      captureFromCamera();
-                      setAutoCapture(false);
-                      setAutoTriggerReady(false);
+                    const currentDetection = latestDetectionRef.current;
+                    if (autoCapture && currentDetection && currentDetection.coverage >= 75) {
+                      // Check similarity again to be sure
+                      if (!areCornersSimilar(currentDetection.corners, lastCapturedCornersRef.current)) {
+                        console.log('📷 Auto-capturing document...');
+                        captureFromCamera();
+                        // Keep autoCapture ON
+                        setAutoTriggerReady(false);
+                        lastCapturedCornersRef.current = currentDetection.corners;
+                      }
                     }
                   }, 1000);
                 }
@@ -249,6 +282,7 @@ const Phone: React.FC = () => {
               }
             } else {
               // No document detected
+              latestDetectionRef.current = null;
               setAutoTriggerReady(false);
               if (autoTriggerCountdownRef.current) {
                 clearInterval(autoTriggerCountdownRef.current);

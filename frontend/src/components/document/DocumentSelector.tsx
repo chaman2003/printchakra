@@ -89,10 +89,11 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<number>(0);
 
-  const bgColor = useColorModeValue('white', 'rgba(12, 16, 35, 0.95)');
-  const hoverBg = useColorModeValue('gray.50', 'whiteAlpha.100');
+  // Updated to match SurfaceCard theme
+  const bgColor = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
+  const hoverBg = useColorModeValue('orange.50', 'whiteAlpha.100');
   const selectedBg = useColorModeValue('brand.50', 'rgba(121,95,238,0.15)');
-  const borderColor = useColorModeValue('brand.200', 'rgba(121,95,238,0.3)');
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
 
   const handleDocumentClick = useCallback(
     (filename: string, index: number, shiftKey: boolean, docs: Document[]) => {
@@ -324,7 +325,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
       <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(10px)" />
-      <ModalContent bg={bgColor} maxH="90vh">
+      <ModalContent bg={bgColor} maxH="90vh" borderRadius="2xl" boxShadow="2xl">
         <ModalHeader
           fontSize="2xl"
           fontWeight="700"

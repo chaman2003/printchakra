@@ -7,6 +7,9 @@ python-engineio==4.8.0
 werkzeug==3.0.1
 python-dotenv>=1.0.1
 
+# System info
+psutil>=5.9.0
+
 # Image processing & OCR
 opencv-python==4.10.0.84
 numpy==2.1.1

@@ -19,7 +19,7 @@ import { SocketProvider } from './context/SocketContext';
 
 function App() {
   const { colorMode, toggleColorMode } = useColorMode();
-  const navBg = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(8,11,25,0.85)');
+  const navBg = useColorModeValue('rgba(255, 248, 240, 0.85)', 'rgba(8,11,25,0.85)');
   const navBorder = useColorModeValue('rgba(121,95,238,0.16)', 'rgba(69,202,255,0.16)');
   const navShadow = useColorModeValue(
     '0 16px 40px rgba(121,95,238,0.12)',

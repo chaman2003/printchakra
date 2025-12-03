@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import {
   Box,
   Button,
@@ -29,21 +29,29 @@ interface ConnectionDetails {
   laptopPrinter: string;
 }
 
+export interface SmartConnectionStatusHandle {
+  runCheck: () => Promise<void>;
+}
+
 interface SmartConnectionStatusProps {
   onStatusComplete?: (allConnected: boolean) => void;
   isOpen?: boolean;
   onClose?: () => void;
   videoRef?: React.RefObject<HTMLVideoElement | null>;
   isCapturing?: boolean;
+  variant?: 'card' | 'minimal';
+  autoRun?: boolean;
 }
 
-const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({ 
+const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConnectionStatusProps>(({ 
   onStatusComplete, 
   isOpen = true, 
   onClose, 
   videoRef,
-  isCapturing = false
-}) => {
+  isCapturing = false,
+  variant = 'card',
+  autoRun = false
+}, ref) => {
   const [status, setStatus] = useState<ConnectionStatus>({
     phoneWiFi: 'idle',
     phoneCamera: 'idle',
@@ -60,8 +68,9 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({
   );
   const [checkProgress, setCheckProgress] = useState(0);
 
-  const bgCard = useColorModeValue('rgba(255, 255, 255, 0.05)', 'rgba(30, 30, 40, 0.6)');
-  const borderColor = useColorModeValue('rgba(69, 202, 255, 0.2)', 'rgba(69, 202, 255, 0.15)');
+  const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
+  const isMinimal = variant === 'minimal';
 
   const runSequentialConnectionCheck = useCallback(async () => {
     setIsChecking(true);
@@ -174,8 +183,140 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({
     }
   }, [isCapturing, videoRef, onStatusComplete]);
 
+  React.useEffect(() => {
+    if (autoRun && isOpen) {
+      runSequentialConnectionCheck();
+    }
+  }, [autoRun, isOpen, runSequentialConnectionCheck]);
+
+  useImperativeHandle(ref, () => ({
+    runCheck: runSequentialConnectionCheck
+  }));
+
   if (!isOpen && !onClose) {
     return null;
+  }
+
+  const content = (
+    <Stack spacing={2} position="relative" zIndex={1} w="full">
+      {/* Header - Only show in card mode */}
+      {!isMinimal && (
+        <Flex justify="space-between" align="flex-start" gap={2}>
+          <VStack align="flex-start" spacing={0} flex={1}>
+            <Text fontSize="sm" fontWeight="600">
+              🔗 System Connection
+            </Text>
+            <Text fontSize="xs" color="text.muted">
+              {overallStatus === 'idle' && 'Ready to validate'}
+              {overallStatus === 'checking' && 'Validating connections...'}
+              {overallStatus === 'success' && '✅ All systems connected'}
+              {overallStatus === 'failed' && '⚠️ Issues detected'}
+            </Text>
+          </VStack>
+          <HStack gap={1}>
+            {isChecking && <Spinner size="xs" color="brand.400" />}
+            {onClose && (
+              <Button size="xs" variant="ghost" onClick={onClose} p={0} minW="auto">
+                ✕
+              </Button>
+            )}
+          </HStack>
+        </Flex>
+      )}
+
+      {/* Progress Bar */}
+      {isChecking && (
+        <Progress value={checkProgress} size="sm" borderRadius="full" colorScheme="brand" />
+      )}
+
+      {/* Connection Items */}
+      <VStack spacing={2} align="stretch">
+        <ConnectionCheckItem
+          label="Phone ↔ Laptop"
+          icon={FiWifi}
+          status={status.phoneWiFi}
+          details={details.phoneWiFi}
+        />
+        <ConnectionCheckItem
+          label="Phone Camera"
+          icon={FiCamera}
+          status={status.phoneCamera}
+          details={details.phoneCamera}
+        />
+        <ConnectionCheckItem
+          label="Laptop ↔ Printer"
+          icon={FiRefreshCw}
+          status={status.laptopPrinter}
+          details={details.laptopPrinter}
+        />
+      </VStack>
+
+      {/* Validate Button - Only show in card mode */}
+      {!isMinimal && (
+        <Flex gap={2} justify="flex-end" pt={1}>
+          <Button
+            size="sm"
+            colorScheme="brand"
+            isLoading={isChecking}
+            loadingText="Validating..."
+            onClick={runSequentialConnectionCheck}
+            leftIcon={<Iconify icon={FiRefreshCw} boxSize={3} />}
+            fontSize="xs"
+            isDisabled={isChecking}
+          >
+            Validate
+          </Button>
+          {overallStatus === 'success' && (
+            <Badge
+              colorScheme="green"
+              p={1}
+              borderRadius="md"
+              fontSize="xs"
+              display="flex"
+              alignItems="center"
+              gap={1}
+            >
+              <Iconify icon={FiCheckCircle} boxSize={3} />
+              Ready
+            </Badge>
+          )}
+        </Flex>
+      )}
+    </Stack>
+  );
+
+  if (isMinimal) {
+    return (
+      <Stack spacing={2} w="full">
+        {content}
+        {overallStatus === 'failed' && (
+          <Box
+            bg="rgba(245, 101, 101, 0.05)"
+            border="1px solid rgba(245, 101, 101, 0.15)"
+            borderRadius="md"
+            p={2}
+            fontSize="xs"
+          >
+            <VStack align="flex-start" spacing={1}>
+              <Text fontWeight="600" color="red.300" fontSize="xs">
+                ⚠️ Connection Failed
+              </Text>
+              <VStack align="flex-start" spacing={0.5} pl={3} fontSize="xs">
+                {status.phoneWiFi === 'failed' && (
+                  <Text>• Check if phone is on same WiFi network</Text>
+                )}
+                {status.phoneCamera === 'failed' && (
+                  <Text>• Ensure camera is actively capturing</Text>
+                )}
+                {status.laptopPrinter === 'failed' && (
+                  <Text>• Verify printer is powered and online</Text>
+                )}
+              </VStack>
+            </VStack>
+          </Box>
+        )}
+      </Stack>
+    );
   }
 
   return (
@@ -183,10 +324,12 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({
       <Box
         bg={bgCard}
         border={`1px solid ${borderColor}`}
-        borderRadius="lg"
+        borderRadius="2xl"
         p={3}
         position="relative"
         overflow="hidden"
+        backdropFilter="blur(12px)"
+        boxShadow="0 4px 20px rgba(0, 0, 0, 0.08)"
         _before={{
           content: '""',
           position: 'absolute',
@@ -203,87 +346,7 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({
           pointerEvents: 'none',
         }}
       >
-        <Stack spacing={2} position="relative" zIndex={1}>
-          {/* Header */}
-          <Flex justify="space-between" align="flex-start" gap={2}>
-            <VStack align="flex-start" spacing={0} flex={1}>
-              <Text fontSize="sm" fontWeight="600">
-                🔗 System Connection
-              </Text>
-              <Text fontSize="xs" color="text.muted">
-                {overallStatus === 'idle' && 'Ready to validate'}
-                {overallStatus === 'checking' && 'Validating connections...'}
-                {overallStatus === 'success' && '✅ All systems connected'}
-                {overallStatus === 'failed' && '⚠️ Issues detected'}
-              </Text>
-            </VStack>
-            <HStack gap={1}>
-              {isChecking && <Spinner size="xs" color="brand.400" />}
-              {onClose && (
-                <Button size="xs" variant="ghost" onClick={onClose} p={0} minW="auto">
-                  ✕
-                </Button>
-              )}
-            </HStack>
-          </Flex>
-
-          {/* Progress Bar */}
-          {isChecking && (
-            <Progress value={checkProgress} size="sm" borderRadius="full" colorScheme="brand" />
-          )}
-
-          {/* Connection Items */}
-          <VStack spacing={2} align="stretch">
-            <ConnectionCheckItem
-              label="Phone ↔ Laptop"
-              icon={FiWifi}
-              status={status.phoneWiFi}
-              details={details.phoneWiFi}
-            />
-            <ConnectionCheckItem
-              label="Phone Camera"
-              icon={FiCamera}
-              status={status.phoneCamera}
-              details={details.phoneCamera}
-            />
-            <ConnectionCheckItem
-              label="Laptop ↔ Printer"
-              icon={FiRefreshCw}
-              status={status.laptopPrinter}
-              details={details.laptopPrinter}
-            />
-          </VStack>
-
-          {/* Validate Button */}
-          <Flex gap={2} justify="flex-end" pt={1}>
-            <Button
-              size="sm"
-              colorScheme="brand"
-              isLoading={isChecking}
-              loadingText="Validating..."
-              onClick={runSequentialConnectionCheck}
-              leftIcon={<Iconify icon={FiRefreshCw} boxSize={3} />}
-              fontSize="xs"
-              isDisabled={isChecking}
-            >
-              Validate
-            </Button>
-            {overallStatus === 'success' && (
-              <Badge
-                colorScheme="green"
-                p={1}
-                borderRadius="md"
-                fontSize="xs"
-                display="flex"
-                alignItems="center"
-                gap={1}
-              >
-                <Iconify icon={FiCheckCircle} boxSize={3} />
-                Ready
-              </Badge>
-            )}
-          </Flex>
-        </Stack>
+        {content}
       </Box>
 
       {overallStatus === 'failed' && (
@@ -314,7 +377,7 @@ const SmartConnectionStatus: React.FC<SmartConnectionStatusProps> = ({
       )}
     </Stack>
   );
-};
+});
 
 // New simplified connection check item component
 const ConnectionCheckItem: React.FC<{

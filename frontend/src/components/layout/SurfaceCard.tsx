@@ -8,10 +8,10 @@ interface SurfaceCardProps extends BoxProps {
 
 const SurfaceCard = React.forwardRef<HTMLDivElement, SurfaceCardProps>((props, ref) => {
   const { children, commands, ...rest } = props;
-  const background = useColorModeValue('rgba(255, 255, 255, 0.95)', 'rgba(12, 16, 35, 0.88)');
-  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.18)', 'rgba(69, 202, 255, 0.25)');
+  const background = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
   const shadow = useColorModeValue(
-    '0 20px 35px rgba(5, 6, 30, 0.12)',
+    '0 20px 35px rgba(121, 95, 238, 0.08)',
     '0 25px 50px rgba(0, 0, 0, 0.8)'
   );
 

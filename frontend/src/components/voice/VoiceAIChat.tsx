@@ -67,12 +67,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
   const toast = useToast();
 
-  // Color mode values
-  const bgColor = useColorModeValue('white', 'gray.800');
-  const userMessageBg = useColorModeValue('blue.50', 'blue.900');
-  const aiMessageBg = useColorModeValue('gray.50', 'gray.700');
-  const systemMessageBg = useColorModeValue('yellow.50', 'yellow.900');
-  const chatBoxBg = useColorModeValue('gray.50', 'gray.700');
+  // Color mode values - Updated to match SurfaceCard theme
+  const bgColor = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.18)', 'rgba(69, 202, 255, 0.25)');
+  const userMessageBg = useColorModeValue('brand.50', 'rgba(121, 95, 238, 0.15)');
+  const aiMessageBg = useColorModeValue('orange.50', 'rgba(255, 255, 255, 0.05)');
+  const systemMessageBg = useColorModeValue('yellow.50', 'rgba(236, 201, 75, 0.1)');
+  const chatBoxBg = useColorModeValue('orange.50', 'rgba(0, 0, 0, 0.2)');
+  const shadow = useColorModeValue(
+    '0 20px 35px rgba(121, 95, 238, 0.08)',
+    '0 25px 50px rgba(0, 0, 0, 0.8)'
+  );
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -389,7 +394,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         setSessionStatus('Ready - Just speak naturally');
         addMessage(
           'system',
-          'Voice AI Ready! Just speak naturally - no wake words needed. Say "bye printchakra" to end.'
+          'Voice AI Ready! Just speak naturally - Say "bye printchakra" to end.'
         );
 
         if (toastIdRef.current) {
@@ -398,13 +403,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
         toastIdRef.current = toast({
           title: 'Voice AI Ready',
-          description: 'Just speak naturally',
+          description: 'Recording started - Speak now',
           status: 'success',
           duration: 4000,
           isClosable: true,
         });
 
-        scheduleRecordingStart(400);
+        // Start recording immediately
+        startRecording();
       } else {
         throw new Error(response.data.error || 'Failed to start session');
       }
@@ -887,24 +893,30 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   };
 
   return (
-    <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%">
+    <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%" bg={bgColor}>
       {/* Header */}
-      <Box borderBottomWidth="1px" p={3} bg={bgColor}>
+      <Box 
+        borderBottomWidth="1px" 
+        borderColor={borderColor}
+        p={4} 
+        bg={bgColor}
+        backdropFilter="blur(20px)"
+      >
         <Flex align="center" gap={3} justify="space-between">
           <Flex align="center" gap={3} flex="1">
             {!isMinimized && (
               <>
-                <Avatar size="sm" name="PrintChakra AI" bg="blue.500" />
+                <Avatar size="sm" name="PrintChakra AI" bg="brand.500" />
                 <Box flex="1">
-                  <Heading size="md">PrintChakra AI</Heading>
+                  <Heading size="sm" fontWeight="700">PrintChakra AI</Heading>
                   <HStack spacing={2} mt={1} flexWrap="wrap">
-                    <Badge colorScheme={isSessionActive ? 'green' : 'gray'} fontSize="xs">{sessionStatus}</Badge>
+                    <Badge colorScheme={isSessionActive ? 'green' : 'gray'} fontSize="xs" variant="subtle" borderRadius="full" px={2}>{sessionStatus}</Badge>
                     {isRecording && (
-                      <Badge colorScheme="red" variant="solid" fontSize="xs">
+                      <Badge colorScheme="red" variant="solid" fontSize="xs" borderRadius="full" px={2}>
                         <HStack spacing={1}>
                           <Box
-                            w={2}
-                            h={2}
+                            w={1.5}
+                            h={1.5}
                             borderRadius="full"
                             bg="white"
                             animation="pulse 1.5s infinite"
@@ -914,7 +926,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                       </Badge>
                     )}
                     {isProcessing && (
-                      <Badge colorScheme="blue" fontSize="xs">
+                      <Badge colorScheme="blue" fontSize="xs" variant="subtle" borderRadius="full" px={2}>
                         <HStack spacing={1}>
                           <Spinner size="xs" />
                           <Text>Processing</Text>
@@ -922,7 +934,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                       </Badge>
                     )}
                     {isSpeaking && (
-                      <Badge colorScheme="purple" fontSize="xs">
+                      <Badge colorScheme="purple" fontSize="xs" variant="subtle" borderRadius="full" px={2}>
                         <HStack spacing={1}>
                           <Spinner size="xs" />
                           <Text>Speaking</Text>
@@ -941,6 +953,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             variant="ghost"
             colorScheme="red"
             onClick={onClose}
+            borderRadius="full"
           />
         </Flex>
       </Box>
@@ -948,8 +961,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       {/* Chat Body */}
       {!isMinimized && (
         <>
-          <Box flex="1" overflowY="auto" p={4}>
-            <VStack spacing={3} align="stretch">
+          <Box flex="1" overflowY="auto" p={4} css={{
+            '&::-webkit-scrollbar': { width: '4px' },
+            '&::-webkit-scrollbar-track': { width: '6px' },
+            '&::-webkit-scrollbar-thumb': { background: borderColor, borderRadius: '24px' },
+          }}>
+            <VStack spacing={4} align="stretch">
               {messages.length === 0 && (
               <Flex
                 direction="column"
@@ -957,12 +974,15 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 justify="center"
                 height="100%"
                 color="gray.500"
+                py={10}
               >
-                <Iconify icon={FiMic} boxSize={12} />
-                <Text mt={4} textAlign="center">
+                <Box p={4} bg={userMessageBg} borderRadius="full" mb={4}>
+                  <Iconify icon={FiMic} boxSize={8} color="brand.500" />
+                </Box>
+                <Text fontWeight="600" textAlign="center">
                   Start talking with PrintChakra AI
                 </Text>
-                <Text fontSize="sm" mt={2} textAlign="center">
+                <Text fontSize="sm" mt={2} textAlign="center" color="gray.400">
                   Say "bye printchakra" to end
                 </Text>
               </Flex>
@@ -972,14 +992,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
               <Box
                 key={message.id}
                 alignSelf={message.type === 'user' ? 'flex-end' : 'flex-start'}
-                maxW="80%"
+                maxW="85%"
               >
                 {message.type === 'system' ? (
-                  <Box bg={systemMessageBg} px={3} py={2} borderRadius="md" textAlign="center">
-                    <Text fontSize="sm" fontStyle="italic">
+                  <Box bg={systemMessageBg} px={4} py={2} borderRadius="xl" textAlign="center" border="1px solid" borderColor="yellow.200">
+                    <Text fontSize="xs" fontStyle="italic" color="yellow.800">
                       {message.text}
                       {message.count && message.count > 1 && (
-                        <Badge ml={2} colorScheme="orange" variant="solid">
+                        <Badge ml={2} colorScheme="orange" variant="solid" borderRadius="full">
                           ×{message.count}
                         </Badge>
                       )}
@@ -988,23 +1008,26 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 ) : (
                   <Flex
                     direction={message.type === 'user' ? 'row-reverse' : 'row'}
-                    gap={2}
-                    align="flex-start"
+                    gap={3}
+                    align="flex-end"
                   >
                     <Avatar
                       size="xs"
                       name={message.type === 'user' ? 'You' : 'PrintChakra AI'}
-                      bg={message.type === 'user' ? 'blue.500' : 'green.500'}
+                      bg={message.type === 'user' ? 'brand.500' : 'green.500'}
                     />
                     <Box
                       bg={message.type === 'user' ? userMessageBg : aiMessageBg}
                       px={4}
-                      py={2}
-                      borderRadius="lg"
+                      py={3}
+                      borderRadius="2xl"
+                      borderTopRightRadius={message.type === 'user' ? 'sm' : '2xl'}
+                      borderTopLeftRadius={message.type === 'user' ? '2xl' : 'sm'}
+                      boxShadow="sm"
                     >
-                      <Text fontSize="sm">{message.text}</Text>
-                      <Text fontSize="xs" color="gray.500" mt={1}>
-                        {new Date(message.timestamp).toLocaleTimeString()}
+                      <Text fontSize="sm" lineHeight="tall">{message.text}</Text>
+                      <Text fontSize="10px" color="gray.500" mt={1} textAlign={message.type === 'user' ? 'right' : 'left'}>
+                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </Text>
                     </Box>
                   </Flex>
@@ -1017,8 +1040,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           </Box>
 
           {isSessionActive && (
-          <Box borderTopWidth="1px" p={3} bg={chatBoxBg}>
-            <InputGroup size="sm" mb={3}>
+          <Box borderTopWidth="1px" borderColor={borderColor} p={4} bg={chatBoxBg} backdropFilter="blur(10px)">
+            <InputGroup size="md" mb={2}>
               <Input
                 ref={chatInputRef}
                 placeholder="Type your message..."
@@ -1026,7 +1049,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 onChange={e => setChatInput(e.target.value)}
                 onKeyPress={handleChatInputKeyPress}
                 isDisabled={isTextSending || isProcessing}
-                borderRadius="md"
+                borderRadius="xl"
+                bg={useColorModeValue('white', 'rgba(0,0,0,0.2)')}
+                border="1px solid"
+                borderColor={borderColor}
+                _focus={{ borderColor: 'brand.400', boxShadow: '0 0 0 1px var(--chakra-colors-brand-400)' }}
               />
               <InputRightElement width="3rem">
                 <IconButton
@@ -1034,15 +1061,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                   size="sm"
                   aria-label="Send message"
                   icon={<Iconify icon={FiSend} boxSize={4} />}
-                  colorScheme="blue"
+                  colorScheme="brand"
                   onClick={() => sendTextMessage(chatInput)}
                   isDisabled={!chatInput.trim() || isTextSending || isProcessing || isSpeaking}
                   variant="ghost"
+                  borderRadius="full"
                 />
               </InputRightElement>
             </InputGroup>
             <Text fontSize="xs" color="gray.500" textAlign="center">
               💬 Or type a message manually
+
             </Text>
           </Box>
           )}

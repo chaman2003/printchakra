@@ -20,6 +20,7 @@ import {
   Badge,
   Tooltip,
   SimpleGrid,
+  useBreakpointValue,
 } from '@chakra-ui/react';
 import Iconify from '../common/Iconify';
 
@@ -91,11 +92,12 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const bgColor = useColorModeValue('rgba(20, 24, 45, 0.3)', 'rgba(20, 24, 45, 0.5)');
-  const borderColor = useColorModeValue('whiteAlpha.400', 'whiteAlpha.300');
-  const thumbnailBg = useColorModeValue('rgba(30, 34, 50, 0.5)', 'rgba(30, 34, 50, 0.9)');
+  // Updated to match SurfaceCard theme
+  const bgColor = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.18)', 'rgba(69, 202, 255, 0.25)');
+  const thumbnailBg = useColorModeValue('rgba(255, 245, 235, 0.5)', 'rgba(30, 34, 50, 0.9)');
   const paperBg = useColorModeValue('white', '#ffffff');
-  const toolbarBg = useColorModeValue('rgba(12,16,35,0.7)', 'rgba(12,16,35,0.95)');
+  const toolbarBg = useColorModeValue('rgba(255, 248, 240, 0.9)', 'rgba(12,16,35,0.95)');
   const hasActiveDoc = typeof activeDocIndex === 'number';
   const hasActivePage = typeof activePage === 'number';
 
@@ -147,14 +149,33 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const layout = previewSettings?.layout || 'portrait';
   const isLandscape = layout === 'landscape';
 
+  const responsiveWidth = useBreakpointValue({ base: 85, md: 50, lg: 28 }) || 28;
+
   // Calculate responsive paper dimensions using configurable values
   const getPaperDimensions = () => {
-    const config = isLandscape ? PREVIEW_SIZE.landscape : PREVIEW_SIZE.portrait;
+    const ratio = 1.414; // A4 aspect ratio
+    let w = responsiveWidth;
+    let h = responsiveWidth * ratio;
+
+    if (isLandscape) {
+      // Swap for landscape
+      const temp = w;
+      w = h;
+      h = temp;
+      
+      // Cap width at 90vw to prevent overflow on small screens
+      if (w > 90) {
+        const scaleFactor = 90 / w;
+        w = 90;
+        h = h * scaleFactor;
+      }
+    }
+
     const scale = ((zoomLevel / 100) * (previewSettings?.scale || 100)) / 100;
 
     return {
-      width: `${config.width * scale}vw`,
-      height: `${config.height * scale}vh`,
+      width: `${w * scale}vw`,
+      height: `${h * scale}vw`, // Use vw for both to maintain aspect ratio
     };
   };
 
@@ -352,8 +373,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   return (
     <Box
       ref={containerRef}
-      bg="transparent"
-      borderRadius="lg"
+      bg={bgColor}
+      borderRadius="2xl"
       border="1px solid"
       borderColor={borderColor}
       overflow="hidden"
@@ -361,7 +382,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
       h="100%"
       display="flex"
       flexDirection="column"
-      boxShadow="sm"
+      boxShadow="2xl"
     >
       {/* Top Toolbar */}
       <Flex

@@ -21,7 +21,7 @@ import wave
 from datetime import datetime
 from typing import Any, Dict, Optional
 
-from config import AI_PROMPT_CONFIG, CONNECTION_CONFIG
+from app.config.settings import AI_PROMPT_CONFIG, CONNECTION_CONFIG
 
 logger = logging.getLogger(__name__)
 

@@ -320,30 +320,59 @@ from werkzeug.exceptions import BadRequest
 
 app.config["TRAP_BAD_REQUEST_ERRORS"] = True
 
-# Configure CORS for frontend - Allow all origins for flexibility
+# Configure CORS for frontend - Works for both local and deployed environments
+# Automatically handles: localhost, ngrok, deployed servers, etc.
+
+# Helper to allow all origins for Socket.IO while supporting credentials
+def allow_all_origins(origin):
+    return True
+
+allowed_origins = [
+    # Local development
+    "http://localhost:3000",
+    "http://localhost:5000",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5000",
+]
+
+# Add specific ngrok/deployed URLs from environment variables
+if os.environ.get('NGROK_URL'):
+    allowed_origins.append(os.environ.get('NGROK_URL'))
+
+if os.environ.get('FRONTEND_URL'):
+    allowed_origins.append(os.environ.get('FRONTEND_URL'))
+
+# For deployed environments, use regex to allow all origins with credentials
+# This is necessary because 'origins': '*' cannot be used with 'supports_credentials': True
 CORS(
     app,
     resources={
         r"/*": {
-            "origins": "*",  # Allow all origins - ngrok domains change frequently
+            "origins": r"https?://.*",  # Regex matches any http/https origin and reflects it
             "methods": ["GET", "POST", "DELETE", "OPTIONS", "PUT", "PATCH"],
             "allow_headers": [
                 "Content-Type",
                 "Authorization",
                 "ngrok-skip-browser-warning",
                 "X-Requested-With",
+                "X-Forwarded-For",
+                "X-Forwarded-Proto",
+                "Accept",
             ],
             "expose_headers": ["Content-Type", "Content-Disposition"],
-            "supports_credentials": False,
+            "supports_credentials": True,
             "max_age": 3600,
         }
     },
 )
 
-# Initialize Socket.IO with comprehensive CORS configuration
+logger.info("[CORS] Configured for multi-environment: local, ngrok, deployed")
+logger.info(f"[CORS] Allowed origins: {allowed_origins}")
+
+# Initialize Socket.IO with comprehensive CORS configuration for all environments
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",  # Allow all origins for development
+    cors_allowed_origins=allow_all_origins,  # Function allows all origins + credentials
     async_mode="threading",
     logger=False,  # Disable verbose logging
     engineio_logger=False,  # Disable verbose logging
@@ -351,7 +380,8 @@ socketio = SocketIO(
     ping_interval=25,
     max_http_buffer_size=1e7,
     always_connect=True,
-    transports=["polling", "websocket"],  # Support both
+    transports=["polling", "websocket"],  # Support both - polling is more reliable on ngrok
+    cors_credentials=True,
 )
 
 # Base directory
@@ -1243,6 +1273,237 @@ def health():
             },
         }
     )
+
+
+@app.route("/system/info", methods=["GET"])
+def system_info():
+    """Get comprehensive system and device information"""
+    import platform
+    import psutil
+    
+    # Basic system info
+    system_data = {
+        "os": {
+            "name": platform.system(),
+            "version": platform.version(),
+            "release": platform.release(),
+            "architecture": platform.machine(),
+            "processor": platform.processor(),
+        },
+        "python": {
+            "version": platform.python_version(),
+            "implementation": platform.python_implementation(),
+        },
+        "memory": {
+            "total_gb": round(psutil.virtual_memory().total / (1024**3), 2),
+            "available_gb": round(psutil.virtual_memory().available / (1024**3), 2),
+            "used_percent": psutil.virtual_memory().percent,
+        },
+        "cpu": {
+            "cores_physical": psutil.cpu_count(logical=False),
+            "cores_logical": psutil.cpu_count(logical=True),
+            "usage_percent": psutil.cpu_percent(interval=0.1),
+        },
+    }
+    
+    # GPU info
+    try:
+        import torch
+        from app.modules.voice.gpu_optimization import detect_gpu
+        gpu_info = detect_gpu()
+        system_data["gpu"] = {
+            "available": gpu_info.get('available', False),
+            "name": gpu_info.get('gpu_name', 'N/A'),
+            "cuda_version": gpu_info.get('cuda_version', 'N/A'),
+            "device_count": gpu_info.get('device_count', 0),
+            "total_memory_gb": round(gpu_info.get('total_memory_gb', 0), 2),
+        }
+    except Exception as e:
+        system_data["gpu"] = {"available": False, "error": str(e)}
+    
+    # Printer info
+    try:
+        import win32print
+        
+        printers = []
+        default_printer = win32print.GetDefaultPrinter()
+        
+        # Get all printers
+        printer_list = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+        
+        for printer in printer_list:
+            printer_name = printer[2]
+            is_default = printer_name == default_printer
+            
+            # Try to get printer status
+            try:
+                handle = win32print.OpenPrinter(printer_name)
+                printer_info = win32print.GetPrinter(handle, 2)
+                win32print.ClosePrinter(handle)
+                
+                status = printer_info.get('Status', 0)
+                driver_name = printer_info.get('pDriverName', 'Unknown')
+                port_name = printer_info.get('pPortName', 'Unknown')
+                
+                # Determine status string
+                if status == 0:
+                    status_str = "Ready"
+                elif status & 0x00000001:
+                    status_str = "Paused"
+                elif status & 0x00000002:
+                    status_str = "Error"
+                elif status & 0x00000004:
+                    status_str = "Pending Deletion"
+                elif status & 0x00000008:
+                    status_str = "Paper Jam"
+                elif status & 0x00000010:
+                    status_str = "Paper Out"
+                elif status & 0x00000020:
+                    status_str = "Manual Feed"
+                elif status & 0x00000040:
+                    status_str = "Paper Problem"
+                elif status & 0x00000080:
+                    status_str = "Offline"
+                elif status & 0x00000100:
+                    status_str = "IO Active"
+                elif status & 0x00000200:
+                    status_str = "Busy"
+                elif status & 0x00000400:
+                    status_str = "Printing"
+                else:
+                    status_str = "Unknown"
+                    
+            except Exception:
+                driver_name = "Unknown"
+                port_name = "Unknown"
+                status_str = "Unknown"
+            
+            printers.append({
+                "name": printer_name,
+                "is_default": is_default,
+                "driver": driver_name,
+                "port": port_name,
+                "status": status_str,
+            })
+        
+        system_data["printers"] = {
+            "available": len(printers) > 0,
+            "default": default_printer,
+            "count": len(printers),
+            "list": printers,
+        }
+        
+    except ImportError:
+        system_data["printers"] = {
+            "available": False,
+            "error": "win32print not available (Windows only)",
+            "list": [],
+        }
+    except Exception as e:
+        system_data["printers"] = {
+            "available": False,
+            "error": str(e),
+            "list": [],
+        }
+    
+    # Driver suggestions based on printer
+    driver_suggestions = []
+    if system_data.get("printers", {}).get("list"):
+        for printer in system_data["printers"]["list"]:
+            name = printer.get("name", "").lower()
+            suggestion = None
+            
+            if "hp" in name or "hewlett" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "HP",
+                    "driver_url": "https://support.hp.com/drivers",
+                    "description": "HP Smart & Drivers"
+                }
+            elif "canon" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Canon",
+                    "driver_url": "https://www.usa.canon.com/support/software-and-drivers",
+                    "description": "Canon Drivers & Downloads"
+                }
+            elif "epson" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Epson",
+                    "driver_url": "https://epson.com/Support/sl/s",
+                    "description": "Epson Support & Drivers"
+                }
+            elif "brother" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Brother",
+                    "driver_url": "https://support.brother.com/g/b/productsearch.aspx",
+                    "description": "Brother Solutions Center"
+                }
+            elif "samsung" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Samsung",
+                    "driver_url": "https://www.hp.com/us-en/samsung-printers.html",
+                    "description": "Samsung Printers (now HP)"
+                }
+            elif "lexmark" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Lexmark",
+                    "driver_url": "https://www.lexmark.com/en_us/support.html",
+                    "description": "Lexmark Support"
+                }
+            elif "xerox" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Xerox",
+                    "driver_url": "https://www.support.xerox.com/",
+                    "description": "Xerox Support"
+                }
+            elif "ricoh" in name:
+                suggestion = {
+                    "printer": printer["name"],
+                    "brand": "Ricoh",
+                    "driver_url": "https://www.ricoh.com/support/",
+                    "description": "Ricoh Support"
+                }
+            
+            if suggestion:
+                driver_suggestions.append(suggestion)
+    
+    system_data["driver_suggestions"] = driver_suggestions
+    
+    return jsonify(system_data)
+
+
+@app.route("/system/set-default-printer", methods=["POST"])
+def set_default_printer():
+    """Set the default printer"""
+    try:
+        data = request.get_json()
+        printer_name = data.get('printer_name')
+        
+        if not printer_name:
+            return jsonify({"error": "printer_name is required"}), 400
+        
+        import win32print
+        
+        # Set the default printer
+        win32print.SetDefaultPrinter(printer_name)
+        
+        return jsonify({
+            "success": True,
+            "message": f"Default printer set to {printer_name}",
+            "printer_name": printer_name
+        })
+    
+    except ImportError:
+        return jsonify({"error": "win32print not available (Windows only)"}), 501
+    except Exception as e:
+        logger.error(f"Failed to set default printer: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/upload", methods=["POST"])

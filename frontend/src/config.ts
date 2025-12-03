@@ -1,44 +1,72 @@
 // Backend API Configuration
-// Priority: Environment variable > Local development > Production URL
+// Automatically detects and routes to the correct backend:
+// - Local development: localhost:5000
+// - Deployed/ngrok: Same host or environment variable
+// - Fallback: Environment variable REACT_APP_API_URL
+
 const getApiBaseUrl = () => {
-  // 1. Check environment variable (highest priority)
+  // Priority 1: Explicit environment variable (highest priority)
   if (process.env.REACT_APP_API_URL) {
+    console.log('[Config] Using REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
     return process.env.REACT_APP_API_URL;
   }
 
-  // 2. Check if running locally (development)
+  // Priority 2: Check if running locally (development)
   if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log('[Config] Detected local development');
     return 'http://localhost:5000';
   }
 
-  // 3. Production fallback - using ngrok tunnel
-  // Update this URL when your ngrok tunnel changes
-  const prodUrl = 'https://ostensible-unvibrant-clarisa.ngrok-free.dev';
-  return prodUrl;
+  // Priority 3: Same host as frontend (deployed on same server/ngrok)
+  // This handles ngrok, Vercel, or any other deployment where backend/frontend share same host
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  const port = window.location.port ? `:${window.location.port}` : '';
+  const sameHostUrl = `${protocol}//${hostname}${port}`;
+  
+  console.log('[Config] Detected deployed environment, using same host:', sameHostUrl);
+  return sameHostUrl;
 };
 
 export const API_BASE_URL = getApiBaseUrl();
 
+// Determine environment type for logging/debugging
+export const ENVIRONMENT = (() => {
+  if (process.env.REACT_APP_API_URL) {
+    return 'custom-url';
+  }
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'development';
+  }
+  return 'deployed';
+})();
+
 // Check if Socket.IO is available
 const isSocketIOEnabled = () => {
-  // Enable Socket.IO everywhere - let transport fallback handle ngrok
-  // This allows real-time updates on both local and ngrok deployments
+  // Enable Socket.IO everywhere - let transport fallback handle issues
+  // This allows real-time updates on both local and deployed environments
   return true;
 };
 
 export const SOCKET_IO_ENABLED = isSocketIOEnabled();
 
-// Check if using ngrok or localtunnel (needs bypass header)
-const isUsingNgrok = () => {
-  return API_BASE_URL.includes('ngrok') || API_BASE_URL.includes('loca.lt');
+// Check if using ngrok or similar tunnel service (needs bypass header)
+const isUsingTunnel = () => {
+  return (
+    API_BASE_URL.includes('ngrok') ||
+    API_BASE_URL.includes('loca.lt') ||
+    API_BASE_URL.includes('.ngrok') ||
+    API_BASE_URL.includes('vercel') ||
+    API_BASE_URL.includes('heroku')
+  );
 };
 
 // Get default headers for axios requests
 export const getDefaultHeaders = () => {
   const headers: Record<string, string> = {};
 
-  // Add ngrok bypass header if using ngrok
-  if (isUsingNgrok()) {
+  // Add tunnel bypass header if using ngrok/similar
+  if (isUsingTunnel()) {
     headers['ngrok-skip-browser-warning'] = 'true';
   }
 
@@ -47,11 +75,7 @@ export const getDefaultHeaders = () => {
 
 // Separate image base URL for better reliability
 export const getImageUrl = (endpoint: string, filename: string) => {
-  // Use direct HTTP for images to bypass WebSocket issues
   const baseUrl = API_BASE_URL;
-
-  // For ngrok, we need to add the bypass header as a query parameter approach won't work
-  // Instead, images will need to be loaded through a proxy or with proper headers
   const fullUrl = `${baseUrl}${endpoint}/${filename}`;
 
   // Add timestamp to bypass cache
@@ -59,21 +83,22 @@ export const getImageUrl = (endpoint: string, filename: string) => {
   return `${fullUrl}${separator}_t=${Date.now()}`;
 };
 
-// Socket.IO specific configuration
+// Socket.IO specific configuration - handles both local and deployed
 export const SOCKET_CONFIG = {
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   reconnectionAttempts: 10,
   timeout: 15000,
-  transports: ['websocket', 'polling'] as ('polling' | 'websocket')[],
+  transports: ['polling', 'websocket'] as ('polling' | 'websocket')[],
   upgrade: true,
   forceNew: false,
   path: '/socket.io/',
-  withCredentials: false,
+  withCredentials: true, // Needed for deployed environments
   secure: API_BASE_URL.startsWith('https'),
   rejectUnauthorized: false,
-  ...(isUsingNgrok()
+  autoConnect: true,
+  ...(isUsingTunnel()
     ? {
         extraHeaders: {
           'ngrok-skip-browser-warning': 'true',

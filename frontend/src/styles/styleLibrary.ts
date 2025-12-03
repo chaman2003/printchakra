@@ -5,12 +5,15 @@ export const styleCommandLibrary: Record<string, SystemStyleObject> = {
   'rounded glass panel': {
     borderRadius: '24px',
     borderWidth: '1px',
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: { base: 'rgba(121, 95, 238, 0.08)', _dark: 'rgba(255,255,255,0.12)' },
     backdropFilter: 'blur(24px)',
-    bg: 'rgba(8, 15, 37, 0.72)',
+    bg: { base: 'rgba(255, 248, 240, 0.85)', _dark: 'rgba(8, 15, 37, 0.72)' },
   },
   'soft glow border': {
-    boxShadow: '0 0 0 1px rgba(99,102,241,0.25), 0 15px 45px rgba(15,23,42,0.55)',
+    boxShadow: {
+      base: '0 0 0 1px rgba(99,102,241,0.15), 0 15px 45px rgba(148,163,184,0.25)',
+      _dark: '0 0 0 1px rgba(99,102,241,0.25), 0 15px 45px rgba(15,23,42,0.55)',
+    },
   },
   'padded layout': {
     px: { base: 4, md: 6 },
@@ -41,11 +44,14 @@ export const styleCommandLibrary: Record<string, SystemStyleObject> = {
     alignItems: 'center',
   },
   'float shadow': {
-    boxShadow: '0 25px 65px rgba(15,23,42,0.55)',
+    boxShadow: {
+      base: '0 25px 65px rgba(148,163,184,0.35)',
+      _dark: '0 25px 65px rgba(15,23,42,0.55)',
+    },
   },
   'subtle border': {
     borderWidth: '1px',
-    borderColor: 'rgba(148,163,184,0.15)',
+    borderColor: { base: 'rgba(0,0,0,0.1)', _dark: 'rgba(148,163,184,0.15)' },
     borderRadius: 'xl',
   },
   'scroll container': {
@@ -53,8 +59,10 @@ export const styleCommandLibrary: Record<string, SystemStyleObject> = {
     pr: 2,
   },
   'soft gradient canvas': {
-    bgGradient:
-      'linear(180deg, rgba(2,6,23,1) 0%, rgba(4,12,33,0.92) 45%, rgba(7,17,41,0.9) 100%)',
+    bgGradient: {
+      base: 'linear(180deg, #fff5eb 0%, #ffe8d6 45%, #ffd6ba 100%)',
+      _dark: 'linear(180deg, rgba(2,6,23,1) 0%, rgba(4,12,33,0.92) 45%, rgba(7,17,41,0.9) 100%)',
+    },
   },
   'contained width': {
     maxW: '1400px',
@@ -69,22 +77,26 @@ export const styleCommandLibrary: Record<string, SystemStyleObject> = {
     px: 4,
     py: 2,
     fontWeight: 600,
-    bg: 'rgba(15,23,42,0.55)',
+    bg: { base: 'rgba(255,255,255,0.8)', _dark: 'rgba(15,23,42,0.55)' },
+    color: { base: 'gray.700', _dark: 'white' },
   },
   'divider glow': {
     borderBottomWidth: '1px',
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: { base: 'rgba(0,0,0,0.08)', _dark: 'rgba(255,255,255,0.08)' },
   },
   'sticky sidebar': {
     position: 'sticky',
     top: { base: 2, md: 8 },
   },
   'command center panel': {
-    bg: 'rgba(15, 18, 38, 0.92)',
+    bg: { base: 'rgba(255, 248, 240, 0.95)', _dark: 'rgba(15, 18, 38, 0.92)' },
     borderRadius: '28px',
     borderWidth: '1px',
-    borderColor: 'rgba(99,102,241,0.35)',
-    boxShadow: '0 30px 80px rgba(7,10,25,0.7)',
+    borderColor: { base: 'rgba(99,102,241,0.2)', _dark: 'rgba(99,102,241,0.35)' },
+    boxShadow: {
+      base: '0 30px 80px rgba(121, 95, 238, 0.08)',
+      _dark: '0 30px 80px rgba(7,10,25,0.7)',
+    },
   },
   'bleedless': {
     w: '100%',

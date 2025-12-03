@@ -79,19 +79,19 @@ const shadows = {
 const semanticTokens = {
   colors: {
     'surface.bg': {
-      default: 'linear-gradient(135deg, #ffffff 0%, #f6f8ff 100%)',
+      default: 'linear-gradient(135deg, #fff5eb 0%, #ffe8d6 100%)',
       _dark: 'linear-gradient(135deg, #050711 0%, #0a0e1a 100%)',
     },
     'surface.card': {
-      default: 'rgba(255, 255, 255, 0.95)',
+      default: 'rgba(255, 248, 240, 0.95)',
       _dark: 'rgba(12, 16, 35, 0.92)',
     },
     'surface.blur': {
-      default: 'rgba(255,255,255,0.75)',
+      default: 'rgba(255, 245, 235, 0.75)',
       _dark: 'rgba(15,20,42,0.75)',
     },
     'surface.glass': {
-      default: 'rgba(255,255,255,0.65)',
+      default: 'rgba(255, 245, 235, 0.65)',
       _dark: 'rgba(8,12,28,0.65)',
     },
     'border.focus': {

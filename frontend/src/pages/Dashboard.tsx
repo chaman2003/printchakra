@@ -55,11 +55,13 @@ import {
   FiLayers,
   FiMic,
   FiWifiOff,
+  FiActivity,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS } from '../config';
 import { Iconify, FancySelect, ConnectionValidator } from '../components/common';
-import { VoiceAIChat, DocumentPreview, DashboardHeroCard, DashboardActionPanel } from '../components';
+import { SmartConnectionStatusHandle } from '../components/common/SmartConnectionStatus';
+import { VoiceAIChat, DocumentPreview, DashboardHeroCard, DashboardActionPanel, DeviceInfoPanel } from '../components';
 import DocumentSelector, {
   DocumentSelectorHandle,
 } from '../components/document/DocumentSelector';
@@ -475,6 +477,7 @@ const Dashboard: React.FC = () => {
 
   // Connection status modal state
   const connectivityModal = useDisclosure();
+  const connectionStatusRef = React.useRef<SmartConnectionStatusHandle>(null);
 
   // Ref for scrolling the modal body
   const modalBodyRef = React.useRef<HTMLDivElement>(null);
@@ -1977,16 +1980,17 @@ const Dashboard: React.FC = () => {
   // Prevent scrolling when chat visibility changes
   return (
     <Box position="relative" minH="100vh">
+      
       <PageShell>
         <DashboardShell
           styleOverrides={{
-            mr: isChatVisible ? '35vw' : 0,
+            mr: isChatVisible ? { base: 0, lg: '35vw' } : 0,
             transition: 'margin-right 0.3s ease-out',
             minH: '100vh',
             pt: 2,
             pb: 2,
             px: 3,
-            pr: isChatVisible ? 0 : 3,
+            pr: isChatVisible ? { base: 3, lg: 0 } : 3,
           }}
         >
           {/* Main Content Area */}
@@ -1997,23 +2001,25 @@ const Dashboard: React.FC = () => {
             statusText={statusText}
             error={error}
             onRefresh={handleRefreshClick}
-          />
-
-          <DashboardActionPanel
-            isChatVisible={isChatVisible}
-            selectionMode={selectionMode}
-            selectedFilesCount={selectedFiles.length}
-            orchestrateMode={orchestrateMode}
-            showReopenOrchestrate={showReopenOrchestrateButton}
-            onTriggerPrint={triggerPrint}
-            onToggleChat={handleChatVisibilityToggle}
-            onToggleSelectionMode={toggleSelectionMode}
-            onOpenConversionModal={openConversionModal}
             onCheckConnectivity={connectivityModal.onOpen}
-            onToggleConvertedDrawer={handleConvertedDrawerToggle}
-            isConvertedDrawerOpen={convertedDrawer.isOpen}
-            onReopenOrchestrate={reopenOrchestrateModal}
-          />
+          >
+            <DashboardActionPanel
+              isChatVisible={isChatVisible}
+              selectionMode={selectionMode}
+              selectedFilesCount={selectedFiles.length}
+              orchestrateMode={orchestrateMode}
+              showReopenOrchestrate={showReopenOrchestrateButton}
+              onTriggerPrint={triggerPrint}
+              onToggleChat={handleChatVisibilityToggle}
+              onToggleSelectionMode={toggleSelectionMode}
+              onOpenConversionModal={openConversionModal}
+              onCheckConnectivity={connectivityModal.onOpen}
+              onToggleConvertedDrawer={handleConvertedDrawerToggle}
+              isConvertedDrawerOpen={convertedDrawer.isOpen}
+              onReopenOrchestrate={reopenOrchestrateModal}
+              embedded={true}
+            />
+          </DashboardHeroCard>
         </VStack>
 
       {error && (
@@ -4455,110 +4461,64 @@ const Dashboard: React.FC = () => {
           boxShadow="0 20px 60px rgba(0,0,0,0.3)"
         >
           <ModalHeader
-            fontSize="2xl"
+            fontSize="xl"
             fontWeight="bold"
-            bgGradient="linear-gradient(135deg, #795FEE 0%, #22d3ee 100%)"
-            bgClip="text"
-            color="transparent"
-            pb={4}
+            display="flex"
+            alignItems="center"
+            gap={2}
+            pb={2}
           >
-            🔍 PrintChakra System Status
+            <Iconify icon={FiActivity} boxSize={5} color="brand.400" />
+            System Status
           </ModalHeader>
-          <ModalCloseButton colorScheme="brand" size="lg" />
+          <ModalCloseButton colorScheme="brand" size="md" top={3} right={3} />
 
-          <ModalBody>
-            <VStack spacing={6} align="stretch">
-              <Box
-                bg="rgba(121,95,238,0.08)"
-                border="1px solid rgba(121,95,238,0.2)"
-                borderRadius="xl"
-                p={4}
-              >
-                <HStack justify="space-between" mb={2}>
-                  <Text fontWeight="600" fontSize="sm" color="text.muted">
-                    SYSTEM CHECK IN PROGRESS
-                  </Text>
-                  <Spinner size="sm" color="brand.400" />
-                </HStack>
-                <Text fontSize="xs" color="text.secondary">
-                  Validating WiFi connectivity, camera capture, and printer connection...
-                </Text>
-              </Box>
-
-              {/* Connection Validator Component */}
-              <Box
-                bg={validatorBoxBg}
-                backdropFilter="blur(10px)"
-                borderRadius="xl"
-                p={6}
-                border="1px solid"
-                borderColor="rgba(121,95,238,0.15)"
-              >
-                <ConnectionValidator
-                  onStatusComplete={(allConnected) => {
-                    console.log('Connection validation complete:', allConnected);
-                    if (allConnected) {
-                      toast({
-                        title: '✅ All Systems Connected',
-                        description: 'PrintChakra is ready to go!',
-                        status: 'success',
-                        duration: 3000,
-                        isClosable: true,
-                      });
-                    }
-                  }}
-                />
-              </Box>
-
-              <Box
-                bg="rgba(34,211,238,0.08)"
-                border="1px solid rgba(34,211,238,0.2)"
-                borderRadius="xl"
-                p={4}
-              >
-                <VStack align="start" spacing={2}>
-                  <HStack>
-                    <Box w={2} h={2} borderRadius="full" bg="green.400" />
-                    <Text fontSize="sm" fontWeight="500">
-                      Phone ↔ Laptop WiFi
-                    </Text>
-                  </HStack>
-                  <HStack>
-                    <Box w={2} h={2} borderRadius="full" bg="green.400" />
-                    <Text fontSize="sm" fontWeight="500">
-                      Phone Camera Capture
-                    </Text>
-                  </HStack>
-                  <HStack>
-                    <Box w={2} h={2} borderRadius="full" bg="green.400" />
-                    <Text fontSize="sm" fontWeight="500">
-                      Laptop ↔ Printer
-                    </Text>
-                  </HStack>
-                </VStack>
-              </Box>
-            </VStack>
+          <ModalBody py={4}>
+            <Box
+              bg={validatorBoxBg}
+              backdropFilter="blur(10px)"
+              borderRadius="xl"
+              p={4}
+              border="1px solid"
+              borderColor="rgba(121,95,238,0.15)"
+            >
+              <ConnectionValidator
+                ref={connectionStatusRef}
+                variant="minimal"
+                autoRun={true}
+                onStatusComplete={(allConnected) => {
+                  if (allConnected) {
+                    toast({
+                      title: '✅ All Systems Connected',
+                      description: 'PrintChakra is ready to go!',
+                      status: 'success',
+                      duration: 3000,
+                      isClosable: true,
+                    });
+                  }
+                }}
+              />
+            </Box>
           </ModalBody>
 
-          <ModalFooter>
+          <ModalFooter pt={2} pb={4}>
             <HStack spacing={3} w="100%">
               <Button
                 variant="ghost"
                 flex={1}
                 onClick={connectivityModal.onClose}
-                colorScheme="brand"
+                colorScheme="gray"
+                size="sm"
               >
                 Close
               </Button>
               <Button
-                colorScheme="cyan"
+                colorScheme="brand"
                 flex={1}
-                size="md"
-                boxShadow="0 4px 14px rgba(34,211,238,0.4)"
-                _hover={{ boxShadow: '0 6px 20px rgba(34,211,238,0.6)' }}
+                size="sm"
+                leftIcon={<Iconify icon={FiRefreshCw} />}
                 onClick={() => {
-                  // Trigger re-check
-                  window.location.reload();
+                  connectionStatusRef.current?.runCheck();
                 }}
               >
                 Re-check
@@ -4574,7 +4534,7 @@ const Dashboard: React.FC = () => {
           position="fixed"
           top="0"
           right="0"
-          w="35vw"
+          w={{ base: '100%', lg: '35vw' }}
           h="100vh"
           bg={chatSidebarBg}
           boxShadow="-4px 0 16px rgba(0,0,0,0.3)"

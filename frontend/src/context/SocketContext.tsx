@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { API_BASE_URL, SOCKET_CONFIG, SOCKET_IO_ENABLED } from '../config';
+import { API_BASE_URL, SOCKET_CONFIG, SOCKET_IO_ENABLED, ENVIRONMENT } from '../config';
 
 interface SocketContextType {
   socket: Socket | null;
@@ -56,7 +56,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     }
     
     initializingRef.current = true;
-    console.log('[Socket] Initializing Socket.IO connection to:', API_BASE_URL);
+    console.log('[Socket] Initializing Socket.IO connection');
+    console.log(`[Socket] Environment: ${ENVIRONMENT}`);
+    console.log(`[Socket] Backend URL: ${API_BASE_URL}`);
 
     try {
       const newSocket = io(API_BASE_URL, {
@@ -83,6 +85,9 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       newSocket.on('connect_error', (error: any) => {
         connectionAttemptRef.current++;
         console.warn('[Socket] Connection error:', error.message || error);
+        if (error.data) {
+          console.warn('[Socket] Error details:', error.data);
+        }
         if (connectionAttemptRef.current >= maxRetries) {
           console.error('[Socket] Max connection attempts reached');
           initializingRef.current = false;
