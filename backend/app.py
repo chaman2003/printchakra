@@ -1144,11 +1144,26 @@ def favicon():
 @app.route("/public/processed/<path:filename>", methods=["GET", "OPTIONS"])
 def serve_public_processed(filename):
     """Serve processed files from public/data/processed directory"""
+    # Handle OPTIONS request for CORS preflight
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response, 200
+    
     try:
         response = send_from_directory(PROCESSED_DIR, filename)
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        # Add explicit CORS headers
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type, Content-Disposition"
+        response.headers["X-Content-Type-Options"] = "nosniff"
         return response
     except Exception as e:
         logger.error(f"Error serving processed file {filename}: {e}")
@@ -1158,11 +1173,26 @@ def serve_public_processed(filename):
 @app.route("/public/uploads/<path:filename>", methods=["GET", "OPTIONS"])
 def serve_public_uploads(filename):
     """Serve uploaded files from public/data/uploads directory"""
+    # Handle OPTIONS request for CORS preflight
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response, 200
+    
     try:
         response = send_from_directory(UPLOAD_DIR, filename)
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        # Add explicit CORS headers
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type, Content-Disposition"
+        response.headers["X-Content-Type-Options"] = "nosniff"
         return response
     except Exception as e:
         logger.error(f"Error serving uploaded file {filename}: {e}")
@@ -1172,11 +1202,26 @@ def serve_public_uploads(filename):
 @app.route("/public/converted/<path:filename>", methods=["GET", "OPTIONS"])
 def serve_public_converted(filename):
     """Serve converted files from public/data/converted directory"""
+    # Handle OPTIONS request for CORS preflight
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Max-Age"] = "86400"
+        return response, 200
+    
     try:
         response = send_from_directory(CONVERTED_DIR, filename)
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
+        # Add explicit CORS headers
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type, Content-Disposition"
+        response.headers["X-Content-Type-Options"] = "nosniff"
         return response
     except Exception as e:
         logger.error(f"Error serving converted file {filename}: {e}")
@@ -1976,6 +2021,8 @@ def get_pdf_page_thumbnail(filename, page_num):
                     mimetype="image/jpeg"
                 )
                 response.headers["Access-Control-Allow-Origin"] = "*"
+                response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+                response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
                 response.headers["Cache-Control"] = "public, max-age=86400"
                 response.headers["Content-Type"] = "image/jpeg"
                 return response
@@ -2102,6 +2149,8 @@ def get_thumbnail(filename):
                 mimetype="image/jpeg"
             )
             response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+            response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
             response.headers["Cache-Control"] = "public, max-age=86400"
             response.headers["Content-Type"] = "image/jpeg"
             return response

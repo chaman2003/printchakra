@@ -214,12 +214,20 @@ const useImageWithHeaders = (imageUrl: string) => {
           headers['ngrok-skip-browser-warning'] = 'true';
         }
 
-        const response = await fetch(imageUrl, {
+        // Add cache-buster to force fresh fetch (timestamp query param)
+        const cacheBuster = `_t=${Date.now()}`;
+        const url = imageUrl.includes('?') 
+          ? `${imageUrl}&${cacheBuster}` 
+          : `${imageUrl}?${cacheBuster}`;
+
+        const response = await fetch(url, {
           headers,
+          credentials: 'include',
+          cache: 'no-store',
         });
 
         if (!response.ok) {
-          console.error(`Failed to fetch image: ${response.status} ${response.statusText}`, imageUrl);
+          console.error(`Failed to fetch image: ${response.status} ${response.statusText}`, url);
           throw new Error(`Failed to fetch image: ${response.status}`);
         }
 
@@ -230,9 +238,9 @@ const useImageWithHeaders = (imageUrl: string) => {
           throw new Error('Empty image response');
         }
 
-        const url = URL.createObjectURL(blob);
-        revokeUrl = url;
-        setBlobUrl(url);
+        const objectUrl = URL.createObjectURL(blob);
+        revokeUrl = objectUrl;
+        setBlobUrl(objectUrl);
       } catch (err) {
         console.error('Image load error:', err, imageUrl);
         setError(err as Error);
