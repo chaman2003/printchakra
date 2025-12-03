@@ -1,8 +1,8 @@
 # PrintChakra Full Stack - Backend + Frontend
 
-$rootDir = "C:\Users\chama\OneDrive\Desktop\printchakra"
-$backendScript = Join-Path $rootDir "scripts\backend.ps1"
-$frontendScript = Join-Path $rootDir "scripts\frontend.ps1"
+$scriptDir = $PSScriptRoot
+$backendScript = Join-Path $scriptDir "backend.ps1"
+$frontendScript = Join-Path $scriptDir "frontend.ps1"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "PrintChakra Full Stack Launcher" -ForegroundColor Green
@@ -20,12 +20,12 @@ if (-not (Test-Path $frontendScript)) {
 }
 
 Write-Host "Starting Backend..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$rootDir'; .\scripts\backend.ps1"
+Start-Process powershell -ArgumentList "-NoExit", "-File", "$backendScript"
 
 Start-Sleep -Seconds 3
 
 Write-Host "Starting Frontend..." -ForegroundColor Yellow
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$rootDir'; .\scripts\frontend.ps1"
+Start-Process powershell -ArgumentList "-NoExit", "-File", "$frontendScript"
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Green

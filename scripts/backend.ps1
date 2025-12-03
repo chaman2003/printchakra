@@ -1,18 +1,7 @@
 ﻿# PrintChakra Backend - Flask Server Only
 
-$backendDir = "C:\Users\chama\OneDrive\Desktop\printchakra\backend"
-$venvDir = Join-Path $backendDir "venv"
-$pythonExe = Join-Path $venvDir "Scripts\python.exe"
-
-if (-not (Test-Path $venvDir)) {
-    Write-Host "Virtual environment not found!" -ForegroundColor Red
-    exit 1
-}
-
-if (-not (Test-Path $pythonExe)) {
-    Write-Host "Python executable not found in venv!" -ForegroundColor Red
-    exit 1
-}
+$scriptDir = $PSScriptRoot
+$backendDir = Join-Path $scriptDir "..\backend"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "PrintChakra Flask Backend" -ForegroundColor Green
@@ -28,7 +17,12 @@ Write-Host ""
 Write-Host "TIP: Run ngrok separately with: .\ngrok.ps1" -ForegroundColor Green
 Write-Host ""
 
-# Run Flask directly with venv python to avoid spawning extra shells
-cd $backendDir
-$env:PYTHONIOENCODING = 'utf-8'
-& $pythonExe "app.py"
+# Run Flask directly with system python
+if (Test-Path $backendDir) {
+    cd $backendDir
+    $env:PYTHONIOENCODING = 'utf-8'
+    python "app.py"
+} else {
+    Write-Host "Backend directory not found at $backendDir" -ForegroundColor Red
+    exit 1
+}

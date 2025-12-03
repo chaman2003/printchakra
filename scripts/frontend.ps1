@@ -1,10 +1,11 @@
 # PrintChakra Frontend - React Development Server
 
-$frontendDir = "C:\Users\chama\OneDrive\Desktop\printchakra\frontend"
+$scriptDir = $PSScriptRoot
+$frontendDir = Join-Path $scriptDir "..\frontend"
 $nodeModulesDir = Join-Path $frontendDir "node_modules"
 
 if (-not (Test-Path $frontendDir)) {
-    Write-Host "Frontend directory not found!" -ForegroundColor Red
+    Write-Host "Frontend directory not found at $frontendDir" -ForegroundColor Red
     exit 1
 }
 
