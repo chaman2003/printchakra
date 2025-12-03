@@ -58,7 +58,7 @@ import {
   FiActivity,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { API_BASE_URL, API_ENDPOINTS } from '../config';
+import { API_BASE_URL, API_ENDPOINTS, getImageUrl } from '../config';
 import { Iconify, FancySelect, ConnectionValidator } from '../components/common';
 import { SmartConnectionStatusHandle } from '../components/common/SmartConnectionStatus';
 import { VoiceAIChat, DocumentPreview, DashboardHeroCard, DashboardActionPanel, DeviceInfoPanel } from '../components';
@@ -2358,7 +2358,7 @@ const Dashboard: React.FC = () => {
             {selectedImageFile && (
               <Box
                 as="img"
-                src={`${API_BASE_URL}${API_ENDPOINTS.processed}/${selectedImageFile}`}
+                src={getImageUrl(API_ENDPOINTS.processed, selectedImageFile)}
                 alt={selectedImageFile}
                 maxW="100%"
                 maxH={{ base: 'calc(95vh - 120px)', md: 'calc(90vh - 120px)' }}
@@ -2384,14 +2384,12 @@ const Dashboard: React.FC = () => {
               onClick={async () => {
                 if (!selectedImageFile) return;
                 try {
-                  const response = await apiClient.get(
-                    `${API_ENDPOINTS.processed}/${selectedImageFile}`,
-                    {
-                      responseType: 'blob',
-                    }
-                  );
-                  const blob = response.data;
-                  const url = URL.createObjectURL(blob);
+                  const imageUrl = getImageUrl(API_ENDPOINTS.processed, selectedImageFile);
+                  const response = await apiClient.get(imageUrl, {
+                    responseType: 'blob',
+                  });
+
+                  const url = URL.createObjectURL(response.data);
                   const a = document.createElement('a');
                   a.href = url;
                   a.download = selectedImageFile;
@@ -2403,8 +2401,9 @@ const Dashboard: React.FC = () => {
                   console.error('Download failed:', err);
                   toast({
                     title: 'Download failed',
-                    description: err.message,
+                    description: err.message || 'Unable to download file',
                     status: 'error',
+                    duration: 4000,
                   });
                 }
               }}
@@ -3179,32 +3178,32 @@ const Dashboard: React.FC = () => {
                           colorScheme={
                             orchestrateOptions.scanLayout === 'portrait' ? 'brand' : 'gray'
                           }
-                          onClick={() =>
-                            setOrchestrateOptions({ ...orchestrateOptions, scanLayout: 'portrait' })
-                          }
-                          leftIcon={<Iconify icon="solar:document-bold" width={20} height={20} />}
-                          _hover={{ transform: 'scale(1.02)' }}
-                          transition="all 0.2s"
-                        >
-                          Portrait
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={
-                            orchestrateOptions.scanLayout === 'landscape' ? 'solid' : 'outline'
-                          }
-                          colorScheme={
-                            orchestrateOptions.scanLayout === 'landscape' ? 'brand' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              scanLayout: 'landscape',
-                            })
-                          }
-                          leftIcon={<Iconify icon="solar:tablet-bold" width={20} height={20} />}
-                          _hover={{ transform: 'scale(1.02)' }}
-                          transition="all 0.2s"
+                          onClick={async () => {
+                            if (!selectedImageFile) return;
+                            try {
+                              const imageUrl = getImageUrl(API_ENDPOINTS.processed, selectedImageFile);
+                              const response = await apiClient.get(imageUrl, {
+                                responseType: 'blob',
+                              });
+
+                              const url = URL.createObjectURL(response.data);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = selectedImageFile;
+                              document.body.appendChild(a);
+                              a.click();
+                              document.body.removeChild(a);
+                              URL.revokeObjectURL(url);
+                            } catch (err: any) {
+                              console.error('Download failed:', err);
+                              toast({
+                                title: 'Download failed',
+                                description: err.message || 'Unable to download file',
+                                status: 'error',
+                                duration: 4000,
+                              });
+                            }
+                          }}
                         >
                           Landscape
                         </Button>
