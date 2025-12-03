@@ -2,6 +2,8 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "homepage": ".",
+  "proxy": "http://localhost:5000",
   "dependencies": {
     "@chakra-ui/react": "^2.10.3",
     "@emotion/react": "^11.13.3",
@@ -38,23 +40,18 @@
       "react-app/jest"
     ],
     "rules": {
-      "@typescript-eslint/no-unused-vars": "warn",
-      "no-console": "off"
+      "no-unused-vars": "warn",
+      "no-console": "warn"
     }
   },
   "prettier": {
     "semi": true,
     "trailingComma": "es5",
-    "singleQuote": true,
+    "singleQuote": false,
     "printWidth": 100,
     "tabWidth": 2,
     "useTabs": false,
-    "arrowParens": "avoid",
-    "endOfLine": "lf"
-  },
-  "npmConfig": {
-    "audit-level": "moderate",
-    "legacy-peer-deps": true
+    "arrowParens": "always"
   },
   "browserslist": {
     "production": [
