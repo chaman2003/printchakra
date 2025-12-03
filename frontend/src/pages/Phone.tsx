@@ -396,11 +396,13 @@ const Phone: React.FC = () => {
 
   const startCamera = async () => {
     try {
+      // Request 3:4 aspect ratio (portrait mode for documents)
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: 1080 },
+          height: { ideal: 1440 },  // 3:4 aspect ratio
+          aspectRatio: { ideal: 3/4 },
         },
       });
       setStream(mediaStream);
@@ -906,23 +908,37 @@ const Phone: React.FC = () => {
                   border="1px solid rgba(69,202,255,0.25)"
                   boxShadow="halo"
                   className="camera-container-normal"
+                  sx={{
+                    aspectRatio: '3 / 4',
+                    maxHeight: isFullScreen ? '100vh' : '70vh',
+                    width: '100%',
+                    maxWidth: isFullScreen ? '100%' : '500px',
+                    mx: 'auto',
+                  }}
                 >
                   <Box position="relative" bg="black" width="100%" height="100%">
                     <video
                       ref={videoRef}
                       autoPlay
                       playsInline
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      style={{ 
+                        width: '100%', 
+                        height: '100%', 
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
                     />
                     <canvas
                       ref={canvasOverlayRef}
                       style={{
                         display: detectionActive ? 'block' : 'none',
                         position: 'absolute',
-                        inset: 0,
+                        top: 0,
+                        left: 0,
                         width: '100%',
                         height: '100%',
-                        objectFit: 'contain',
+                        objectFit: 'cover',
+                        pointerEvents: 'none',
                       }}
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
