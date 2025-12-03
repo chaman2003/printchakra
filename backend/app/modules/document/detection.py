@@ -96,8 +96,15 @@ class DocumentDetector:
         # Aspect ratio check (prefer close to 1:1.5 or similar)
         if rect[1][0] > 0 and rect[1][1] > 0:
             aspect = max(rect[1]) / min(rect[1])
-            if 1.2 <= aspect <= 2.5:  # Document-like aspect ratio
-                aspect_score = 40
+            
+            # A4 aspect ratio is approx 1.414
+            # Letter aspect ratio is approx 1.29
+            if 1.35 <= aspect <= 1.48:  # A4 sweet spot
+                aspect_score = 80
+            elif 1.25 <= aspect <= 1.55:  # General document range (A4/Letter)
+                aspect_score = 50
+            elif 1.2 <= aspect <= 2.5:  # Broad document-like aspect ratio
+                aspect_score = 20
             elif aspect > 2.5 or aspect < 1.2:
                 aspect_score = -80
             else:
