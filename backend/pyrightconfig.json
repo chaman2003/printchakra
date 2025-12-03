@@ -1,7 +1,0 @@
-{
-  "include": ["app.py", "app/**"],
-  "extraPaths": ["app"],
-  "reportMissingImports": false,
-  "reportMissingModuleSource": false,
-  "pythonVersion": "3.11"
-}
