@@ -900,6 +900,7 @@ def process_document_image(input_path, output_path, filename=None):
         # Helper function to emit progress
         def emit_progress(step, stage_name, message):
             progress_data = {
+                "filename": filename,  # Include filename for frontend tracking
                 "step": step,
                 "total_steps": 12,
                 "stage_name": stage_name,
@@ -1075,18 +1076,8 @@ def process_document_image(input_path, output_path, filename=None):
         print(f"   Text extracted: {len(text)} characters")
         print(f"{'='*60}\n")
 
-        # Emit completion
-        socketio.emit(
-            "processing_complete",
-            {
-                "step": 12,
-                "total_steps": 12,
-                "stage_name": "Complete",
-                "message": "Processing complete!",
-                "text_length": len(text),
-                "success": True,
-            },
-        )
+        # NOTE: processing_complete is emitted by background_process() which has the filename
+        # Don't emit here to avoid duplicate events without filename
 
         return True, text
 

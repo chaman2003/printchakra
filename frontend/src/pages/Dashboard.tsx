@@ -171,6 +171,7 @@ const MotionButton = motion.create(Button);
 const MotionFlex = motion.create(Flex);
 
 interface ProcessingProgress {
+  filename?: string;
   step: number;
   total_steps: number;
   stage_name: string;
@@ -1382,12 +1383,44 @@ const Dashboard: React.FC = () => {
 
     const newFileListener = (data: any) => {
       console.log('New file uploaded:', data);
-      loadFiles(false); // Background refresh, no loading spinner
+      // Immediately add placeholder file to state for instant UI feedback
+      if (data?.filename) {
+        setFiles((prevFiles: FileInfo[]) => {
+          // Check if file already exists
+          const exists = prevFiles.some(f => f.filename === data.filename);
+          if (exists) {
+            // Update existing file's processing status
+            return prevFiles.map(f => 
+              f.filename === data.filename 
+                ? { ...f, processing: true, processing_stage: 'Processing...' }
+                : f
+            );
+          }
+          // Add new file at the beginning (newest first)
+          const newFile: FileInfo = {
+            filename: data.filename,
+            size: 0,
+            created: new Date().toISOString(),
+            has_text: false,
+            processing: true,
+            processing_stage: 'Processing...',
+          };
+          return [newFile, ...prevFiles];
+        });
+      }
+      // Also refresh from server to get complete data
+      loadFiles(false);
     };
     socket.on('new_file', newFileListener);
 
     const fileDeletedListener = (data: any) => {
       console.log('File deleted:', data);
+      // Immediately remove from state
+      if (data?.filename) {
+        setFiles((prevFiles: FileInfo[]) => 
+          prevFiles.filter(f => f.filename !== data.filename)
+        );
+      }
       loadFiles(false);
     };
     socket.on('file_deleted', fileDeletedListener);
@@ -1395,19 +1428,56 @@ const Dashboard: React.FC = () => {
     const processingProgressListener = (data: ProcessingProgress) => {
       console.log(`Processing: Step ${data.step}/${data.total_steps} - ${data.stage_name}`);
       setProcessingProgress(data);
+      // Update the file's processing status in the list
+      if (data?.filename) {
+        setFiles((prevFiles: FileInfo[]) => 
+          prevFiles.map(f => 
+            f.filename === data.filename 
+              ? { 
+                  ...f, 
+                  processing: true, 
+                  processing_step: data.step,
+                  processing_total: data.total_steps,
+                  processing_stage: data.stage_name 
+                }
+              : f
+          )
+        );
+      }
     };
     socket.on('processing_progress', processingProgressListener);
 
     const processingCompleteListener = (data: any) => {
       console.log('Processing complete:', data);
       setProcessingProgress(null);
-      setTimeout(() => loadFiles(false), 500); // Refresh after processing
+      // Immediately update file state
+      if (data?.filename) {
+        setFiles((prevFiles: FileInfo[]) => 
+          prevFiles.map(f => 
+            f.filename === data.filename 
+              ? { ...f, processing: false, has_text: data.has_text || false }
+              : f
+          )
+        );
+      }
+      // Refresh from server to get complete data (with slight delay to ensure file is saved)
+      setTimeout(() => loadFiles(false), 300);
     };
     socket.on('processing_complete', processingCompleteListener);
 
     const processingErrorListener = (data: any) => {
       console.error('Processing error:', data);
       setProcessingProgress(null);
+      // Update file state to show error
+      if (data?.filename) {
+        setFiles((prevFiles: FileInfo[]) => 
+          prevFiles.map(f => 
+            f.filename === data.filename 
+              ? { ...f, processing: false, processing_error: data.error }
+              : f
+          )
+        );
+      }
     };
     socket.on('processing_error', processingErrorListener);
 
@@ -1470,7 +1540,7 @@ const Dashboard: React.FC = () => {
   }, [socket]);
 
   const lastLoadFilesRunRef = React.useRef<number>(0);
-  const minLoadFilesInterval = 1000; // ms - minimum interval between calls
+  const minLoadFilesInterval = 500; // ms - reduced for faster real-time updates during capture
 
   const loadFiles = useCallback(async (showLoading = true) => {
     const now = Date.now();
@@ -1494,11 +1564,21 @@ const Dashboard: React.FC = () => {
       });
       const filesData = Array.isArray(response.data) ? response.data : response.data.files || [];
 
-      // Smart cache: only update if file count changed
+      // Smart cache: check if files actually changed (count OR content/processing status)
       const newCount = filesData.length;
-      if (newCount !== filesCacheRef.current.lastCount) {
+      const cachedData = filesCacheRef.current.data || [];
+      
+      // Create a fingerprint of the files list to detect any changes
+      const getFilesFingerprint = (files: any[]) => {
+        return files.map(f => `${f.filename}:${f.processing}:${f.has_text}`).sort().join('|');
+      };
+      
+      const newFingerprint = getFilesFingerprint(filesData);
+      const cachedFingerprint = getFilesFingerprint(cachedData);
+      
+      if (newCount !== filesCacheRef.current.lastCount || newFingerprint !== cachedFingerprint) {
         console.log(
-          `File count changed: ${filesCacheRef.current.lastCount} → ${newCount}, updating cache`
+          `Files changed: count ${filesCacheRef.current.lastCount} → ${newCount}, updating cache`
         );
         setFiles(filesData);
         filesCacheRef.current = {
@@ -1507,7 +1587,7 @@ const Dashboard: React.FC = () => {
           timestamp: Date.now(),
         };
       } else {
-        console.log(`File count unchanged (${newCount}), using cached data`);
+        console.log(`Files unchanged (${newCount}), using cached data`);
         // Use cached data if available
         if (filesCacheRef.current.data) {
           setFiles(filesCacheRef.current.data);

@@ -16,6 +16,7 @@ export interface FileInfo {
   processing_stage?: string;
   processing_eta?: number;
   processing_progress?: number;
+  processing_error?: string;
   thumbnail?: string;
   thumbnailUrl?: string; // Keep for compatibility if needed
 }

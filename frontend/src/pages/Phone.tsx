@@ -232,6 +232,9 @@ const Phone: React.FC = () => {
     }
   }, [autoCaptureCount, toast]);
 
+  // Ref to hold latest captureInBackground function to avoid stale closures in interval
+  const captureInBackgroundRef = useRef<() => Promise<void>>();
+  
   // Background capture without freezing camera
   const captureInBackground = useCallback(async () => {
     if (isCapturingRef.current || !videoRef.current || !canvasRef.current) return;
@@ -244,8 +247,10 @@ const Phone: React.FC = () => {
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d');
       
-      if (!context || !video.videoWidth) {
+      if (!context || !video.videoWidth || video.videoWidth === 0) {
+        console.warn('Video not ready for capture, skipping...');
         isCapturingRef.current = false;
+        setFrameChangeStatus('waiting');
         return;
       }
       
@@ -261,66 +266,82 @@ const Phone: React.FC = () => {
       }
       
       // Convert to blob and upload
-      canvas.toBlob(
-        async (blob: Blob | null) => {
-          if (!blob) {
-            isCapturingRef.current = false;
-            setFrameChangeStatus('waiting');
-            return;
-          }
-          
-          // Upload in background
-          const formData = new FormData();
-          formData.append('file', blob, `auto_capture_${Date.now()}.jpg`);
-          formData.append('auto_crop', processingOptions.autoCrop.toString());
-          formData.append('ai_enhance', processingOptions.aiEnhance.toString());
-          formData.append('strict_quality', processingOptions.strictQuality.toString());
-          
-          try {
-            await apiClient.post(API_ENDPOINTS.upload, formData, {
-              headers: { 'Content-Type': 'multipart/form-data' },
-            });
-            
-            setAutoCaptureCount(prev => prev + 1);
-            
-            toast({
-              title: '📸 Document Captured!',
-              description: 'Place next document...',
-              status: 'success',
-              duration: 1500,
-              position: 'top',
-            });
-            
-            // Reset for next document
-            stableFrameCountRef.current = 0;
-            setFrameChangeStatus('waiting');
-            
-          } catch (err) {
-            console.error('Background upload failed:', err);
-            lastCapturedImageDataRef.current = null; // Allow retry
-            setFrameChangeStatus('waiting');
-          }
-          
-          isCapturingRef.current = false;
-        },
-        'image/jpeg',
-        0.9
-      );
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(
+          (b) => resolve(b),
+          'image/jpeg',
+          0.9
+        );
+      });
+      
+      if (!blob) {
+        console.warn('Failed to create blob from canvas');
+        isCapturingRef.current = false;
+        setFrameChangeStatus('waiting');
+        return;
+      }
+      
+      // Upload in background
+      const formData = new FormData();
+      formData.append('file', blob, `auto_capture_${Date.now()}.jpg`);
+      formData.append('auto_crop', processingOptions.autoCrop.toString());
+      formData.append('ai_enhance', processingOptions.aiEnhance.toString());
+      formData.append('strict_quality', processingOptions.strictQuality.toString());
+      
+      try {
+        await apiClient.post(API_ENDPOINTS.upload, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        setAutoCaptureCount(prev => prev + 1);
+        
+        toast({
+          title: '📸 Document Captured!',
+          description: 'Place next document...',
+          status: 'success',
+          duration: 1500,
+          position: 'top',
+        });
+        
+      } catch (err) {
+        console.error('Background upload failed:', err);
+        lastCapturedImageDataRef.current = null; // Allow retry
+      }
+      
+      // Reset for next document
+      stableFrameCountRef.current = 0;
+      setFrameChangeStatus('waiting');
+      
     } catch (err) {
       console.error('Background capture error:', err);
-      isCapturingRef.current = false;
+      lastCapturedImageDataRef.current = null;
       setFrameChangeStatus('waiting');
+    } finally {
+      // Always reset capturing flag
+      isCapturingRef.current = false;
     }
   }, [processingOptions, toast]);
 
+  // Keep ref updated with latest captureInBackground
+  useEffect(() => {
+    captureInBackgroundRef.current = captureInBackground;
+  }, [captureInBackground]);
+
   // Main frame comparison loop - runs every 500ms
-  const startFrameComparisonLoop = () => {
+  const startFrameComparisonLoop = useCallback(() => {
     if (autoCaptureIntervalRef.current) {
       clearInterval(autoCaptureIntervalRef.current);
     }
     
     autoCaptureIntervalRef.current = setInterval(() => {
       if (isCapturingRef.current || !videoRef.current) return;
+      
+      // Check if video stream is still active
+      const video = videoRef.current;
+      if (!video.videoWidth || video.videoWidth === 0 || video.paused || video.ended) {
+        console.warn('Video stream not active, waiting...');
+        return;
+      }
       
       const currentFrame = getCurrentFrameData();
       if (!currentFrame) return;
@@ -339,7 +360,7 @@ const Phone: React.FC = () => {
             if (stableFrameCountRef.current >= 3) {
               // Stable for 1.5 seconds - capture first document
               console.log('📷 First document stable - capturing...');
-              captureInBackground();
+              captureInBackgroundRef.current?.();
             }
           } else {
             // Frame changed, reset stability counter
@@ -372,7 +393,7 @@ const Phone: React.FC = () => {
           if (stableFrameCountRef.current >= 3) {
             // New stable document - capture it!
             console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
-            captureInBackground();
+            captureInBackgroundRef.current?.();
           }
         } else {
           // Document still moving
@@ -388,7 +409,7 @@ const Phone: React.FC = () => {
       lastFrameImageDataRef.current = currentFrame;
       
     }, 500); // Check every 500ms
-  };
+  }, []);
 
   const startCamera = async () => {
     try {
