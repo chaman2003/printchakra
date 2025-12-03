@@ -331,6 +331,20 @@ const Phone: React.FC = () => {
       context.lineWidth = 3;
       context.beginPath();
 
+      // Calculate scaling factors
+      // The detection coordinates are in percentage (0-100)
+      // We need to map them to the canvas dimensions
+      // Note: The canvas size matches the video size (resolution), 
+      // but it is displayed with object-fit: contain.
+      // The overlay canvas should also be displayed with object-fit: contain 
+      // and match the video element's visual dimensions if possible, 
+      // OR we rely on the fact that both video and canvas have the same resolution 
+      // and are both scaled by CSS 'contain' in the same way.
+      
+      // Since we set canvas.width/height to video.videoWidth/Height in startRealTimeDetection,
+      // and both have object-fit: contain (we need to ensure canvas has it too),
+      // they should align visually.
+
       for (let i = 0; i < detection.corners.length; i++) {
         const corner = detection.corners[i];
         const x = (corner.x / 100) * width;
@@ -893,12 +907,12 @@ const Phone: React.FC = () => {
                   boxShadow="halo"
                   className="camera-container-normal"
                 >
-                  <Box position="relative" bg="black" aspectRatio={3 / 4}>
+                  <Box position="relative" bg="black" width="100%" height="100%">
                     <video
                       ref={videoRef}
                       autoPlay
                       playsInline
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                     />
                     <canvas
                       ref={canvasOverlayRef}
@@ -906,6 +920,9 @@ const Phone: React.FC = () => {
                         display: detectionActive ? 'block' : 'none',
                         position: 'absolute',
                         inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'contain',
                       }}
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
