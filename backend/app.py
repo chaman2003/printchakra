@@ -299,7 +299,7 @@ except ImportError:
 
 
     def _fetch_windows_printer_queues():
-        script = r"
+        script = """
     $printers = Get-Printer | Sort-Object -Property Name
     $result = @()
     foreach ($printer in $printers) {
@@ -326,7 +326,7 @@ except ImportError:
         }
     }
     $result | ConvertTo-Json -Depth 6
-    ".strip()
+    """.strip()
 
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", script],
@@ -455,8 +455,13 @@ except ImportError:
             raise RuntimeError(result.stderr.strip() or "Failed to cancel job")
 
 
-    @app.route("/printer/queues", methods=["GET"])
+    @app.route("/printer/queues", methods=["GET", "OPTIONS"])
     def list_printer_queues():
+        if request.method == "OPTIONS":
+            response = jsonify({})
+            response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+            return response
         try:
             data = get_printer_queue_snapshot()
             return jsonify({"printers": data, "count": len(data)})
@@ -711,6 +716,168 @@ def after_request_handler(response):
     return response
 
 
+# ============================================================================
+# PRINTER QUEUE ROUTES (Module level - always available)
+# ============================================================================
+
+def _normalize_printer_status_code(code) -> str:
+    """Normalize Windows printer status code to human-readable string."""
+    status_map = {
+        0: "ready",
+        1: "paused",
+        2: "error",
+        3: "pending deletion",
+        4: "paper jam",
+        5: "paper out",
+        6: "manual feed",
+        7: "paper problem",
+        8: "offline",
+        9: "io active",
+        10: "busy",
+        11: "printing",
+        12: "output bin full",
+        13: "not available",
+        14: "waiting",
+        15: "processing",
+        16: "initializing",
+        17: "warming up",
+        18: "toner low",
+        19: "no toner",
+        20: "page punt",
+        21: "user intervention",
+        22: "out of memory",
+        23: "door open",
+        24: "server unknown",
+        25: "power save",
+    }
+    return status_map.get(int(code) if code is not None else -1, "unknown")
+
+
+def _get_printer_queues_windows():
+    """Fetch printer queues on Windows using PowerShell."""
+    script = """
+$printers = Get-Printer | Sort-Object -Property Name
+$result = @()
+foreach ($printer in $printers) {
+    $jobs = @()
+    try {
+        $jobs = Get-PrintJob -PrinterName $printer.Name -ErrorAction Stop | ForEach-Object {
+            [PSCustomObject]@{
+                id = $_.Id
+                document = $_.DocumentName
+                owner = $_.UserName
+                status = ($_.JobStatus -join ',')
+                submitted = $_.TimeSubmitted.ToString('o')
+                totalPages = $_.TotalPages
+                pagesPrinted = $_.PagesPrinted
+                sizeBytes = $_.Size
+            }
+        }
+    } catch {}
+    $result += [PSCustomObject]@{
+        name = $printer.Name
+        status = $printer.PrinterStatus
+        isDefault = ($printer.Name -eq (Get-CimInstance -ClassName Win32_Printer | Where-Object {$_.Default}).Name)
+        jobs = @($jobs)
+    }
+}
+$result | ConvertTo-Json -Depth 4
+"""
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-Command", script],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "Failed to get printer queues")
+    
+    output = result.stdout.strip()
+    if not output or output == "null":
+        return []
+    
+    data = json.loads(output)
+    if isinstance(data, dict):
+        data = [data]
+    
+    # Normalize the data
+    normalized = []
+    for printer in data:
+        jobs = printer.get("jobs", []) or []
+        if isinstance(jobs, dict):
+            jobs = [jobs]
+        normalized.append({
+            "name": printer.get("name"),
+            "status": _normalize_printer_status_code(printer.get("status")),
+            "isDefault": printer.get("isDefault", False),
+            "jobs": [
+                {
+                    "id": job.get("id"),
+                    "document": job.get("document"),
+                    "owner": job.get("owner"),
+                    "status": job.get("status") or "in queue",
+                    "submitted": job.get("submitted"),
+                }
+                for job in jobs
+            ],
+        })
+    return normalized
+
+
+@app.route("/printer/queues", methods=["GET", "OPTIONS"])
+def get_printer_queues():
+    """Get all printer queues and their jobs."""
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+    
+    try:
+        if sys.platform.startswith("win"):
+            data = _get_printer_queues_windows()
+        else:
+            # For non-Windows, return empty for now
+            data = []
+        return jsonify({"printers": data, "count": len(data)})
+    except Exception as exc:
+        logger.exception("[Printer] Failed to list queues")
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
+@app.route("/printer/cancel-job", methods=["POST", "OPTIONS"])
+def cancel_printer_job_route():
+    """Cancel a specific print job."""
+    if request.method == "OPTIONS":
+        response = jsonify({})
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response
+    
+    payload = request.get_json(silent=True) or {}
+    printer_name = payload.get("printer_name")
+    job_id = payload.get("job_id")
+
+    if not printer_name or not job_id:
+        return jsonify({"status": "error", "error": "printer_name and job_id required"}), 400
+
+    try:
+        if sys.platform.startswith("win"):
+            script = f'Remove-PrintJob -PrinterName "{printer_name}" -ID {job_id} -ErrorAction Stop'
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip() or "Failed to cancel job")
+        return jsonify({"status": "success", "message": "Job cancelled"})
+    except Exception as exc:
+        logger.exception("[Printer] Failed to cancel job")
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
 @app.route("/printer/clear-queue", methods=["POST"])
 def clear_printer_queue():
     """Clear all pending print jobs from the system spooler."""
@@ -718,7 +885,7 @@ def clear_printer_queue():
 
     try:
         if sys.platform.startswith("win"):
-            clear_script = r"
+            clear_script = """
 $ErrorActionPreference = 'SilentlyContinue'
 Get-Service -Name Spooler | Stop-Service -Force
 Start-Sleep -Seconds 2
@@ -731,7 +898,7 @@ Get-Printer | ForEach-Object {
     Get-PrintJob -PrinterName $_.Name -ErrorAction SilentlyContinue | Remove-PrintJob -ErrorAction SilentlyContinue
 }
 Write-Output 'CLEARED'
-".strip()
+""".strip()
 
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", clear_script],
@@ -1440,12 +1607,16 @@ def favicon():
 @app.route("/public/processed/<path:filename>", methods=["GET", "OPTIONS"])
 def serve_public_processed(filename):
     """Serve processed files from public/data/processed directory"""
+    # Get origin from request or use localhost
+    origin = request.headers.get('Origin', 'http://localhost:3000')
+    
     # Handle OPTIONS request for CORS preflight
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Max-Age"] = "86400"
         return response, 200
     
@@ -1454,10 +1625,11 @@ def serve_public_processed(filename):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        # Add explicit CORS headers
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        # Add explicit CORS headers with actual origin (not wildcard when credentials)
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type, Content-Disposition"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
@@ -1469,12 +1641,16 @@ def serve_public_processed(filename):
 @app.route("/public/uploads/<path:filename>", methods=["GET", "OPTIONS"])
 def serve_public_uploads(filename):
     """Serve uploaded files from public/data/uploads directory"""
+    # Get origin from request or use localhost
+    origin = request.headers.get('Origin', 'http://localhost:3000')
+    
     # Handle OPTIONS request for CORS preflight
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Max-Age"] = "86400"
         return response, 200
     
@@ -1483,10 +1659,11 @@ def serve_public_uploads(filename):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        # Add explicit CORS headers
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        # Add explicit CORS headers with actual origin (not wildcard when credentials)
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type, Content-Disposition"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
@@ -1498,12 +1675,16 @@ def serve_public_uploads(filename):
 @app.route("/public/converted/<path:filename>", methods=["GET", "OPTIONS"])
 def serve_public_converted(filename):
     """Serve converted files from public/data/converted directory"""
+    # Get origin from request or use localhost
+    origin = request.headers.get('Origin', 'http://localhost:3000')
+    
     # Handle OPTIONS request for CORS preflight
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Max-Age"] = "86400"
         return response, 200
     
@@ -1512,10 +1693,11 @@ def serve_public_converted(filename):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
-        # Add explicit CORS headers
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        # Add explicit CORS headers with actual origin (not wildcard when credentials)
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, ngrok-skip-browser-warning, X-Requested-With"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type, Content-Disposition"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
@@ -3501,7 +3683,7 @@ def validate_camera_capturing():
 
 @app.route("/connection/validate-printer", methods=["POST", "OPTIONS"])
 def validate_printer_connection():
-    """Validate laptop ? printer connection by auto-printing a blank PDF"""
+    """Validate laptop to printer connection by auto-printing blank.pdf"""
     if request.method == "OPTIONS":
         response = jsonify({"status": "ok"})
         response.headers["Access-Control-Allow-Origin"] = "*"
@@ -3516,6 +3698,8 @@ def validate_printer_connection():
 
         printer_ready = False
         printer_model = "Unknown"
+        print_success = False
+        print_error_msg = ""
 
         # Check if printer is available
         try:
@@ -3524,65 +3708,129 @@ def validate_printer_connection():
             # Get default printer name
             printer_name = win32print.GetDefaultPrinter()
             
-            if printer_name:
-                printer_ready = True
-                printer_model = printer_name
+            if not printer_name:
+                return jsonify({
+                    "connected": False,
+                    "message": "[ERROR] No default printer configured"
+                }), 200
+            
+            printer_model = printer_name
+            
+            # If test print is requested, print blank.pdf
+            if test_print:
+                import subprocess
                 
-                # If test print is requested, send blank PDF to printer
-                if test_print:
-                    try:
-                        from fpdf import FPDF
-                        import tempfile
-                        import os
-                        
-                        # Create blank PDF
-                        pdf = FPDF()
-                        pdf.add_page()
-                        pdf.set_font("Arial", size=12)
-                        pdf.cell(0, 10, "Printer Connection Test", ln=1, align="C")
-                        
-                        # Save to temp file
-                        temp_pdf = os.path.join(tempfile.gettempdir(), "printer_test.pdf")
-                        pdf.output(temp_pdf)
-                        
-                        # Print the PDF
-                        import subprocess
-                        subprocess.run(
-                            ['powershell', '-Command', f'(New-Object -ComObject WScript.Shell).Exec("rundll32 url.dll,FileProtocolHandler {temp_pdf}")'],
-                            capture_output=True,
-                            timeout=5
-                        )
-                        
-                        # Clean up
-                        try:
-                            os.remove(temp_pdf)
-                        except:
-                            pass
-                        
-                        logger.info(f"[OK] Test print sent to {printer_name}")
-                    except Exception as print_err:
-                        logger.warning(f"Test print failed: {print_err}")
-                        # Printer exists even if test print failed
+                # Path to blank.pdf in public folder
+                blank_pdf_path = os.path.join(os.path.dirname(__file__), 'public', 'blank.pdf')
+                
+                if not os.path.exists(blank_pdf_path):
+                    return jsonify({
+                        "connected": False,
+                        "message": "[ERROR] Test file (blank.pdf) not found"
+                    }), 200
+                
+                # Use PowerShell to print the PDF and verify it was queued
+                print_script = f'''
+$ErrorActionPreference = "Stop"
+$pdfPath = "{blank_pdf_path}"
+$printerName = "{printer_name}"
+
+# Get initial job count
+$initialJobs = @(Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue).Count
+
+# Print the document
+try {{
+    Start-Process -FilePath $pdfPath -Verb PrintTo -ArgumentList "`"$printerName`"" -Wait -WindowStyle Hidden -ErrorAction Stop
+    Start-Sleep -Seconds 2
+    
+    # Check if job was added to queue or printer status changed
+    $currentJobs = @(Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue).Count
+    $printerStatus = (Get-Printer -Name $printerName -ErrorAction SilentlyContinue).PrinterStatus
+    
+    # Success if: job added to queue, or printer is now printing/processing
+    if ($currentJobs -gt $initialJobs -or $printerStatus -match "Printing|Processing|Busy") {{
+        Write-Output "PRINT_SUCCESS"
+    }} else {{
+        # Even if job count same, print might have completed quickly - check printer is ready
+        if ($printerStatus -eq 0 -or $printerStatus -match "Normal|Ready") {{
+            Write-Output "PRINT_SUCCESS"
+        }} else {{
+            Write-Output "PRINT_FAILED:Printer status is $printerStatus"
+        }}
+    }}
+}} catch {{
+    Write-Output "PRINT_FAILED:$($_.Exception.Message)"
+}}
+'''
+                try:
+                    result = subprocess.run(
+                        ['powershell', '-NoProfile', '-Command', print_script],
+                        capture_output=True,
+                        text=True,
+                        timeout=45
+                    )
+                    
+                    output = result.stdout.strip()
+                    
+                    if "PRINT_SUCCESS" in output:
+                        print_success = True
                         printer_ready = True
+                        logger.info(f"[OK] Test print (blank.pdf) sent to {printer_name}")
+                    elif "PRINT_FAILED" in output:
+                        error_detail = output.split("PRINT_FAILED:")[-1] if ":" in output else "Unknown error"
+                        print_error_msg = f"Print failed: {error_detail}"
+                        logger.error(f"[ERROR] Test print failed: {error_detail}")
+                        printer_ready = False
+                    else:
+                        # Check stderr for errors
+                        if result.returncode != 0 or result.stderr:
+                            print_error_msg = result.stderr.strip() or "Print command failed"
+                            logger.error(f"[ERROR] Print command error: {print_error_msg}")
+                            printer_ready = False
+                        else:
+                            # Assume success if no error
+                            print_success = True
+                            printer_ready = True
+                            
+                except subprocess.TimeoutExpired:
+                    print_error_msg = "Print operation timed out"
+                    logger.error("[ERROR] Print operation timed out")
+                    printer_ready = False
+                except Exception as print_err:
+                    print_error_msg = str(print_err)
+                    logger.error(f"[ERROR] Test print exception: {print_err}")
+                    printer_ready = False
+            else:
+                # No test print requested, just check printer exists
+                printer_ready = True
+                print_success = True
                 
-                logger.info(f"[OK] Printer validation successful - {printer_name}")
+            logger.info(f"[INFO] Printer validation for {printer_name}: ready={printer_ready}, print_success={print_success}")
 
+        except ImportError:
+            return jsonify({
+                "connected": False,
+                "message": "[ERROR] win32print module not installed"
+            }), 200
         except Exception as printer_err:
-            logger.warning(f"Printer check error: {printer_err}")
-            printer_ready = False
+            logger.error(f"Printer check error: {printer_err}")
+            return jsonify({
+                "connected": False,
+                "message": f"[ERROR] Printer check failed: {str(printer_err)}"
+            }), 200
 
-        if printer_ready:
+        if printer_ready and (print_success or not test_print):
             return jsonify({
                 "connected": True,
                 "message": f"[OK] Printer ready: {printer_model}",
                 "model": printer_model,
                 "timestamp": timestamp,
-                "testPrintSent": test_print
+                "testPrintSent": test_print and print_success
             }), 200
         else:
             return jsonify({
                 "connected": False,
-                "message": "[ERROR] No printer found or printer offline"
+                "message": f"[ERROR] {print_error_msg or 'Printer not responding or offline'}"
             }), 200
 
     except Exception as e:

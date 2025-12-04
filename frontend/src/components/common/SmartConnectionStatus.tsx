@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import React, { useState, useCallback, useImperativeHandle, forwardRef, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -13,9 +13,12 @@ import {
   useColorModeValue,
   Progress,
 } from '@chakra-ui/react';
-import { FiWifi, FiCheckCircle, FiAlertCircle, FiRefreshCw, FiCamera } from 'react-icons/fi';
+import { FiWifi, FiCheckCircle, FiAlertCircle, FiRefreshCw, FiCamera, FiPrinter } from 'react-icons/fi';
 import Iconify from './Iconify';
 import apiClient from '../../apiClient';
+
+// Session storage key for tracking if connectivity check has been done
+const SESSION_CHECK_KEY = 'printchakra_connectivity_checked';
 
 interface ConnectionStatus {
   phoneWiFi: 'idle' | 'checking' | 'connected' | 'failed';
@@ -29,8 +32,16 @@ interface ConnectionDetails {
   laptopPrinter: string;
 }
 
+interface SavedConnectionResult {
+  status: ConnectionStatus;
+  details: ConnectionDetails;
+  overallStatus: 'idle' | 'checking' | 'success' | 'failed';
+  timestamp: number;
+}
+
 export interface SmartConnectionStatusHandle {
   runCheck: () => Promise<void>;
+  forceRecheck: () => Promise<void>;
 }
 
 interface SmartConnectionStatusProps {
@@ -67,15 +78,68 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
     'idle'
   );
   const [checkProgress, setCheckProgress] = useState(0);
+  const [alreadyCheckedThisSession, setAlreadyCheckedThisSession] = useState(false);
 
   const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
   const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
   const isMinimal = variant === 'minimal';
 
+  // Load saved session result on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_CHECK_KEY);
+      if (saved) {
+        const result: SavedConnectionResult = JSON.parse(saved);
+        // Only use cached result if it's less than 30 minutes old
+        const age = Date.now() - result.timestamp;
+        if (age < 30 * 60 * 1000) {
+          setStatus(result.status);
+          setDetails(result.details);
+          setOverallStatus(result.overallStatus);
+          setAlreadyCheckedThisSession(true);
+          if (onStatusComplete) {
+            onStatusComplete(result.overallStatus === 'success');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load session connectivity result:', e);
+    }
+  }, []);
+
+  // Save result to session storage
+  const saveToSession = useCallback((newStatus: ConnectionStatus, newDetails: ConnectionDetails, newOverall: 'success' | 'failed') => {
+    try {
+      const result: SavedConnectionResult = {
+        status: newStatus,
+        details: newDetails,
+        overallStatus: newOverall,
+        timestamp: Date.now(),
+      };
+      sessionStorage.setItem(SESSION_CHECK_KEY, JSON.stringify(result));
+      setAlreadyCheckedThisSession(true);
+    } catch (e) {
+      console.warn('Failed to save session connectivity result:', e);
+    }
+  }, []);
+
   const runSequentialConnectionCheck = useCallback(async () => {
+    // Always run - no conditions, no skipping
+    console.log('[ConnectionCheck] Starting connection check...');
     setIsChecking(true);
     setOverallStatus('checking');
     setCheckProgress(0);
+
+    let finalStatus: ConnectionStatus = {
+      phoneWiFi: 'idle',
+      phoneCamera: 'idle',
+      laptopPrinter: 'idle',
+    };
+    let finalDetails: ConnectionDetails = {
+      phoneWiFi: 'Awaiting check',
+      phoneCamera: 'Awaiting check',
+      laptopPrinter: 'Awaiting check',
+    };
 
     try {
       let allConnected = true;
@@ -91,15 +155,16 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
         });
         
         const wifiConnected = wifiResponse?.data?.connected;
-        setStatus(prev => ({ ...prev, phoneWiFi: wifiConnected ? 'connected' : 'failed' }));
-        setDetails(prev => ({
-          ...prev,
-          phoneWiFi: wifiConnected
-            ? `✅ Same network (${wifiResponse?.data?.ip || 'Active'})`
-            : wifiResponse?.data?.message || '❌ Not on same WiFi',
-        }));
+        finalStatus.phoneWiFi = wifiConnected ? 'connected' : 'failed';
+        finalDetails.phoneWiFi = wifiConnected
+          ? `✅ Same network (${wifiResponse?.data?.ip || 'Active'})`
+          : wifiResponse?.data?.message || '❌ Not on same WiFi';
+        setStatus(prev => ({ ...prev, phoneWiFi: finalStatus.phoneWiFi }));
+        setDetails(prev => ({ ...prev, phoneWiFi: finalDetails.phoneWiFi }));
         allConnected = allConnected && wifiConnected;
       } catch (err: any) {
+        finalStatus.phoneWiFi = 'failed';
+        finalDetails.phoneWiFi = '❌ WiFi check failed';
         setStatus(prev => ({ ...prev, phoneWiFi: 'failed' }));
         setDetails(prev => ({ ...prev, phoneWiFi: '❌ WiFi check failed' }));
         allConnected = false;
@@ -120,15 +185,16 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
         });
         
         const cameraActive = cameraResponse?.data?.capturing;
-        setStatus(prev => ({ ...prev, phoneCamera: cameraActive ? 'connected' : 'failed' }));
-        setDetails(prev => ({
-          ...prev,
-          phoneCamera: cameraActive
-            ? '✅ Camera capturing frames'
-            : '❌ Camera not active',
-        }));
+        finalStatus.phoneCamera = cameraActive ? 'connected' : 'failed';
+        finalDetails.phoneCamera = cameraActive
+          ? '✅ Camera capturing frames'
+          : '❌ Camera not active';
+        setStatus(prev => ({ ...prev, phoneCamera: finalStatus.phoneCamera }));
+        setDetails(prev => ({ ...prev, phoneCamera: finalDetails.phoneCamera }));
         allConnected = allConnected && cameraActive;
       } catch (err: any) {
+        finalStatus.phoneCamera = 'failed';
+        finalDetails.phoneCamera = '❌ Camera check failed';
         setStatus(prev => ({ ...prev, phoneCamera: 'failed' }));
         setDetails(prev => ({ ...prev, phoneCamera: '❌ Camera check failed' }));
         allConnected = false;
@@ -137,27 +203,28 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
       // Small delay between checks for visual effect
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // STEP 3: Laptop ↔ Printer Connection (Auto-print blank PDF)
+      // STEP 3: Laptop ↔ Printer Connection (Auto-print blank page)
       setCheckProgress(75);
       setStatus(prev => ({ ...prev, laptopPrinter: 'checking' }));
-      setDetails(prev => ({ ...prev, laptopPrinter: 'Testing printer connection...' }));
+      setDetails(prev => ({ ...prev, laptopPrinter: 'Testing printer (printing blank page)...' }));
 
       try {
         const printerResponse = await apiClient.post('/connection/validate-printer', {
-          testPrint: true,
+          testPrint: true,  // This will print a blank test page
           timestamp: Date.now(),
         });
         
         const printerReady = printerResponse?.data?.connected;
-        setStatus(prev => ({ ...prev, laptopPrinter: printerReady ? 'connected' : 'failed' }));
-        setDetails(prev => ({
-          ...prev,
-          laptopPrinter: printerReady
-            ? `✅ Printer ready (${printerResponse?.data?.model || 'Connected'})`
-            : printerResponse?.data?.message || '❌ Printer not responding',
-        }));
+        finalStatus.laptopPrinter = printerReady ? 'connected' : 'failed';
+        finalDetails.laptopPrinter = printerReady
+          ? `✅ Printer ready (${printerResponse?.data?.model || 'Connected'}) - Test page sent`
+          : printerResponse?.data?.message || '❌ Printer not responding';
+        setStatus(prev => ({ ...prev, laptopPrinter: finalStatus.laptopPrinter }));
+        setDetails(prev => ({ ...prev, laptopPrinter: finalDetails.laptopPrinter }));
         allConnected = allConnected && printerReady;
       } catch (err: any) {
+        finalStatus.laptopPrinter = 'failed';
+        finalDetails.laptopPrinter = '❌ Printer check failed';
         setStatus(prev => ({ ...prev, laptopPrinter: 'failed' }));
         setDetails(prev => ({ ...prev, laptopPrinter: '❌ Printer check failed' }));
         allConnected = false;
@@ -165,7 +232,11 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
 
       // Final status
       setCheckProgress(100);
-      setOverallStatus(allConnected ? 'success' : 'failed');
+      const finalOverall = allConnected ? 'success' : 'failed';
+      setOverallStatus(finalOverall);
+
+      // Save to session storage so we don't re-run
+      saveToSession(finalStatus, finalDetails, finalOverall);
 
       if (onStatusComplete) {
         onStatusComplete(allConnected);
@@ -181,16 +252,15 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
     } finally {
       setIsChecking(false);
     }
-  }, [isCapturing, videoRef, onStatusComplete]);
+  }, [isCapturing, videoRef, onStatusComplete, saveToSession]);
 
   React.useEffect(() => {
-    if (autoRun && isOpen) {
-      runSequentialConnectionCheck();
-    }
+    // Don't auto-run - only run when user explicitly clicks the button
   }, [autoRun, isOpen, runSequentialConnectionCheck]);
 
   useImperativeHandle(ref, () => ({
-    runCheck: runSequentialConnectionCheck
+    runCheck: () => runSequentialConnectionCheck(),
+    forceRecheck: () => runSequentialConnectionCheck(),
   }));
 
   if (!isOpen && !onClose) {
@@ -259,12 +329,12 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
             colorScheme="brand"
             isLoading={isChecking}
             loadingText="Validating..."
-            onClick={runSequentialConnectionCheck}
+            onClick={() => runSequentialConnectionCheck()}
             leftIcon={<Iconify icon={FiRefreshCw} boxSize={3} />}
             fontSize="xs"
             isDisabled={isChecking}
           >
-            Validate
+            {alreadyCheckedThisSession ? 'Re-check' : 'Validate'}
           </Button>
           {overallStatus === 'success' && (
             <Badge

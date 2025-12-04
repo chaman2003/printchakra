@@ -25,11 +25,28 @@ import {
   Tooltip,
   useColorModeValue,
   useDisclosure,
+  useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiWifiOff } from 'react-icons/fi';
+import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiTrash2, FiWifiOff, FiX } from 'react-icons/fi';
 import { Iconify } from '../common';
 import apiClient from '../../apiClient';
+import { API_ENDPOINTS } from '../../config';
+
+interface PrintJobInfo {
+  id: string | number;
+  document: string;
+  owner: string;
+  status: string;
+  submitted: string;
+}
+
+interface PrinterQueueSnapshot {
+  name: string;
+  status: string;
+  isDefault: boolean;
+  jobs: PrintJobInfo[];
+}
 
 interface PrinterInfo {
   name: string;
@@ -92,11 +109,19 @@ interface DeviceAndConnectivityPanelProps {
 
 export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProps> = ({ onCheckConnectivity }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const printQueueModal = useDisclosure();
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [defaultPrinter, setDefaultPrinter] = useState<string>('');
   const [settingDefault, setSettingDefault] = useState(false);
+  
+  // Print Queue state
+  const [printerQueues, setPrinterQueues] = useState<PrinterQueueSnapshot[]>([]);
+  const [queuesLoading, setQueuesLoading] = useState(false);
+  const [clearingQueue, setClearingQueue] = useState(false);
+  const [terminatingJobId, setTerminatingJobId] = useState<string | null>(null);
+  const toast = useToast();
 
   // Consistent styling with SurfaceCard
   const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
@@ -106,6 +131,7 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
     '0 25px 50px rgba(0, 0, 0, 0.8)'
   );
   const textMuted = useColorModeValue('gray.600', 'gray.400');
+  const textColor = useColorModeValue('gray.800', 'white');
   const tagBg = useColorModeValue('gray.100', 'rgba(121, 95, 238, 0.15)');
 
   const fetchSystemInfo = useCallback(async () => {
@@ -148,6 +174,86 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
   useEffect(() => {
     fetchSystemInfo();
   }, [fetchSystemInfo]);
+
+  // Print Queue handlers
+  const fetchPrinterQueues = useCallback(async () => {
+    setQueuesLoading(true);
+    try {
+      const { data } = await apiClient.get(API_ENDPOINTS.printerQueues);
+      setPrinterQueues(data?.printers || []);
+    } catch (err: any) {
+      console.error('Failed to fetch printer queues', err);
+      toast({
+        title: 'Failed to fetch queues',
+        description: err.response?.data?.error || err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setQueuesLoading(false);
+    }
+  }, [toast]);
+
+  const handleClearPrintQueue = useCallback(async () => {
+    setClearingQueue(true);
+    try {
+      const { data } = await apiClient.post(API_ENDPOINTS.printerClearQueue);
+      toast({
+        title: 'Print queue cleared',
+        description: data?.message || 'All pending jobs removed',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      fetchPrinterQueues();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to clear queue',
+        description: err.response?.data?.error || err.message,
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+    } finally {
+      setClearingQueue(false);
+    }
+  }, [toast, fetchPrinterQueues]);
+
+  const handleTerminateJob = useCallback(async (printerName: string, jobId: string) => {
+    const key = `${printerName}_${jobId}`;
+    setTerminatingJobId(key);
+    try {
+      await apiClient.post(API_ENDPOINTS.printerCancelJob, {
+        printer_name: printerName,
+        job_id: jobId,
+      });
+      toast({
+        title: 'Print job cancelled',
+        status: 'success',
+        duration: 2000,
+        isClosable: true,
+      });
+      fetchPrinterQueues();
+    } catch (err: any) {
+      toast({
+        title: 'Failed to cancel job',
+        description: err.response?.data?.error || err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setTerminatingJobId(null);
+    }
+  }, [toast, fetchPrinterQueues]);
+
+  const handleOpenPrintQueueModal = () => {
+    fetchPrinterQueues();
+    printQueueModal.onOpen();
+  };
+
+  const totalJobs = printerQueues.reduce((sum, p) => sum + (p.jobs?.length || 0), 0);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -204,6 +310,17 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
             Check Connectivity
           </Button>
         )}
+
+        <Button
+          colorScheme="pink"
+          variant="ghost"
+          onClick={handleOpenPrintQueueModal}
+          leftIcon={<Iconify icon={FiPrinter} boxSize={3} />}
+          _hover={{ bg: 'rgba(236,72,153,0.15)' }}
+          transition="all 0.3s"
+        >
+          Print Queue
+        </Button>
       </ButtonGroup>
 
       <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered scrollBehavior="inside">
@@ -461,6 +578,142 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
                 </Box>
               </VStack>
             ) : null}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Print Queue Modal */}
+      <Modal isOpen={printQueueModal.isOpen} onClose={printQueueModal.onClose} size="3xl" isCentered scrollBehavior="inside">
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent
+          bg={bgCard}
+          borderRadius="2xl"
+          border="1px solid"
+          borderColor={borderColor}
+          boxShadow={shadow}
+          maxH="85vh"
+        >
+          <Flex
+            borderBottom="1px solid"
+            borderColor={borderColor}
+            align="center"
+            justify="space-between"
+            py={4}
+            px={6}
+          >
+            <Flex align="center" gap={3}>
+              <Box
+                p={2}
+                borderRadius="xl"
+                bg="pink.500"
+                boxShadow="0 4px 14px rgba(236,72,153,0.3)"
+              >
+                <Iconify icon={FiPrinter} color="white" boxSize={5} />
+              </Box>
+              <Box>
+                <Text fontWeight="bold" fontSize="lg" color={textColor}>
+                  Print Queues
+                </Text>
+                <Text fontSize="xs" color={textMuted}>
+                  Manage active print jobs
+                </Text>
+              </Box>
+            </Flex>
+            <Flex gap={2}>
+              <Button
+                size="sm"
+                colorScheme="red"
+                variant="solid"
+                leftIcon={<Iconify icon={FiTrash2} boxSize={4} />}
+                onClick={handleClearPrintQueue}
+                isLoading={clearingQueue}
+                loadingText="Clearing..."
+              >
+                Clear All Queues
+              </Button>
+              <Button variant="ghost" onClick={printQueueModal.onClose}>
+                <Iconify icon={FiX} boxSize={5} />
+              </Button>
+            </Flex>
+          </Flex>
+          <ModalBody py={6} px={6}>
+            {queuesLoading ? (
+              <Flex justify="center" align="center" py={10}>
+                <Spinner size="lg" color="pink.400" />
+              </Flex>
+            ) : printerQueues.length === 0 ? (
+              <Flex direction="column" align="center" justify="center" py={10}>
+                <Iconify icon={FiPrinter} boxSize={10} color={textMuted} mb={4} />
+                <Text color={textMuted} fontSize="lg">No print queues found</Text>
+                <Text color={textMuted} fontSize="sm">All queues are empty</Text>
+              </Flex>
+            ) : (
+              <VStack spacing={4} align="stretch">
+                {printerQueues.map((queue) => (
+                  <Box
+                    key={queue.name}
+                    bg={useColorModeValue('gray.50', 'rgba(236,72,153,0.05)')}
+                    p={4}
+                    borderRadius="xl"
+                    border="1px solid"
+                    borderColor={useColorModeValue('gray.200', 'whiteAlpha.100')}
+                  >
+                    <Flex justify="space-between" align="center" mb={3}>
+                      <Flex align="center" gap={2}>
+                        <Iconify icon={FiPrinter} color="pink.400" boxSize={5} />
+                        <Text fontWeight="bold" color={textColor}>{queue.name}</Text>
+                        <Tag size="sm" colorScheme={queue.status === 'Ready' ? 'green' : 'yellow'} variant="subtle">
+                          {queue.status}
+                        </Tag>
+                      </Flex>
+                      <Tag size="sm" colorScheme="pink" variant="solid">
+                        {queue.jobs?.length || 0} jobs
+                      </Tag>
+                    </Flex>
+                    
+                    {queue.jobs && queue.jobs.length > 0 ? (
+                      <VStack spacing={2} align="stretch">
+                        {queue.jobs.map((job) => (
+                          <Flex
+                            key={job.id}
+                            justify="space-between"
+                            align="center"
+                            bg={useColorModeValue('white', 'whiteAlpha.50')}
+                            p={3}
+                            borderRadius="lg"
+                          >
+                            <Box flex={1}>
+                              <Text fontSize="sm" fontWeight="medium" color={textColor} isTruncated maxW="300px">
+                                {job.document}
+                              </Text>
+                              <Flex gap={2} mt={1}>
+                                <Text fontSize="xs" color={textMuted}>ID: {job.id}</Text>
+                                <Text fontSize="xs" color={textMuted}>•</Text>
+                                <Text fontSize="xs" color={textMuted}>{job.status}</Text>
+                              </Flex>
+                            </Box>
+                            <Button
+                              size="xs"
+                              colorScheme="red"
+                              variant="ghost"
+                              onClick={() => handleTerminateJob(queue.name, String(job.id))}
+                              isLoading={terminatingJobId === String(job.id)}
+                              leftIcon={<Iconify icon={FiX} boxSize={3} />}
+                            >
+                              Cancel
+                            </Button>
+                          </Flex>
+                        ))}
+                      </VStack>
+                    ) : (
+                      <Text fontSize="sm" color={textMuted} textAlign="center" py={2}>
+                        No active jobs in queue
+                      </Text>
+                    )}
+                  </Box>
+                ))}
+              </VStack>
+            )}
           </ModalBody>
         </ModalContent>
       </Modal>

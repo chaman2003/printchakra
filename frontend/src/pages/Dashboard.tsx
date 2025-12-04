@@ -222,8 +222,8 @@ const useImageWithHeaders = (imageUrl: string) => {
 
         const response = await fetch(url, {
           headers,
-          credentials: 'include',
           cache: 'no-store',
+          mode: 'cors',
         });
 
         if (!response.ok) {

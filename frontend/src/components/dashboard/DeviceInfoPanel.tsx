@@ -27,7 +27,7 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw } from 'react-icons/fi';
+import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import { Iconify } from '../common';
 import apiClient from '../../apiClient';
 import { API_ENDPOINTS } from '../../config';
@@ -107,6 +107,7 @@ interface PrinterQueueSnapshot {
 
 export const DeviceInfoPanel: React.FC = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const printQueuesRef = React.useRef<HTMLDivElement | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -323,6 +324,23 @@ export const DeviceInfoPanel: React.FC = () => {
               )}
             </HStack>
             <HStack spacing={2}>
+              <Tooltip label="Print queues" placement="top">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  color={textMuted}
+                  leftIcon={<Iconify icon={FiPrinter} boxSize={4} />}
+                  onClick={() => {
+                    // fetch queues and scroll to section
+                    fetchPrinterQueues();
+                    setTimeout(() => {
+                      printQueuesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 150);
+                  }}
+                >
+                  Print Queues
+                </Button>
+              </Tooltip>
               <Tooltip label="Refresh" placement="top">
                 <IconButton
                   aria-label="Refresh"
@@ -358,7 +376,7 @@ export const DeviceInfoPanel: React.FC = () => {
                   border="1px solid"
                   borderColor={borderColor}
                 >
-                  <Flex mb={4} align="center" gap={3}>
+                  <Flex mb={4} align="center" gap={3} wrap="wrap">
                     <HStack spacing={3}>
                       <Iconify icon={FiPrinter} boxSize={5} color="brand.400" />
                       <Text fontWeight="700" fontSize="sm" textTransform="uppercase" letterSpacing="wider" color="brand.400">
@@ -366,18 +384,30 @@ export const DeviceInfoPanel: React.FC = () => {
                       </Text>
                     </HStack>
                     <Box flex="1" />
-                    <Tooltip label="Clear printing queue" placement="top">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        colorScheme="pink"
-                        leftIcon={<Iconify icon={FiPrinter} boxSize={4} />}
-                        onClick={handleClearPrintQueue}
-                        isLoading={clearingQueue}
-                      >
-                        Clear Queue
-                      </Button>
-                    </Tooltip>
+                    <HStack spacing={2}>
+                      <Tooltip label="Refresh queue status" placement="top">
+                        <IconButton
+                          aria-label="Refresh queues"
+                          icon={<Iconify icon={FiRefreshCw} boxSize={4} />}
+                          size="sm"
+                          variant="ghost"
+                          onClick={fetchPrinterQueues}
+                          isLoading={queuesLoading}
+                        />
+                      </Tooltip>
+                      <Tooltip label="Clear ALL pending print jobs" placement="top">
+                        <Button
+                          size="sm"
+                          colorScheme="red"
+                          variant="solid"
+                          leftIcon={<Iconify icon={FiTrash2} boxSize={4} />}
+                          onClick={handleClearPrintQueue}
+                          isLoading={clearingQueue}
+                        >
+                          Clear All Queues
+                        </Button>
+                      </Tooltip>
+                    </HStack>
                   </Flex>
 
                   {systemInfo.printers.available ? (
@@ -506,17 +536,18 @@ export const DeviceInfoPanel: React.FC = () => {
 
                 <Divider borderColor={borderColor} opacity={0.4} />
 
-                {/* Driver Suggestions */}
-                {systemInfo.driver_suggestions.length > 0 && (
-                  <>
-                    <Box>
-                      <HStack mb={4} spacing={3}>
-                        <Iconify icon={FiDownload} boxSize={5} color="brand.400" />
-                        <Text fontWeight="700" fontSize="sm" textTransform="uppercase" letterSpacing="wider" color="brand.400">
-                          Driver Downloads
-                        </Text>
-                      </HStack>
-                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} w="100%">
+                {/* Driver Downloads & Print Queues - Side by Side */}
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="100%">
+                  {/* Driver Suggestions - Left */}
+                  <Box>
+                    <HStack mb={4} spacing={3}>
+                      <Iconify icon={FiDownload} boxSize={5} color="brand.400" />
+                      <Text fontWeight="700" fontSize="sm" textTransform="uppercase" letterSpacing="wider" color="brand.400">
+                        Driver Downloads
+                      </Text>
+                    </HStack>
+                    {systemInfo.driver_suggestions.length > 0 ? (
+                      <VStack align="stretch" spacing={3}>
                         {systemInfo.driver_suggestions.map((suggestion, idx) => (
                           <Link
                             key={idx}
@@ -549,11 +580,137 @@ export const DeviceInfoPanel: React.FC = () => {
                             </Box>
                           </Link>
                         ))}
-                      </SimpleGrid>
-                    </Box>
-                    <Divider borderColor={borderColor} opacity={0.4} />
-                  </>
-                )}
+                      </VStack>
+                    ) : (
+                      <Box
+                        bg={useColorModeValue('white', 'rgba(255,255,255,0.03)')}
+                        px={4}
+                        py={3}
+                        borderRadius="lg"
+                        border="1px solid"
+                        borderColor={borderColor}
+                      >
+                        <Text fontSize="sm" color={textMuted} fontStyle="italic" textAlign="center">
+                          No driver suggestions
+                        </Text>
+                      </Box>
+                    )}
+                  </Box>
+
+                  {/* Print Queues - Right */}
+                  <Box ref={printQueuesRef as any} id="print-queues-section">
+                    <Flex mb={4} align="center" justify="space-between" wrap="wrap" gap={3}>
+                      <HStack spacing={3}>
+                        <Iconify icon={FiPrinter} boxSize={5} color="brand.400" />
+                        <Text fontWeight="700" fontSize="sm" textTransform="uppercase" letterSpacing="wider" color="brand.400">
+                          Print Queues
+                        </Text>
+                      </HStack>
+                      <HStack spacing={2}>
+                        <Tooltip label="Refresh queues" placement="top">
+                          <IconButton
+                            aria-label="Refresh queues"
+                            icon={<Iconify icon={FiRefreshCw} boxSize={4} />}
+                            size="sm"
+                            variant="ghost"
+                            onClick={fetchPrinterQueues}
+                            isLoading={queuesLoading}
+                          />
+                        </Tooltip>
+                        <Tooltip label="Clear ALL pending print jobs" placement="top">
+                          <Button
+                            size="sm"
+                            colorScheme="red"
+                            variant="solid"
+                            leftIcon={<Iconify icon={FiTrash2} boxSize={4} />}
+                            onClick={handleClearPrintQueue}
+                            isLoading={clearingQueue}
+                          >
+                            Clear All Print Jobs
+                          </Button>
+                        </Tooltip>
+                      </HStack>
+                    </Flex>
+                    <VStack align="stretch" spacing={2} maxH="200px" overflowY="auto">
+                      {queuesLoading ? (
+                        <HStack spacing={2} color={textMuted} p={3}>
+                          <Spinner size="xs" />
+                          <Text fontSize="xs">Loading queues...</Text>
+                        </HStack>
+                      ) : printerQueues.length === 0 || printerQueues.every(q => !q.jobs || q.jobs.length === 0) ? (
+                        <Box
+                          bg={useColorModeValue('white', 'rgba(255,255,255,0.03)')}
+                          px={4}
+                          py={3}
+                          borderRadius="lg"
+                          border="1px solid"
+                          borderColor={borderColor}
+                        >
+                          <Text fontSize="sm" color={textMuted} fontStyle="italic" textAlign="center">
+                            No pending print jobs
+                          </Text>
+                        </Box>
+                      ) : (
+                        printerQueues.filter(q => q.jobs && q.jobs.length > 0).map((printerQueue) => (
+                          <Box
+                            key={printerQueue.name}
+                            bg={useColorModeValue('white', 'rgba(255,255,255,0.03)')}
+                            px={3}
+                            py={2}
+                            borderRadius="lg"
+                            border="1px solid"
+                            borderColor={borderColor}
+                          >
+                            <Text fontSize="xs" fontWeight="700" color="brand.400" mb={1}>
+                              {printerQueue.name}
+                            </Text>
+                            {printerQueue.jobs.map((job) => {
+                              const terminateKey = `${printerQueue.name}_${job.id}`;
+                              return (
+                                <Flex
+                                  key={terminateKey}
+                                  justify="space-between"
+                                  align="center"
+                                  py={1}
+                                  borderBottom="1px solid"
+                                  borderColor={borderColor}
+                                  _last={{ borderBottom: 'none' }}
+                                >
+                                  <Box flex={1}>
+                                    <Text fontSize="xs" fontWeight="500" isTruncated maxW="150px">
+                                      {job.document || `Job #${job.id}`}
+                                    </Text>
+                                    <Text fontSize="10px" color={textMuted}>
+                                      {job.status || 'pending'}
+                                    </Text>
+                                  </Box>
+                                  <Button
+                                    size="xs"
+                                    colorScheme="red"
+                                    variant="ghost"
+                                    fontSize="10px"
+                                    h="20px"
+                                    onClick={() => handleTerminateJob(printerQueue.name, String(job.id))}
+                                    isLoading={terminatingJobId === terminateKey}
+                                  >
+                                    Cancel
+                                  </Button>
+                                </Flex>
+                              );
+                            })}
+                          </Box>
+                        ))
+                      )}
+                      {queueError && (
+                        <Text fontSize="xs" color="red.400">
+                          {queueError}
+                        </Text>
+                      )}
+                    </VStack>
+                  </Box>
+                </SimpleGrid>
+
+                <Divider borderColor={borderColor} opacity={0.4} />
 
                 {/* System Resources */}
                 <Box>
