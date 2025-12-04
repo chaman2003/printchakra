@@ -189,7 +189,7 @@ interface PreviewControlState {
 
 type OrchestrationAction = 'print' | 'scan';
 
-const useImageWithHeaders = (imageUrl: string) => {
+const useImageWithHeaders = (imageUrl: string, refreshToken?: number) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
@@ -202,6 +202,7 @@ const useImageWithHeaders = (imageUrl: string) => {
     let revokeUrl: string | null = null;
     setLoading(true);
     setError(null);
+    setBlobUrl(null); // Clear previous blob to show loading state
 
     const loadImage = async () => {
       try {
@@ -214,8 +215,8 @@ const useImageWithHeaders = (imageUrl: string) => {
           headers['ngrok-skip-browser-warning'] = 'true';
         }
 
-        // Add cache-buster to force fresh fetch (timestamp query param)
-        const cacheBuster = `_t=${Date.now()}`;
+        // Add cache-buster to force fresh fetch (timestamp + refresh token)
+        const cacheBuster = `_t=${Date.now()}_r=${refreshToken || 0}`;
         const url = imageUrl.includes('?') 
           ? `${imageUrl}&${cacheBuster}` 
           : `${imageUrl}?${cacheBuster}`;
@@ -257,7 +258,7 @@ const useImageWithHeaders = (imageUrl: string) => {
         URL.revokeObjectURL(revokeUrl);
       }
     };
-  }, [imageUrl]);
+  }, [imageUrl, refreshToken]);
 
   return { blobUrl, loading, error };
 };
@@ -269,13 +270,14 @@ interface SecureImageProps {
   className?: string;
   onClick?: () => void;
   style?: React.CSSProperties;
+  refreshToken?: number;
 }
 
-const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onClick, style }) => {
+const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onClick, style, refreshToken }) => {
   // Try /processed first, fallback to /thumbnail
   const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
-  const thumbnailUrl = `${API_BASE_URL}/thumbnail/${filename}`;
-  const { blobUrl, loading, error } = useImageWithHeaders(imageUrl);
+  const thumbnailUrl = `${API_BASE_URL}/thumbnail/${filename}?_r=${refreshToken || 0}`;
+  const { blobUrl, loading, error } = useImageWithHeaders(imageUrl, refreshToken);
 
   if (loading) {
     return (
@@ -344,11 +346,12 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
 interface ModalImageWithHeadersProps {
   filename: string;
   alt: string;
+  refreshToken?: number;
 }
 
-const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename, alt }) => {
+const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename, alt, refreshToken }) => {
   const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
-  const { blobUrl, loading, error } = useImageWithHeaders(imageUrl);
+  const { blobUrl, loading, error } = useImageWithHeaders(imageUrl, refreshToken);
 
   if (loading) {
     return (
@@ -406,6 +409,7 @@ const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename,
 
 const Dashboard: React.FC = () => {
   const [files, setFiles] = useState<FileInfo[]>([]);
+  const [refreshToken, setRefreshToken] = useState<number>(0); // Forces thumbnail re-renders
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -1415,6 +1419,8 @@ const Dashboard: React.FC = () => {
           };
           return [newFile, ...prevFiles];
         });
+        // Force thumbnail refresh
+        setRefreshToken(prev => prev + 1);
       }
       // Also refresh from server to get complete data
       loadFiles(false);
@@ -1467,6 +1473,8 @@ const Dashboard: React.FC = () => {
               : f
           )
         );
+        // Force thumbnail refresh by updating the refresh token
+        setRefreshToken(prev => prev + 1);
       }
       // Refresh from server to get complete data (with slight delay to ensure file is saved)
       setTimeout(() => loadFiles(false), 300);
@@ -1548,7 +1556,7 @@ const Dashboard: React.FC = () => {
   }, [socket]);
 
   const lastLoadFilesRunRef = React.useRef<number>(0);
-  const minLoadFilesInterval = 500; // ms - reduced for faster real-time updates during capture
+  const minLoadFilesInterval = 200; // ms - reduced for faster real-time updates during capture
 
   const loadFiles = useCallback(async (showLoading = true) => {
     const now = Date.now();
@@ -2368,6 +2376,7 @@ const Dashboard: React.FC = () => {
                               filename={file.filename}
                               alt={file.filename}
                               onClick={() => !file.processing && openImageModal(file.filename)}
+                              refreshToken={refreshToken}
                             />
                           </Box>
 
@@ -2511,6 +2520,7 @@ const Dashboard: React.FC = () => {
               <ModalImageWithHeaders
                 filename={selectedImageFile}
                 alt={selectedImageFile}
+                refreshToken={refreshToken}
               />
             )}
           </ModalBody>
