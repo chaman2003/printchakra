@@ -561,6 +561,11 @@ const Dashboard: React.FC = () => {
   const orchestrateModal = useDisclosure();
   const documentSelectorModal = useDisclosure(); // Document selector modal
 
+  // Document feeder state for scan workflow
+  const [isFeedingDocuments, setIsFeedingDocuments] = useState(false);
+  const [documentsFed, setDocumentsFed] = useState(false);
+  const [feedCount, setFeedCount] = useState(0);
+
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
   const [previewControl, setPreviewControl] = useState<PreviewControlState>(() => ({
@@ -1726,6 +1731,9 @@ const Dashboard: React.FC = () => {
     // Reset state
     setOrchestrateStep(1);
     setOrchestrateMode(null);
+    // Reset document feeder state
+    setDocumentsFed(false);
+    setFeedCount(0);
 
     // If files are selected, auto-select print mode
     if (selectedFiles.length > 0) {
@@ -1865,6 +1873,67 @@ const Dashboard: React.FC = () => {
         description: err.response?.data?.error || err.message,
         status: 'error',
       });
+    }
+  };
+
+  // Feed documents through printer (uses printer as document feeder)
+  const feedDocumentsThroughPrinter = async () => {
+    setIsFeedingDocuments(true);
+    try {
+      // Use the /print endpoint with type: "blank" - this triggers the printer to feed paper
+      // The blank.pdf acts as a "pull through" command for the printer
+      const response = await apiClient.post('/print', { type: 'blank' });
+
+      if (response.data.status === 'success') {
+        setDocumentsFed(true);
+        setFeedCount(prev => prev + 1);
+        toast({
+          title: 'Documents Fed Through Printer',
+          description: 'Documents are now in the output tray. Ready for phone capture!',
+          status: 'success',
+          duration: 5000,
+        });
+      } else {
+        // If blank.pdf doesn't exist, try to create it first
+        if (response.data.message?.includes('not found')) {
+          await apiClient.post('/print', { type: 'test' });
+          const retryResponse = await apiClient.post('/print', { type: 'blank' });
+          
+          if (retryResponse.data.status === 'success') {
+            setDocumentsFed(true);
+            setFeedCount(prev => prev + 1);
+            toast({
+              title: 'Documents Fed Through Printer',
+              description: 'Documents are now in the output tray. Ready for phone capture!',
+              status: 'success',
+              duration: 5000,
+            });
+          } else {
+            toast({
+              title: 'Feed Issue',
+              description: retryResponse.data.message || 'Could not feed documents',
+              status: 'warning',
+              duration: 5000,
+            });
+          }
+        } else {
+          toast({
+            title: 'Feed Issue',
+            description: response.data.message || 'Could not feed documents',
+            status: 'warning',
+            duration: 5000,
+          });
+        }
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Feed Failed',
+        description: err.response?.data?.message || err.message || 'Could not feed documents through printer',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsFeedingDocuments(false);
     }
   };
 
@@ -3194,18 +3263,81 @@ const Dashboard: React.FC = () => {
                         : 'Select Document to Scan'}
                     </Button>
 
-                    {/* Start Phone Capture - Navigate to Phone page */}
+                    {/* Step 1: Feed Documents Through Printer */}
                     <Box
                       p="1.25rem"
                       borderRadius="xl"
                       border="2px solid"
-                      borderColor="brand.400"
-                      bg="rgba(121,95,238,0.08)"
+                      borderColor={documentsFed ? 'green.400' : 'orange.400'}
+                      bg={documentsFed ? 'rgba(72,187,120,0.08)' : 'rgba(237,137,54,0.08)'}
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: documentsFed ? 'green.500' : 'orange.500',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Flex direction="column" gap={3}>
+                        <Flex justify="space-between" align="center" gap={4}>
+                          <Box flex="1">
+                            <Heading size="md" mb={2} display="flex" alignItems="center" gap={2}>
+                              <Iconify
+                                icon="solar:printer-bold-duotone"
+                                width={24}
+                                height={24}
+                                color={documentsFed ? 'var(--chakra-colors-green-500)' : 'var(--chakra-colors-orange-400)'}
+                              />
+                              Step 1: Feed Documents
+                              {documentsFed && (
+                                <Badge colorScheme="green" fontSize="xs">
+                                  ✓ {feedCount} page{feedCount !== 1 ? 's' : ''} fed
+                                </Badge>
+                              )}
+                            </Heading>
+                            <Text fontSize="sm" color="text.muted">
+                              Place documents in printer input tray, then click to feed them through to the output tray
+                            </Text>
+                          </Box>
+                          <Button
+                            colorScheme={documentsFed ? 'green' : 'orange'}
+                            size="md"
+                            onClick={feedDocumentsThroughPrinter}
+                            isLoading={isFeedingDocuments}
+                            loadingText="Feeding..."
+                            leftIcon={
+                              <Iconify 
+                                icon={documentsFed ? 'solar:refresh-bold' : 'solar:printer-bold'} 
+                                width={18} 
+                                height={18} 
+                              />
+                            }
+                            _hover={{
+                              transform: 'translateY(-1px)',
+                              boxShadow: 'md',
+                            }}
+                          >
+                            {documentsFed ? 'Feed More' : 'Feed Documents'}
+                          </Button>
+                        </Flex>
+                        <Text fontSize="xs" color="text.muted" fontStyle="italic">
+                          💡 Tip: The printer will pull documents from the input tray and output them for scanning
+                        </Text>
+                      </Flex>
+                    </Box>
+
+                    {/* Step 2: Capture with Phone Camera */}
+                    <Box
+                      p="1.25rem"
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor={documentsFed ? 'brand.400' : 'whiteAlpha.300'}
+                      bg={documentsFed ? 'rgba(121,95,238,0.08)' : 'whiteAlpha.50'}
+                      opacity={documentsFed ? 1 : 0.7}
                       transition="all 0.3s"
                       _hover={{
                         borderColor: 'brand.500',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
+                        transform: documentsFed ? 'translateY(-2px)' : 'none',
+                        boxShadow: documentsFed ? '0 8px 20px rgba(121,95,238,0.3)' : 'none',
                       }}
                     >
                       <Flex justify="space-between" align="center" gap={4}>
@@ -3215,12 +3347,15 @@ const Dashboard: React.FC = () => {
                               icon="solar:camera-bold-duotone"
                               width={24}
                               height={24}
-                              color="var(--chakra-colors-brand-500)"
+                              color={documentsFed ? 'var(--chakra-colors-brand-500)' : 'var(--chakra-colors-gray-500)'}
                             />
-                            Phone Camera Capture
+                            Step 2: Capture Documents
                           </Heading>
                           <Text fontSize="sm" color="text.muted">
-                            Use your phone's camera to capture documents. Open the capture page on your phone.
+                            {documentsFed 
+                              ? 'Documents ready! Open phone camera to capture the fed pages.'
+                              : 'Feed documents first, then capture with phone camera.'
+                            }
                           </Text>
                         </Box>
                         <Button
@@ -3229,6 +3364,7 @@ const Dashboard: React.FC = () => {
                           as="a"
                           href="/phone"
                           target="_blank"
+                          isDisabled={!documentsFed}
                           leftIcon={
                             <Iconify 
                               icon="solar:smartphone-bold" 
@@ -3237,8 +3373,8 @@ const Dashboard: React.FC = () => {
                             />
                           }
                           _hover={{
-                            transform: 'translateY(-1px)',
-                            boxShadow: 'md',
+                            transform: documentsFed ? 'translateY(-1px)' : 'none',
+                            boxShadow: documentsFed ? 'md' : 'none',
                           }}
                         >
                           Open Capture
