@@ -196,7 +196,7 @@ const Phone: React.FC = () => {
       
       const video = videoRef.current;
       const canvas = comparisonCanvasRef.current;
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       
       if (!ctx || !video.videoWidth || video.paused || video.ended) {
         if (video.paused) {
@@ -352,7 +352,7 @@ const Phone: React.FC = () => {
     try {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      const context = canvas.getContext('2d');
+      const context = canvas.getContext('2d', { willReadFrequently: true });
       
       if (!context || !video.videoWidth || video.videoWidth === 0) {
         console.warn('Video not ready for capture, skipping...');
@@ -637,7 +637,7 @@ const Phone: React.FC = () => {
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
 
     if (!context) return;
 
