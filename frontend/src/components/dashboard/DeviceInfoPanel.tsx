@@ -24,11 +24,13 @@ import {
   Tooltip,
   useColorModeValue,
   useDisclosure,
+  useToast,
   VStack,
 } from '@chakra-ui/react';
 import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw } from 'react-icons/fi';
 import { Iconify } from '../common';
 import apiClient from '../../apiClient';
+import { API_ENDPOINTS } from '../../config';
 
 interface PrinterInfo {
   name: string;
@@ -92,6 +94,8 @@ export const DeviceInfoPanel: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [defaultPrinter, setDefaultPrinter] = useState<string>('');
   const [settingDefault, setSettingDefault] = useState(false);
+  const [clearingQueue, setClearingQueue] = useState(false);
+  const toast = useToast();
 
   // Consistent styling with SurfaceCard
   const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
@@ -143,6 +147,32 @@ export const DeviceInfoPanel: React.FC = () => {
   useEffect(() => {
     fetchSystemInfo();
   }, [fetchSystemInfo]);
+
+  const handleClearPrintQueue = useCallback(async () => {
+    setClearingQueue(true);
+    try {
+      const { data } = await apiClient.post(API_ENDPOINTS.printerClearQueue);
+      toast({
+        title: 'Printing queue cleared',
+        description: data?.message || 'All pending jobs were removed',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (err: any) {
+      const message = err.response?.data?.error || err.message || 'Failed to clear printing queue';
+      toast({
+        title: 'Unable to clear queue',
+        description: message,
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+      });
+      setError(message);
+    } finally {
+      setClearingQueue(false);
+    }
+  }, [toast]);
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -211,6 +241,17 @@ export const DeviceInfoPanel: React.FC = () => {
               )}
             </HStack>
             <HStack spacing={2}>
+              <Tooltip label="Clear printing queue" placement="top">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  leftIcon={<Iconify icon={FiPrinter} boxSize={4} />}
+                  onClick={handleClearPrintQueue}
+                  isLoading={clearingQueue}
+                >
+                  Clear Queue
+                </Button>
+              </Tooltip>
               <Tooltip label="Refresh" placement="top">
                 <IconButton
                   aria-label="Refresh"

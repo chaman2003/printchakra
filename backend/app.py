@@ -484,6 +484,75 @@ def after_request_handler(response):
     return response
 
 
+@app.route("/printer/clear-queue", methods=["POST"])
+def clear_printer_queue():
+    """Clear all pending print jobs from the system spooler."""
+    logger.info("[Printer] Clear queue requested")
+
+    try:
+        if sys.platform.startswith("win"):
+            clear_script = r"
+$ErrorActionPreference = 'SilentlyContinue'
+Get-Service -Name Spooler | Stop-Service -Force
+Start-Sleep -Seconds 2
+$spoolPath = Join-Path $env:windir 'System32\\spool\\PRINTERS'
+if (Test-Path $spoolPath) {
+    Remove-Item -Path (Join-Path $spoolPath '*') -Force -Recurse -ErrorAction SilentlyContinue
+}
+Get-Service -Name Spooler | Start-Service
+Get-Printer | ForEach-Object {
+    Get-PrintJob -PrinterName $_.Name -ErrorAction SilentlyContinue | Remove-PrintJob -ErrorAction SilentlyContinue
+}
+Write-Output 'CLEARED'
+".strip()
+
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", clear_script],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode != 0:
+                logger.error("[Printer] Clear queue failed: %s", result.stderr.strip())
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "error": result.stderr.strip() or "Failed to clear printer queue",
+                        }
+                    ),
+                    500,
+                )
+
+        else:
+            cmd = ["cancel", "-a"]  # CUPS/Linux
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode != 0:
+                logger.error("[Printer] Clear queue failed: %s", result.stderr.strip())
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "error": result.stderr.strip() or "Failed to clear printer queue",
+                        }
+                    ),
+                    500,
+                )
+
+        logger.info("[Printer] Queue cleared successfully")
+        return jsonify({"status": "success", "message": "Printing queue cleared"})
+
+    except subprocess.TimeoutExpired:
+        logger.exception("[Printer] Clear queue timed out")
+        return jsonify({"status": "error", "error": "Timeout clearing printer queue"}), 504
+    except FileNotFoundError:
+        logger.exception("[Printer] Clear queue command missing")
+        return jsonify({"status": "error", "error": "Spooler tools not available"}), 500
+    except Exception as exc:
+        logger.exception("[Printer] Unexpected error clearing queue")
+        return jsonify({"status": "error", "error": str(exc)}), 500
+
+
 # ============================================================================
 # FALLBACK QUALITY CHECK FUNCTION (for when modules unavailable)
 # ============================================================================

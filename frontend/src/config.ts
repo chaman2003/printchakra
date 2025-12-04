@@ -117,6 +117,7 @@ export const API_ENDPOINTS = {
   delete: '/delete',
   ocr: '/ocr',
   print: '/print',
+  printerClearQueue: '/printer/clear-queue',
   processingStatus: '/processing-status',
 
   // Advanced processing endpoints
