@@ -28,7 +28,7 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiTrash2, FiWifiOff, FiX } from 'react-icons/fi';
+import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiTrash2, FiWifiOff } from 'react-icons/fi';
 import { Iconify } from '../common';
 import apiClient from '../../apiClient';
 import { API_ENDPOINTS } from '../../config';
@@ -365,7 +365,6 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
                   isLoading={loading}
                 />
               </Tooltip>
-              <ModalCloseButton position="relative" top="0" right="0" />
             </HStack>
           </Flex>
 
@@ -631,9 +630,6 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
               >
                 Clear All Queues
               </Button>
-              <Button variant="ghost" onClick={printQueueModal.onClose}>
-                <Iconify icon={FiX} boxSize={5} />
-              </Button>
             </Flex>
           </Flex>
           <ModalBody py={6} px={6}>
@@ -698,7 +694,7 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
                               variant="ghost"
                               onClick={() => handleTerminateJob(queue.name, String(job.id))}
                               isLoading={terminatingJobId === String(job.id)}
-                              leftIcon={<Iconify icon={FiX} boxSize={3} />}
+                              leftIcon={<Iconify icon={FiTrash2} boxSize={3} />}
                             >
                               Cancel
                             </Button>

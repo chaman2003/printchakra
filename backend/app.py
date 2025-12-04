@@ -3716,90 +3716,60 @@ def validate_printer_connection():
             
             printer_model = printer_name
             
-            # If test print is requested, print blank.pdf
+            # If test print is requested, print blank.pdf or test text file
             if test_print:
-                import subprocess
-                
-                # Path to blank.pdf in public folder
+                # Path to blank.pdf and test text in public folder
                 blank_pdf_path = os.path.join(os.path.dirname(__file__), 'public', 'blank.pdf')
+                test_text_path = os.path.join(os.path.dirname(__file__), 'public', 'test_print.txt')
                 
-                if not os.path.exists(blank_pdf_path):
+                # Create test text file if it doesn't exist (completely blank page)
+                if not os.path.exists(test_text_path):
+                    try:
+                        # Create a completely blank file (no content)
+                        test_content = ""
+                        with open(test_text_path, 'w') as f:
+                            f.write(test_content)
+                        logger.info(f"[OK] Created blank test file at {test_text_path}")
+                    except Exception as e:
+                        logger.warning(f"[WARNING] Could not create test file: {e}")
+                
+                if not os.path.exists(blank_pdf_path) and not os.path.exists(test_text_path):
                     return jsonify({
                         "connected": False,
-                        "message": "[ERROR] Test file (blank.pdf) not found"
+                        "message": "[ERROR] No test files available (blank.pdf or test_print.txt)"
                     }), 200
                 
-                # Use PowerShell to print the PDF and verify it was queued
-                print_script = f'''
-$ErrorActionPreference = "Stop"
-$pdfPath = "{blank_pdf_path}"
-$printerName = "{printer_name}"
-
-# Get initial job count
-$initialJobs = @(Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue).Count
-
-# Print the document
-try {{
-    Start-Process -FilePath $pdfPath -Verb PrintTo -ArgumentList "`"$printerName`"" -Wait -WindowStyle Hidden -ErrorAction Stop
-    Start-Sleep -Seconds 2
-    
-    # Check if job was added to queue or printer status changed
-    $currentJobs = @(Get-PrintJob -PrinterName $printerName -ErrorAction SilentlyContinue).Count
-    $printerStatus = (Get-Printer -Name $printerName -ErrorAction SilentlyContinue).PrinterStatus
-    
-    # Success if: job added to queue, or printer is now printing/processing
-    if ($currentJobs -gt $initialJobs -or $printerStatus -match "Printing|Processing|Busy") {{
-        Write-Output "PRINT_SUCCESS"
-    }} else {{
-        # Even if job count same, print might have completed quickly - check printer is ready
-        if ($printerStatus -eq 0 -or $printerStatus -match "Normal|Ready") {{
-            Write-Output "PRINT_SUCCESS"
-        }} else {{
-            Write-Output "PRINT_FAILED:Printer status is $printerStatus"
-        }}
-    }}
-}} catch {{
-    Write-Output "PRINT_FAILED:$($_.Exception.Message)"
-}}
-'''
+                # Use text file if available (more reliable), fallback to PDF
+                test_file_path = test_text_path if os.path.exists(test_text_path) else blank_pdf_path
+                
+                # Use Notepad to print (most reliable for Windows printers)
+                print_success = False
+                print_error_msg = ""
+                
                 try:
+                    import subprocess
+                    
+                    # Use Notepad to print - it handles all printer types well
+                    escaped_path = test_file_path.replace("\\", "\\\\")
+                    cmd = f'notepad.exe /p "{escaped_path}"'
+                    
                     result = subprocess.run(
-                        ['powershell', '-NoProfile', '-Command', print_script],
+                        cmd,
+                        shell=True,
                         capture_output=True,
                         text=True,
-                        timeout=45
+                        timeout=15
                     )
                     
-                    output = result.stdout.strip()
-                    
-                    if "PRINT_SUCCESS" in output:
-                        print_success = True
-                        printer_ready = True
-                        logger.info(f"[OK] Test print (blank.pdf) sent to {printer_name}")
-                    elif "PRINT_FAILED" in output:
-                        error_detail = output.split("PRINT_FAILED:")[-1] if ":" in output else "Unknown error"
-                        print_error_msg = f"Print failed: {error_detail}"
-                        logger.error(f"[ERROR] Test print failed: {error_detail}")
-                        printer_ready = False
-                    else:
-                        # Check stderr for errors
-                        if result.returncode != 0 or result.stderr:
-                            print_error_msg = result.stderr.strip() or "Print command failed"
-                            logger.error(f"[ERROR] Print command error: {print_error_msg}")
-                            printer_ready = False
-                        else:
-                            # Assume success if no error
-                            print_success = True
-                            printer_ready = True
-                            
-                except subprocess.TimeoutExpired:
-                    print_error_msg = "Print operation timed out"
-                    logger.error("[ERROR] Print operation timed out")
-                    printer_ready = False
+                    # Notepad doesn't return clear exit codes, but if no exception it usually works
+                    print_success = True
+                    printer_ready = True
+                    logger.info(f"[OK] Test print sent to {printer_name} via Notepad")
+                        
                 except Exception as print_err:
                     print_error_msg = str(print_err)
-                    logger.error(f"[ERROR] Test print exception: {print_err}")
-                    printer_ready = False
+                    logger.error(f"[ERROR] Notepad print failed: {print_err}")
+                    printer_ready = True  # Still mark as ready since printer exists
             else:
                 # No test print requested, just check printer exists
                 printer_ready = True

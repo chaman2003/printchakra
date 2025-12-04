@@ -83,6 +83,16 @@ const Phone: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
+  
+  // Upload Queue State
+  const [uploadQueue, setUploadQueue] = useState<Array<{
+    id: string;
+    blob: Blob;
+    filename: string;
+    options: typeof processingOptions;
+  }>>([]);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+
   const toast = useToast();
   
   // Frame comparison based auto-capture (no API calls for detection)
@@ -263,37 +273,72 @@ const Phone: React.FC = () => {
     }
   }, [autoCaptureCount, toast]);
 
+  // Process upload queue
+  useEffect(() => {
+    const processQueue = async () => {
+      if (isProcessingQueue || uploadQueue.length === 0) return;
+      
+      setIsProcessingQueue(true);
+      const item = uploadQueue[0];
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', item.blob, item.filename);
+        formData.append('auto_crop', item.options.autoCrop.toString());
+        formData.append('ai_enhance', item.options.aiEnhance.toString());
+        formData.append('strict_quality', item.options.strictQuality.toString());
+
+        await apiClient.post(API_ENDPOINTS.upload, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        toast({
+          title: 'Upload complete',
+          description: `${item.filename} processed`,
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+          position: 'top-right',
+        });
+      } catch (err) {
+        console.error('Queue upload failed:', err);
+        toast({
+          title: 'Upload failed',
+          description: 'Failed to upload image',
+          status: 'error',
+          duration: 3000,
+          position: 'top-right',
+        });
+      } finally {
+        setUploadQueue(prev => prev.slice(1));
+        setIsProcessingQueue(false);
+      }
+    };
+    
+    processQueue();
+  }, [uploadQueue, isProcessingQueue, toast]);
+
   // Ref to hold latest captureInBackground function to avoid stale closures in interval
   const captureInBackgroundRef = useRef<(() => Promise<void>) | null>(null);
   
   const startAsyncUpload = useCallback((blob: Blob, filename: string, optionsSnapshot: typeof processingOptions) => {
-    (async () => {
-      const formData = new FormData();
-      formData.append('file', blob, filename);
-      formData.append('auto_crop', optionsSnapshot.autoCrop.toString());
-      formData.append('ai_enhance', optionsSnapshot.aiEnhance.toString());
-      formData.append('strict_quality', optionsSnapshot.strictQuality.toString());
+    // Add to queue instead of immediate upload
+    setUploadQueue(prev => [...prev, {
+      id: Date.now().toString() + Math.random(),
+      blob,
+      filename,
+      options: optionsSnapshot
+    }]);
 
-      try {
-        await apiClient.post(API_ENDPOINTS.upload, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+    setAutoCaptureCount(prev => prev + 1);
 
-        setAutoCaptureCount(prev => prev + 1);
-
-        toast({
-          title: '📸 Document Captured!',
-          description: 'Place next document...',
-          status: 'success',
-          duration: 1500,
-          position: 'top',
-        });
-      } catch (err) {
-        console.error('Background upload failed:', err);
-        lastCapturedImageDataRef.current = null; // Allow retry on same document
-        setFrameChangeStatus('waiting');
-      }
-    })();
+    toast({
+      title: '📸 Added to Queue',
+      description: 'Processing in background...',
+      status: 'info',
+      duration: 1000,
+      position: 'top',
+    });
   }, [toast]);
 
   // Background capture without freezing camera
@@ -550,58 +595,39 @@ const Phone: React.FC = () => {
 
   const uploadImage = useCallback(
     async (file: Blob, filename: string) => {
-      try {
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file, filename);
+      // Add to queue instead of blocking upload
+      setUploadQueue(prev => [...prev, {
+        id: Date.now().toString() + Math.random(),
+        blob: file,
+        filename,
+        options: { ...processingOptions }
+      }]);
 
-        // Add processing options
-        formData.append('auto_crop', processingOptions.autoCrop.toString());
-        formData.append('ai_enhance', processingOptions.aiEnhance.toString());
-        formData.append('strict_quality', processingOptions.strictQuality.toString());
-
-        const response = await apiClient.post(API_ENDPOINTS.upload, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
-
-        showMessage(`✅ ${response.data.message || 'Upload successful'}`);
-        toast({
-          title: 'Upload successful',
-          description: 'Document dispatched to the processing pipeline.',
-          status: 'success',
-          duration: 4000,
-        });
-        console.log('Upload response:', response.data);
-
-        // Show additional message about checking dashboard
+      showMessage(`✅ Added to processing queue`);
+      toast({
+        title: 'Queued for processing',
+        description: 'You can continue capturing.',
+        status: 'success',
+        duration: 2000,
+      });
+      
+      // Show additional message about checking dashboard
+      if (uploadQueue.length === 0) {
         setTimeout(() => {
           showMessage(
-            '📊 Image is processing... Check the Dashboard in ~5-10 seconds to see the result!'
+            '📊 Processing in background... Check Dashboard for results.'
           );
         }, 1500);
-
-        // Clear quality check after successful upload
-        setQualityCheck(null);
-      } catch (err: any) {
-        console.error('Upload error:', err);
-        const errorMsg = err.response?.data?.error || err.message || 'Upload failed';
-        showMessage(`❌ ${errorMsg}`);
-        toast({
-          title: 'Upload failed',
-          description: errorMsg,
-          status: 'error',
-          duration: 4000,
-        });
-      } finally {
-        setUploading(false);
       }
+
+      // Clear quality check
+      setQualityCheck(null);
     },
     [
-      processingOptions.aiEnhance,
-      processingOptions.autoCrop,
-      processingOptions.strictQuality,
+      processingOptions,
       showMessage,
       toast,
+      uploadQueue.length
     ]
   );
 
@@ -621,19 +647,20 @@ const Phone: React.FC = () => {
     canvas.toBlob(
       async (blob: Blob | null) => {
         if (blob) {
-          const url = URL.createObjectURL(blob);
-          setPreviewImage(url);
+          // NOTE: We do NOT set previewImage here to allow continuous capture
+          // setPreviewImage(url);
 
-          // Check quality before uploading
-          const quality = await checkImageQuality(blob);
-          if (
-            quality === null &&
-            validateQuality &&
-            qualityCheck &&
-            !qualityCheck.quality.overall_acceptable
-          ) {
-            setPreviewImage(null);
-            return;
+          // Check quality before uploading (optional - could be skipped for speed)
+          if (validateQuality) {
+            const quality = await checkImageQuality(blob);
+            if (
+              quality === null &&
+              qualityCheck &&
+              !qualityCheck.quality.overall_acceptable
+            ) {
+              // If quality check failed and user cancelled, stop.
+              return;
+            }
           }
 
           uploadImage(blob, `capture_${Date.now()}.jpg`);
@@ -745,6 +772,27 @@ const Phone: React.FC = () => {
             {connected ? 'Connected to processing hub' : 'Link offline'}
           </Text>
         </Flex>
+        
+        {/* Queue Indicator */}
+        {(uploadQueue.length > 0 || isProcessingQueue) && (
+          <Flex
+            align="center"
+            gap={2}
+            bg="blue.500"
+            color="white"
+            borderRadius="full"
+            px={4}
+            py={2}
+            boxShadow="0 0 12px rgba(66, 153, 225, 0.6)"
+            animation="pulse 2s infinite"
+          >
+            <Spinner size="xs" />
+            <Text fontWeight="bold" fontSize="sm">
+              Processing: {uploadQueue.length + (isProcessingQueue ? 1 : 0)}
+            </Text>
+          </Flex>
+        )}
+      </Flex>
       </Flex>
 
       {message && (
