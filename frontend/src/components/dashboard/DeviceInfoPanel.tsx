@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -87,6 +87,24 @@ interface SystemInfo {
   driver_suggestions: DriverSuggestion[];
 }
 
+interface PrintJobInfo {
+  id: string;
+  document?: string;
+  owner?: string;
+  status?: string;
+  submitted?: string;
+  totalPages?: number | null;
+  pagesPrinted?: number | null;
+  sizeBytes?: number | null;
+}
+
+interface PrinterQueueSnapshot {
+  name: string;
+  status: string;
+  isDefault: boolean;
+  jobs: PrintJobInfo[];
+}
+
 export const DeviceInfoPanel: React.FC = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
@@ -95,6 +113,10 @@ export const DeviceInfoPanel: React.FC = () => {
   const [defaultPrinter, setDefaultPrinter] = useState<string>('');
   const [settingDefault, setSettingDefault] = useState(false);
   const [clearingQueue, setClearingQueue] = useState(false);
+  const [printerQueues, setPrinterQueues] = useState<PrinterQueueSnapshot[]>([]);
+  const [queuesLoading, setQueuesLoading] = useState(false);
+  const [queueError, setQueueError] = useState<string | null>(null);
+  const [terminatingJobId, setTerminatingJobId] = useState<string | null>(null);
   const toast = useToast();
 
   // Consistent styling with SurfaceCard
@@ -121,6 +143,20 @@ export const DeviceInfoPanel: React.FC = () => {
     }
   }, []);
 
+  const fetchPrinterQueues = useCallback(async () => {
+    setQueuesLoading(true);
+    setQueueError(null);
+    try {
+      const { data } = await apiClient.get(API_ENDPOINTS.printerQueues);
+      setPrinterQueues(data?.printers || []);
+    } catch (err: any) {
+      console.error('Failed to fetch printer queues', err);
+      setQueueError(err.response?.data?.error || err.message || 'Failed to fetch printer queues');
+    } finally {
+      setQueuesLoading(false);
+    }
+  }, []);
+
   const handleSetDefaultPrinter = useCallback(async (printerName: string) => {
     setSettingDefault(true);
     setError(null);
@@ -144,9 +180,22 @@ export const DeviceInfoPanel: React.FC = () => {
     }
   }, [systemInfo]);
 
-  useEffect(() => {
+  const refreshSystemStatus = useCallback(() => {
     fetchSystemInfo();
-  }, [fetchSystemInfo]);
+    fetchPrinterQueues();
+  }, [fetchSystemInfo, fetchPrinterQueues]);
+
+  useEffect(() => {
+    refreshSystemStatus();
+  }, [refreshSystemStatus]);
+
+  const queueByPrinter = useMemo(() => {
+    const map = new Map<string, PrinterQueueSnapshot>();
+    printerQueues.forEach((printer) => {
+      map.set(printer.name, printer);
+    });
+    return map;
+  }, [printerQueues]);
 
   const handleClearPrintQueue = useCallback(async () => {
     setClearingQueue(true);
@@ -159,6 +208,7 @@ export const DeviceInfoPanel: React.FC = () => {
         duration: 3000,
         isClosable: true,
       });
+      fetchPrinterQueues();
     } catch (err: any) {
       const message = err.response?.data?.error || err.message || 'Failed to clear printing queue';
       toast({
@@ -172,7 +222,39 @@ export const DeviceInfoPanel: React.FC = () => {
     } finally {
       setClearingQueue(false);
     }
-  }, [toast]);
+  }, [toast, fetchPrinterQueues]);
+
+  const handleTerminateJob = useCallback(
+    async (printerName: string, jobId: string) => {
+      const key = `${printerName}_${jobId}`;
+      setTerminatingJobId(key);
+      try {
+        await apiClient.post(API_ENDPOINTS.printerCancelJob, {
+          printer_name: printerName,
+          job_id: jobId,
+        });
+        toast({
+          title: 'Print job terminated',
+          status: 'success',
+          duration: 2000,
+          isClosable: true,
+        });
+        fetchPrinterQueues();
+      } catch (err: any) {
+        const description = err.response?.data?.error || err.message || 'Failed to terminate job';
+        toast({
+          title: 'Unable to terminate job',
+          description,
+          status: 'error',
+          duration: 4000,
+          isClosable: true,
+        });
+      } finally {
+        setTerminatingJobId(null);
+      }
+    },
+    [toast, fetchPrinterQueues]
+  );
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -249,7 +331,7 @@ export const DeviceInfoPanel: React.FC = () => {
                   variant="ghost"
                   color={textMuted}
                   _hover={{ color: 'brand.400', bg: 'rgba(121, 95, 238, 0.1)' }}
-                  onClick={fetchSystemInfo}
+                  onClick={refreshSystemStatus}
                   isLoading={loading}
                 />
               </Tooltip>
@@ -301,42 +383,118 @@ export const DeviceInfoPanel: React.FC = () => {
                   {systemInfo.printers.available ? (
                     <RadioGroup value={defaultPrinter} onChange={(value) => handleSetDefaultPrinter(value)}>
                       <VStack align="stretch" spacing={3}>
-                        {systemInfo.printers.list.map((printer, idx) => (
-                          <Box
-                            key={idx}
-                            bg={useColorModeValue('white', 'rgba(255,255,255,0.03)')}
-                            px={4}
-                            py={3}
-                            borderRadius="lg"
-                            border="1.5px solid"
-                            borderColor={defaultPrinter === printer.name ? 'brand.400' : borderColor}
-                            cursor="pointer"
-                            transition="all 0.2s"
-                            _hover={{ borderColor: 'brand.400', boxShadow: `0 0 0 2px rgba(121, 95, 238, 0.1)` }}
-                          >
-                            <Flex align="center" justify="space-between" gap={3}>
-                              <Radio value={printer.name} isDisabled={settingDefault} />
-                              <VStack align="start" spacing={0.5} flex={1}>
-                                <Text fontSize="sm" fontWeight="600">
-                                  {printer.name}
-                                </Text>
-                                <Text fontSize="xs" color={textMuted}>
-                                  {printer.driver}
-                                </Text>
-                              </VStack>
-                              <HStack spacing={2}>
-                                <Tag size="sm" colorScheme={getStatusColor(printer.status)} variant="subtle">
-                                  {printer.status}
-                                </Tag>
-                                {defaultPrinter === printer.name && (
-                                  <Tag size="sm" colorScheme="brand" variant="solid" fontSize="11px">
-                                    ACTIVE
+                        {systemInfo.printers.list.map((printer, idx) => {
+                          const queue = queueByPrinter.get(printer.name);
+                          const jobCount = queue?.jobs?.length || 0;
+                          return (
+                            <Box
+                              key={idx}
+                              bg={useColorModeValue('white', 'rgba(255,255,255,0.03)')}
+                              px={4}
+                              py={3}
+                              borderRadius="lg"
+                              border="1.5px solid"
+                              borderColor={defaultPrinter === printer.name ? 'brand.400' : borderColor}
+                              cursor="pointer"
+                              transition="all 0.2s"
+                              _hover={{ borderColor: 'brand.400', boxShadow: `0 0 0 2px rgba(121, 95, 238, 0.1)` }}
+                            >
+                              <Flex align="center" justify="space-between" gap={3}>
+                                <Radio value={printer.name} isDisabled={settingDefault} />
+                                <VStack align="start" spacing={0.5} flex={1}>
+                                  <Text fontSize="sm" fontWeight="600">
+                                    {printer.name}
+                                  </Text>
+                                  <Text fontSize="xs" color={textMuted}>
+                                    {printer.driver}
+                                  </Text>
+                                </VStack>
+                                <HStack spacing={2}>
+                                  <Tag size="sm" colorScheme={getStatusColor(queue?.status || printer.status)} variant="subtle">
+                                    {queue?.status || printer.status}
                                   </Tag>
+                                  <Tag size="sm" colorScheme={jobCount > 0 ? 'purple' : 'gray'} variant="subtle">
+                                    {jobCount} in queue
+                                  </Tag>
+                                  {defaultPrinter === printer.name && (
+                                    <Tag size="sm" colorScheme="brand" variant="solid" fontSize="11px">
+                                      ACTIVE
+                                    </Tag>
+                                  )}
+                                </HStack>
+                              </Flex>
+
+                              <Box mt={3} pl={6}>
+                                {queuesLoading && !queue ? (
+                                  <HStack spacing={2} color={textMuted}>
+                                    <Spinner size="xs" />
+                                    <Text fontSize="xs">Loading queue…</Text>
+                                  </HStack>
+                                ) : jobCount === 0 ? (
+                                  <Text fontSize="xs" color={textMuted} fontStyle="italic">
+                                    No pending jobs.
+                                  </Text>
+                                ) : (
+                                  <Stack spacing={2}>
+                                    {queue?.jobs?.map((job) => {
+                                      const terminateKey = `${printer.name}_${job.id}`;
+                                      const submittedLabel = job.submitted
+                                        ? Number.isNaN(Date.parse(job.submitted))
+                                          ? job.submitted
+                                          : new Date(job.submitted).toLocaleString()
+                                        : null;
+                                      return (
+                                        <Flex
+                                          key={terminateKey}
+                                          justify="space-between"
+                                          align={{ base: 'flex-start', md: 'center' }}
+                                          gap={3}
+                                          direction={{ base: 'column', md: 'row' }}
+                                          p={2}
+                                          border="1px solid"
+                                          borderColor={borderColor}
+                                          borderRadius="md"
+                                          bg={useColorModeValue('gray.50', 'rgba(255,255,255,0.04)')}
+                                        >
+                                          <Box flex={1}>
+                                            <Text fontSize="sm" fontWeight="600">
+                                              {job.document || `Job #${job.id}`}
+                                            </Text>
+                                            <Text fontSize="xs" color={textMuted}>
+                                              {job.owner} • {job.status || 'pending'}
+                                            </Text>
+                                            {submittedLabel && (
+                                              <Text fontSize="xs" color={textMuted}>
+                                                {submittedLabel}
+                                              </Text>
+                                            )}
+                                          </Box>
+                                          <Button
+                                            size="xs"
+                                            colorScheme="red"
+                                            variant="ghost"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleTerminateJob(printer.name, String(job.id));
+                                            }}
+                                            isLoading={terminatingJobId === terminateKey}
+                                          >
+                                            Terminate
+                                          </Button>
+                                        </Flex>
+                                      );
+                                    })}
+                                  </Stack>
                                 )}
-                              </HStack>
-                            </Flex>
-                          </Box>
-                        ))}
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                        {queueError && (
+                          <Text fontSize="xs" color="red.400">
+                            {queueError}
+                          </Text>
+                        )}
                       </VStack>
                     </RadioGroup>
                   ) : (

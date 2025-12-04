@@ -118,6 +118,8 @@ export const API_ENDPOINTS = {
   ocr: '/ocr',
   print: '/print',
   printerClearQueue: '/printer/clear-queue',
+  printerQueues: '/printer/queues',
+  printerCancelJob: '/printer/cancel-job',
   processingStatus: '/processing-status',
 
   // Advanced processing endpoints

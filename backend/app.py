@@ -7,6 +7,7 @@ import traceback
 import uuid
 from datetime import datetime
 import io
+import json
 
 import cv2
 import numpy as np
@@ -264,6 +265,232 @@ try:
             logger.warning(f"[WARN] GPU initialization warning: {e}")
             
 except ImportError:
+
+    def _normalize_printer_status(code: int) -> str:
+        status_map = {
+            0: "ready",
+            1: "paused",
+            2: "error",
+            3: "pending deletion",
+            4: "paper jam",
+            5: "paper out",
+            6: "manual feed",
+            7: "paper problem",
+            8: "offline",
+            9: "io active",
+            10: "busy",
+            11: "printing",
+            12: "output bin full",
+            13: "not available",
+            14: "waiting",
+            15: "processing",
+            16: "initializing",
+            17: "warming up",
+            18: "toner low",
+            19: "no toner",
+            20: "page punt",
+            21: "user intervention",
+            22: "out of memory",
+            23: "door open",
+            24: "server unknown",
+            25: "power save",
+        }
+        return status_map.get(int(code) if code is not None else -1, "unknown")
+
+
+    def _fetch_windows_printer_queues():
+        script = r"
+    $printers = Get-Printer | Sort-Object -Property Name
+    $result = @()
+    foreach ($printer in $printers) {
+        $jobs = @()
+        try {
+            $jobs = Get-PrintJob -PrinterName $printer.Name -ErrorAction Stop | ForEach-Object {
+                [PSCustomObject]@{
+                    id = $_.Id
+                    document = $_.DocumentName
+                    owner = $_.UserName
+                    status = ($_.JobStatus -join ',')
+                    submitted = $_.TimeSubmitted.ToString('o')
+                    totalPages = $_.TotalPages
+                    pagesPrinted = $_.PagesPrinted
+                    sizeBytes = $_.Size
+                }
+            }
+        } catch {}
+        $result += [PSCustomObject]@{
+            name = $printer.Name
+            status = $printer.PrinterStatus
+            isDefault = $printer.Default
+            jobs = $jobs
+        }
+    }
+    $result | ConvertTo-Json -Depth 6
+    ".strip()
+
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            timeout=40,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Failed to query printers")
+
+        output = result.stdout.strip() or "[]"
+        return json.loads(output)
+
+
+    def _fetch_cups_printer_queues():
+        printers = {}
+
+        printers_result = subprocess.run(
+            ["lpstat", "-p"], capture_output=True, text=True, timeout=15
+        )
+        if printers_result.returncode == 0:
+            for line in printers_result.stdout.splitlines():
+                parts = line.split()
+                if len(parts) >= 3 and parts[0] == "printer":
+                    name = parts[1]
+                    status_fragment = " ".join(parts[3:]).strip()
+                    status = status_fragment.split(".")[0] if status_fragment else "unknown"
+                    printers[name] = {
+                        "name": name,
+                        "status": status,
+                        "isDefault": False,
+                        "jobs": [],
+                    }
+
+        jobs_result = subprocess.run(
+            ["lpstat", "-W", "not-completed", "-o"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if jobs_result.returncode == 0:
+            for line in jobs_result.stdout.splitlines():
+                parts = line.split()
+                if not parts:
+                    continue
+                job_id = parts[0]
+                printer_name = job_id.split("-", 1)[0]
+                owner = parts[1] if len(parts) > 1 else "unknown"
+                submitted = " ".join(parts[2:]) if len(parts) > 2 else ""
+                job = {
+                    "id": job_id,
+                    "document": job_id,
+                    "owner": owner,
+                    "status": "pending",
+                    "submitted": submitted,
+                    "totalPages": None,
+                    "pagesPrinted": None,
+                    "sizeBytes": None,
+                }
+                printers.setdefault(
+                    printer_name,
+                    {
+                        "name": printer_name,
+                        "status": "unknown",
+                        "isDefault": False,
+                        "jobs": [],
+                    },
+                )
+                printers[printer_name]["jobs"].append(job)
+
+        return list(printers.values())
+
+
+    def get_printer_queue_snapshot():
+        if sys.platform.startswith("win"):
+            raw_printers = _fetch_windows_printer_queues()
+            result = []
+            for printer in raw_printers:
+                jobs = printer.get("jobs", []) or []
+                result.append(
+                    {
+                        "name": printer.get("name"),
+                        "status": _normalize_printer_status(printer.get("status")),
+                        "isDefault": printer.get("isDefault", False),
+                        "jobs": [
+                            {
+                                "id": job.get("id"),
+                                "document": job.get("document"),
+                                "owner": job.get("owner"),
+                                "status": job.get("status") or "in queue",
+                                "submitted": job.get("submitted"),
+                                "pagesPrinted": job.get("pagesPrinted"),
+                                "totalPages": job.get("totalPages"),
+                                "sizeBytes": job.get("sizeBytes"),
+                            }
+                            for job in jobs
+                        ],
+                    }
+                )
+            return result
+
+        return _fetch_cups_printer_queues()
+
+
+    def cancel_printer_job(printer_name: str, job_id: str):
+        if not printer_name or not job_id:
+            raise ValueError("printer_name and job_id required")
+
+        if sys.platform.startswith("win"):
+            script = f"Remove-PrintJob -PrinterName \"{printer_name}\" -ID {job_id} -ErrorAction Stop"
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", script],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip() or "Failed to cancel job")
+            return
+
+        job_identifier = job_id if "-" in job_id else f"{printer_name}-{job_id}"
+        result = subprocess.run(
+            ["cancel", job_identifier], capture_output=True, text=True, timeout=15
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "Failed to cancel job")
+
+
+    @app.route("/printer/queues", methods=["GET"])
+    def list_printer_queues():
+        try:
+            data = get_printer_queue_snapshot()
+            return jsonify({"printers": data, "count": len(data)})
+        except FileNotFoundError:
+            return (
+                jsonify(
+                    {
+                        "status": "error",
+                        "error": "Printing tools not available on this system",
+                    }
+                ),
+                500,
+            )
+        except Exception as exc:
+            logger.exception("[Printer] Failed to list queues")
+            return jsonify({"status": "error", "error": str(exc)}), 500
+
+
+    @app.route("/printer/cancel-job", methods=["POST"])
+    def printer_cancel_job():
+        payload = request.get_json(silent=True) or {}
+        printer_name = payload.get("printer_name")
+        job_id = payload.get("job_id")
+
+        try:
+            cancel_printer_job(printer_name, job_id)
+            return jsonify({"status": "success", "message": "Job terminated"})
+        except ValueError as exc:
+            return jsonify({"status": "error", "error": str(exc)}), 400
+        except Exception as exc:
+            logger.exception("[Printer] Failed to cancel job")
+            return jsonify({"status": "error", "error": str(exc)}), 500
+
+
     logger.error("[ERROR] PyTorch not installed - GPU detection unavailable")
 except Exception as e:
     logger.error(f"[ERROR] GPU detection failed: {e}")
