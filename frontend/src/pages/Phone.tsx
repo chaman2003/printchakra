@@ -102,6 +102,7 @@ const Phone: React.FC = () => {
   const isCapturingRef = useRef<boolean>(false);
   const stableFrameCountRef = useRef<number>(0);
   const comparisonCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureCooldownRef = useRef<boolean>(false);
 
   // Theme values with insane visual enhancements
   const panelBg = useColorModeValue('whiteAlpha.900', 'rgba(12, 16, 35, 0.95)');
@@ -341,14 +342,9 @@ const Phone: React.FC = () => {
       return newCount;
     });
 
-    toast({
-      title: '📸 Added to Queue',
-      description: 'Processing in background...',
-      status: 'info',
-      duration: 1000,
-      position: 'top',
-    });
-  }, [toast]);
+    // Toast removed to prevent re-renders during rapid capture
+    console.log(`📸 Queued: ${filename}`);
+  }, []);
 
   // Background capture without freezing camera
   const captureInBackground = useCallback(async () => {
@@ -428,7 +424,7 @@ const Phone: React.FC = () => {
     
     autoCaptureIntervalRef.current = setInterval(() => {
       try {
-        if (isCapturingRef.current || !videoRef.current) return;
+        if (isCapturingRef.current || captureCooldownRef.current || !videoRef.current) return;
         
         // Check if video stream is still active
         const video = videoRef.current;
@@ -454,12 +450,14 @@ const Phone: React.FC = () => {
               stableFrameCountRef.current++;
               setFrameChangeStatus('detecting');
               
-              if (stableFrameCountRef.current >= 3) {
-                // Stable for 1.5 seconds - capture first document
+              if (stableFrameCountRef.current >= 2) {
+                // Stable for 1 second - capture first document
                 console.log('📷 First document stable - capturing...');
                 captureInBackgroundRef.current?.();
-                // Reset stability counter after capture to prevent double capture
+                // Reset stability counter and start cooldown
                 stableFrameCountRef.current = 0;
+                captureCooldownRef.current = true;
+                setTimeout(() => { captureCooldownRef.current = false; }, 1500);
               }
             } else {
               // Frame changed, reset stability counter
@@ -489,12 +487,14 @@ const Phone: React.FC = () => {
             stableFrameCountRef.current++;
             setFrameChangeStatus('ready');
             
-            if (stableFrameCountRef.current >= 3) {
+            if (stableFrameCountRef.current >= 2) {
               // New stable document - capture it!
               console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
               captureInBackgroundRef.current?.();
-              // Reset stability counter after capture
+              // Reset stability counter and start cooldown
               stableFrameCountRef.current = 0;
+              captureCooldownRef.current = true;
+              setTimeout(() => { captureCooldownRef.current = false; }, 1500);
             }
           } else {
             // Document still moving
