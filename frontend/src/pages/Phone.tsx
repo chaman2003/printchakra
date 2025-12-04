@@ -232,10 +232,14 @@ const Phone: React.FC = () => {
     }
   };
 
+  // Ref to track auto capture count without triggering re-renders/dependency changes
+  const autoCaptureCountRef = useRef(0);
+
   // Start continuous auto-capture mode with frame comparison
   const startAutoCapture = () => {
     setAutoCapture(true);
     setAutoCaptureCount(0);
+    autoCaptureCountRef.current = 0;
     lastCapturedImageDataRef.current = null;
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
@@ -264,15 +268,15 @@ const Phone: React.FC = () => {
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
     
-    if (autoCaptureCount > 0) {
+    if (autoCaptureCountRef.current > 0) {
       toast({
         title: 'Auto-Capture Stopped',
-        description: `Captured ${autoCaptureCount} document(s)`,
+        description: `Captured ${autoCaptureCountRef.current} document(s)`,
         status: 'success',
         duration: 3000,
       });
     }
-  }, [autoCaptureCount, toast]);
+  }, [toast]);
 
   // Process upload queue
   useEffect(() => {
@@ -331,7 +335,11 @@ const Phone: React.FC = () => {
       options: optionsSnapshot
     }]);
 
-    setAutoCaptureCount(prev => prev + 1);
+    setAutoCaptureCount(prev => {
+      const newCount = prev + 1;
+      autoCaptureCountRef.current = newCount;
+      return newCount;
+    });
 
     toast({
       title: '📸 Added to Queue',
@@ -617,13 +625,12 @@ const Phone: React.FC = () => {
       });
       
       // Show additional message about checking dashboard
-      if (uploadQueue.length === 0) {
-        setTimeout(() => {
-          showMessage(
-            '📊 Processing in background... Check Dashboard for results.'
-          );
-        }, 1500);
-      }
+      // Removed queue length check to avoid dependency on uploadQueue.length
+      setTimeout(() => {
+        showMessage(
+          '📊 Processing in background... Check Dashboard for results.'
+        );
+      }, 1500);
 
       // Clear quality check
       setQualityCheck(null);
@@ -631,8 +638,7 @@ const Phone: React.FC = () => {
     [
       processingOptions,
       showMessage,
-      toast,
-      uploadQueue.length
+      toast
     ]
   );
 
@@ -733,14 +739,14 @@ const Phone: React.FC = () => {
     return () => {
       socket.off('capture_now');
       // Do NOT stop camera here, as this effect re-runs when uploadQueue changes
-      stopAutoCapture();
+      // stopAutoCapture(); // Removed to prevent stopping auto-capture on queue updates
     };
   }, [
     socket,
     captureFromCamera,
     captureMode,
     showMessage,
-    stopAutoCapture,
+    // stopAutoCapture, // Removed from dependency to prevent re-runs
     stream,
   ]);
 
@@ -749,6 +755,10 @@ const Phone: React.FC = () => {
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
+      }
+      // Ensure auto-capture stops when component unmounts
+      if (autoCaptureIntervalRef.current) {
+        clearInterval(autoCaptureIntervalRef.current);
       }
     };
   }, [stream]);
