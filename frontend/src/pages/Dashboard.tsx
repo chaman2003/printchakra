@@ -1877,30 +1877,49 @@ const Dashboard: React.FC = () => {
   const printBlankPageForScan = async () => {
     setIsPrintingBlank(true);
     try {
-      // First ensure blank.pdf exists via test endpoint
-      await apiClient.post('/print', { type: 'test' });
-      
-      // Then print the blank page
-      const response = await apiClient.post('/connection/validate-printer', { 
-        testPrint: true,
-        timestamp: Date.now()
-      });
+      // Use the /print endpoint with type: "blank" - this prints blank.pdf and triggers capture
+      const response = await apiClient.post('/print', { type: 'blank' });
 
-      if (response.data.connected && response.data.testPrintSent) {
+      if (response.data.status === 'success') {
         setBlankPagePrinted(true);
         toast({
           title: 'Blank Page Sent to Printer',
-          description: 'Place your document on the printed page for scanning',
+          description: 'Place your document on the printed blank page for photo capture',
           status: 'success',
           duration: 5000,
         });
       } else {
-        toast({
-          title: 'Print Issue',
-          description: response.data.message || 'Could not print blank page',
-          status: 'warning',
-          duration: 5000,
-        });
+        // If blank.pdf doesn't exist, try to create it first
+        if (response.data.message?.includes('not found')) {
+          // First ensure blank.pdf exists
+          await apiClient.post('/print', { type: 'test' });
+          // Then try printing again
+          const retryResponse = await apiClient.post('/print', { type: 'blank' });
+          
+          if (retryResponse.data.status === 'success') {
+            setBlankPagePrinted(true);
+            toast({
+              title: 'Blank Page Sent to Printer',
+              description: 'Place your document on the printed blank page for photo capture',
+              status: 'success',
+              duration: 5000,
+            });
+          } else {
+            toast({
+              title: 'Print Issue',
+              description: retryResponse.data.message || 'Could not print blank page',
+              status: 'warning',
+              duration: 5000,
+            });
+          }
+        } else {
+          toast({
+            title: 'Print Issue',
+            description: response.data.message || 'Could not print blank page',
+            status: 'warning',
+            duration: 5000,
+          });
+        }
       }
     } catch (err: any) {
       toast({

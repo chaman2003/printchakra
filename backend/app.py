@@ -3716,59 +3716,99 @@ def validate_printer_connection():
             
             printer_model = printer_name
             
-            # If test print is requested, print blank.pdf or test text file
+            # If test print is requested, print blank.pdf (actual blank page)
             if test_print:
-                # Path to blank.pdf and test text in public folder
-                blank_pdf_path = os.path.join(os.path.dirname(__file__), 'public', 'blank.pdf')
-                test_text_path = os.path.join(os.path.dirname(__file__), 'public', 'test_print.txt')
+                # Path to blank.pdf in print_scripts folder (actual blank PDF page)
+                blank_pdf_path = os.path.join(PRINT_DIR, "blank.pdf")
                 
-                # Create test text file if it doesn't exist (completely blank page)
-                if not os.path.exists(test_text_path):
-                    try:
-                        # Create a completely blank file (no content)
-                        test_content = ""
-                        with open(test_text_path, 'w') as f:
-                            f.write(test_content)
-                        logger.info(f"[OK] Created blank test file at {test_text_path}")
-                    except Exception as e:
-                        logger.warning(f"[WARNING] Could not create test file: {e}")
+                # Fallback to public folder if not in print_scripts
+                if not os.path.exists(blank_pdf_path):
+                    blank_pdf_path = os.path.join(os.path.dirname(__file__), 'public', 'blank.pdf')
                 
-                if not os.path.exists(blank_pdf_path) and not os.path.exists(test_text_path):
+                if not os.path.exists(blank_pdf_path):
                     return jsonify({
                         "connected": False,
-                        "message": "[ERROR] No test files available (blank.pdf or test_print.txt)"
+                        "message": "[ERROR] blank.pdf not found. Cannot print blank page."
                     }), 200
                 
-                # Use text file if available (more reliable), fallback to PDF
-                test_file_path = test_text_path if os.path.exists(test_text_path) else blank_pdf_path
-                
-                # Use Notepad to print (most reliable for Windows printers)
+                # Print using multiple methods for reliability
                 print_success = False
                 print_error_msg = ""
                 
                 try:
                     import subprocess
+                    import win32api
                     
-                    # Use Notepad to print - it handles all printer types well
-                    escaped_path = test_file_path.replace("\\", "\\\\")
-                    cmd = f'notepad.exe /p "{escaped_path}"'
+                    logger.info(f"[INFO] Attempting to print blank page: {blank_pdf_path}")
                     
-                    result = subprocess.run(
-                        cmd,
-                        shell=True,
-                        capture_output=True,
-                        text=True,
-                        timeout=15
-                    )
-                    
-                    # Notepad doesn't return clear exit codes, but if no exception it usually works
-                    print_success = True
-                    printer_ready = True
-                    logger.info(f"[OK] Test print sent to {printer_name} via Notepad")
+                    # Method 1: Use win32api ShellExecute with "print" verb (most reliable for PDFs)
+                    try:
+                        win32api.ShellExecute(
+                            0,           # handle to parent window
+                            "print",     # operation - "print" uses default printer
+                            blank_pdf_path,  # file to print
+                            None,        # parameters (not needed for print)
+                            os.path.dirname(blank_pdf_path),  # working directory
+                            0            # show command (0 = hide)
+                        )
+                        print_success = True
+                        printer_ready = True
+                        logger.info(f"[OK] Blank page sent to {printer_name} via ShellExecute print")
+                    except Exception as shell_err:
+                        logger.warning(f"[WARNING] ShellExecute print failed: {shell_err}")
+                        
+                        # Method 2: PowerShell with Start-Process PrintTo
+                        try:
+                            escaped_path = blank_pdf_path.replace("\\", "\\\\")
+                            escaped_printer = printer_name.replace("\\", "\\\\")
+                            ps_cmd = f'Start-Process -FilePath "{escaped_path}" -Verb PrintTo -ArgumentList \\"{escaped_printer}\\" -WindowStyle Hidden'
+                            
+                            result = subprocess.run(
+                                ["powershell", "-Command", ps_cmd],
+                                capture_output=True,
+                                text=True,
+                                timeout=30
+                            )
+                            
+                            if result.returncode == 0:
+                                print_success = True
+                                printer_ready = True
+                                logger.info(f"[OK] Blank page sent to {printer_name} via PowerShell")
+                            else:
+                                logger.warning(f"[WARNING] PowerShell print returned: {result.stderr}")
+                        except Exception as ps_err:
+                            logger.warning(f"[WARNING] PowerShell print failed: {ps_err}")
+                            
+                            # Method 3: Direct print using SumatraPDF if available (silent print)
+                            sumatra_paths = [
+                                r"C:\Program Files\SumatraPDF\SumatraPDF.exe",
+                                r"C:\Program Files (x86)\SumatraPDF\SumatraPDF.exe",
+                                os.path.expanduser(r"~\AppData\Local\SumatraPDF\SumatraPDF.exe")
+                            ]
+                            
+                            for sumatra_path in sumatra_paths:
+                                if os.path.exists(sumatra_path):
+                                    try:
+                                        # SumatraPDF silent print: -print-to "printer" file.pdf
+                                        subprocess.run(
+                                            [sumatra_path, "-print-to", printer_name, blank_pdf_path],
+                                            capture_output=True,
+                                            timeout=30
+                                        )
+                                        print_success = True
+                                        printer_ready = True
+                                        logger.info(f"[OK] Blank page sent to {printer_name} via SumatraPDF")
+                                        break
+                                    except Exception as sumatra_err:
+                                        logger.warning(f"[WARNING] SumatraPDF print failed: {sumatra_err}")
+                            
+                            if not print_success:
+                                print_error_msg = "Could not print blank page. Please ensure a PDF viewer is installed."
+                                printer_ready = True  # Printer exists but print failed
                         
                 except Exception as print_err:
                     print_error_msg = str(print_err)
-                    logger.error(f"[ERROR] Notepad print failed: {print_err}")
+                    logger.error(f"[ERROR] Print failed: {print_err}")
                     printer_ready = True  # Still mark as ready since printer exists
             else:
                 # No test print requested, just check printer exists
