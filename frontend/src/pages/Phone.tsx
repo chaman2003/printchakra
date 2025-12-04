@@ -450,6 +450,8 @@ const Phone: React.FC = () => {
                 // Stable for 1.5 seconds - capture first document
                 console.log('📷 First document stable - capturing...');
                 captureInBackgroundRef.current?.();
+                // Reset stability counter after capture to prevent double capture
+                stableFrameCountRef.current = 0;
               }
             } else {
               // Frame changed, reset stability counter
@@ -483,6 +485,8 @@ const Phone: React.FC = () => {
               // New stable document - capture it!
               console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
               captureInBackgroundRef.current?.();
+              // Reset stability counter after capture
+              stableFrameCountRef.current = 0;
             }
           } else {
             // Document still moving
