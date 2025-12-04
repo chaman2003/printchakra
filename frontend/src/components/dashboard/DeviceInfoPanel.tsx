@@ -241,17 +241,6 @@ export const DeviceInfoPanel: React.FC = () => {
               )}
             </HStack>
             <HStack spacing={2}>
-              <Tooltip label="Clear printing queue" placement="top">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  leftIcon={<Iconify icon={FiPrinter} boxSize={4} />}
-                  onClick={handleClearPrintQueue}
-                  isLoading={clearingQueue}
-                >
-                  Clear Queue
-                </Button>
-              </Tooltip>
               <Tooltip label="Refresh" placement="top">
                 <IconButton
                   aria-label="Refresh"
@@ -287,12 +276,27 @@ export const DeviceInfoPanel: React.FC = () => {
                   border="1px solid"
                   borderColor={borderColor}
                 >
-                  <HStack mb={4} spacing={3}>
-                    <Iconify icon={FiPrinter} boxSize={5} color="brand.400" />
-                    <Text fontWeight="700" fontSize="sm" textTransform="uppercase" letterSpacing="wider" color="brand.400">
-                      Printers & Default Selection
-                    </Text>
-                  </HStack>
+                  <Flex mb={4} align="center" gap={3}>
+                    <HStack spacing={3}>
+                      <Iconify icon={FiPrinter} boxSize={5} color="brand.400" />
+                      <Text fontWeight="700" fontSize="sm" textTransform="uppercase" letterSpacing="wider" color="brand.400">
+                        Printers & Default Selection
+                      </Text>
+                    </HStack>
+                    <Box flex="1" />
+                    <Tooltip label="Clear printing queue" placement="top">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        colorScheme="pink"
+                        leftIcon={<Iconify icon={FiPrinter} boxSize={4} />}
+                        onClick={handleClearPrintQueue}
+                        isLoading={clearingQueue}
+                      >
+                        Clear Queue
+                      </Button>
+                    </Tooltip>
+                  </Flex>
 
                   {systemInfo.printers.available ? (
                     <RadioGroup value={defaultPrinter} onChange={(value) => handleSetDefaultPrinter(value)}>
