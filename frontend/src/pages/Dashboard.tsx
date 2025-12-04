@@ -561,6 +561,10 @@ const Dashboard: React.FC = () => {
   const orchestrateModal = useDisclosure();
   const documentSelectorModal = useDisclosure(); // Document selector modal
 
+  // Blank page print state for scan workflow
+  const [isPrintingBlank, setIsPrintingBlank] = useState(false);
+  const [blankPagePrinted, setBlankPagePrinted] = useState(false);
+
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
   const [previewControl, setPreviewControl] = useState<PreviewControlState>(() => ({
@@ -1726,6 +1730,7 @@ const Dashboard: React.FC = () => {
     // Reset state
     setOrchestrateStep(1);
     setOrchestrateMode(null);
+    setBlankPagePrinted(false); // Reset blank page state
 
     // If files are selected, auto-select print mode
     if (selectedFiles.length > 0) {
@@ -1865,6 +1870,47 @@ const Dashboard: React.FC = () => {
         description: err.response?.data?.error || err.message,
         status: 'error',
       });
+    }
+  };
+
+  // Print blank page for document placement (scan workflow)
+  const printBlankPageForScan = async () => {
+    setIsPrintingBlank(true);
+    try {
+      // First ensure blank.pdf exists via test endpoint
+      await apiClient.post('/print', { type: 'test' });
+      
+      // Then print the blank page
+      const response = await apiClient.post('/connection/validate-printer', { 
+        testPrint: true,
+        timestamp: Date.now()
+      });
+
+      if (response.data.connected && response.data.testPrintSent) {
+        setBlankPagePrinted(true);
+        toast({
+          title: 'Blank Page Sent to Printer',
+          description: 'Place your document on the printed page for scanning',
+          status: 'success',
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: 'Print Issue',
+          description: response.data.message || 'Could not print blank page',
+          status: 'warning',
+          duration: 5000,
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Print Failed',
+        description: err.response?.data?.message || err.message || 'Could not print blank page',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsPrintingBlank(false);
     }
   };
 
@@ -3194,6 +3240,63 @@ const Dashboard: React.FC = () => {
                         : 'Select Document to Scan'}
                     </Button>
 
+                    {/* Print Blank Page for Document Placement */}
+                    <Box
+                      p="1.25rem"
+                      borderRadius="xl"
+                      border="2px solid"
+                      borderColor={blankPagePrinted ? 'green.400' : 'orange.300'}
+                      bg={blankPagePrinted ? 'rgba(72,187,120,0.08)' : 'rgba(237,137,54,0.08)'}
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: blankPagePrinted ? 'green.500' : 'orange.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
+                    >
+                      <Flex justify="space-between" align="center" gap={4}>
+                        <Box flex="1">
+                          <Heading size="md" mb={2} display="flex" alignItems="center" gap={2}>
+                            <Iconify
+                              icon="solar:printer-bold-duotone"
+                              width={24}
+                              height={24}
+                              color={blankPagePrinted ? 'var(--chakra-colors-green-500)' : 'var(--chakra-colors-orange-400)'}
+                            />
+                            Print Blank Page
+                            {blankPagePrinted && (
+                              <Badge colorScheme="green" fontSize="xs">
+                                ✓ Printed
+                              </Badge>
+                            )}
+                          </Heading>
+                          <Text fontSize="sm" color="text.muted">
+                            Print a blank page to place your document on for photo capture
+                          </Text>
+                        </Box>
+                        <Button
+                          colorScheme={blankPagePrinted ? 'green' : 'orange'}
+                          size="md"
+                          onClick={printBlankPageForScan}
+                          isLoading={isPrintingBlank}
+                          loadingText="Printing..."
+                          leftIcon={
+                            <Iconify 
+                              icon={blankPagePrinted ? 'solar:refresh-bold' : 'solar:printer-bold'} 
+                              width={18} 
+                              height={18} 
+                            />
+                          }
+                          _hover={{
+                            transform: 'translateY(-1px)',
+                            boxShadow: 'md',
+                          }}
+                        >
+                          {blankPagePrinted ? 'Print Again' : 'Print Now'}
+                        </Button>
+                      </Flex>
+                    </Box>
+
                     {/* Select Page Scan Mode */}
                     <Box
                       p="1.25rem"
@@ -3287,25 +3390,32 @@ const Dashboard: React.FC = () => {
                       </Flex>
                     </Box>
 
-                    {/* Page Selection */}
+                    {/* Page Selection / Printable Range */}
                     <Box
-                      p="1rem"
-                      borderRadius="lg"
-                      border="1px solid"
+                      p="1.25rem"
+                      borderRadius="xl"
+                      border="2px solid"
                       borderColor="whiteAlpha.200"
                       bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400', boxShadow: 'md' }}
+                      transition="all 0.3s"
+                      _hover={{
+                        borderColor: 'brand.400',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 'lg',
+                      }}
                     >
-                      <Heading size="sm" mb={3} display="flex" alignItems="center" gap={2}>
+                      <Heading size="md" mb={4} display="flex" alignItems="center" gap={2}>
                         <Iconify
                           icon="solar:documents-bold-duotone"
-                          width={20}
-                          height={20}
+                          width={24}
+                          height={24}
                           color="var(--chakra-colors-brand-500)"
                         />
-                        Page Selection
+                        Page Range Selection
                       </Heading>
+                      <Text fontSize="sm" color="text.muted" mb={4}>
+                        Specify which pages to scan or capture from your document
+                      </Text>
                       <RadioGroup
                         value={orchestrateOptions.scanPageMode}
                         onChange={(value: string) =>
@@ -3315,29 +3425,79 @@ const Dashboard: React.FC = () => {
                           })
                         }
                       >
-                        <Stack spacing={4}>
-                          <Radio value="all" colorScheme="brand" size="lg">
-                            <Text fontWeight="500">All Pages</Text>
-                          </Radio>
-                          <Radio value="odd" colorScheme="brand" size="lg">
-                            <Text fontWeight="500">Odd Pages Only</Text>
-                            <Text fontSize="xs" color="text.muted">
-                              (1, 3, 5...)
-                            </Text>
-                          </Radio>
-                          <Radio value="even" colorScheme="brand" size="lg">
-                            <Text fontWeight="500">Even Pages Only</Text>
-                            <Text fontSize="xs" color="text.muted">
-                              (2, 4, 6...)
-                            </Text>
-                          </Radio>
-                          <Radio value="custom" colorScheme="brand" size="lg">
-                            <Flex direction="column" gap={2} w="full">
-                              <Text fontWeight="500">Custom Page Range</Text>
-                              {orchestrateOptions.scanPageMode === 'custom' && (
+                        <Stack spacing={3}>
+                          <Box
+                            p={3}
+                            borderRadius="lg"
+                            border="1px solid"
+                            borderColor={orchestrateOptions.scanPageMode === 'all' ? 'brand.400' : 'transparent'}
+                            bg={orchestrateOptions.scanPageMode === 'all' ? 'rgba(121,95,238,0.08)' : 'transparent'}
+                            transition="all 0.2s"
+                          >
+                            <Radio value="all" colorScheme="brand" size="lg">
+                              <Flex direction="column">
+                                <Text fontWeight="600">All Pages</Text>
+                                <Text fontSize="xs" color="text.muted">
+                                  Scan every page in the document
+                                </Text>
+                              </Flex>
+                            </Radio>
+                          </Box>
+                          <Box
+                            p={3}
+                            borderRadius="lg"
+                            border="1px solid"
+                            borderColor={orchestrateOptions.scanPageMode === 'odd' ? 'brand.400' : 'transparent'}
+                            bg={orchestrateOptions.scanPageMode === 'odd' ? 'rgba(121,95,238,0.08)' : 'transparent'}
+                            transition="all 0.2s"
+                          >
+                            <Radio value="odd" colorScheme="brand" size="lg">
+                              <Flex direction="column">
+                                <Text fontWeight="600">Odd Pages Only</Text>
+                                <Text fontSize="xs" color="text.muted">
+                                  Pages 1, 3, 5, 7... (front sides for duplex)
+                                </Text>
+                              </Flex>
+                            </Radio>
+                          </Box>
+                          <Box
+                            p={3}
+                            borderRadius="lg"
+                            border="1px solid"
+                            borderColor={orchestrateOptions.scanPageMode === 'even' ? 'brand.400' : 'transparent'}
+                            bg={orchestrateOptions.scanPageMode === 'even' ? 'rgba(121,95,238,0.08)' : 'transparent'}
+                            transition="all 0.2s"
+                          >
+                            <Radio value="even" colorScheme="brand" size="lg">
+                              <Flex direction="column">
+                                <Text fontWeight="600">Even Pages Only</Text>
+                                <Text fontSize="xs" color="text.muted">
+                                  Pages 2, 4, 6, 8... (back sides for duplex)
+                                </Text>
+                              </Flex>
+                            </Radio>
+                          </Box>
+                          <Box
+                            p={3}
+                            borderRadius="lg"
+                            border="1px solid"
+                            borderColor={orchestrateOptions.scanPageMode === 'custom' ? 'brand.400' : 'transparent'}
+                            bg={orchestrateOptions.scanPageMode === 'custom' ? 'rgba(121,95,238,0.08)' : 'transparent'}
+                            transition="all 0.2s"
+                          >
+                            <Radio value="custom" colorScheme="brand" size="lg">
+                              <Flex direction="column" gap={2} w="full">
+                                <Text fontWeight="600">Custom Page Range</Text>
+                                <Text fontSize="xs" color="text.muted">
+                                  Specify exact pages to scan
+                                </Text>
+                              </Flex>
+                            </Radio>
+                            {orchestrateOptions.scanPageMode === 'custom' && (
+                              <Box mt={3} pl={7}>
                                 <Input
                                   size="md"
-                                  placeholder="e.g., 1-5,7,9-12"
+                                  placeholder="e.g., 1-5, 7, 9-12"
                                   value={orchestrateOptions.scanCustomRange}
                                   onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                                     setOrchestrateOptions({
@@ -3353,9 +3513,12 @@ const Dashboard: React.FC = () => {
                                     boxShadow: '0 0 0 3px rgba(121,95,238,0.2)',
                                   }}
                                 />
-                              )}
-                            </Flex>
-                          </Radio>
+                                <Text fontSize="xs" color="text.muted" mt={2}>
+                                  Use commas to separate pages, hyphens for ranges
+                                </Text>
+                              </Box>
+                            )}
+                          </Box>
                         </Stack>
                       </RadioGroup>
                     </Box>
