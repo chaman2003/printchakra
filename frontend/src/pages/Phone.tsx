@@ -728,7 +728,7 @@ const Phone: React.FC = () => {
 
     return () => {
       socket.off('capture_now');
-      stopCamera();
+      // Do NOT stop camera here, as this effect re-runs when uploadQueue changes
       stopAutoCapture();
     };
   }, [
@@ -737,9 +737,17 @@ const Phone: React.FC = () => {
     captureMode,
     showMessage,
     stopAutoCapture,
-    stopCamera,
     stream,
   ]);
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
 
   return (
     <VStack align="stretch" spacing={10} pb={16}>
