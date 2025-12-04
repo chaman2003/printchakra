@@ -15,6 +15,7 @@ import {
   Grid,
   Heading,
   Stack,
+  Spinner,
   Switch,
   Tag,
   Text,
@@ -792,7 +793,6 @@ const Phone: React.FC = () => {
             </Text>
           </Flex>
         )}
-      </Flex>
       </Flex>
 
       {message && (
