@@ -2752,49 +2752,73 @@ def trigger_print():
     try:
         data = request.get_json() if request.is_json else {}
         print_type = data.get("type", "blank")
+        
+        # Check multiple possible locations for blank.pdf
+        possible_blank_paths = [
+            os.path.join(PRINT_DIR, "blank.pdf"),
+            os.path.join(BASE_DIR, "app", "print_scripts", "blank.pdf"),
+            os.path.join(PUBLIC_DIR, "blank.pdf"),
+        ]
+        
+        blank_pdf = None
+        for path in possible_blank_paths:
+            if os.path.exists(path):
+                blank_pdf = path
+                break
 
         if print_type == "test":
-            # Test printer connection
-            test_script = os.path.join(PRINT_DIR, "create_blank_pdf.py")
-            blank_pdf = os.path.join(PRINT_DIR, "blank.pdf")
-
-            # Create blank PDF if it doesn't exist
-            if not os.path.exists(blank_pdf):
-                if os.path.exists(test_script):
-                    subprocess.run(["python", test_script], cwd=PRINT_DIR, check=True)
-
+            # Test printer connection - just verify blank.pdf exists
             return jsonify(
                 {
                     "status": "success",
-                    "message": "Printer test: blank.pdf is ready",
-                    "pdf_exists": os.path.exists(blank_pdf),
+                    "message": "Printer test: blank.pdf is ready" if blank_pdf else "blank.pdf not found",
+                    "pdf_exists": blank_pdf is not None,
+                    "pdf_path": blank_pdf,
                 }
             )
 
         elif print_type == "blank":
-            # Print blank page and trigger phone capture
-            blank_pdf = os.path.join(PRINT_DIR, "blank.pdf")
-
-            if not os.path.exists(blank_pdf):
+            # Print blank page and trigger phone capture (feed documents through printer)
+            if not blank_pdf:
                 return (
                     jsonify(
                         {
                             "status": "error",
-                            "message": "blank.pdf not found. Run test printer first.",
+                            "message": "blank.pdf not found in any location.",
                         }
                     ),
                     404,
                 )
 
-            # Execute print using print-file.py
-            print_script = os.path.join(PRINT_DIR, "print-file.py")
+            # Execute print using print-file.py or direct printing
+            print_script = os.path.join(os.path.dirname(blank_pdf), "print-file.py")
+            
             if os.path.exists(print_script):
                 try:
-                    # Run print script in background
-                    subprocess.Popen(["python", print_script], cwd=PRINT_DIR)
-                    print(f"Print triggered: {blank_pdf}")
+                    # Run print script
+                    subprocess.Popen(["python", print_script], cwd=os.path.dirname(blank_pdf))
+                    print(f"Print triggered via script: {blank_pdf}")
                 except Exception as print_error:
-                    print(f"Print error: {str(print_error)}")
+                    print(f"Print script error: {str(print_error)}")
+            else:
+                # Fallback: Direct print using printer_test approach
+                try:
+                    import win32api
+                    import win32print
+                    
+                    printer_name = win32print.GetDefaultPrinter()
+                    if printer_name:
+                        # Method 1: PowerShell
+                        try:
+                            cmd = f'Start-Process -FilePath "{blank_pdf}" -Verb PrintTo -ArgumentList "{printer_name}" -WindowStyle Hidden'
+                            subprocess.run(["powershell", "-Command", cmd], timeout=30)
+                            print(f"Print triggered via PowerShell: {blank_pdf}")
+                        except:
+                            # Method 2: ShellExecute
+                            win32api.ShellExecute(0, "printto", blank_pdf, f'"{printer_name}"', ".", 0)
+                            print(f"Print triggered via ShellExecute: {blank_pdf}")
+                except Exception as direct_print_error:
+                    print(f"Direct print error: {str(direct_print_error)}")
 
             # Notify phone to capture
             try:
