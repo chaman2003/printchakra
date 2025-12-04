@@ -561,10 +561,6 @@ const Dashboard: React.FC = () => {
   const orchestrateModal = useDisclosure();
   const documentSelectorModal = useDisclosure(); // Document selector modal
 
-  // Blank page print state for scan workflow
-  const [isPrintingBlank, setIsPrintingBlank] = useState(false);
-  const [blankPagePrinted, setBlankPagePrinted] = useState(false);
-
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
   const [previewControl, setPreviewControl] = useState<PreviewControlState>(() => ({
@@ -1730,7 +1726,6 @@ const Dashboard: React.FC = () => {
     // Reset state
     setOrchestrateStep(1);
     setOrchestrateMode(null);
-    setBlankPagePrinted(false); // Reset blank page state
 
     // If files are selected, auto-select print mode
     if (selectedFiles.length > 0) {
@@ -1870,66 +1865,6 @@ const Dashboard: React.FC = () => {
         description: err.response?.data?.error || err.message,
         status: 'error',
       });
-    }
-  };
-
-  // Print blank page for document placement (scan workflow)
-  const printBlankPageForScan = async () => {
-    setIsPrintingBlank(true);
-    try {
-      // Use the /print endpoint with type: "blank" - this prints blank.pdf and triggers capture
-      const response = await apiClient.post('/print', { type: 'blank' });
-
-      if (response.data.status === 'success') {
-        setBlankPagePrinted(true);
-        toast({
-          title: 'Blank Page Sent to Printer',
-          description: 'Place your document on the printed blank page for photo capture',
-          status: 'success',
-          duration: 5000,
-        });
-      } else {
-        // If blank.pdf doesn't exist, try to create it first
-        if (response.data.message?.includes('not found')) {
-          // First ensure blank.pdf exists
-          await apiClient.post('/print', { type: 'test' });
-          // Then try printing again
-          const retryResponse = await apiClient.post('/print', { type: 'blank' });
-          
-          if (retryResponse.data.status === 'success') {
-            setBlankPagePrinted(true);
-            toast({
-              title: 'Blank Page Sent to Printer',
-              description: 'Place your document on the printed blank page for photo capture',
-              status: 'success',
-              duration: 5000,
-            });
-          } else {
-            toast({
-              title: 'Print Issue',
-              description: retryResponse.data.message || 'Could not print blank page',
-              status: 'warning',
-              duration: 5000,
-            });
-          }
-        } else {
-          toast({
-            title: 'Print Issue',
-            description: response.data.message || 'Could not print blank page',
-            status: 'warning',
-            duration: 5000,
-          });
-        }
-      }
-    } catch (err: any) {
-      toast({
-        title: 'Print Failed',
-        description: err.response?.data?.message || err.message || 'Could not print blank page',
-        status: 'error',
-        duration: 5000,
-      });
-    } finally {
-      setIsPrintingBlank(false);
     }
   };
 
@@ -3259,49 +3194,44 @@ const Dashboard: React.FC = () => {
                         : 'Select Document to Scan'}
                     </Button>
 
-                    {/* Print Blank Page for Document Placement */}
+                    {/* Start Phone Capture - Navigate to Phone page */}
                     <Box
                       p="1.25rem"
                       borderRadius="xl"
                       border="2px solid"
-                      borderColor={blankPagePrinted ? 'green.400' : 'orange.300'}
-                      bg={blankPagePrinted ? 'rgba(72,187,120,0.08)' : 'rgba(237,137,54,0.08)'}
+                      borderColor="brand.400"
+                      bg="rgba(121,95,238,0.08)"
                       transition="all 0.3s"
                       _hover={{
-                        borderColor: blankPagePrinted ? 'green.500' : 'orange.400',
+                        borderColor: 'brand.500',
                         transform: 'translateY(-2px)',
-                        boxShadow: 'lg',
+                        boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
                       }}
                     >
                       <Flex justify="space-between" align="center" gap={4}>
                         <Box flex="1">
                           <Heading size="md" mb={2} display="flex" alignItems="center" gap={2}>
                             <Iconify
-                              icon="solar:printer-bold-duotone"
+                              icon="solar:camera-bold-duotone"
                               width={24}
                               height={24}
-                              color={blankPagePrinted ? 'var(--chakra-colors-green-500)' : 'var(--chakra-colors-orange-400)'}
+                              color="var(--chakra-colors-brand-500)"
                             />
-                            Print Blank Page
-                            {blankPagePrinted && (
-                              <Badge colorScheme="green" fontSize="xs">
-                                ✓ Printed
-                              </Badge>
-                            )}
+                            Phone Camera Capture
                           </Heading>
                           <Text fontSize="sm" color="text.muted">
-                            Print a blank page to place your document on for photo capture
+                            Use your phone's camera to capture documents. Open the capture page on your phone.
                           </Text>
                         </Box>
                         <Button
-                          colorScheme={blankPagePrinted ? 'green' : 'orange'}
+                          colorScheme="brand"
                           size="md"
-                          onClick={printBlankPageForScan}
-                          isLoading={isPrintingBlank}
-                          loadingText="Printing..."
+                          as="a"
+                          href="/phone"
+                          target="_blank"
                           leftIcon={
                             <Iconify 
-                              icon={blankPagePrinted ? 'solar:refresh-bold' : 'solar:printer-bold'} 
+                              icon="solar:smartphone-bold" 
                               width={18} 
                               height={18} 
                             />
@@ -3311,7 +3241,7 @@ const Dashboard: React.FC = () => {
                             boxShadow: 'md',
                           }}
                         >
-                          {blankPagePrinted ? 'Print Again' : 'Print Now'}
+                          Open Capture
                         </Button>
                       </Flex>
                     </Box>
