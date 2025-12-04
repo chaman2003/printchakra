@@ -276,8 +276,24 @@ interface SecureImageProps {
 const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onClick, style, refreshToken }) => {
   // Try /processed first, fallback to /thumbnail
   const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
-  const thumbnailUrl = `${API_BASE_URL}/thumbnail/${filename}?_r=${refreshToken || 0}`;
   const { blobUrl, loading, error } = useImageWithHeaders(imageUrl, refreshToken);
+  const [thumbnailError, setThumbnailError] = useState(false);
+  const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
+  
+  // Build thumbnail URL with headers bypass for ngrok
+  const thumbnailUrl = useMemo(() => {
+    const base = `${API_BASE_URL}/thumbnail/${filename}`;
+    const params = new URLSearchParams();
+    params.set('_t', Date.now().toString());
+    if (refreshToken) params.set('_r', refreshToken.toString());
+    return `${base}?${params.toString()}`;
+  }, [filename, refreshToken]);
+
+  // Reset thumbnail states when filename or refreshToken changes
+  useEffect(() => {
+    setThumbnailError(false);
+    setThumbnailLoaded(false);
+  }, [filename, refreshToken]);
 
   if (loading) {
     return (
@@ -299,9 +315,66 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
     );
   }
 
-  if (error || !blobUrl) {
-    // Fallback to thumbnail endpoint if /processed fails
+  // If primary image loaded successfully, show it
+  if (blobUrl && !error) {
     return (
+      <Box
+        as="img"
+        src={blobUrl}
+        alt={alt}
+        className={className}
+        onClick={onClick}
+        style={style}
+        cursor={onClick ? 'pointer' : 'default'}
+        objectFit="cover"
+        w="100%"
+        h="100%"
+        borderRadius="lg"
+      />
+    );
+  }
+
+  // Fallback: try thumbnail endpoint
+  if (thumbnailError) {
+    // Both failed - show placeholder
+    return (
+      <Flex
+        direction="column"
+        align="center"
+        justify="center"
+        className={className}
+        style={style}
+        minH="160px"
+        bg="rgba(0,0,0,0.2)"
+        borderRadius="lg"
+        onClick={onClick}
+        cursor={onClick ? 'pointer' : 'default'}
+      >
+        <Iconify icon={FiFileText} boxSize={8} color="text.muted" />
+        <Text mt={2} fontSize="xs" color="text.muted">
+          Preview unavailable
+        </Text>
+      </Flex>
+    );
+  }
+
+  // Try loading thumbnail
+  return (
+    <Box position="relative" w="100%" h="100%">
+      {!thumbnailLoaded && (
+        <Flex
+          position="absolute"
+          inset={0}
+          direction="column"
+          align="center"
+          justify="center"
+          bg="surface.blur"
+          borderRadius="lg"
+          zIndex={1}
+        >
+          <Spinner size="md" color="brand.400" />
+        </Flex>
+      )}
       <Box
         as="img"
         src={thumbnailUrl}
@@ -314,31 +387,12 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
         w="100%"
         h="100%"
         borderRadius="lg"
-        onError={(e: any) => {
-          // If thumbnail also fails, show placeholder
-          (e.target as HTMLImageElement).style.display = 'none';
-          const placeholder = document.createElement('div');
-          placeholder.innerHTML = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; background: rgba(0,0,0,0.2); border-radius: 8px;"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg><span style="margin-top: 8px; font-size: 12px; color: #999;">Preview unavailable</span></div>';
-          (e.target as HTMLImageElement).parentElement?.appendChild(placeholder);
-        }}
+        opacity={thumbnailLoaded ? 1 : 0}
+        transition="opacity 0.2s"
+        onLoad={() => setThumbnailLoaded(true)}
+        onError={() => setThumbnailError(true)}
       />
-    );
-  }
-
-  return (
-    <Box
-      as="img"
-      src={blobUrl}
-      alt={alt}
-      className={className}
-      onClick={onClick}
-      style={style}
-      cursor={onClick ? 'pointer' : 'default'}
-      objectFit="cover"
-      w="100%"
-      h="100%"
-      borderRadius="lg"
-    />
+    </Box>
   );
 };
 
