@@ -455,47 +455,6 @@ except ImportError:
             raise RuntimeError(result.stderr.strip() or "Failed to cancel job")
 
 
-    @app.route("/printer/queues", methods=["GET", "OPTIONS"])
-    def list_printer_queues():
-        if request.method == "OPTIONS":
-            response = jsonify({})
-            response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-            return response
-        try:
-            data = get_printer_queue_snapshot()
-            return jsonify({"printers": data, "count": len(data)})
-        except FileNotFoundError:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "error": "Printing tools not available on this system",
-                    }
-                ),
-                500,
-            )
-        except Exception as exc:
-            logger.exception("[Printer] Failed to list queues")
-            return jsonify({"status": "error", "error": str(exc)}), 500
-
-
-    @app.route("/printer/cancel-job", methods=["POST"])
-    def printer_cancel_job():
-        payload = request.get_json(silent=True) or {}
-        printer_name = payload.get("printer_name")
-        job_id = payload.get("job_id")
-
-        try:
-            cancel_printer_job(printer_name, job_id)
-            return jsonify({"status": "success", "message": "Job terminated"})
-        except ValueError as exc:
-            return jsonify({"status": "error", "error": str(exc)}), 400
-        except Exception as exc:
-            logger.exception("[Printer] Failed to cancel job")
-            return jsonify({"status": "error", "error": str(exc)}), 500
-
-
     logger.error("[ERROR] PyTorch not installed - GPU detection unavailable")
 except Exception as e:
     logger.error(f"[ERROR] GPU detection failed: {e}")
@@ -715,6 +674,32 @@ def after_request_handler(response):
 
     return response
 
+
+# ============================================================================
+# REGISTER API BLUEPRINTS
+# ============================================================================
+
+# Share configuration with blueprints via app.config
+app.config['UPLOAD_DIR'] = UPLOAD_DIR
+app.config['PROCESSED_DIR'] = PROCESSED_DIR
+app.config['TEXT_DIR'] = TEXT_DIR
+app.config['PDF_DIR'] = PDF_DIR
+app.config['CONVERTED_DIR'] = CONVERTED_DIR
+app.config['DATA_DIR'] = DATA_DIR
+app.config['POPPLER_PATH'] = POPPLER_PATH
+app.config['update_processing_status'] = update_processing_status
+app.config['get_processing_status'] = get_processing_status
+app.config['clear_processing_status'] = clear_processing_status
+app.config['processing_status'] = processing_status
+app.config['doc_pipeline'] = doc_pipeline
+
+# Import and register document API blueprint
+try:
+    from app.api import document_bp
+    app.register_blueprint(document_bp)
+    print("[OK] Document API blueprint registered")
+except ImportError as e:
+    print(f"[WARN] Could not import document API blueprint: {e}")
 
 # ============================================================================
 # PRINTER QUEUE ROUTES (Module level - always available)
@@ -1551,6 +1536,10 @@ def process_document_image(input_path, output_path, filename=None):
         if filename:
             update_processing_status(filename, 12, 12, "Error", is_complete=True, error=str(e))
         return False, str(e)
+
+
+# Add process_document_image to app config for blueprint access
+app.config['process_document_image'] = process_document_image
 
 
 # ============================================================================
