@@ -424,4 +424,4 @@ class AIEnhancer:
         return enhanced
 
 
-print("✅ OCR module loaded (improved multi-config)")
+print("[OK] OCR module loaded (improved multi-config)")

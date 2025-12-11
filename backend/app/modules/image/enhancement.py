@@ -425,4 +425,4 @@ class ImageEnhancer:
         logger.info("Parameters reset to defaults")
 
 
-print("✅ Enhancement module loaded (improved)")
+print("[OK] Enhancement module loaded (improved)")

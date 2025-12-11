@@ -566,6 +566,7 @@ const Dashboard: React.FC = () => {
   const [documentsFed, setDocumentsFed] = useState(false);
   const [feedCount, setFeedCount] = useState(0);
   const [documentsToFeed, setDocumentsToFeed] = useState(1); // Number of documents to feed
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false); // Track auto-capture state
 
   // Selected documents for orchestrate modal
   const [selectedDocuments, setSelectedDocuments] = useState<any[]>([]);
@@ -3369,6 +3370,71 @@ const Dashboard: React.FC = () => {
                             {documentsFed ? 'Feed More' : 'Feed'}
                           </Button>
                         </Flex>
+
+                        {/* Auto Capture Button - Triggers phone camera auto-capture with visual feedback */}
+                        <Button
+                          colorScheme={autoCaptureEnabled ? 'blue' : 'gray'}
+                          size="md"
+                          variant={autoCaptureEnabled ? 'solid' : 'outline'}
+                          width="100%"
+                          onClick={() => {
+                            // Emit socket event to trigger auto-capture on phone
+                            if (socket) {
+                              socket.emit('start_auto_capture', {
+                                documentCount: documentsToFeed,
+                                timestamp: Date.now(),
+                              });
+                              // Set button state to enabled with visual feedback
+                              setAutoCaptureEnabled(true);
+                              // Auto-disable after 8 seconds
+                              setTimeout(() => setAutoCaptureEnabled(false), 8000);
+                              toast({
+                                title: '📱 Auto Capture ENABLED',
+                                description: `✨ Phone camera will auto-capture the next ${documentsToFeed} document${documentsToFeed !== 1 ? 's' : ''}. Get ready to feed documents!`,
+                                status: 'success',
+                                duration: 4000,
+                                isClosable: true,
+                              });
+                            } else {
+                              toast({
+                                title: '🔗 Connection Error',
+                                description: 'Phone is not connected. Open the Phone Interface to connect.',
+                                status: 'error',
+                                duration: 3000,
+                                isClosable: true,
+                              });
+                            }
+                          }}
+                          leftIcon={
+                            <Iconify 
+                              icon={autoCaptureEnabled ? 'solar:camera-bold' : 'solar:camera-minimalistic-bold'} 
+                              width={18} 
+                              height={18} 
+                            />
+                          }
+                          isDisabled={!socket}
+                          boxShadow={autoCaptureEnabled ? '0 0 20px rgba(66, 153, 225, 0.6), inset 0 0 10px rgba(66, 153, 225, 0.3)' : 'none'}
+                          transition="all 0.3s ease"
+                          _hover={{
+                            boxShadow: autoCaptureEnabled 
+                              ? '0 0 30px rgba(66, 153, 225, 0.8), inset 0 0 15px rgba(66, 153, 225, 0.4)'
+                              : 'md',
+                            transform: 'translateY(-1px)',
+                            bg: autoCaptureEnabled ? 'blue.600' : undefined,
+                          }}
+                          _active={{
+                            transform: 'translateY(0)',
+                          }}
+                          animation={autoCaptureEnabled ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none'}
+                          css={autoCaptureEnabled ? {
+                            '@keyframes pulse': {
+                              '0%, 100%': { opacity: 1 },
+                              '50%': { opacity: 0.8 },
+                            }
+                          } : {}}
+                        >
+                          {autoCaptureEnabled ? '🟢 Auto Capture ACTIVE' : '📱 Auto Capture on Phone'}
+                        </Button>
                         
                         <Text fontSize="xs" color="text.muted" fontStyle="italic">
                           💡 Tip: The printer will pull {documentsToFeed} document{documentsToFeed !== 1 ? 's' : ''} from the input tray and output them for scanning

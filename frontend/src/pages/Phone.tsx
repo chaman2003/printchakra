@@ -736,8 +736,27 @@ const Phone: React.FC = () => {
       }, 500);
     });
 
+    socket.on('start_auto_capture', (data: any) => {
+      console.log('Received auto-capture command from Dashboard:', data);
+      const documentCount = data?.documentCount || 1;
+      showMessage(`📱 Auto-capture enabled for ${documentCount} document${documentCount !== 1 ? 's' : ''}!`);
+      setTimeout(() => {
+        if (captureMode === 'camera' && stream) {
+          startAutoCapture();
+        } else {
+          showMessage('💡 Switching to Camera mode to auto-capture...');
+          handleCaptureMode('camera');
+          // Start auto-capture after camera mode is activated
+          setTimeout(() => {
+            startAutoCapture();
+          }, 1000);
+        }
+      }, 500);
+    });
+
     return () => {
       socket.off('capture_now');
+      socket.off('start_auto_capture');
       // Do NOT stop camera here, as this effect re-runs when uploadQueue changes
       // stopAutoCapture(); // Removed to prevent stopping auto-capture on queue updates
     };
@@ -746,8 +765,10 @@ const Phone: React.FC = () => {
     captureFromCamera,
     captureMode,
     showMessage,
-    // stopAutoCapture, // Removed from dependency to prevent re-runs
+    startAutoCapture,
+    handleCaptureMode,
     stream,
+    // stopAutoCapture, // Removed from dependency to prevent re-runs
   ]);
 
   // Cleanup camera on unmount

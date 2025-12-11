@@ -543,4 +543,4 @@ def create_default_pipeline(storage_dir: str = "./documents") -> DocumentPipelin
     return DocumentPipeline(config)
 
 
-print("✅ Pipeline loaded (improved with notebook logic)")
+print("[OK] Pipeline loaded (improved with notebook logic)")

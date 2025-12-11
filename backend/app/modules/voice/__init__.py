@@ -84,13 +84,13 @@ except ImportError:
     GPU_OPTIMIZATION_AVAILABLE = False
     logger.warning("[WARN] GPU optimization module not available")
 
-# Import GPU-accelerated TTS
+# Import TTS module
 try:
-    from .tts_gpu import speak_text_gpu, get_tts_engine_info, _init_gpu_tts_engine
-    GPU_TTS_AVAILABLE = True
-except ImportError:
-    GPU_TTS_AVAILABLE = False
-    logger.warning("[WARN] GPU TTS module not available")
+    from .tts_gpu import speak_text_gpu, get_tts_engine_info, _init_tts_engine
+    TTS_IMPORTED = True
+except ImportError as e:
+    TTS_IMPORTED = False
+    logger.debug(f"[DEBUG] TTS module import note: {e}")
 
 # Legacy TTS fallback (keep for compatibility)
 _tts_engine = None
@@ -101,17 +101,18 @@ _tts_initialized_once = False  # Track if we've logged TTS init
 
 
 def _init_tts_engine():
-    """Initialize TTS engine - uses GPU-accelerated version if available"""
+    """Initialize TTS engine"""
     global _tts_engine, TTS_AVAILABLE, _tts_initialized_once
 
-    # If GPU TTS is available, use that instead
-    if GPU_TTS_AVAILABLE:
+    # Use imported TTS module if available
+    if TTS_IMPORTED:
         try:
-            _init_gpu_tts_engine()
+            from .tts_gpu import _init_tts_engine as init_gpu_tts
+            init_gpu_tts()
             TTS_AVAILABLE = True
             return True
         except Exception as e:
-            logger.warning(f"[WARN] GPU TTS initialization failed, falling back to SAPI5: {e}")
+            logger.debug(f"[DEBUG] TTS initialization: {e}")
     
     # Legacy SAPI5 initialization (fallback)
     if _tts_engine is not None:

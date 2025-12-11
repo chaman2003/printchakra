@@ -183,4 +183,4 @@ def get_image_info(image: np.ndarray) -> dict:
     return info
 
 
-print("✅ Utility module loaded")
+print("[OK] Utility module loaded")

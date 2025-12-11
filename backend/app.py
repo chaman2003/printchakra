@@ -461,18 +461,26 @@ except Exception as e:
 
 logger.info("=" * 70)
 
-# Configure Poppler path for pdf2image
+# Configure Poppler path for pdf2image (optional, PDF thumbnail generation)
 POPPLER_PATH = None
 try:
-    poppler_bin = os.path.join(os.path.dirname(__file__), 'public', 'poppler', 'poppler-24.08.0', 'Library', 'bin')
-    if os.path.exists(poppler_bin):
-        POPPLER_PATH = poppler_bin
-        logger.info(f"[OK] Poppler found at: {poppler_bin}")
-    else:
-        logger.warning("[WARN] Poppler not found - PDF thumbnail generation will fail")
-        logger.warning(f"   Expected location: {poppler_bin}")
+    # Try standard locations
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), 'public', 'poppler', 'poppler-24.08.0', 'Library', 'bin'),
+        r'C:\Program Files\poppler\Library\bin',
+        r'C:\Program Files (x86)\poppler\Library\bin',
+    ]
+    
+    for poppler_bin in possible_paths:
+        if os.path.exists(poppler_bin):
+            POPPLER_PATH = poppler_bin
+            logger.info(f"[OK] Poppler found at: {poppler_bin}")
+            break
+    
+    if POPPLER_PATH is None:
+        logger.debug("[INFO] Poppler not found (optional - PDF thumbnails disabled)")
 except Exception as e:
-    logger.warning(f"[WARN] Poppler detection failed: {e}")
+    logger.debug(f"[DEBUG] Poppler detection: {e}")
 
 logger.info("=" * 60)
 

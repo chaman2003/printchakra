@@ -495,4 +495,4 @@ if __name__ == "__main__":
         cv2.destroyAllWindows()
 
 
-print("✅ Document detection module loaded (improved v3)")
+print("[OK] Document detection module loaded (improved v3)")

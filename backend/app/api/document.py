@@ -1,6 +1,5 @@
 """
 Document API endpoints for uploading, loading, listing, and managing documents.
-All document-related endpoints are consolidated here.
 """
 
 import os
@@ -336,7 +335,7 @@ def list_files():
 
 @document_bp.route("/processing-status/<filename>")
 def get_file_processing_status(filename):
-    """Get processing status for a specific file"""
+    """Get processing statu s for a specific file"""
     funcs = get_processing_funcs()
     get_processing_status = funcs['get']
     
