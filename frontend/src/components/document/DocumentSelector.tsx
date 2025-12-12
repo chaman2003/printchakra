@@ -10,6 +10,7 @@ import React, {
   useRef,
   forwardRef,
   useImperativeHandle,
+  useEffect,
 } from 'react';
 import {
   Modal,
@@ -41,14 +42,8 @@ import {
 } from '@chakra-ui/react';
 import { FiFile, FiUpload, FiCheck } from 'react-icons/fi';
 import Iconify from '../common/Iconify';
-
-export interface Document {
-  filename: string;
-  size: number;
-  type: string;
-  thumbnailUrl?: string;
-  isProcessed?: boolean;
-}
+import { Document } from '../../types';
+import { processFileForPreview } from '../../utils/pdfUtils';
 
 export interface DocumentSelectorProps {
   isOpen: boolean;
@@ -133,27 +128,52 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
     [allowMultiple, lastClickedIndex, selectedDocs]
   );
 
-  const handleFileUpload = useCallback(
-    (files: FileList | null) => {
-      if (!files) return;
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string>('');
 
-      const validFiles: Document[] = [];
+  const handleFileUpload = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) {
+        return;
+      }
+
       const validExtensions =
         mode === 'print' ? ['pdf', 'jpg', 'jpeg', 'png'] : ['jpg', 'jpeg', 'png'];
 
-      Array.from(files).forEach(file => {
-        const ext = file.name.split('.').pop()?.toLowerCase();
-        if (ext && validExtensions.includes(ext)) {
-          validFiles.push({
-            filename: file.name,
-            size: file.size,
-            type: file.type,
-            thumbnailUrl: URL.createObjectURL(file),
-          });
-        }
-      });
+      setIsUploading(true);
+      const processedDocs: Document[] = [];
 
-      setUploadedFiles(prev => [...prev, ...validFiles]);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        
+        if (!ext || !validExtensions.includes(ext)) {
+          continue;
+        }
+
+        try {
+          setUploadProgress(`Processing ${file.name}... (${i + 1}/${files.length})`);
+          
+          // Use PDF.js to convert PDF to images, or FileReader for images
+          const result = await processFileForPreview(file);
+          
+          processedDocs.push({
+            filename: result.filename,
+            size: result.size,
+            type: result.type,
+            fileObject: result.fileObject,
+            thumbnailUrl: result.thumbnailUrl,
+            pages: result.pages,
+          });
+          
+        } catch (error) {
+          console.error(`[DocumentSelector] Error processing ${file.name}:`, error);
+        }
+      }
+
+      setUploadedFiles(prev => [...prev, ...processedDocs]);
+      setIsUploading(false);
+      setUploadProgress('');
     },
     [mode]
   );
@@ -179,13 +199,24 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
   const handleConfirm = () => {
     const allDocs = [...currentDocuments, ...convertedDocuments, ...uploadedFiles];
     const selected = allDocs.filter(doc => selectedDocs.has(doc.filename));
-    onSelect(selected);
+    
+    // Ensure all selected documents have proper pages structure
+    const docsWithPages = selected.map(doc => ({
+      ...doc,
+      pages: doc.pages || [{
+        pageNumber: 1,
+        thumbnailUrl: doc.thumbnailUrl
+      }]
+    }));
+    
+    onSelect(docsWithPages);
     onClose();
   };
 
   const renderDocumentCard = (doc: Document, index: number, allDocs: Document[]) => {
     const isSelected = selectedDocs.has(doc.filename);
     const documentIndex = index + 1;
+    const pageCount = doc.pages?.length || 1;
 
     return (
       <Box
@@ -219,6 +250,23 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           #{documentIndex}
         </Badge>
 
+        {/* Page count badge for multi-page docs */}
+        {pageCount > 1 && (
+          <Badge
+            position="absolute"
+            top={3}
+            right={isSelected ? 10 : 3}
+            colorScheme="cyan"
+            borderRadius="full"
+            px={2}
+            py={1}
+            fontSize="xs"
+            zIndex={2}
+          >
+            {pageCount} pages
+          </Badge>
+        )}
+
         {isSelected && (
           <Box
             position="absolute"
@@ -236,31 +284,24 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
 
         <Box position="relative" h={{ base: '120px', md: '150px' }} bg="gray.800" overflow="hidden">
           {doc.thumbnailUrl ? (
-            <Image 
+            <img 
               src={doc.thumbnailUrl} 
-              alt={doc.filename} 
-              objectFit="contain" 
-              w="100%" 
-              h="100%"
-              loading="eager"
-              crossOrigin="anonymous"
-              onError={(e) => {
-                console.error(`Failed to load thumbnail for ${doc.filename}:`, doc.thumbnailUrl);
-                // If thumbnail fails to load, show fallback icon
-                e.currentTarget.style.display = 'none';
+              alt={doc.filename}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'contain',
+                display: 'block',
+                backgroundColor: '#1a1a2e'
               }}
-              onLoad={() => {
-                console.log(`Successfully loaded thumbnail for ${doc.filename}`);
-              }}
-              fallback={
-                <Flex align="center" justify="center" h="100%" bg="gray.700">
-                  <Iconify icon="solar:document-bold" boxSize={8} color="whiteAlpha.600" />
-                </Flex>
-              }
             />
           ) : (
-            <Flex align="center" justify="center" h="100%">
-              <Iconify icon="solar:document-bold" boxSize={8} color="whiteAlpha.500" />
+            <Flex align="center" justify="center" h="100%" bg="gray.700">
+              <Iconify 
+                icon="solar:document-bold" 
+                boxSize={10} 
+                color="whiteAlpha.400" 
+              />
             </Flex>
           )}
         </Box>
@@ -271,13 +312,8 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           </Text>
           <HStack justify="space-between" w="100%">
             <Text fontSize="xs" color="text.muted">
-              {(doc.size / 1024).toFixed(1)} KB
+              {doc.size ? (doc.size / 1024).toFixed(1) : '0'} KB
             </Text>
-            {doc.isProcessed && (
-              <Badge colorScheme="green" fontSize="xs">
-                Processed
-              </Badge>
-            )}
           </HStack>
         </VStack>
 
@@ -513,7 +549,15 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
                     accept={mode === 'print' ? '.pdf,.jpg,.jpeg,.png' : '.jpg,.jpeg,.png'}
                     style={{ display: 'none' }}
                     onChange={e => handleFileUpload(e.target.files)}
+                    disabled={isUploading}
                   />
+
+                  {isUploading && (
+                    <Flex align="center" justify="center" p={4} bg="rgba(121,95,238,0.1)" borderRadius="lg">
+                      <Spinner size="md" color="brand.400" mr={3} />
+                      <Text color="brand.300">{uploadProgress || 'Processing files...'}</Text>
+                    </Flex>
+                  )}
 
                   {uploadedFiles.length > 0 && (
                     <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4} w="100%">

@@ -2,6 +2,7 @@
 OCR & AI Recognition Module - Improved multi-config OCR extraction
 Text extraction with multiple preprocessing variants and configurations
 Based on printchakra_clean.ipynb Section 5
+Includes PaddleOCR for advanced OCR with bounding boxes
 """
 
 import os
@@ -13,6 +14,19 @@ import numpy as np
 import pytesseract
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
+
+# Import PaddleOCR components
+try:
+    from .paddle_ocr import (
+        PaddleOCRProcessor,
+        OCRResult,
+        get_ocr_processor,
+        get_paddle_ocr,
+    )
+    PADDLE_OCR_AVAILABLE = True
+except ImportError as e:
+    PADDLE_OCR_AVAILABLE = False
+    print(f"⚠️  PaddleOCR not available: {e}")
 
 
 class OCRModule:

@@ -210,5 +210,6 @@ uploads/*
 txt/*
 pc/*
 docs
+error.txt
 prompt.txt
 logs.txt

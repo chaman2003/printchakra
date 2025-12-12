@@ -162,18 +162,29 @@ def upload_file():
                 processed_path = os.path.join(PROCESSED_DIR, processed_filename)
 
                 # Process image with progress tracking
+                # Returns: (success, text, new_filename_or_none)
                 if process_document_image:
-                    success, text_or_error = process_document_image(
+                    result = process_document_image(
                         upload_path,
                         processed_path,
                         processed_filename,  # Pass filename for status tracking
                     )
+                    # Handle both old (2-tuple) and new (3-tuple) return formats
+                    if len(result) == 3:
+                        success, text_or_error, new_filename = result
+                    else:
+                        success, text_or_error = result
+                        new_filename = None
                 else:
                     # Fallback: just copy file
                     import shutil
                     shutil.copy2(upload_path, processed_path)
                     success = True
                     text_or_error = ""
+                    new_filename = None
+
+                # Use renamed filename if available
+                final_filename = new_filename if new_filename else processed_filename
 
                 if not success:
                     if update_processing_status:
@@ -186,33 +197,38 @@ def upload_file():
                         )
                     return
 
-                # Save extracted text
-                text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
+                # Save extracted text (only if not already saved by process_document_image)
+                text_filename = f"{os.path.splitext(final_filename)[0]}.txt"
                 text_path = os.path.join(TEXT_DIR, text_filename)
 
-                try:
-                    with open(text_path, "w", encoding="utf-8") as f:
-                        f.write(text_or_error)
-                    print(f"  ✓ Text saved: {text_path}")
-                except Exception as text_error:
-                    print(f"  [WARN] Warning: Failed to save text file: {str(text_error)}")
+                if not os.path.exists(text_path) and text_or_error:
+                    try:
+                        with open(text_path, "w", encoding="utf-8") as f:
+                            f.write(text_or_error)
+                        print(f"  ✓ Text saved: {text_path}")
+                    except Exception as text_error:
+                        print(f"  [WARN] Warning: Failed to save text file: {str(text_error)}")
 
                 # Mark as complete
                 if update_processing_status:
                     update_processing_status(processed_filename, 12, 12, "Complete", is_complete=True)
 
-                # Notify completion
+                # Notify completion with the final filename (might be OCR-renamed)
                 if socketio:
                     socketio.emit(
                         "processing_complete",
                         {
-                            "filename": processed_filename,
-                            "has_text": len(text_or_error) > 0,
-                            "text_length": len(text_or_error),
+                            "filename": final_filename,
+                            "original_filename": processed_filename if new_filename else None,
+                            "renamed": new_filename is not None,
+                            "has_text": len(text_or_error) > 0 if isinstance(text_or_error, str) else False,
+                            "text_length": len(text_or_error) if isinstance(text_or_error, str) else 0,
                         },
                     )
 
-                print(f"\n[OK] Background processing completed for {processed_filename}")
+                print(f"\n[OK] Background processing completed for {final_filename}")
+                if new_filename:
+                    print(f"    (OCR-renamed from {processed_filename})")
 
                 # Clear status after 60 seconds
                 if clear_processing_status:

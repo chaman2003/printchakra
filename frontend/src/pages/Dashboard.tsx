@@ -68,7 +68,11 @@ import DocumentSelector, {
 import PageShell from '../components/layout/PageShell';
 import SurfaceCard from '../components/layout/SurfaceCard';
 import { DashboardShell } from '../components/layout/DashboardRegions';
-import { FileInfo } from '../types';
+import { FileInfo, Document, OCRResult, OCRResponse } from '../types';
+import { processFileForPreview } from '../utils/pdfUtils';
+import { runOCR, getOCRResult, getBatchOCRStatus } from '../ocrApi';
+import { OCRReadyBadge } from '../components/document/OCROverlay';
+import OCRStructuredView from '../components/document/OCRStructuredView';
 
 // ==================== MODAL & PREVIEW CONFIGURATION ====================
 // 🔧 ADJUST THESE VALUES TO CONTROL MODAL AND PREVIEW SIZING
@@ -473,6 +477,11 @@ const Dashboard: React.FC = () => {
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
 
+  // PaddleOCR state
+  const [ocrResults, setOcrResults] = useState<Record<string, OCRResult>>({});
+  const [ocrLoading, setOcrLoading] = useState<Record<string, boolean>>({});
+  const [activeOCRView, setActiveOCRView] = useState<string | null>(null);
+
   // File conversion state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
@@ -484,6 +493,7 @@ const Dashboard: React.FC = () => {
 
   // Converted files state
   const [convertedFiles, setConvertedFiles] = useState<any[]>([]);
+  const [processedConvertedDocs, setProcessedConvertedDocs] = useState<Document[]>([]);
 
   const currentDocumentOptions = useMemo(
     () =>
@@ -498,7 +508,7 @@ const Dashboard: React.FC = () => {
   );
 
   const convertedDocumentOptions = useMemo(
-    () =>
+    () => processedConvertedDocs.length > 0 ? processedConvertedDocs : 
       convertedFiles.map((file: any) => ({
         filename: file.filename,
         size: file.size || 0,
@@ -506,7 +516,7 @@ const Dashboard: React.FC = () => {
         thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
         isProcessed: true,
       })),
-    [convertedFiles]
+    [processedConvertedDocs, convertedFiles]
   );
 
   // Smart selection state - simple multi-select
@@ -650,6 +660,105 @@ const Dashboard: React.FC = () => {
       setIsChatVisible(true);
     }
   }, [orchestrationContext, isChatVisible]);
+
+  // Process converted files with extracted pages or PDF.js fallback
+  useEffect(() => {
+    const processConvertedFiles = async () => {
+      if (!convertedFiles || convertedFiles.length === 0) {
+        setProcessedConvertedDocs([]);
+        return;
+      }
+
+      try {
+        const processed: Document[] = [];
+        
+        for (const file of convertedFiles) {
+          try {
+            // Check if this file has extracted pages
+            const baseName = file.filename.replace(/\.[^.]+$/, '');
+            const pagesInfo: any[] = [];
+            let thumbnailUrl = '';
+
+            // If file has pages info from backend, use it
+            if (file.pages && Array.isArray(file.pages) && file.pages.length > 0) {
+              console.log(`[Dashboard] Using pre-extracted pages for: ${file.filename}`);
+              
+              // Use extracted pages directly
+              for (const page of file.pages) {
+                pagesInfo.push({
+                  pageNumber: parseInt(page.filename.match(/page_(\d+)/)?.[1] || '1'),
+                  thumbnailUrl: page.url || `${API_BASE_URL}/converted-page/${page.path}`,
+                  width: 0,
+                  height: 0,
+                });
+              }
+              
+              // First page as thumbnail
+              thumbnailUrl = pagesInfo[0]?.thumbnailUrl || '';
+              
+              processed.push({
+                filename: file.filename,
+                size: file.size || 0,
+                type: 'pdf',
+                thumbnailUrl,
+                pages: pagesInfo,
+              });
+              
+              console.log(`[Dashboard] Loaded ${pagesInfo.length} extracted pages for: ${file.filename}`);
+            } else {
+              // Fallback: try to fetch and convert with PDF.js
+              console.log(`[Dashboard] No extracted pages found, using PDF.js for: ${file.filename}`);
+              
+              const response = await fetch(`${API_BASE_URL}/converted/${file.filename}`);
+              if (!response.ok) {
+                console.warn(`Failed to fetch converted file: ${file.filename}`);
+                // Use backend thumbnail as last resort
+                processed.push({
+                  filename: file.filename,
+                  size: file.size || 0,
+                  type: 'pdf',
+                  thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
+                });
+                continue;
+              }
+
+              const blob = await response.blob();
+              const processedFile = new File([blob], file.filename, { type: 'application/pdf' });
+              
+              // Process with PDF.js
+              const result = await processFileForPreview(processedFile);
+              
+              processed.push({
+                filename: result.filename,
+                size: result.size,
+                type: result.type,
+                fileObject: result.fileObject,
+                thumbnailUrl: result.thumbnailUrl,
+                pages: result.pages,
+              });
+              
+              console.log(`[Dashboard] Processed with PDF.js: ${file.filename}`);
+            }
+          } catch (error) {
+            console.error(`[Dashboard] Error processing converted file ${file.filename}:`, error);
+            // Fallback to backend thumbnail
+            processed.push({
+              filename: file.filename,
+              size: file.size || 0,
+              type: 'pdf',
+              thumbnailUrl: `${API_BASE_URL}/thumbnail/${file.filename}`,
+            });
+          }
+        }
+        
+        setProcessedConvertedDocs(processed);
+      } catch (error) {
+        console.error('[Dashboard] Error processing converted files:', error);
+      }
+    };
+
+    processConvertedFiles();
+  }, [convertedFiles]);
 
   const legacyVoiceKeyMap = useMemo<Record<OrchestrationAction, Record<string, string>>>(
     () => ({
@@ -1075,29 +1184,31 @@ const Dashboard: React.FC = () => {
   const enhanceDocumentsWithPages = useCallback(async (docs: any[]) => {
     const enhanced = await Promise.all(
       docs.map(async (doc) => {
-        // Check if this is an uploaded/local file (has blob URL)
-        const isUploadedFile = doc.thumbnailUrl?.startsWith('blob:');
+        // If document already has pages (from client-side PDF.js conversion), use them
+        if (doc.pages && doc.pages.length > 0) {
+          return doc;
+        }
         
-        if (isUploadedFile) {
-          // For uploaded files, use the blob URL directly without API call
+        // For server-side documents, fetch page information
+        try {
+          const docInfo = await fetchDocumentInfo(doc.filename);
+          return {
+            ...doc,
+            pages: docInfo.pages || [{
+              pageNumber: 1,
+              thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}/thumbnail/${doc.filename}`
+            }]
+          };
+        } catch (error) {
+          console.error(`Error fetching page info for ${doc.filename}:`, error);
           return {
             ...doc,
             pages: [{
               pageNumber: 1,
-              thumbnailUrl: doc.thumbnailUrl
+              thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}/thumbnail/${doc.filename}`
             }]
           };
         }
-        
-        // For server-side documents, fetch page information
-        const docInfo = await fetchDocumentInfo(doc.filename);
-        return {
-          ...doc,
-          pages: docInfo.pages || [{
-            pageNumber: 1,
-            thumbnailUrl: doc.thumbnailUrl || `${API_BASE_URL}/thumbnail/${doc.filename}`
-          }]
-        };
       })
     );
     return enhanced;
@@ -1631,6 +1742,35 @@ const Dashboard: React.FC = () => {
     };
     socket.on('auto_capture_state_changed', autoCaptureStateListener);
 
+    // Listen for OCR completion events
+    const ocrCompleteListener = (data: any) => {
+      console.log('OCR complete:', data);
+      if (data?.filename && data?.success && data?.result) {
+        // Store the OCR result
+        setOcrResults(prev => ({ ...prev, [data.filename]: data.result }));
+        
+        // Update file's has_text status
+        setFiles((prevFiles: FileInfo[]) => 
+          prevFiles.map(f => 
+            f.filename === data.filename ? { ...f, has_text: true } : f
+          )
+        );
+        
+        // Clear loading state
+        setOcrLoading(prev => ({ ...prev, [data.filename]: false }));
+        
+        toast({
+          title: '📄 OCR Complete',
+          description: data.result.derived_title 
+            ? `"${data.result.derived_title}"`
+            : `Processed ${data.result.word_count} words`,
+          status: 'success',
+          duration: 4000,
+        });
+      }
+    };
+    socket.on('ocr_complete', ocrCompleteListener);
+
     loadFiles();
     loadConvertedFiles(); // Load converted files on component mount
 
@@ -1680,6 +1820,7 @@ const Dashboard: React.FC = () => {
       socket.off('processing_error', processingErrorListener);
       socket.off('orchestration_update', orchestrationUpdateListener);
       socket.off('auto_capture_state_changed', autoCaptureStateListener);
+      socket.off('ocr_complete', ocrCompleteListener);
       // -- startPolling cleaned up
     };
   }, [socket, toast]);
@@ -1795,6 +1936,120 @@ const Dashboard: React.FC = () => {
       });
     }
   };
+
+  // PaddleOCR functions
+  const handleRunOCR = async (filename: string) => {
+    // Mark as loading
+    setOcrLoading(prev => ({ ...prev, [filename]: true }));
+    
+    try {
+      const response = await runOCR(filename);
+      if (response.success && response.ocr_result) {
+        // Store the OCR result
+        setOcrResults(prev => ({ ...prev, [filename]: response.ocr_result! }));
+        
+        // Update file's has_text status
+        setFiles(prev => prev.map(f => 
+          f.filename === filename ? { ...f, has_text: true } : f
+        ));
+        
+        toast({
+          title: 'OCR Complete',
+          description: response.ocr_result.derived_title 
+            ? `Document: "${response.ocr_result.derived_title}"`
+            : `Processed ${response.ocr_result.word_count} words`,
+          status: 'success',
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: 'OCR Failed',
+          description: response.error || 'Unknown error',
+          status: 'error',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'OCR Error',
+        description: err.message,
+        status: 'error',
+      });
+    } finally {
+      setOcrLoading(prev => ({ ...prev, [filename]: false }));
+    }
+  };
+
+  const handleViewOCRResult = async (filename: string) => {
+    // If we already have the result cached, just open the view
+    if (ocrResults[filename]) {
+      setActiveOCRView(filename);
+      return;
+    }
+    
+    // Otherwise, fetch it
+    try {
+      const response = await getOCRResult(filename);
+      if (response.success && response.ocr_result) {
+        setOcrResults(prev => ({ ...prev, [filename]: response.ocr_result! }));
+        setActiveOCRView(filename);
+      } else {
+        toast({
+          title: 'No OCR Result',
+          description: 'Run OCR first to process this document',
+          status: 'info',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Failed to load OCR',
+        description: err.message,
+        status: 'error',
+      });
+    }
+  };
+
+  const closeOCRView = () => {
+    setActiveOCRView(null);
+  };
+
+  // Load OCR statuses for all files on mount and when files change
+  const loadOCRStatuses = useCallback(async (filenames: string[]) => {
+    if (filenames.length === 0) return;
+    
+    try {
+      const response = await getBatchOCRStatus(filenames);
+      if (response.success && response.statuses) {
+        // For files with OCR ready, fetch their full results
+        const ocrReadyFiles = Object.entries(response.statuses)
+          .filter(([_, status]) => status.has_ocr)
+          .map(([filename]) => filename);
+        
+        // Batch load OCR results for files that have them
+        for (const filename of ocrReadyFiles) {
+          if (!ocrResults[filename]) {
+            try {
+              const ocrResponse = await getOCRResult(filename);
+              if (ocrResponse.success && ocrResponse.ocr_result) {
+                setOcrResults(prev => ({ ...prev, [filename]: ocrResponse.ocr_result! }));
+              }
+            } catch (err) {
+              console.warn(`Failed to load OCR for ${filename}:`, err);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load OCR statuses:', err);
+    }
+  }, [ocrResults]);
+
+  // Load OCR statuses when files change
+  useEffect(() => {
+    if (files.length > 0) {
+      const filenames = files.map(f => f.filename);
+      loadOCRStatuses(filenames);
+    }
+  }, [files, loadOCRStatuses]);
 
   const openOrchestrateModal = () => {
     setOrchestrationContext('manual');
@@ -2686,9 +2941,15 @@ const Dashboard: React.FC = () => {
                                 Active pipeline
                               </Tag>
                             )}
-                            {!file.processing && file.has_text && (
-                              <Badge colorScheme="green" borderRadius="full" px={2}>
-                                OCR ready
+                            {!file.processing && ocrResults[file.filename] && (
+                              <OCRReadyBadge 
+                                title={ocrResults[file.filename].derived_title}
+                                onClick={() => handleViewOCRResult(file.filename)}
+                              />
+                            )}
+                            {!file.processing && !ocrResults[file.filename] && file.has_text && (
+                              <Badge colorScheme="blue" borderRadius="full" px={2}>
+                                Text available
                               </Badge>
                             )}
                           </Stack>
@@ -2703,12 +2964,38 @@ const Dashboard: React.FC = () => {
                                 />
                               </Tooltip>
                             )}
-                            {file.has_text && !file.processing && (
-                              <Tooltip label="View OCR" hasArrow>
+                            {/* Run PaddleOCR button - shows when pipeline complete but no OCR yet */}
+                            {!file.processing && !ocrResults[file.filename] && (
+                              <Tooltip label={ocrLoading[file.filename] ? 'Processing OCR...' : 'Run OCR (PaddleOCR)'} hasArrow>
                                 <IconButton
-                                  aria-label="OCR"
+                                  aria-label="Run OCR"
+                                  icon={ocrLoading[file.filename] ? <Spinner size="sm" /> : <Iconify icon="mdi:text-recognition" boxSize={5} />}
+                                  onClick={() => handleRunOCR(file.filename)}
+                                  isLoading={ocrLoading[file.filename]}
+                                  colorScheme="blue"
+                                  variant="solid"
+                                />
+                              </Tooltip>
+                            )}
+                            {/* View OCR result button - shows when OCR is complete */}
+                            {ocrResults[file.filename] && !file.processing && (
+                              <Tooltip label="View OCR Result" hasArrow>
+                                <IconButton
+                                  aria-label="View OCR"
+                                  icon={<Iconify icon={FiFileText} boxSize={5} />}
+                                  onClick={() => handleViewOCRResult(file.filename)}
+                                  colorScheme="green"
+                                />
+                              </Tooltip>
+                            )}
+                            {/* Legacy OCR view for files with existing text */}
+                            {file.has_text && !ocrResults[file.filename] && !file.processing && (
+                              <Tooltip label="View Legacy OCR" hasArrow>
+                                <IconButton
+                                  aria-label="Legacy OCR"
                                   icon={<Iconify icon={FiFileText} boxSize={5} />}
                                   onClick={() => viewOCR(file.filename)}
+                                  variant="outline"
                                 />
                               </Tooltip>
                             )}
@@ -2845,6 +3132,70 @@ const Dashboard: React.FC = () => {
             >
               Download
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* PaddleOCR Structured View Modal */}
+      <Modal
+        isOpen={Boolean(activeOCRView)}
+        onClose={closeOCRView}
+        size="6xl"
+        scrollBehavior="inside"
+        isCentered
+      >
+        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalContent
+          bg={surfaceCard}
+          borderRadius="2xl"
+          border="1px solid rgba(72, 187, 120, 0.25)"
+          boxShadow="halo"
+          maxH={{ base: '95vh', md: '90vh' }}
+          m={{ base: 2, md: 4 }}
+          overflow="hidden"
+        >
+          <ModalHeader>
+            <HStack spacing={3}>
+              <Iconify icon="mdi:text-recognition" boxSize={6} color="green.400" />
+              <Text>
+                OCR Result: {activeOCRView && ocrResults[activeOCRView]?.derived_title 
+                  ? ocrResults[activeOCRView].derived_title 
+                  : activeOCRView}
+              </Text>
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton borderRadius="full" />
+          <ModalBody p={{ base: 2, md: 4 }} overflow="auto">
+            {activeOCRView && ocrResults[activeOCRView] && (
+              <OCRStructuredView 
+                result={ocrResults[activeOCRView]} 
+                filename={activeOCRView}
+              />
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={closeOCRView}>
+              Close
+            </Button>
+            {activeOCRView && ocrResults[activeOCRView]?.full_text && (
+              <Button
+                colorScheme="brand"
+                leftIcon={<Iconify icon="mdi:content-copy" boxSize={5} />}
+                onClick={() => {
+                  if (activeOCRView && ocrResults[activeOCRView]?.full_text) {
+                    navigator.clipboard.writeText(ocrResults[activeOCRView].full_text);
+                    toast({
+                      title: 'Copied',
+                      description: 'OCR text copied to clipboard',
+                      status: 'success',
+                      duration: 2000,
+                    });
+                  }
+                }}
+              >
+                Copy Text
+              </Button>
+            )}
           </ModalFooter>
         </ModalContent>
       </Modal>

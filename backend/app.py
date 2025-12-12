@@ -1525,17 +1525,86 @@ def process_document_image(input_path, output_path, filename=None):
                 f.write(text)
             print(f"  ? Text saved: {text_output_path}")
 
+        # ============================================================================
+        # STEP 13 (BONUS): PaddleOCR + Ollama Filename Generation
+        # ============================================================================
+        ocr_filename = None
+        try:
+            from app.modules.ocr.paddle_ocr import get_ocr_processor, OCRResult
+            
+            print(f"\n[STEP 13] PaddleOCR + Ollama Filename Generation")
+            emit_progress(12, "OCR Analysis", "Running advanced OCR for filename generation...")
+            
+            # Initialize OCR processor
+            ocr_data_dir = os.path.join(os.path.dirname(output_path), '..', 'ocr_results')
+            ocr_processor = get_ocr_processor(ocr_data_dir)
+            
+            # Run PaddleOCR on the processed image
+            ocr_result = ocr_processor.process_image(output_path)
+            
+            if ocr_result and ocr_result.word_count > 0:
+                # Get timestamp from filename if available
+                timestamp = None
+                if filename:
+                    import re
+                    match = re.search(r'_(\d{8}_\d{6})_', filename)
+                    if match:
+                        timestamp = match.group(1)
+                
+                # Generate filename using Ollama
+                suggested_filename = ocr_processor.generate_filename_from_ocr(ocr_result, timestamp)
+                
+                if suggested_filename and suggested_filename != "untitled":
+                    # Rename the file
+                    output_dir = os.path.dirname(output_path)
+                    ext = os.path.splitext(output_path)[1]
+                    new_filename = f"{suggested_filename}{ext}"
+                    new_output_path = os.path.join(output_dir, new_filename)
+                    
+                    # Avoid overwriting existing files
+                    counter = 1
+                    while os.path.exists(new_output_path):
+                        new_filename = f"{suggested_filename}_{counter}{ext}"
+                        new_output_path = os.path.join(output_dir, new_filename)
+                        counter += 1
+                    
+                    # Rename the processed image
+                    os.rename(output_path, new_output_path)
+                    output_path = new_output_path
+                    ocr_filename = new_filename
+                    
+                    # Also rename the text file if it exists
+                    if text_output_path and os.path.exists(text_output_path):
+                        new_text_filename = f"{suggested_filename}.txt"
+                        new_text_path = os.path.join(os.path.dirname(text_output_path), new_text_filename)
+                        if not os.path.exists(new_text_path):
+                            os.rename(text_output_path, new_text_path)
+                            text_output_path = new_text_path
+                    
+                    print(f"  ✓ File renamed based on OCR content: {new_filename}")
+                    print(f"    Derived title: {ocr_result.derived_title}")
+                
+                # Save OCR result
+                ocr_processor.save_result(os.path.basename(output_path), ocr_result)
+                print(f"  ✓ OCR result saved ({ocr_result.word_count} words, {len(ocr_result.raw_results)} regions)")
+            else:
+                print(f"  ? No text detected by PaddleOCR, keeping original filename")
+                
+        except Exception as paddle_ocr_error:
+            print(f"  [WARN] PaddleOCR/Ollama step failed: {paddle_ocr_error}")
+            # Continue without renaming - not critical
+
         print(f"\n{'='*60}")
         print(f"[OK] PROCESSING COMPLETE!")
         print(f"   Input: {input_path}")
         print(f"   Output: {output_path}")
+        if ocr_filename:
+            print(f"   OCR-derived filename: {ocr_filename}")
         print(f"   Text extracted: {len(text)} characters")
         print(f"{'='*60}\n")
 
-        # NOTE: processing_complete is emitted by background_process() which has the filename
-        # Don't emit here to avoid duplicate events without filename
-
-        return True, text
+        # Return the new filename if renamed
+        return True, text, ocr_filename if ocr_filename else filename
 
     except Exception as e:
         print(f"[ERROR] Processing error: {str(e)}")
@@ -1543,7 +1612,7 @@ def process_document_image(input_path, output_path, filename=None):
         socketio.emit("processing_error", error_data)
         if filename:
             update_processing_status(filename, 12, 12, "Error", is_complete=True, error=str(e))
-        return False, str(e)
+        return False, str(e), None
 
 
 # Add process_document_image to app config for blueprint access
@@ -3365,6 +3434,196 @@ def batch_process():
 
 
 # ============================================================================
+# OCR ENDPOINTS (PaddleOCR with Ollama post-processing)
+# ============================================================================
+
+# OCR data directory
+OCR_DATA_DIR = os.path.join(DATA_DIR, "ocr_results")
+os.makedirs(OCR_DATA_DIR, exist_ok=True)
+
+
+@app.route("/ocr/<path:filename>", methods=["POST", "OPTIONS"])
+def run_ocr(filename):
+    """
+    Run PaddleOCR on a processed image
+    Returns structured OCR results with bounding boxes and derived title
+    Notifies frontend via Socket.IO on completion
+    """
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, Authorization, ngrok-skip-browser-warning"
+        )
+        response.headers["Access-Control-Max-Age"] = "3600"
+        return response, 200
+
+    try:
+        from app.modules.ocr.paddle_ocr import get_ocr_processor
+        
+        # Security: prevent directory traversal
+        if ".." in filename:
+            return jsonify({"error": "Invalid filename"}), 400
+
+        # Find the image file
+        image_path = os.path.join(PROCESSED_DIR, filename)
+        if not os.path.exists(image_path):
+            # Try uploads directory
+            image_path = os.path.join(UPLOAD_DIR, filename)
+        
+        if not os.path.exists(image_path):
+            return jsonify({"error": f"File not found: {filename}"}), 404
+
+        print(f"\n{'='*60}")
+        print(f"📝 OCR PROCESSING: {filename}")
+        print(f"{'='*60}")
+
+        # Get or create OCR processor
+        processor = get_ocr_processor(OCR_DATA_DIR)
+        
+        # Run OCR
+        result = processor.process_image(image_path)
+        
+        # Save result
+        json_path = processor.save_result(filename, result)
+        
+        # Prepare response
+        response_data = {
+            "success": True,
+            "filename": filename,
+            "ocr_result": result.to_dict(),
+            "ocr_ready": True,
+        }
+        
+        print(f"✅ OCR complete: {result.word_count} words, {len(result.raw_results)} regions")
+        print(f"   Derived title: {result.derived_title}")
+        print(f"   Processing time: {result.processing_time_ms:.0f}ms")
+        print(f"{'='*60}\n")
+
+        # Notify frontend via Socket.IO
+        try:
+            socketio.emit("ocr_complete", {
+                "filename": filename,
+                "success": True,
+                "result": result.to_dict(),  # Include full result for UI update
+                "derived_title": result.derived_title,
+                "word_count": result.word_count,
+                "confidence": result.confidence_avg,
+                "has_text": result.word_count > 0,
+            })
+        except Exception as socket_error:
+            print(f"[WARN] Socket.IO emit failed: {socket_error}")
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        error_msg = f"OCR error: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        traceback.print_exc()
+        return jsonify({"success": False, "error": error_msg}), 500
+
+
+@app.route("/ocr/<path:filename>", methods=["GET"])
+def get_ocr_result(filename):
+    """
+    Get existing OCR result for a file
+    Returns cached result if available
+    """
+    try:
+        from app.modules.ocr.paddle_ocr import get_ocr_processor
+        
+        # Security: prevent directory traversal
+        if ".." in filename:
+            return jsonify({"error": "Invalid filename"}), 400
+
+        # Get OCR processor
+        processor = get_ocr_processor(OCR_DATA_DIR)
+        
+        # Check if OCR result exists
+        result = processor.load_result(filename)
+        
+        if result:
+            return jsonify({
+                "success": True,
+                "filename": filename,
+                "ocr_result": result,
+                "ocr_ready": True,
+            })
+        else:
+            return jsonify({
+                "success": True,
+                "filename": filename,
+                "ocr_result": None,
+                "ocr_ready": False,
+            })
+
+    except Exception as e:
+        error_msg = f"Error fetching OCR result: {str(e)}"
+        print(f"[ERROR] {error_msg}")
+        return jsonify({"success": False, "error": error_msg}), 500
+
+
+@app.route("/ocr-status/<path:filename>", methods=["GET"])
+def get_ocr_status(filename):
+    """
+    Quick check if OCR has been run on a file
+    """
+    try:
+        from app.modules.ocr.paddle_ocr import get_ocr_processor
+        
+        if ".." in filename:
+            return jsonify({"error": "Invalid filename"}), 400
+
+        processor = get_ocr_processor(OCR_DATA_DIR)
+        has_ocr = processor.has_ocr_result(filename)
+        
+        return jsonify({
+            "filename": filename,
+            "ocr_ready": has_ocr,
+        })
+
+    except Exception as e:
+        return jsonify({"filename": filename, "ocr_ready": False})
+
+
+@app.route("/ocr-batch-status", methods=["POST"])
+def get_batch_ocr_status():
+    """
+    Check OCR status for multiple files at once
+    """
+    try:
+        from app.modules.ocr.paddle_ocr import get_ocr_processor
+        
+        data = request.get_json()
+        filenames = data.get("filenames", [])
+        
+        processor = get_ocr_processor(OCR_DATA_DIR)
+        
+        statuses = {}
+        for filename in filenames:
+            if ".." not in filename:
+                has_ocr = processor.has_ocr_result(filename)
+                status_info = {"has_ocr": has_ocr}
+                
+                # If OCR exists, try to get the derived title
+                if has_ocr:
+                    try:
+                        result = processor.load_result(filename)
+                        if result and result.derived_title:
+                            status_info["derived_title"] = result.derived_title
+                    except:
+                        pass
+                
+                statuses[filename] = status_info
+        
+        return jsonify({"success": True, "statuses": statuses})
+
+    except Exception as e:
+        return jsonify({"success": False, "statuses": {}, "error": str(e)})
+
+
+# ============================================================================
 # FILE CONVERSION ENDPOINTS
 # ============================================================================
 
@@ -3546,9 +3805,20 @@ def serve_converted_file(filename):
         return jsonify({"error": str(e)}), 404
 
 
+@app.route("/converted-page/<path:filepath>")
+def serve_converted_page(filepath):
+    """Serve extracted PDF pages from converted documents"""
+    try:
+        # filepath format: filename_pages/filename_page_001.jpg
+        return send_from_directory(CONVERTED_DIR, filepath)
+    except Exception as e:
+        print(f"Error serving converted page: {e}")
+        return jsonify({"error": str(e)}), 404
+
+
 @app.route("/get-converted-files", methods=["GET"])
 def get_converted_files():
-    """Get list of converted files"""
+    """Get list of converted files with extracted pages info"""
     try:
         if not os.path.exists(CONVERTED_DIR):
             return jsonify({"files": []})
@@ -3556,16 +3826,35 @@ def get_converted_files():
         files = []
         for filename in os.listdir(CONVERTED_DIR):
             filepath = os.path.join(CONVERTED_DIR, filename)
+            # Only include files, not directories
             if os.path.isfile(filepath):
                 stat = os.stat(filepath)
-                files.append(
-                    {
-                        "filename": filename,
-                        "size": stat.st_size,
-                        "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
-                        "url": f"/converted/{filename}",
-                    }
-                )
+                file_info = {
+                    "filename": filename,
+                    "size": stat.st_size,
+                    "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    "url": f"/converted/{filename}",
+                    "pages": [],  # Will be populated if pages are extracted
+                }
+                
+                # Check if extracted pages exist for this file
+                base_name = os.path.splitext(filename)[0]
+                pages_dir = os.path.join(CONVERTED_DIR, f"{base_name}_pages")
+                
+                if os.path.isdir(pages_dir):
+                    # List extracted pages
+                    page_files = sorted([f for f in os.listdir(pages_dir) if f.endswith('.jpg')])
+                    for page_file in page_files:
+                        page_path = os.path.join(pages_dir, page_file)
+                        page_size = os.path.getsize(page_path)
+                        file_info["pages"].append({
+                            "filename": page_file,
+                            "path": f"{base_name}_pages/{page_file}",
+                            "size": page_size,
+                            "url": f"/converted-page/{base_name}_pages/{page_file}",
+                        })
+                
+                files.append(file_info)
 
         # Sort by creation time (newest first)
         files.sort(key=lambda x: x["created"], reverse=True)

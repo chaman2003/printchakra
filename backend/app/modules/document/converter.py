@@ -13,6 +13,13 @@ from docx import Document
 from docx.shared import Inches
 from PIL import Image
 
+try:
+    from pdf2image import convert_from_path
+    PDF2IMAGE_AVAILABLE = True
+except ImportError:
+    PDF2IMAGE_AVAILABLE = False
+    print("⚠️  pdf2image not available - PDF page extraction disabled")
+
 
 class FileConverter:
     """Handle file format conversions"""
@@ -278,6 +285,17 @@ class FileConverter:
                         }
                     )
                     print(f"       ✅ Success ({file_size:.2f} MB): {message}")
+
+                    # Extract PDF pages if target format is PDF
+                    if target_format.lower() == 'pdf':
+                        extract_success, extracted_pages, extract_msg = FileConverter.extract_pdf_pages(
+                            output_path, output_dir
+                        )
+                        if extract_success:
+                            print(f"       📄 {extract_msg}")
+                        else:
+                            print(f"       ⚠️  Page extraction failed: {extract_msg}")
+
                 else:
                     fail_count += 1
                     results.append(
@@ -392,3 +410,64 @@ class FileConverter:
             print(f"❌ {error_msg}")
             traceback.print_exc()
             return False, error_msg
+
+    @staticmethod
+    def extract_pdf_pages(pdf_path: str, output_dir: str) -> Tuple[bool, List[str], str]:
+        """
+        Extract all pages from a PDF as images
+        Returns: (success, list_of_image_paths, message)
+        """
+        if not PDF2IMAGE_AVAILABLE:
+            return False, [], "pdf2image library not available"
+
+        try:
+            if not os.path.exists(pdf_path):
+                return False, [], f"PDF file not found: {pdf_path}"
+
+            print(f"\n📄 Extracting pages from PDF: {os.path.basename(pdf_path)}")
+
+            # Create pages subdirectory
+            base_name = os.path.splitext(os.path.basename(pdf_path))[0]
+            pages_dir = os.path.join(output_dir, f"{base_name}_pages")
+            os.makedirs(pages_dir, exist_ok=True)
+
+            # Convert PDF pages to images
+            images = convert_from_path(pdf_path, dpi=150)  # 150 DPI for good quality/size tradeoff
+
+            print(f"   Total pages: {len(images)}")
+
+            extracted_pages = []
+            blank_count = 0
+
+            for page_num, image in enumerate(images, 1):
+                # Check if page is blank (>95% white)
+                pixels = list(image.convert('RGB').getdata())
+                total_pixels = len(pixels)
+                light_pixels = sum(1 for r, g, b in pixels if r > 200 and g > 200 and b > 200)
+                light_ratio = light_pixels / total_pixels if total_pixels > 0 else 0
+
+                if light_ratio > 0.95:
+                    print(f"   ⊘ Page {page_num}: Skipped (blank)")
+                    blank_count += 1
+                    continue
+
+                # Save page as JPEG
+                page_filename = f"{base_name}_page_{page_num:03d}.jpg"
+                page_path = os.path.join(pages_dir, page_filename)
+                image.save(page_path, 'JPEG', quality=85, optimize=True)
+
+                extracted_pages.append(page_path)
+                file_size = os.path.getsize(page_path) / 1024  # KB
+                print(f"   ✓ Page {page_num}: Extracted ({file_size:.1f} KB)")
+
+            if not extracted_pages:
+                return False, [], f"No valid pages extracted (all {blank_count} pages were blank)"
+
+            print(f"   ✅ Extracted {len(extracted_pages)} pages (skipped {blank_count} blank pages)")
+            return True, extracted_pages, f"Extracted {len(extracted_pages)} pages"
+
+        except Exception as e:
+            error_msg = f"PDF page extraction failed: {str(e)}"
+            print(f"   ❌ {error_msg}")
+            traceback.print_exc()
+            return False, [], error_msg

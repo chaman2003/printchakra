@@ -32,6 +32,9 @@ export interface Document {
   pages?: DocumentPage[];
   thumbnailUrl?: string;
   fullUrl?: string;
+  size?: number;
+  type?: string;
+  fileObject?: File;
 }
 
 export interface ScanConfig {
@@ -70,3 +73,47 @@ export interface ConversionOptions {
   quality?: number;
   dpi?: number;
 }
+
+// OCR Types
+export interface OCRBoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  points?: number[][];
+}
+
+export interface OCRRawResult {
+  text: string;
+  confidence: number;
+  bbox: OCRBoundingBox;
+}
+
+export interface OCRStructuredUnit {
+  text: string;
+  type: 'title' | 'heading' | 'paragraph' | 'list_item' | 'table_cell' | 'footer' | 'other';
+  bbox: OCRBoundingBox;
+  confidence: number;
+  word_indices: number[];
+}
+
+export interface OCRResult {
+  raw_results: OCRRawResult[];
+  structured_units: OCRStructuredUnit[];
+  full_text: string;
+  derived_title: string;
+  confidence_avg: number;
+  word_count: number;
+  timestamp: string;
+  processing_time_ms: number;
+  image_dimensions: [number, number];
+}
+
+export interface OCRResponse {
+  success: boolean;
+  filename: string;
+  ocr_result: OCRResult | null;
+  ocr_ready: boolean;
+  error?: string;
+}
+
