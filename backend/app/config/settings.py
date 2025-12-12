@@ -146,7 +146,7 @@ CONNECTION_CONFIG = {
 }
 
 AI_PROMPT_CONFIG = {
-    "default_model": env("VOICE_AI_MODEL", "phi3:mini"),
+    "default_model": env("VOICE_AI_MODEL", "smollm2:135m"),
     "system_prompt_file": str(SYSTEM_PROMPT_FILE),
     "command_mappings_file": str(COMMAND_MAPPINGS_FILE),
     "models_dir": str(MODELS_DIR),

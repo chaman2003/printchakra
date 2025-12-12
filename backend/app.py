@@ -4163,7 +4163,7 @@ def transcribe_voice():
 @app.route("/voice/chat", methods=["POST"])
 def chat_with_ai():
     """
-    Send text to smollm2:135m and get AI response
+    Send text to the configured voice AI model and get a response
     Expects: JSON with 'message' field
     """
     try:

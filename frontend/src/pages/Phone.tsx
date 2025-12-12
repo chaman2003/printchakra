@@ -85,6 +85,14 @@ const Phone: React.FC = () => {
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
   
+  // Countdown state for auto-capture from dashboard
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Sync state - tracks if auto-capture was triggered remotely (from dashboard)
+  const [autoCaptureSource, setAutoCaptureSource] = useState<'local' | 'dashboard' | null>(null);
+  const [pendingDocumentCount, setPendingDocumentCount] = useState<number>(0);
+  
   // Upload Queue State
   const [uploadQueue, setUploadQueue] = useState<Array<{
     id: string;
@@ -237,7 +245,7 @@ const Phone: React.FC = () => {
   const autoCaptureCountRef = useRef(0);
 
   // Start continuous auto-capture mode with frame comparison
-  const startAutoCapture = () => {
+  const startAutoCapture = useCallback((source: 'local' | 'dashboard' = 'local', documentCount?: number) => {
     setAutoCapture(true);
     setAutoCaptureCount(0);
     autoCaptureCountRef.current = 0;
@@ -245,17 +253,26 @@ const Phone: React.FC = () => {
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
     setFrameChangeStatus('waiting');
+    setAutoCaptureSource(source);
+    if (documentCount) setPendingDocumentCount(documentCount);
     
     // Start frame comparison loop
     startFrameComparisonLoop();
     
+    // Notify dashboard if started locally
+    if (source === 'local' && socket) {
+      socket.emit('auto_capture_state_changed', { enabled: true, source: 'phone' });
+    }
+    
     toast({
-      title: 'Auto-Capture Enabled',
-      description: 'Place documents one by one. Each new document will be captured automatically.',
-      status: 'info',
+      title: source === 'dashboard' ? '📱 Auto-Capture Started!' : 'Auto-Capture Enabled',
+      description: source === 'dashboard' 
+        ? `Ready to capture ${documentCount || 'multiple'} document(s). Place documents one by one.`
+        : 'Place documents one by one. Each new document will be captured automatically.',
+      status: 'success',
       duration: 3000,
     });
-  };
+  }, [socket, toast, startFrameComparisonLoop]);
 
   // Stop continuous auto-capture mode
   const stopAutoCapture = useCallback(() => {
@@ -263,21 +280,36 @@ const Phone: React.FC = () => {
       clearInterval(autoCaptureIntervalRef.current);
       autoCaptureIntervalRef.current = null;
     }
+    // Clear countdown if running
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setCountdown(null);
     setAutoCapture(false);
     setFrameChangeStatus('waiting');
     lastCapturedImageDataRef.current = null;
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
     
+    // Notify dashboard that auto-capture stopped
+    if (socket) {
+      socket.emit('auto_capture_state_changed', { enabled: false, source: 'phone', capturedCount: autoCaptureCountRef.current });
+    }
+    
+    const wasRemote = autoCaptureSource === 'dashboard';
+    setAutoCaptureSource(null);
+    setPendingDocumentCount(0);
+    
     if (autoCaptureCountRef.current > 0) {
       toast({
         title: 'Auto-Capture Stopped',
-        description: `Captured ${autoCaptureCountRef.current} document(s)`,
+        description: `Captured ${autoCaptureCountRef.current} document(s)${wasRemote ? ' - Dashboard notified' : ''}`,
         status: 'success',
         duration: 3000,
       });
     }
-  }, [toast]);
+  }, [toast, socket, autoCaptureSource]);
 
   // Process upload queue
   useEffect(() => {
@@ -736,29 +768,81 @@ const Phone: React.FC = () => {
       }, 500);
     });
 
+    // Handle auto-capture start with 5-second countdown
     socket.on('start_auto_capture', (data: any) => {
       console.log('Received auto-capture command from Dashboard:', data);
       const documentCount = data?.documentCount || 1;
-      showMessage(`📱 Auto-capture enabled for ${documentCount} document${documentCount !== 1 ? 's' : ''}!`);
-      setTimeout(() => {
-        if (captureMode === 'camera' && stream) {
-          startAutoCapture();
-        } else {
-          showMessage('💡 Switching to Camera mode to auto-capture...');
-          handleCaptureMode('camera');
-          // Start auto-capture after camera mode is activated
-          setTimeout(() => {
-            startAutoCapture();
-          }, 1000);
-        }
-      }, 500);
+      
+      // Show immediate visual feedback toast
+      toast({
+        title: '📱 Auto-Capture Incoming!',
+        description: `Starting 5-second countdown for ${documentCount} document${documentCount !== 1 ? 's' : ''}...`,
+        status: 'info',
+        duration: 2000,
+        isClosable: true,
+        position: 'top',
+      });
+      
+      // Ensure camera mode is active
+      if (captureMode !== 'camera' || !stream) {
+        showMessage('💡 Switching to Camera mode...');
+        handleCaptureMode('camera');
+      }
+      
+      // Start 5-second countdown
+      setCountdown(5);
+      setPendingDocumentCount(documentCount);
+      
+      // Clear any existing countdown
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      
+      countdownIntervalRef.current = setInterval(() => {
+        setCountdown(prev => {
+          if (prev === null || prev <= 1) {
+            // Countdown finished - start auto-capture
+            clearInterval(countdownIntervalRef.current!);
+            countdownIntervalRef.current = null;
+            
+            // Start auto-capture after short delay to ensure camera is ready
+            setTimeout(() => {
+              startAutoCapture('dashboard', documentCount);
+            }, 100);
+            
+            return null;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    });
+    
+    // Handle stop auto-capture from dashboard
+    socket.on('stop_auto_capture', () => {
+      console.log('Received stop auto-capture from Dashboard');
+      stopAutoCapture();
+      toast({
+        title: '⏹️ Auto-Capture Stopped',
+        description: 'Dashboard disabled auto-capture',
+        status: 'info',
+        duration: 2000,
+      });
+    });
+    
+    // Handle sync request from dashboard
+    socket.on('request_auto_capture_state', () => {
+      socket.emit('auto_capture_state_changed', { 
+        enabled: autoCapture, 
+        source: 'phone',
+        capturedCount: autoCaptureCountRef.current 
+      });
     });
 
     return () => {
       socket.off('capture_now');
       socket.off('start_auto_capture');
-      // Do NOT stop camera here, as this effect re-runs when uploadQueue changes
-      // stopAutoCapture(); // Removed to prevent stopping auto-capture on queue updates
+      socket.off('stop_auto_capture');
+      socket.off('request_auto_capture_state');
     };
   }, [
     socket,
@@ -766,9 +850,11 @@ const Phone: React.FC = () => {
     captureMode,
     showMessage,
     startAutoCapture,
+    stopAutoCapture,
     handleCaptureMode,
     stream,
-    // stopAutoCapture, // Removed from dependency to prevent re-runs
+    toast,
+    autoCapture,
   ]);
 
   // Cleanup camera on unmount
@@ -1121,6 +1207,58 @@ const Phone: React.FC = () => {
                       </Button>
                     </Tooltip>
 
+                    {/* Countdown Overlay - Shows when auto-capture is about to start */}
+                    {countdown !== null && (
+                      <Flex
+                        position="absolute"
+                        top={0}
+                        left={0}
+                        right={0}
+                        bottom={0}
+                        align="center"
+                        justify="center"
+                        bg="rgba(0,0,0,0.7)"
+                        zIndex={20}
+                        flexDirection="column"
+                      >
+                        <Text
+                          fontSize="8xl"
+                          fontWeight="bold"
+                          color="white"
+                          textShadow="0 0 40px rgba(66, 153, 225, 1)"
+                          animation="pulse 1s infinite"
+                        >
+                          {countdown}
+                        </Text>
+                        <Text fontSize="xl" color="white" mt={4} fontWeight="600">
+                          📱 Auto-Capture Starting...
+                        </Text>
+                        <Text fontSize="md" color="whiteAlpha.800" mt={2}>
+                          {pendingDocumentCount} document{pendingDocumentCount !== 1 ? 's' : ''} queued
+                        </Text>
+                        <Button
+                          mt={6}
+                          colorScheme="red"
+                          variant="outline"
+                          onClick={() => {
+                            if (countdownIntervalRef.current) {
+                              clearInterval(countdownIntervalRef.current);
+                              countdownIntervalRef.current = null;
+                            }
+                            setCountdown(null);
+                            setPendingDocumentCount(0);
+                            toast({
+                              title: '❌ Countdown Cancelled',
+                              status: 'warning',
+                              duration: 2000,
+                            });
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </Flex>
+                    )}
+
                     {/* Auto-capture status indicator */}
                     {autoCapture && (
                       <Box
@@ -1128,28 +1266,46 @@ const Phone: React.FC = () => {
                         top={4}
                         left={4}
                         bg={
-                          frameChangeStatus === 'captured' ? 'rgba(34,197,94,0.8)' :
-                          frameChangeStatus === 'ready' ? 'rgba(34,197,94,0.5)' :
-                          frameChangeStatus === 'detecting' ? 'rgba(245,158,11,0.5)' :
-                          'rgba(100,100,100,0.5)'
+                          frameChangeStatus === 'captured' ? 'rgba(34,197,94,0.9)' :
+                          frameChangeStatus === 'ready' ? 'rgba(34,197,94,0.7)' :
+                          frameChangeStatus === 'detecting' ? 'rgba(245,158,11,0.7)' :
+                          'rgba(66,153,225,0.7)'
                         }
                         border={`2px solid ${
                           frameChangeStatus === 'captured' ? 'rgb(34,197,94)' :
                           frameChangeStatus === 'ready' ? 'rgb(34,197,94)' :
                           frameChangeStatus === 'detecting' ? 'rgb(245,158,11)' :
-                          'rgb(150,150,150)'
+                          'rgb(66,153,225)'
                         }`}
                         borderRadius="lg"
                         px={3}
-                        py={1}
+                        py={2}
                         color="white"
                         fontSize="sm"
                         fontWeight="bold"
+                        boxShadow={
+                          frameChangeStatus === 'captured' ? '0 0 20px rgba(34,197,94,0.8)' :
+                          frameChangeStatus === 'ready' ? '0 0 15px rgba(34,197,94,0.6)' :
+                          '0 0 10px rgba(66,153,225,0.5)'
+                        }
+                        animation={autoCapture ? 'pulse 2s infinite' : 'none'}
                       >
-                        {frameChangeStatus === 'captured' ? '✓ Captured!' :
-                         frameChangeStatus === 'ready' ? '📸 Ready...' :
-                         frameChangeStatus === 'detecting' ? '👀 Detecting...' :
-                         `📷 ${autoCaptureCount} captured`}
+                        <Flex align="center" gap={2}>
+                          <Box
+                            w={2}
+                            h={2}
+                            borderRadius="full"
+                            bg={frameChangeStatus === 'captured' ? 'green.300' : 'white'}
+                            animation="pulse 1s infinite"
+                          />
+                          {frameChangeStatus === 'captured' ? '✓ Captured!' :
+                           frameChangeStatus === 'ready' ? '📸 Ready...' :
+                           frameChangeStatus === 'detecting' ? '👀 Detecting...' :
+                           `📷 ${autoCaptureCount} captured`}
+                          {autoCaptureSource === 'dashboard' && (
+                            <Tag size="sm" colorScheme="blue" ml={1}>Dashboard</Tag>
+                          )}
+                        </Flex>
                       </Box>
                     )}
 
@@ -1175,10 +1331,12 @@ const Phone: React.FC = () => {
                           <Button
                             colorScheme={autoCapture ? 'green' : 'brand'}
                             size="lg"
-                            onClick={autoCapture ? stopAutoCapture : startAutoCapture}
+                            onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
                             isDisabled={!stream || uploading}
                             leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
                             minW="160px"
+                            boxShadow={autoCapture ? '0 0 20px rgba(72, 187, 120, 0.6)' : 'none'}
+                            animation={autoCapture ? 'pulse 2s infinite' : 'none'}
                           >
                             {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
                           </Button>
@@ -1217,13 +1375,17 @@ const Phone: React.FC = () => {
                         Capture
                       </Button>
                     </Tooltip>
-                    <Tooltip label="Continuous auto-capture for stacked documents" hasArrow>
+                    <Tooltip label={autoCapture 
+                      ? `Stop auto-capture (${autoCaptureCount} captured)` 
+                      : 'Enable continuous auto-capture for stacked documents'} hasArrow>
                       <Button
                         variant={autoCapture ? 'solid' : 'outline'}
                         colorScheme={autoCapture ? 'green' : 'orange'}
-                        onClick={autoCapture ? stopAutoCapture : startAutoCapture}
+                        onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
                         isDisabled={!stream || uploading}
                         leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
+                        boxShadow={autoCapture ? '0 0 15px rgba(72, 187, 120, 0.5)' : 'none'}
+                        animation={autoCapture ? 'pulse 2s infinite' : 'none'}
                       >
                         {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
                       </Button>

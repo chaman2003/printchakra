@@ -952,7 +952,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             size="sm"
             variant="ghost"
             colorScheme="red"
-            onClick={onClose}
+            onClick={handleClose}
             borderRadius="full"
           />
         </Flex>

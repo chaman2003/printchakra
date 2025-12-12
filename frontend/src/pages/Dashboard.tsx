@@ -1563,6 +1563,28 @@ const Dashboard: React.FC = () => {
       handleOrchestrationUpdateRef.current?.(payload);
     };
     socket.on('orchestration_update', orchestrationUpdateListener);
+    
+    // Listen for auto-capture state changes from phone
+    const autoCaptureStateListener = (data: any) => {
+      console.log('Auto-capture state changed from phone:', data);
+      setAutoCaptureEnabled(data?.enabled || false);
+      if (data?.enabled) {
+        toast({
+          title: '📱 Phone Auto-Capture Active',
+          description: data?.source === 'phone' ? 'Started from Phone interface' : 'Auto-capture is running',
+          status: 'success',
+          duration: 3000,
+        });
+      } else if (data?.capturedCount > 0) {
+        toast({
+          title: '✅ Auto-Capture Complete',
+          description: `Phone captured ${data.capturedCount} document(s)`,
+          status: 'success',
+          duration: 4000,
+        });
+      }
+    };
+    socket.on('auto_capture_state_changed', autoCaptureStateListener);
 
     loadFiles();
     loadConvertedFiles(); // Load converted files on component mount
@@ -1612,9 +1634,10 @@ const Dashboard: React.FC = () => {
       socket.off('processing_complete', processingCompleteListener);
       socket.off('processing_error', processingErrorListener);
       socket.off('orchestration_update', orchestrationUpdateListener);
+      socket.off('auto_capture_state_changed', autoCaptureStateListener);
       // -- startPolling cleaned up
     };
-  }, [socket]);
+  }, [socket, toast]);
 
   const lastLoadFilesRunRef = React.useRef<number>(0);
   const minLoadFilesInterval = 200; // ms - reduced for faster real-time updates during capture
@@ -1880,6 +1903,7 @@ const Dashboard: React.FC = () => {
   };
 
   // Feed documents through printer (uses printer as document feeder)
+  // Also triggers auto-capture on phone with 5-second countdown
   const feedDocumentsThroughPrinter = async () => {
     if (documentsToFeed < 1) {
       toast({
@@ -1894,6 +1918,21 @@ const Dashboard: React.FC = () => {
     setIsFeedingDocuments(true);
     let successCount = 0;
     let failCount = 0;
+    
+    // Trigger auto-capture on phone with countdown BEFORE feeding starts
+    if (socket && !autoCaptureEnabled) {
+      socket.emit('start_auto_capture', {
+        documentCount: documentsToFeed,
+        timestamp: Date.now(),
+      });
+      setAutoCaptureEnabled(true);
+      toast({
+        title: '📱 Phone Auto-Capture Starting',
+        description: '5-second countdown on Phone while documents are feeding...',
+        status: 'info',
+        duration: 3000,
+      });
+    }
 
     try {
       // Loop through the number of documents to feed
@@ -1939,7 +1978,7 @@ const Dashboard: React.FC = () => {
           title: `Fed ${successCount} Document${successCount !== 1 ? 's' : ''}`,
           description: failCount > 0 
             ? `${successCount} fed successfully, ${failCount} failed.` 
-            : 'Documents are now in the output tray. Ready for phone capture!',
+            : 'Documents ready! Phone auto-capture should be active.',
           status: failCount > 0 ? 'warning' : 'success',
           duration: 5000,
         });
@@ -3371,31 +3410,14 @@ const Dashboard: React.FC = () => {
                           </Button>
                         </Flex>
 
-                        {/* Auto Capture Button - Triggers phone camera auto-capture with visual feedback */}
+                        {/* Auto Capture Button - Toggles phone camera auto-capture with visual feedback */}
                         <Button
-                          colorScheme={autoCaptureEnabled ? 'blue' : 'gray'}
+                          colorScheme={autoCaptureEnabled ? 'green' : 'blue'}
                           size="md"
                           variant={autoCaptureEnabled ? 'solid' : 'outline'}
                           width="100%"
                           onClick={() => {
-                            // Emit socket event to trigger auto-capture on phone
-                            if (socket) {
-                              socket.emit('start_auto_capture', {
-                                documentCount: documentsToFeed,
-                                timestamp: Date.now(),
-                              });
-                              // Set button state to enabled with visual feedback
-                              setAutoCaptureEnabled(true);
-                              // Auto-disable after 8 seconds
-                              setTimeout(() => setAutoCaptureEnabled(false), 8000);
-                              toast({
-                                title: '📱 Auto Capture ENABLED',
-                                description: `✨ Phone camera will auto-capture the next ${documentsToFeed} document${documentsToFeed !== 1 ? 's' : ''}. Get ready to feed documents!`,
-                                status: 'success',
-                                duration: 4000,
-                                isClosable: true,
-                              });
-                            } else {
+                            if (!socket) {
                               toast({
                                 title: '🔗 Connection Error',
                                 description: 'Phone is not connected. Open the Phone Interface to connect.',
@@ -3403,24 +3425,52 @@ const Dashboard: React.FC = () => {
                                 duration: 3000,
                                 isClosable: true,
                               });
+                              return;
+                            }
+                            
+                            if (autoCaptureEnabled) {
+                              // Stop auto-capture
+                              socket.emit('stop_auto_capture', { timestamp: Date.now() });
+                              setAutoCaptureEnabled(false);
+                              toast({
+                                title: '⏹️ Auto Capture STOPPED',
+                                description: 'Phone camera auto-capture has been disabled.',
+                                status: 'info',
+                                duration: 3000,
+                                isClosable: true,
+                              });
+                            } else {
+                              // Start auto-capture with 5-second countdown on phone
+                              socket.emit('start_auto_capture', {
+                                documentCount: documentsToFeed,
+                                timestamp: Date.now(),
+                              });
+                              setAutoCaptureEnabled(true);
+                              toast({
+                                title: '📱 Auto Capture STARTING',
+                                description: `5-second countdown on Phone, then auto-capture for ${documentsToFeed} document${documentsToFeed !== 1 ? 's' : ''}!`,
+                                status: 'success',
+                                duration: 4000,
+                                isClosable: true,
+                              });
                             }
                           }}
                           leftIcon={
                             <Iconify 
-                              icon={autoCaptureEnabled ? 'solar:camera-bold' : 'solar:camera-minimalistic-bold'} 
+                              icon={autoCaptureEnabled ? 'solar:stop-bold' : 'solar:camera-minimalistic-bold'} 
                               width={18} 
                               height={18} 
                             />
                           }
                           isDisabled={!socket}
-                          boxShadow={autoCaptureEnabled ? '0 0 20px rgba(66, 153, 225, 0.6), inset 0 0 10px rgba(66, 153, 225, 0.3)' : 'none'}
+                          boxShadow={autoCaptureEnabled ? '0 0 20px rgba(72, 187, 120, 0.6), inset 0 0 10px rgba(72, 187, 120, 0.3)' : 'none'}
                           transition="all 0.3s ease"
                           _hover={{
                             boxShadow: autoCaptureEnabled 
-                              ? '0 0 30px rgba(66, 153, 225, 0.8), inset 0 0 15px rgba(66, 153, 225, 0.4)'
-                              : 'md',
+                              ? '0 0 30px rgba(72, 187, 120, 0.8), inset 0 0 15px rgba(72, 187, 120, 0.4)'
+                              : '0 0 15px rgba(66, 153, 225, 0.4)',
                             transform: 'translateY(-1px)',
-                            bg: autoCaptureEnabled ? 'blue.600' : undefined,
+                            bg: autoCaptureEnabled ? 'green.600' : undefined,
                           }}
                           _active={{
                             transform: 'translateY(0)',
@@ -3429,11 +3479,11 @@ const Dashboard: React.FC = () => {
                           css={autoCaptureEnabled ? {
                             '@keyframes pulse': {
                               '0%, 100%': { opacity: 1 },
-                              '50%': { opacity: 0.8 },
+                              '50%': { opacity: 0.85 },
                             }
                           } : {}}
                         >
-                          {autoCaptureEnabled ? '🟢 Auto Capture ACTIVE' : '📱 Auto Capture on Phone'}
+                          {autoCaptureEnabled ? '🟢 STOP Auto Capture' : '📱 Start Auto Capture on Phone'}
                         </Button>
                         
                         <Text fontSize="xs" color="text.muted" fontStyle="italic">

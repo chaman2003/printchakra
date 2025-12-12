@@ -156,7 +156,7 @@ DEFAULT_COMMAND_CONFIG = {
             "repeat_penalty": 1.2,
             "stop": ["\n\n", "User:", "Assistant:"],
         },
-        "timeout": 15,
+        "timeout": 60,
     },
 }
 
@@ -219,7 +219,7 @@ PRINT_KEYWORDS = COMMAND_CONFIG["print_keywords"]
 SCAN_KEYWORDS = COMMAND_CONFIG["scan_keywords"]
 QUESTION_WORDS = COMMAND_CONFIG["question_words"]
 OLLAMA_QUERY_OPTIONS = COMMAND_CONFIG["ollama"]["options"]
-OLLAMA_API_TIMEOUT = COMMAND_CONFIG["ollama"].get("timeout", 15)
+OLLAMA_API_TIMEOUT = COMMAND_CONFIG["ollama"].get("timeout", 60)  # Default voice AI timeout
 
 
 # ============================================================================
@@ -276,11 +276,11 @@ class VoicePromptManager:
             
         Example:
             >>> messages = [
-            ...     {"role": "system", "content": SMOLLM_SYSTEM_PROMPT},
+            ...     {"role": "system", "content": SYSTEM_PROMPT},
             ...     {"role": "user", "content": "Print this document"}
             ... ]
-            >>> query = VoicePromptManager.build_ollama_query("phi3:mini", messages)
-            >>> response = requests.post("http://localhost:11434/api/chat", json=query, timeout=15)
+            >>> query = VoicePromptManager.build_ollama_query("smollm2:135m", messages)
+            >>> response = requests.post("http://localhost:11434/api/chat", json=query, timeout=60)
         """
         return {
             "model": model_name,
@@ -301,7 +301,7 @@ class VoicePromptManager:
         - Ensure proper punctuation
         
         Args:
-            ai_response: Raw response from SmolLM2
+            ai_response: Raw response from the selected model
             
         Returns:
             Formatted, voice-friendly response
@@ -390,9 +390,9 @@ class VoicePromptManager:
             True if message confirms an action
             
         Example:
-            >>> SmolLMPromptManager.is_confirmation("yes proceed")
+            >>> VoicePromptManager.is_confirmation("yes proceed")
             True
-            >>> SmolLMPromptManager.is_confirmation("no thanks")
+            >>> VoicePromptManager.is_confirmation("no thanks")
             False
         """
         user_lower = user_message.lower().strip()
@@ -414,9 +414,9 @@ class VoicePromptManager:
             True if message appears to be a print command
             
         Example:
-            >>> SmolLMPromptManager.is_print_command("print this document")
+            >>> VoicePromptManager.is_print_command("print this document")
             True
-            >>> SmolLMPromptManager.is_print_command("how do I print?")
+            >>> VoicePromptManager.is_print_command("how do I print?")
             False  # if exclude_questions=True
         """
         user_lower = user_message.lower().strip()
@@ -447,9 +447,9 @@ class VoicePromptManager:
             True if message appears to be a scan command
             
         Example:
-            >>> SmolLMPromptManager.is_scan_command("scan a document")
+            >>> VoicePromptManager.is_scan_command("scan a document")
             True
-            >>> SmolLMPromptManager.is_scan_command("can you scan?")
+            >>> VoicePromptManager.is_scan_command("can you scan?")
             False  # if exclude_questions=True
         """
         user_lower = user_message.lower().strip()
@@ -486,7 +486,7 @@ if __name__ == "__main__":
         {"role": "system", "content": prompt},
         {"role": "user", "content": "How can I help?"}
     ]
-    query = VoicePromptManager.build_ollama_query("phi3:mini", messages)
+    query = VoicePromptManager.build_ollama_query("smollm2:135m", messages)
     print(f"Ollama Query Keys: {query.keys()}\n")
     
     # Format response

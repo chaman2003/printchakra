@@ -12,7 +12,7 @@ psutil>=5.9.0
 
 # Image processing & OCR
 opencv-python==4.10.0.84
-numpy==2.1.1
+numpy>=1.24.0,<2.0.0
 Pillow>=11.0.0
 pytesseract==0.3.10
 
@@ -37,13 +37,12 @@ pywin32>=307
 
 # Voice AI & Audio
 openai-whisper>=20240930
-# whisper-cpp-python>=0.2.0  # For GGML model support (requires C++ build tools on Windows - install manually if needed)
+# whisper-cpp-python>=0.2.0  # Requires C++ build tools - use standard model instead
 # PyTorch with CUDA support - Install separately with:
-# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
 torch>=2.0.0
 torchaudio>=2.0.0
 requests>=2.31.0
 pyttsx3>=2.99
 pypiwin32>=223
 comtypes>=1.4.0
-TTS>=0.22.0  # Coqui TTS GPU-accelerated
