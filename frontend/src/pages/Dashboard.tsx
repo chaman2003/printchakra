@@ -3028,6 +3028,7 @@ const Dashboard: React.FC = () => {
         <ModalOverlay
           backdropFilter={isVoiceOrchestration ? 'blur(8px)' : 'blur(16px)'}
           bg={isVoiceOrchestration ? 'blackAlpha.600' : 'blackAlpha.700'}
+          zIndex={isChatVisible ? 2001 : undefined}
         />
         <MotionModalContent
           bg={surfaceCard}
@@ -3036,14 +3037,17 @@ const Dashboard: React.FC = () => {
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
           maxH={isVoiceOrchestration ? '90vh' : MODAL_CONFIG.modal.maxHeight}
-          maxW={isVoiceOrchestration ? '95vw' : MODAL_CONFIG.modal.maxWidth}
-          w={isVoiceOrchestration ? '95vw' : 'auto'}
+          maxW={isChatVisible ? { base: '95vw', lg: '60vw' } : (isVoiceOrchestration ? '95vw' : MODAL_CONFIG.modal.maxWidth)}
+          w={isChatVisible ? { base: '95vw', lg: '60vw' } : (isVoiceOrchestration ? '95vw' : 'auto')}
           h={isVoiceOrchestration ? '90vh' : 'auto'}
-          mx={isVoiceOrchestration ? 'auto' : 'auto'}
+          mx={isChatVisible ? { base: 'auto', lg: '2' } : 'auto'}
+          ml={isChatVisible ? { base: 'auto', lg: '2' } : 'auto'}
+          mr={isChatVisible ? { base: 'auto', lg: '37vw' } : 'auto'}
           my={isVoiceOrchestration ? '5vh' : 'auto'}
           overflow="hidden"
           display="flex"
           flexDirection="column"
+          zIndex={isChatVisible ? 2002 : undefined}
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -5114,8 +5118,8 @@ const Dashboard: React.FC = () => {
           borderLeft="1px solid"
           borderColor={chatSidebarBorderColor}
           overflowY="auto"
-          zIndex={2000}
-          transition="transform 0.3s ease-out"
+          zIndex={orchestrateModal.isOpen ? 2003 : 2000}
+          transition="transform 0.3s ease-out, z-index 0.1s"
         >
           <VoiceAIChat
             isOpen={isChatVisible}
