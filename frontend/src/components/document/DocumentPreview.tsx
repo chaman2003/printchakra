@@ -151,31 +151,27 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
 
   const responsiveWidth = useBreakpointValue({ base: 85, md: 50, lg: 28 }) || 28;
 
-  // Calculate responsive paper dimensions using configurable values
+  // Calculate responsive paper dimensions using configurable values - Like Chrome print preview
   const getPaperDimensions = () => {
     const ratio = 1.414; // A4 aspect ratio
-    let w = responsiveWidth;
-    let h = responsiveWidth * ratio;
+    
+    // Start with a base size that fits in most containers
+    let baseWidth = 600; // pixels as base
+    let baseHeight = baseWidth * ratio;
 
     if (isLandscape) {
       // Swap for landscape
-      const temp = w;
-      w = h;
-      h = temp;
-      
-      // Cap width at 90vw to prevent overflow on small screens
-      if (w > 90) {
-        const scaleFactor = 90 / w;
-        w = 90;
-        h = h * scaleFactor;
-      }
+      const temp = baseWidth;
+      baseWidth = baseHeight;
+      baseHeight = temp;
     }
 
-    const scale = ((zoomLevel / 100) * (previewSettings?.scale || 100)) / 100;
-
+    // Apply zoom and scale settings
+    const scale = (zoomLevel / 100) * ((previewSettings?.scale || 100) / 100);
+    
     return {
-      width: `${w * scale}vw`,
-      height: `${h * scale}vw`, // Use vw for both to maintain aspect ratio
+      width: `${baseWidth * scale}px`,
+      height: `${baseHeight * scale}px`,
     };
   };
 
@@ -671,7 +667,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
           flex={1}
           align="center"
           justify="center"
-          p="1rem"
+          p={{ base: '0.5rem', md: '1rem', lg: '1.5rem' }}
           minH={PREVIEW_SIZE.containerMinHeight}
           overflow="auto"
           bg={bgColor}
@@ -783,7 +779,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               </SimpleGrid>
             </VStack>
           ) : (
-            // SINGLE PAGE VIEW - Show one page at a time
+            // SINGLE PAGE VIEW - Show one page at a time (Like Chrome Print Preview)
             <Box
               width={paperDimensions.width}
               height={paperDimensions.height}
@@ -793,16 +789,14 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
               borderRadius="sm"
               boxShadow={focusShadow}
               bg={paperBg}
-              border="1px solid"
+              border="2px solid"
               borderColor={focusBorderColor}
               position="relative"
               display="flex"
               alignItems="center"
               justifyContent="center"
-              overflow="visible"
-              sx={{
-                aspectRatio: isLandscape ? '1.414 / 1' : '1 / 1.414',
-              }}
+              overflow="hidden"
+              flexShrink={0}
             >
               {currentPageUrl ? (
                 <img
@@ -810,12 +804,10 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                   src={currentPageUrl}
                   alt={`${currentDoc.filename} - Page ${currentPage}`}
                   style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    width: 'auto',
-                    height: 'auto',
-                    display: 'block',
+                    width: '100%',
+                    height: '100%',
                     objectFit: 'contain',
+                    display: 'block',
                     transformOrigin: 'center center',
                     transform: `rotate(${rotation}deg)`,
                     filter:
