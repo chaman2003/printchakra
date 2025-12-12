@@ -452,6 +452,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
               <TabPanel>
                 <VStack spacing={4}>
                   <Box
+                    as="div"
                     w="100%"
                     minH="200px"
                     border="2px dashed"
@@ -459,10 +460,29 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
                     borderRadius="xl"
                     bg={isDragging ? 'rgba(121,95,238,0.1)' : 'transparent'}
                     transition="all 0.3s"
-                    onDrop={handleDrop}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
                     cursor="pointer"
+                    pointerEvents="auto"
+                    onDrop={(e: any) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                      handleFileUpload(e.dataTransfer.files);
+                    }}
+                    onDragOver={(e: any) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(true);
+                    }}
+                    onDragEnter={(e: any) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={(e: any) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                    }}
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <Flex direction="column" align="center" justify="center" h="100%" p={6}>
