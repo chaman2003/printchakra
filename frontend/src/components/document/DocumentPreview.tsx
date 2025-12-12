@@ -155,8 +155,8 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
   const getPaperDimensions = () => {
     const ratio = 1.414; // A4 aspect ratio
     
-    // Full HD base size for larger preview
-    let baseWidth = 900; // pixels as base - Full HD quality
+    // Start with a base size that fits in most containers
+    let baseWidth = 600; // pixels as base
     let baseHeight = baseWidth * ratio;
 
     if (isLandscape) {
