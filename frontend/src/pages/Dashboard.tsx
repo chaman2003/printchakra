@@ -519,6 +519,8 @@ const Dashboard: React.FC = () => {
   const [orchestrateMode, setOrchestrateMode] = useState<'scan' | 'print' | null>(null);
   // For scan mode: track whether user wants to select/upload documents or use feed tray
   const [scanDocumentSource, setScanDocumentSource] = useState<'select' | 'feed' | null>(null);
+  // Track if user manually closed document selector to prevent auto-reopening
+  const [userClosedDocSelector, setUserClosedDocSelector] = useState(false);
   const [orchestrateOptions, setOrchestrateOptions] = useState({
     // Scan options
     scanMode: 'single' as 'single' | 'multi',
@@ -983,12 +985,15 @@ const Dashboard: React.FC = () => {
   }, []);
 
   // Auto-open document selector when entering Print Step 2 with no documents selected
+  // Only auto-open once, not if user manually closed it
   useEffect(() => {
     if (
       orchestrateStep === 2 &&
       orchestrateMode === 'print' &&
       selectedDocuments.length === 0 &&
-      orchestrateModal.isOpen
+      orchestrateModal.isOpen &&
+      !userClosedDocSelector &&
+      !documentSelectorModal.isOpen
     ) {
       // Small delay to allow the modal body to render
       const timer = setTimeout(() => {
@@ -996,7 +1001,14 @@ const Dashboard: React.FC = () => {
       }, 100);
       return () => clearTimeout(timer);
     }
-  }, [orchestrateStep, orchestrateMode, selectedDocuments.length, orchestrateModal.isOpen, documentSelectorModal]);
+  }, [orchestrateStep, orchestrateMode, selectedDocuments.length, orchestrateModal.isOpen, userClosedDocSelector, documentSelectorModal]);
+
+  // Reset userClosedDocSelector when leaving print mode or step 2
+  useEffect(() => {
+    if (orchestrateStep !== 2 || orchestrateMode !== 'print') {
+      setUserClosedDocSelector(false);
+    }
+  }, [orchestrateStep, orchestrateMode]);
 
   // Save defaults to localStorage when saveAsDefault is checked
   const saveDefaultSettings = () => {
@@ -3443,11 +3455,12 @@ const Dashboard: React.FC = () => {
                 {renderVoiceAdjustmentPanel('scan')}
                 {renderVoiceAdjustmentPanel('print')}
                 <Grid
-                  templateColumns={{ base: '1fr', lg: '1fr 1fr' }}
+                  templateColumns={{ base: '1fr', lg: scanDocumentSource === 'feed' ? '1fr' : '1fr 1fr' }}
                   gap="1.5rem"
                   alignItems="start"
                 >
-                  {/* Live Preview - Scan Mode (LEFT SIDE) */}
+                  {/* Live Preview - Scan Mode (LEFT SIDE) - Hidden for feed tray mode */}
+                  {scanDocumentSource === 'select' && (
                   <Box
                     display={{ base: 'none', lg: 'flex' }}
                     flexDirection="column"
@@ -3493,6 +3506,7 @@ const Dashboard: React.FC = () => {
                       }
                     />
                   </Box>
+                  )}
 
                   {/* Options Panel (RIGHT SIDE) */}
                   <Stack spacing={3} order={{ base: 1, lg: 2 }}>
@@ -5304,7 +5318,10 @@ const Dashboard: React.FC = () => {
       <DocumentSelector
         ref={documentSelectorRef}
         isOpen={documentSelectorModal.isOpen}
-        onClose={documentSelectorModal.onClose}
+        onClose={() => {
+          setUserClosedDocSelector(true);
+          documentSelectorModal.onClose();
+        }}
         onSelect={async (docs) => {
           // Enhance documents with page information before setting
           const enhancedDocs = await enhanceDocumentsWithPages(docs);
@@ -5318,7 +5335,7 @@ const Dashboard: React.FC = () => {
         convertedDocuments={convertedDocumentOptions}
         allowMultiple={true}
         mode={orchestrateMode || 'print'}
-        isChatVisible={isChatVisible}
+        isChatVisible={false}
       />
         </DashboardShell>
       </PageShell>
