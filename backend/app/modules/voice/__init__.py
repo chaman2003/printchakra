@@ -869,6 +869,35 @@ class VoiceChatService:
             
             logger.info(f"[SEARCH] Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
 
+            # PRIORITY -1: Check for GREETINGS - Respond with friendly introduction
+            is_greeting = False
+            if VOICE_PROMPT_AVAILABLE:
+                is_greeting = VoicePromptManager.is_greeting(user_message)
+            else:
+                greeting_words = ["hello", "hi", "hey", "greetings", "howdy", "good morning", "good afternoon", "good evening"]
+                is_greeting = any(word in user_lower for word in greeting_words)
+            
+            if is_greeting:
+                # Greeting detected - Return friendly concise introduction
+                greeting_response = "Hello! I'm PrintChakra AI. Say print or scan to get started."
+                logger.info(f"[GREETING] Recognized greeting: '{user_message}'")
+                
+                self.conversation_history.append({"role": "user", "content": user_message})
+                self.conversation_history.append({"role": "assistant", "content": greeting_response})
+                
+                # Keep only last 8 exchanges (16 messages) for context
+                if len(self.conversation_history) > 16:
+                    self.conversation_history = self.conversation_history[-16:]
+                
+                return {
+                    "success": True,
+                    "response": greeting_response,
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "tts_enabled": TTS_AVAILABLE,
+                    "spoken": False,
+                }
+
             # PRIORITY 0: Check for DIRECT print/scan commands FIRST - HIGHEST PRIORITY
             # These should take precedence over any other command interpretation
             is_print_command = False

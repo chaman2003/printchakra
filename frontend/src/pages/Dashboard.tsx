@@ -193,6 +193,8 @@ interface PreviewControlState {
 
 type OrchestrationAction = 'print' | 'scan';
 
+type ColorModeOption = 'color' | 'bw' | 'grayscale';
+
 const useImageWithHeaders = (imageUrl: string, refreshToken?: number) => {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -559,7 +561,7 @@ const Dashboard: React.FC = () => {
     scanPaperSizeCustom: '',
     scanResolution: '300' as string,
     scanResolutionCustom: '',
-    scanColorMode: 'color' as 'color',
+    scanColorMode: 'color' as ColorModeOption,
     scanFormat: 'pdf' as string,
     scanQuality: 'normal' as string,
     // Print options
@@ -569,7 +571,7 @@ const Dashboard: React.FC = () => {
     printPaperSize: 'A4' as string,
     printPaperSizeCustom: '',
     printResolution: '300' as string,
-    printColorMode: 'color' as 'color',
+    printColorMode: 'color' as ColorModeOption,
     printScale: '100' as string,
     printScaleCustom: '',
     printMargins: 'default' as 'default' | 'narrow' | 'none',

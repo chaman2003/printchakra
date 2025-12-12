@@ -116,6 +116,11 @@ DEFAULT_COMMAND_CONFIG = {
             "stop recording", "stop listening", "end session",
             "bye", "goodbye", "stop voice"
         ],
+        "greeting": [
+            "hello", "hi", "hey", "greetings", "howdy",
+            "good morning", "good afternoon", "good evening",
+            "hi there", "hello there"
+        ],
     },
     "friendly_responses": {
         "select_document": "Selecting document {document_number}",
@@ -129,6 +134,7 @@ DEFAULT_COMMAND_CONFIG = {
         "repeat_settings": "Reading settings...",
         "help": "Here's what I can do...",
         "stop_recording": "Stopping recording",
+        "greeting": "Hello! I'm PrintChakra AI. Say print or scan to get started.",
     },
     "confirmation_words": [
         "yes", "proceed", "go ahead", "okay", "ok",
@@ -493,6 +499,34 @@ class VoicePromptManager:
             return not has_question_word
         
         return True
+    
+    @staticmethod
+    def is_greeting(user_message: str) -> bool:
+        """
+        Check if user message is a greeting
+        
+        Args:
+            user_message: User's text input
+            
+        Returns:
+            True if message appears to be a greeting
+            
+        Example:
+            >>> VoicePromptManager.is_greeting("hello")
+            True
+            >>> VoicePromptManager.is_greeting("hi there")
+            True
+        """
+        user_lower = user_message.lower().strip()
+        
+        # Get greeting keywords from config
+        greeting_keywords = DEFAULT_COMMAND_CONFIG.get("voice_commands", {}).get("greeting", [])
+        
+        # Check if message matches greeting pattern
+        return any(
+            user_lower == kw or user_lower.startswith(kw + " ") or kw in user_lower
+            for kw in greeting_keywords
+        )
 
 
 # ============================================================================
