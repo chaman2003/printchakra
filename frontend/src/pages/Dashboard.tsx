@@ -517,6 +517,8 @@ const Dashboard: React.FC = () => {
   // Orchestrate Print & Capture state
   const [orchestrateStep, setOrchestrateStep] = useState<number>(1); // 1=mode, 2=options, 3=confirm
   const [orchestrateMode, setOrchestrateMode] = useState<'scan' | 'print' | null>(null);
+  // For scan mode: track whether user wants to select/upload documents or use feed tray
+  const [scanDocumentSource, setScanDocumentSource] = useState<'select' | 'feed' | null>(null);
   const [orchestrateOptions, setOrchestrateOptions] = useState({
     // Scan options
     scanMode: 'single' as 'single' | 'multi',
@@ -979,6 +981,22 @@ const Dashboard: React.FC = () => {
       }
     }
   }, []);
+
+  // Auto-open document selector when entering Print Step 2 with no documents selected
+  useEffect(() => {
+    if (
+      orchestrateStep === 2 &&
+      orchestrateMode === 'print' &&
+      selectedDocuments.length === 0 &&
+      orchestrateModal.isOpen
+    ) {
+      // Small delay to allow the modal body to render
+      const timer = setTimeout(() => {
+        documentSelectorModal.onOpen();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [orchestrateStep, orchestrateMode, selectedDocuments.length, orchestrateModal.isOpen, documentSelectorModal]);
 
   // Save defaults to localStorage when saveAsDefault is checked
   const saveDefaultSettings = () => {
@@ -1756,6 +1774,7 @@ const Dashboard: React.FC = () => {
     // Reset state
     setOrchestrateStep(1);
     setOrchestrateMode(null);
+    setScanDocumentSource(null); // Reset scan document source choice
     // Reset document feeder state
     setDocumentsFed(false);
     setFeedCount(0);
@@ -1798,6 +1817,12 @@ const Dashboard: React.FC = () => {
 
     setOrchestrateMode(mode);
 
+    // For scan mode, reset document source so user sees the choice screen
+    // (select/upload vs feed tray)
+    if (mode === 'scan') {
+      setScanDocumentSource(null);
+    }
+
     const resolvedVoiceOptions = resolveInitialVoiceConfigOptions(mode, config);
     if (Object.keys(resolvedVoiceOptions).length > 0) {
       setOrchestrateOptions(prev => ({
@@ -1812,7 +1837,9 @@ const Dashboard: React.FC = () => {
       orchestrateModal.onOpen();
       toast({
         title: `${mode === 'print' ? '🖨️ Print' : '📸 Scan'} Mode Activated`,
-        description: 'AI has configured your settings. Review and proceed.',
+        description: mode === 'scan' 
+          ? 'Choose how you want to provide documents for scanning.'
+          : 'Select documents to print.',
         status: 'success',
         duration: 4000,
         isClosable: true,
@@ -3232,7 +3259,13 @@ const Dashboard: React.FC = () => {
                 </Button>
                 <Button
                   colorScheme="brand"
-                  onClick={() => setOrchestrateStep(2)}
+                  onClick={() => {
+                    // Reset scan document source for scan mode so choice screen appears
+                    if (orchestrateMode === 'scan') {
+                      setScanDocumentSource(null);
+                    }
+                    setOrchestrateStep(2);
+                  }}
                   isDisabled={!orchestrateMode}
                   size="lg"
                   px={8}
@@ -3260,7 +3293,7 @@ const Dashboard: React.FC = () => {
                 <Box p={2} bg="brand.500" borderRadius="lg" color="white">
                   <Iconify icon="solar:document-add-bold-duotone" width={24} height={24} />
                 </Box>
-                Scan Configuration
+                {scanDocumentSource === null ? 'Select Document Source' : 'Scan Configuration'}
                 <Badge colorScheme="purple" fontSize="sm" px={3} py={1}>
                   Step 2 of 3
                 </Badge>
@@ -3271,6 +3304,123 @@ const Dashboard: React.FC = () => {
                 right={6}
                 _hover={{ bg: 'red.500', color: 'white' }}
               />
+
+              {/* Sub-step: Choose document source (select/upload OR feed tray) */}
+              {scanDocumentSource === null && (
+                <>
+                  <ModalBody py={8} px={6}>
+                    <VStack spacing={6} align="stretch">
+                      <Text fontSize="lg" color="text.secondary" textAlign="center" mb={4}>
+                        How would you like to provide documents for scanning?
+                      </Text>
+                      
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                        {/* Option 1: Select/Upload Documents */}
+                        <Box
+                          as="button"
+                          p={8}
+                          borderRadius="2xl"
+                          border="3px solid"
+                          borderColor="brand.400"
+                          bg="rgba(121,95,238,0.08)"
+                          _hover={{
+                            borderColor: 'brand.500',
+                            bg: 'rgba(121,95,238,0.15)',
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 12px 30px rgba(121,95,238,0.3)',
+                          }}
+                          transition="all 0.3s"
+                          onClick={() => {
+                            setScanDocumentSource('select');
+                            documentSelectorModal.onOpen();
+                          }}
+                          textAlign="center"
+                        >
+                          <VStack spacing={4}>
+                            <Box
+                              p={4}
+                              borderRadius="full"
+                              bg="brand.500"
+                              color="white"
+                            >
+                              <Iconify icon="solar:upload-bold-duotone" width={48} height={48} />
+                            </Box>
+                            <Heading size="md" color="text.primary">
+                              Select or Upload Document
+                            </Heading>
+                            <Text fontSize="sm" color="text.muted">
+                              Choose from existing documents or upload new files from your device
+                            </Text>
+                            <HStack spacing={2} flexWrap="wrap" justify="center">
+                              <Badge colorScheme="purple">PDF</Badge>
+                              <Badge colorScheme="blue">JPG</Badge>
+                              <Badge colorScheme="green">PNG</Badge>
+                            </HStack>
+                          </VStack>
+                        </Box>
+
+                        {/* Option 2: Use Feed Tray */}
+                        <Box
+                          as="button"
+                          p={8}
+                          borderRadius="2xl"
+                          border="3px solid"
+                          borderColor="orange.400"
+                          bg="rgba(237,137,54,0.08)"
+                          _hover={{
+                            borderColor: 'orange.500',
+                            bg: 'rgba(237,137,54,0.15)',
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 12px 30px rgba(237,137,54,0.3)',
+                          }}
+                          transition="all 0.3s"
+                          onClick={() => setScanDocumentSource('feed')}
+                          textAlign="center"
+                        >
+                          <VStack spacing={4}>
+                            <Box
+                              p={4}
+                              borderRadius="full"
+                              bg="orange.500"
+                              color="white"
+                            >
+                              <Iconify icon="solar:printer-bold-duotone" width={48} height={48} />
+                            </Box>
+                            <Heading size="md" color="text.primary">
+                              Use Printer Feed Tray
+                            </Heading>
+                            <Text fontSize="sm" color="text.muted">
+                              Feed physical documents through the printer's input tray for scanning
+                            </Text>
+                            <HStack spacing={2}>
+                              <Badge colorScheme="orange">Physical Documents</Badge>
+                            </HStack>
+                          </VStack>
+                        </Box>
+                      </SimpleGrid>
+                    </VStack>
+                  </ModalBody>
+                  <ModalFooter
+                    py="1.5rem"
+                    px="2.5rem"
+                    borderTop="1px solid"
+                    borderColor="whiteAlpha.200"
+                  >
+                    <Button
+                      variant="ghost"
+                      onClick={() => setOrchestrateStep(1)}
+                      size="lg"
+                      leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
+                    >
+                      Back to Mode Selection
+                    </Button>
+                  </ModalFooter>
+                </>
+              )}
+
+              {/* Scan options after document source is selected */}
+              {scanDocumentSource !== null && (
+                <>
               <ModalBody
                 ref={modalBodyRef}
                 py="1rem"
@@ -3346,31 +3496,34 @@ const Dashboard: React.FC = () => {
 
                   {/* Options Panel (RIGHT SIDE) */}
                   <Stack spacing={3} order={{ base: 1, lg: 2 }}>
-                    {/* Select Document Button */}
-                    <Button
-                      size="lg"
-                      colorScheme="brand"
-                      variant="solid"
-                      leftIcon={
-                        <Iconify icon="solar:document-add-bold-duotone" width={20} height={20} />
-                      }
-                      onClick={documentSelectorModal.onOpen}
-                      w="full"
-                      py="1.5rem"
-                      fontSize="md"
-                      fontWeight="600"
-                      _hover={{
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
-                      }}
-                      transition="all 0.3s"
-                    >
-                      {selectedDocuments.length > 0
-                        ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected`
-                        : 'Select Document to Scan'}
-                    </Button>
+                    {/* Select Document Button - Only show if user chose 'select' source */}
+                    {scanDocumentSource === 'select' && (
+                      <Button
+                        size="lg"
+                        colorScheme="brand"
+                        variant="solid"
+                        leftIcon={
+                          <Iconify icon="solar:document-add-bold-duotone" width={20} height={20} />
+                        }
+                        onClick={documentSelectorModal.onOpen}
+                        w="full"
+                        py="1.5rem"
+                        fontSize="md"
+                        fontWeight="600"
+                        _hover={{
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 8px 20px rgba(121,95,238,0.3)',
+                        }}
+                        transition="all 0.3s"
+                      >
+                        {selectedDocuments.length > 0
+                          ? `${selectedDocuments.length} Document${selectedDocuments.length > 1 ? 's' : ''} Selected`
+                          : 'Select Document to Scan'}
+                      </Button>
+                    )}
 
-                    {/* Feed Documents Through Printer */}
+                    {/* Feed Documents Through Printer - Only show if user chose 'feed' source */}
+                    {scanDocumentSource === 'feed' && (
                     <Box
                       p="1.25rem"
                       borderRadius="xl"
@@ -3533,6 +3686,7 @@ const Dashboard: React.FC = () => {
                         </Text>
                       </Flex>
                     </Box>
+                    )}
 
                     {/* Select Page Scan Mode */}
                     <Box
@@ -4047,7 +4201,7 @@ const Dashboard: React.FC = () => {
                 <HStack>
                   <Button
                     variant="ghost"
-                    onClick={() => setOrchestrateStep(1)}
+                    onClick={() => setScanDocumentSource(null)}
                     size="lg"
                     leftIcon={<Iconify icon="solar:arrow-left-bold" width={20} height={20} />}
                   >
@@ -4064,6 +4218,8 @@ const Dashboard: React.FC = () => {
                   </Button>
                 </HStack>
               </ModalFooter>
+                </>
+              )}
             </>
           )}
 
@@ -4146,7 +4302,7 @@ const Dashboard: React.FC = () => {
                       }
                       previewSettings={{
                         layout: orchestrateOptions.printLayout,
-                        scale: parseInt(orchestrateOptions.printScale),
+                        scale: parseInt(orchestrateOptions.printScale) || 100,
                         paperSize: orchestrateOptions.printPaperSize,
                         colorMode: orchestrateOptions.printColorMode,
                       }}

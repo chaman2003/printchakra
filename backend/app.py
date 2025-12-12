@@ -4184,7 +4184,7 @@ def chat_with_ai():
         if not user_message:
             return jsonify({"success": False, "error": "No message provided"}), 400
 
-        logger.info(f"?? User message: {user_message}")
+        logger.info(f"💬 User message: {user_message}")
 
         # Generate response (text only, no TTS)
         response = voice_ai_orchestrator.chat_service.generate_response(user_message)
@@ -4221,6 +4221,115 @@ def chat_with_ai():
             
             # Extract configuration parameters from user text
             config_params = voice_ai_orchestrator._extract_config_parameters(user_message.lower())
+            
+            # Check orchestration state and handle configuration changes (like /voice/process does)
+            if ORCHESTRATION_AVAILABLE and orchestrator:
+                current_state = orchestrator.current_state.value
+                
+                # If in CONFIGURING state, parse and apply configuration changes
+                if current_state == "configuring" and orchestrator.pending_action:
+                    action_type = orchestrator.pending_action.get("type")
+                    if action_type:
+                        logger.info(f"[CHAT] Parsing configuration for {action_type} from chat message")
+                        parsed_config = orchestrator.parse_voice_configuration(
+                            user_message, action_type
+                        )
+                        
+                        if parsed_config.get("no_changes"):
+                            # User indicated they're done with configuration
+                            response["orchestration"] = {
+                                "no_changes": True,
+                                "message": "Configuration complete. Ready to proceed.",
+                                "ready_to_confirm": True,
+                            }
+                            
+                            try:
+                                socketio.emit(
+                                    "orchestration_update",
+                                    {
+                                        "type": "configuration_complete",
+                                        "ready_to_confirm": True,
+                                        "timestamp": datetime.now().isoformat(),
+                                    },
+                                )
+                            except Exception as socket_error:
+                                logger.warning(f"Socket.IO emit failed: {socket_error}")
+                        elif parsed_config:
+                            # Apply configuration updates
+                            update_result = orchestrator.update_configuration(
+                                action_type, parsed_config
+                            )
+                            response["orchestration"] = {
+                                "configuration_updated": True,
+                                "updates": parsed_config,
+                                "configuration": update_result.get("configuration"),
+                            }
+                            
+                            # Build confirmation message
+                            confirmation_message = _build_voice_confirmation(parsed_config)
+                            if confirmation_message:
+                                response["response"] = confirmation_message
+                                ai_response = confirmation_message
+                            
+                            # Emit socket event for frontend to update UI
+                            try:
+                                socketio.emit(
+                                    "orchestration_update",
+                                    {
+                                        "type": "voice_configuration_updated",
+                                        "action_type": action_type,
+                                        "updates": parsed_config,
+                                        "configuration": update_result.get("configuration"),
+                                        "frontend_updates": update_result.get("frontend_updates"),
+                                        "frontend_state": update_result.get("frontend_state"),
+                                        "timestamp": datetime.now().isoformat(),
+                                    },
+                                )
+                                logger.info(f"[CHAT] Emitted configuration update: {parsed_config}")
+                            except Exception as socket_error:
+                                logger.warning(f"Socket.IO emit failed: {socket_error}")
+                
+                # If orchestration trigger detected, set up orchestrator state
+                elif orchestration_trigger and orchestration_mode:
+                    from app.modules.orchestration import IntentType
+                    
+                    logger.info(f"[CHAT] Setting up {orchestration_mode} orchestration state")
+                    
+                    # Add voice_triggered flag to trigger CONFIGURING state
+                    intent_text = f"{orchestration_mode} a document with voice control"
+                    intent, params = orchestrator.detect_intent(intent_text)
+                    
+                    if params is None:
+                        params = {}
+                    params["voice_triggered"] = True
+                    
+                    # Process command to set orchestrator state
+                    orchestration_result = orchestrator.process_command(
+                        intent_text,
+                        force_voice_triggered=True,
+                    )
+                    
+                    response["orchestration_state_setup"] = True
+                    response["orchestration_workflow_state"] = orchestrator.current_state.value
+                    
+                    # Emit orchestration trigger event
+                    try:
+                        socketio.emit(
+                            "orchestration_update",
+                            {
+                                "type": "voice_command_detected",
+                                "intent": orchestration_mode,
+                                "result": orchestration_result,
+                                "timestamp": datetime.now().isoformat(),
+                                "open_ui": orchestration_result.get("open_ui", False),
+                                "skip_mode_selection": orchestration_result.get("skip_mode_selection", False),
+                                "frontend_state": orchestration_result.get("frontend_state"),
+                            },
+                        )
+                    except Exception as socket_error:
+                        logger.warning(f"Socket.IO emit failed: {socket_error}")
+                    
+                    logger.info(f"[CHAT] Orchestrator state set to: {orchestrator.current_state.value}")
             
             # Add orchestration data to response
             response["orchestration_trigger"] = orchestration_trigger
