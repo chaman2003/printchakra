@@ -1771,10 +1771,9 @@ const Dashboard: React.FC = () => {
   };
 
   const reopenOrchestrateModal = () => {
-    // If it was triggered by voice, reopen voice chat as well
-    if (orchestrationContext === 'voice') {
-      setIsChatVisible(true);
-    }
+    // Always treat reopening as a voice context (no blur, transparent background)
+    setOrchestrationContext('voice');
+    setIsChatVisible(true);
     
     // Reopen with current mode and step 2 (keep same settings)
     if (orchestrateMode) {
@@ -1825,34 +1824,66 @@ const Dashboard: React.FC = () => {
 
   const executePrintJob = async () => {
     try {
+      // Validate that documents are selected
+      if (selectedDocuments.length === 0 && 
+          orchestrateOptions.printFiles.length === 0 && 
+          orchestrateOptions.printConvertedFiles.length === 0) {
+        toast({
+          title: 'No Documents Selected',
+          description: 'Please select documents to print first.',
+          status: 'warning',
+          duration: 3000,
+        });
+        return;
+      }
+
       const formData = new FormData();
 
-      // Add uploaded files
+      // Add uploaded files from print dialog
       orchestrateOptions.printFiles.forEach((file: File, index: number) => {
         formData.append('files', file);
       });
 
-      // Add converted PDFs
+      // Add converted PDFs selected from print dialog
       formData.append('convertedFiles', JSON.stringify(orchestrateOptions.printConvertedFiles));
+
+      // Add selected documents from DocumentSelector (main source for printing)
+      if (selectedDocuments.length > 0) {
+        const selectedFilenames = selectedDocuments.map(doc => doc.filename);
+        formData.append('selectedDocuments', JSON.stringify(selectedFilenames));
+      }
 
       // Add selected dashboard files if any
       if (selectedFiles.length > 0) {
         formData.append('dashboardFiles', JSON.stringify(selectedFiles));
       }
 
-      // Add print options
+      // Add comprehensive print options
       formData.append(
         'options',
         JSON.stringify({
           pages: orchestrateOptions.printPages,
+          customRange: orchestrateOptions.printCustomRange,
           layout: orchestrateOptions.printLayout,
           paperSize: orchestrateOptions.printPaperSize,
+          resolution: orchestrateOptions.printResolution,
+          colorMode: orchestrateOptions.printColorMode,
           scale: orchestrateOptions.printScale,
           margins: orchestrateOptions.printMargins,
           pagesPerSheet: orchestrateOptions.printPagesPerSheet,
+          copies: orchestrateOptions.printCopies,
+          duplex: orchestrateOptions.printDuplex,
+          quality: orchestrateOptions.printQuality,
           saveAsDefault: orchestrateOptions.saveAsDefault,
         })
       );
+
+      toast({
+        title: 'Submitting Print Job',
+        description: `Sending ${selectedDocuments.length || orchestrateOptions.printConvertedFiles.length} document(s) to printer...`,
+        status: 'info',
+        duration: 2000,
+      });
 
       const response = await apiClient.post('/orchestrate/print', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -1860,8 +1891,9 @@ const Dashboard: React.FC = () => {
 
       toast({
         title: 'Print Job Submitted',
-        description: response.data.message || 'Documents sent to printer',
+        description: response.data.message || 'Documents sent to printer successfully!',
         status: 'success',
+        duration: 4000,
       });
 
       orchestrateModal.onClose();
@@ -1870,6 +1902,7 @@ const Dashboard: React.FC = () => {
         title: 'Print Failed',
         description: err.response?.data?.error || err.message,
         status: 'error',
+        duration: 5000,
       });
     }
   };
@@ -2327,7 +2360,7 @@ const Dashboard: React.FC = () => {
   }, [convertedDrawer, loadConvertedFiles]);
   // Prevent scrolling when chat visibility changes
   return (
-    <Box position="relative" minH="100vh">
+    <Box position="relative" minH="100dvh">
       
       <PageShell>
         <DashboardShell
@@ -2335,14 +2368,14 @@ const Dashboard: React.FC = () => {
             mr: isChatVisible ? { base: 0, lg: '35vw' } : 0,
             transition: 'margin-right 0.3s ease-out',
             minH: '100vh',
-            pt: 2,
-            pb: 2,
-            px: 3,
-            pr: isChatVisible ? { base: 3, lg: 0 } : 3,
+            pt: { base: 0, md: 2 },
+            pb: 4,
+            px: { base: 0, md: 2 },
+            pr: isChatVisible ? { base: 0, lg: 0 } : { base: 0, md: 2 },
           }}
         >
           {/* Main Content Area */}
-          <VStack align="stretch" spacing={5} pb={6}>
+          <VStack align="stretch" spacing={{ base: 3, md: 4 }} pb={4}>
           <DashboardHeroCard
             statusDotColor={statusDotColor}
             statusTextColor={statusTextColor}
@@ -3024,11 +3057,14 @@ const Dashboard: React.FC = () => {
         isCentered={!isVoiceOrchestration}
         scrollBehavior={isVoiceOrchestration ? 'outside' : 'inside'}
         motionPreset={isVoiceOrchestration ? 'slideInBottom' : 'scale'}
+        trapFocus={!isChatVisible}
+        preserveScrollBarGap
       >
         <ModalOverlay
-          backdropFilter={isVoiceOrchestration ? 'blur(8px)' : 'blur(16px)'}
-          bg={isVoiceOrchestration ? 'blackAlpha.600' : 'blackAlpha.700'}
+          backdropFilter={isVoiceOrchestration ? 'none' : 'blur(16px)'}
+          bg={isVoiceOrchestration ? 'transparent' : 'blackAlpha.700'}
           zIndex={isChatVisible ? 2001 : undefined}
+          pointerEvents={isChatVisible || isVoiceOrchestration ? 'none' : 'auto'}
         />
         <MotionModalContent
           bg={surfaceCard}
@@ -3048,6 +3084,7 @@ const Dashboard: React.FC = () => {
           display="flex"
           flexDirection="column"
           zIndex={isChatVisible ? 2002 : undefined}
+          pointerEvents="auto"
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -3058,8 +3095,9 @@ const Dashboard: React.FC = () => {
             w="100%"
             direction={{ base: 'column', xl: isVoiceOrchestration ? 'row' : 'column' }}
             overflow="hidden"
+            pointerEvents="auto"
           >
-            <Box flex="1" display="flex" flexDirection="column" overflow="hidden">
+            <Box flex="1" display="flex" flexDirection="column" overflow="hidden" pointerEvents="auto">
           {/* STEP 1: Choose Mode */}
           {orchestrateStep === 1 && (
             <>
@@ -4511,6 +4549,70 @@ const Dashboard: React.FC = () => {
                       />
                     </Box>
 
+                    {/* Copies */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Heading size="sm" mb={3}>
+                        📄 Number of Copies
+                      </Heading>
+                      <Flex align="center" gap={3}>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="999"
+                          value={orchestrateOptions.printCopies}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printCopies: e.target.value,
+                            })
+                          }
+                          bg="whiteAlpha.100"
+                          borderColor="brand.300"
+                          _hover={{ borderColor: 'brand.400' }}
+                          w="100px"
+                          textAlign="center"
+                          fontWeight="bold"
+                        />
+                        <Text>copies</Text>
+                      </Flex>
+                    </Box>
+
+                    {/* Double-sided (Duplex) */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Checkbox
+                        size="lg"
+                        colorScheme="nebula"
+                        isChecked={orchestrateOptions.printDuplex}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setOrchestrateOptions({
+                            ...orchestrateOptions,
+                            printDuplex: e.target.checked,
+                          })
+                        }
+                      >
+                        <Text fontWeight="600">📑 Double-sided (Duplex) Printing</Text>
+                        <Text fontSize="xs" color="text.muted">
+                          Print on both sides of the paper
+                        </Text>
+                      </Checkbox>
+                    </Box>
+
                     {/* Select Converted PDFs */}
                     <Box>
                       <Heading size="sm" mb={3}>
@@ -4891,6 +4993,57 @@ const Dashboard: React.FC = () => {
                               </Badge>
                             </HStack>
                           )}
+                          {selectedDocuments.length > 0 && (
+                            <HStack justify="space-between" p={4} bg="green.100" borderRadius="lg" gridColumn={{ base: 'span 1', md: 'span 2' }}>
+                              <HStack>
+                                <Iconify
+                                  icon="solar:documents-bold-duotone"
+                                  width={20}
+                                  height={20}
+                                  color="green.600"
+                                />
+                                <Text fontWeight="600" color="green.700">
+                                  Documents to Print:
+                                </Text>
+                              </HStack>
+                              <Badge colorScheme="green" fontSize="md" px={3} py={1}>
+                                {selectedDocuments.length} document(s) • {selectedDocuments.reduce((total, doc) => total + (doc.pages?.length || 1), 0)} page(s)
+                              </Badge>
+                            </HStack>
+                          )}
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
+                            <Text fontWeight="600">Copies:</Text>
+                            <Badge colorScheme="indigo" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printCopies}
+                            </Badge>
+                          </HStack>
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
+                            <Text fontWeight="600">Double-sided:</Text>
+                            <Badge colorScheme={orchestrateOptions.printDuplex ? 'green' : 'gray'} fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printDuplex ? 'Yes' : 'No'}
+                            </Badge>
+                          </HStack>
+                          <HStack
+                            justify="space-between"
+                            p={4}
+                            bg="whiteAlpha.200"
+                            borderRadius="lg"
+                          >
+                            <Text fontWeight="600">Color Mode:</Text>
+                            <Badge colorScheme="pink" fontSize="md" px={3} py={1}>
+                              {orchestrateOptions.printColorMode}
+                            </Badge>
+                          </HStack>
                         </>
                       )}
                       {orchestrateOptions.saveAsDefault && (
@@ -4968,15 +5121,12 @@ const Dashboard: React.FC = () => {
                 </Button>
                 <Button
                   colorScheme={orchestrateMode === 'scan' ? 'brand' : 'blue'}
-                  onClick={() => {
-                    toast({
-                      title: '✅ Operation Started',
-                      description: `${orchestrateMode === 'scan' ? 'Scanning' : 'Printing'} with your selected options...`,
-                      status: 'success',
-                      duration: 4000,
-                      isClosable: true,
-                    });
-                    orchestrateModal.onClose();
+                  onClick={async () => {
+                    if (orchestrateMode === 'scan') {
+                      await executeScanJob();
+                    } else {
+                      await executePrintJob();
+                    }
                     setOrchestrateStep(1);
                     setOrchestrateMode(null);
                   }}
@@ -5012,6 +5162,7 @@ const Dashboard: React.FC = () => {
         convertedDocuments={convertedDocumentOptions}
         allowMultiple={true}
         mode={orchestrateMode || 'print'}
+        isChatVisible={isChatVisible}
       />
         </DashboardShell>
       </PageShell>

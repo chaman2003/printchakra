@@ -131,6 +131,19 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isSessionActive]);
 
+  // Ensure chat input can receive focus when clicked, even with modal open
+  useEffect(() => {
+    const inputElement = chatInputRef.current;
+    if (!inputElement) return;
+
+    const handleFocus = () => {
+      inputElement.focus();
+    };
+
+    inputElement.addEventListener('click', handleFocus, true);
+    return () => inputElement.removeEventListener('click', handleFocus, true);
+  }, []);
+
   const addMessage = useCallback((type: 'user' | 'ai' | 'system', text: string) => {
     setMessages(prev => addMessageWithDedup(prev, type, text));
   }, []);
@@ -1054,6 +1067,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 border="1px solid"
                 borderColor={borderColor}
                 _focus={{ borderColor: 'brand.400', boxShadow: '0 0 0 1px var(--chakra-colors-brand-400)' }}
+                autoComplete="off"
               />
               <InputRightElement width="3rem">
                 <IconButton

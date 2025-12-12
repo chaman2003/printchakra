@@ -29,58 +29,80 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   onCheckConnectivity,
   children,
 }) => {
-  const dividerColor = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.06)');
+  const dividerColor = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(69, 202, 255, 0.1)');
 
   return (
     <SurfaceCard>
-      <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align={{ base: 'start', md: 'center' }} gap={6}>
-        <Stack spacing={2}>
-          <Heading size="lg" display="flex" alignItems="center" gap={3}>
+      <Flex 
+        direction={{ base: 'column', lg: 'row' }} 
+        justify="space-between" 
+        align={{ base: 'stretch', lg: 'center' }} 
+        gap={{ base: 4, md: 5 }}
+        flexWrap="wrap"
+      >
+        <Stack spacing={1} flex="1" minW="0">
+          <Heading 
+            size={{ base: 'md', md: 'lg' }} 
+            display="flex" 
+            alignItems="center" 
+            gap={2}
+            whiteSpace="nowrap"
+          >
             📊 Dashboard
           </Heading>
-          <Text color="text.muted" maxW="lg" fontSize="sm">
+          <Text color="text.muted" maxW="xl" fontSize={{ base: 'xs', md: 'sm' }} lineHeight="short">
             {description}
           </Text>
         </Stack>
 
-        <Stack direction="row" spacing={3} align="center">
+        <Flex 
+          direction={{ base: 'column', sm: 'row' }}
+          gap={{ base: 2, md: 3 }} 
+          align={{ base: 'stretch', sm: 'center' }}
+          flexWrap="wrap"
+          justify="flex-end"
+        >
           <DeviceAndConnectivityPanel onCheckConnectivity={onCheckConnectivity} />
           <Flex
             align="center"
             gap={2}
-            px={4}
-            py={2}
+            px={{ base: 3, md: 4 }}
+            py={{ base: 1.5, md: 2 }}
             borderRadius="full"
             bg="surface.blur"
             border="1px solid"
-            borderColor="rgba(121,95,238,0.2)"
+            borderColor="rgba(69, 202, 255, 0.2)"
+            flexShrink={0}
+            whiteSpace="nowrap"
           >
             <Box
-              w={3}
-              h={3}
+              w={{ base: 2, md: 3 }}
+              h={{ base: 2, md: 3 }}
               borderRadius="full"
               bg={error ? 'orange.400' : statusDotColor}
               boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`}
+              flexShrink={0}
             />
-            <Text fontWeight="600" color={statusTextColor} fontSize="sm">
+            <Text fontWeight="600" color={statusTextColor} fontSize={{ base: 'xs', md: 'sm' }} whiteSpace="nowrap">
               {statusText}
             </Text>
           </Flex>
           <IconButton
             aria-label="Refresh files"
-            icon={<Iconify icon={FiRefreshCw} boxSize={5} />}
+            icon={<Iconify icon={FiRefreshCw} boxSize={{ base: 4, md: 5 }} />}
             onClick={onRefresh}
             variant="ghost"
             colorScheme="brand"
-            size="md"
+            size={{ base: 'sm', md: 'md' }}
             _hover={{ transform: 'rotate(180deg)', transition: 'transform 0.3s' }}
+            flexShrink={0}
           />
-        </Stack>
+        </Flex>
       </Flex>
       
       {children && (
         <>
-          <Divider my={4} borderColor={dividerColor} />
+          <Divider my={{ base: 3, md: 4 }} borderColor={dividerColor} />
           <Box>
             {children}
           </Box>

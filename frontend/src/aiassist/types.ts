@@ -1,0 +1,172 @@
+/**
+ * AI Assist Type Definitions
+ * Core types for voice commands, settings, and AI interactions
+ */
+
+// ==================== Command Types ====================
+export type CommandCategory =
+  | 'document_selection'
+  | 'settings_change'
+  | 'navigation'
+  | 'workflow_action'
+  | 'confirmation'
+  | 'system';
+
+export type CommandAction =
+  | 'SELECT_DOCUMENT'
+  | 'NEXT_DOCUMENT'
+  | 'PREV_DOCUMENT'
+  | 'SWITCH_SECTION'
+  | 'UPLOAD_DOCUMENT'
+  | 'SET_LAYOUT'
+  | 'SET_PAPER_SIZE'
+  | 'SET_COLOR_MODE'
+  | 'SET_RESOLUTION'
+  | 'SET_COPIES'
+  | 'SET_DUPLEX'
+  | 'SET_MARGINS'
+  | 'SET_SCALE'
+  | 'SET_PAGES'
+  | 'SET_PAGES_PER_SHEET'
+  | 'SET_QUALITY'
+  | 'TOGGLE_OCR'
+  | 'TOGGLE_TEXT_MODE'
+  | 'SCROLL_DOWN'
+  | 'SCROLL_UP'
+  | 'GO_BACK'
+  | 'GO_NEXT'
+  | 'APPLY_SETTINGS'
+  | 'CONFIRM'
+  | 'CANCEL'
+  | 'STATUS'
+  | 'REPEAT_SETTINGS'
+  | 'HELP'
+  | 'STOP_RECORDING'
+  | 'FEED_DOCUMENTS'
+  | 'START_PRINT'
+  | 'START_SCAN';
+
+export interface ParsedCommand {
+  action: CommandAction;
+  category: CommandCategory;
+  params?: Record<string, any>;
+  confidence: number;
+  originalText: string;
+}
+
+// ==================== Settings Types ====================
+export type WorkflowMode = 'print' | 'scan';
+export type LayoutOrientation = 'portrait' | 'landscape';
+export type ColorMode = 'color' | 'grayscale' | 'bw';
+export type PaperSize = 'A4' | 'Letter' | 'Legal' | 'A3' | 'A5';
+export type PageSelection = 'all' | 'odd' | 'even' | 'custom';
+export type MarginPreset = 'default' | 'narrow' | 'none' | 'custom';
+export type QualityPreset = 'draft' | 'normal' | 'high' | 'professional';
+
+export interface PrintSettings {
+  pages: PageSelection;
+  customRange: string;
+  layout: LayoutOrientation;
+  paperSize: PaperSize | string;
+  resolution: string;
+  colorMode: ColorMode;
+  scale: string;
+  margins: MarginPreset;
+  marginsCustom: string;
+  pagesPerSheet: string;
+  pagesPerSheetCustom: string;
+  copies: string;
+  duplex: boolean;
+  quality: QualityPreset;
+  selectedFiles: string[];
+  convertedFiles: string[];
+}
+
+export interface ScanSettings {
+  mode: 'single' | 'multi';
+  textMode: boolean;
+  pageMode: PageSelection;
+  customRange: string;
+  layout: LayoutOrientation;
+  paperSize: PaperSize | string;
+  paperSizeCustom: string;
+  resolution: string;
+  resolutionCustom: string;
+  colorMode: ColorMode;
+  format: string;
+  quality: QualityPreset;
+}
+
+export interface OrchestrateOptions {
+  scan: ScanSettings;
+  print: PrintSettings;
+  saveAsDefault: boolean;
+}
+
+// ==================== Document Types ====================
+export interface DocumentInfo {
+  filename: string;
+  size: number;
+  type: string;
+  thumbnailUrl?: string;
+  isProcessed?: boolean;
+  pages?: DocumentPage[];
+}
+
+export interface DocumentPage {
+  pageNumber: number;
+  thumbnailUrl?: string;
+  fullUrl?: string;
+}
+
+export type DocumentSection = 'current' | 'converted' | 'uploaded';
+
+export interface DocumentSelectionState {
+  activeSection: DocumentSection;
+  selectedDocuments: DocumentInfo[];
+  currentIndex: number;
+}
+
+// ==================== Context Types ====================
+export interface WorkflowContext {
+  mode: WorkflowMode | null;
+  step: number;
+  isModalOpen: boolean;
+  isChatVisible: boolean;
+  documentsFed: boolean;
+  feedCount: number;
+  selectedDocuments: DocumentInfo[];
+  currentSettings: Partial<PrintSettings> | Partial<ScanSettings> | Record<string, unknown>;
+}
+
+// ==================== Response Types ====================
+export interface AIResponse {
+  text: string;
+  action?: CommandAction;
+  params?: Record<string, any>;
+  shouldSpeak?: boolean;
+  feedbackType?: 'success' | 'info' | 'warning' | 'error';
+}
+
+// ==================== Handler Types ====================
+export type CommandHandler = (
+  command: ParsedCommand,
+  context: WorkflowContext
+) => AIResponse | Promise<AIResponse>;
+
+export interface CommandHandlerMap {
+  [key: string]: CommandHandler;
+}
+
+// ==================== Callback Types ====================
+export interface AIAssistCallbacks {
+  onSelectDocument?: (index: number, section: DocumentSection) => void;
+  onSwitchSection?: (section: DocumentSection) => void;
+  onUpdateSettings?: (settings: Partial<PrintSettings | ScanSettings>) => void;
+  onNavigate?: (direction: 'next' | 'prev' | 'back') => void;
+  onExecuteAction?: (action: 'print' | 'scan' | 'cancel' | 'confirm') => void;
+  onFeedDocuments?: (count: number) => void;
+  onOpenModal?: () => void;
+  onCloseModal?: () => void;
+  onShowToast?: (title: string, description: string, status: 'success' | 'error' | 'warning' | 'info') => void;
+}

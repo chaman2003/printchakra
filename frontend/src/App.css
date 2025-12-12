@@ -1,7 +1,14 @@
+/* ===== Global Reset & Base Styles ===== */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+html, body, #root {
+  min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
 }
 
 body {
@@ -11,70 +18,89 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: #f5f5f5;
+  overflow-x: hidden;
 }
 
 .App {
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
+/* ===== Navbar - Responsive ===== */
 .navbar {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1rem 0;
+  padding: clamp(0.5rem, 2vw, 1rem) 0;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  flex-shrink: 0;
 }
 
 .nav-container {
-  max-width: 1200px;
+  width: 100%;
+  max-width: min(1200px, 95vw);
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 clamp(1rem, 3vw, 2rem);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: clamp(0.5rem, 2vw, 1rem);
 }
 
 .logo {
-  font-size: 1.5rem;
+  font-size: clamp(1.1rem, 3vw, 1.5rem);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .nav-links {
   display: flex;
-  gap: 2rem;
+  gap: clamp(0.75rem, 3vw, 2rem);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .nav-link {
   color: white;
   text-decoration: none;
   font-weight: 500;
-  padding: 0.5rem 1rem;
+  padding: clamp(0.35rem, 1vw, 0.5rem) clamp(0.5rem, 2vw, 1rem);
   border-radius: 8px;
   transition: background-color 0.3s;
+  font-size: clamp(0.85rem, 2vw, 1rem);
+  white-space: nowrap;
 }
 
 .nav-link:hover {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+/* ===== Page Container - Fluid & Responsive ===== */
 .page-container {
-  max-width: 1200px;
-  margin: 2rem auto;
-  padding: 0 2rem;
+  width: 100%;
+  max-width: min(1200px, 95vw);
+  margin: clamp(1rem, 3vw, 2rem) auto;
+  padding: 0 clamp(0.75rem, 2vw, 2rem);
+  flex: 1;
 }
 
 .page-header {
-  margin-bottom: 2rem;
+  margin-bottom: clamp(1rem, 3vw, 2rem);
 }
 
 .page-title {
-  font-size: 2rem;
+  font-size: clamp(1.25rem, 4vw, 2rem);
   color: #333;
-  margin-bottom: 0.5rem;
+  margin-bottom: clamp(0.25rem, 1vw, 0.5rem);
 }
 
 .page-description {
   color: #666;
-  font-size: 1rem;
+  font-size: clamp(0.85rem, 2vw, 1rem);
 }
 
 .status-indicator {
@@ -133,10 +159,57 @@ body {
 @media (max-width: 768px) {
   .nav-container {
     flex-direction: column;
-    gap: 1rem;
+    gap: clamp(0.5rem, 2vw, 1rem);
   }
 
   .page-container {
-    padding: 0 1rem;
+    padding: 0 clamp(0.5rem, 2vw, 1rem);
+  }
+  
+  .nav-links {
+    width: 100%;
+    justify-content: center;
   }
 }
+
+/* ===== Extra small screens ===== */
+@media (max-width: 480px) {
+  .nav-container {
+    padding: 0 clamp(0.5rem, 3vw, 1rem);
+  }
+  
+  .nav-links {
+    gap: clamp(0.5rem, 2vw, 1rem);
+  }
+  
+  .page-container {
+    margin: clamp(0.5rem, 2vw, 1rem) auto;
+  }
+}
+
+/* ===== Large screens ===== */
+@media (min-width: 1440px) {
+  .page-container {
+    max-width: min(1400px, 90vw);
+  }
+}
+
+/* ===== Ultra-wide screens ===== */
+@media (min-width: 1920px) {
+  .page-container {
+    max-width: min(1600px, 85vw);
+  }
+  
+  .nav-container {
+    max-width: min(1600px, 85vw);
+  }
+}
+
+/* ===== High DPI / Zoom adjustments ===== */
+@media (min-resolution: 1.5dppx) {
+  .page-container,
+  .nav-container {
+    max-width: min(1200px, 92vw);
+  }
+}
+

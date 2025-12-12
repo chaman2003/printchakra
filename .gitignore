@@ -210,4 +210,5 @@ uploads/*
 txt/*
 pc/*
 docs
+prompt.txt
 logs.txt

@@ -1,167 +1,211 @@
 {
   "voice_commands": {
     "select_document": [
-      "select document",
-      "choose document",
-      "pick document",
-      "open document",
-      "select original document",
-      "select converted document",
-      "select uploaded document",
-      "document number",
-      "file number",
-      "document",
-      "file"
+      "select document", "choose document", "pick document", "open document",
+      "select original document", "select converted document", "select uploaded document",
+      "document number", "file number", "document", "file", "select file"
     ],
     "switch_section": [
-      "switch to",
-      "show",
-      "go to",
-      "open section",
-      "switch section",
-      "change to"
+      "switch to", "show", "go to", "open section", "switch section", "change to",
+      "current documents", "converted documents", "uploaded files", "originals"
     ],
     "next_document": [
-      "next",
-      "next document",
-      "next file",
-      "forward",
-      "move forward",
-      "go forward"
+      "next", "next document", "next file", "forward", "move forward", "go forward"
     ],
     "previous_document": [
-      "previous",
-      "previous document",
-      "previous file",
-      "back",
-      "move back",
-      "go back"
+      "previous", "previous document", "previous file", "back", "move back", "go back"
     ],
     "upload_document": [
-      "upload",
-      "upload document",
-      "upload file",
-      "add document",
-      "add file",
-      "new document"
+      "upload", "upload document", "upload file", "add document", "add file", 
+      "new document", "browse files", "open file"
+    ],
+    "set_layout": [
+      "portrait", "landscape", "vertical", "horizontal", "portrait mode", 
+      "landscape mode", "portrait orientation", "landscape orientation"
+    ],
+    "set_paper_size": [
+      "a4", "letter", "legal", "a3", "a5", "paper size", "page size"
+    ],
+    "set_color_mode": [
+      "color", "grayscale", "grey", "gray", "black and white", "b&w", "bw",
+      "full color", "monochrome", "colour"
+    ],
+    "set_pages": [
+      "all pages", "odd pages", "even pages", "custom pages", "page range",
+      "pages 1", "pages 2", "pages", "odd only", "even only"
+    ],
+    "set_copies": [
+      "copies", "copy", "print copies", "number of copies", "1 copy", "2 copies",
+      "3 copies", "4 copies", "5 copies", "multiple copies"
+    ],
+    "set_duplex": [
+      "duplex", "double sided", "both sides", "two sided", "front and back",
+      "single sided", "one side", "no duplex", "front only"
+    ],
+    "set_scale": [
+      "scale", "zoom", "size", "print size", "scaling", "percent", "actual size",
+      "fit to page", "shrink to fit"
+    ],
+    "set_margins": [
+      "margins", "default margins", "narrow margins", "no margins", "borderless",
+      "full bleed", "margin size"
+    ],
+    "set_resolution": [
+      "dpi", "resolution", "150 dpi", "300 dpi", "600 dpi", "1200 dpi",
+      "high resolution", "low resolution", "quality dpi"
+    ],
+    "set_quality": [
+      "draft", "normal", "high", "professional", "best quality", "fast print",
+      "draft quality", "high quality", "standard quality"
+    ],
+    "set_pages_per_sheet": [
+      "pages per sheet", "multiple pages", "2 per page", "4 per page", "n-up",
+      "booklet", "1 page per sheet", "2 pages per sheet", "4 pages per sheet"
+    ],
+    "toggle_ocr": [
+      "ocr", "text mode", "text recognition", "recognize text", "enable ocr",
+      "disable ocr", "turn on ocr", "turn off ocr", "image only"
+    ],
+    "set_scan_mode": [
+      "single page", "multi page", "single scan", "batch scan", "multiple pages"
+    ],
+    "set_format": [
+      "pdf", "jpeg", "jpg", "png", "save as pdf", "save as jpeg", "image format"
+    ],
+    "feed_documents": [
+      "feed", "feed documents", "feed paper", "insert documents", "load documents",
+      "feed through", "put documents", "feed 1", "feed 2", "feed 3"
     ],
     "confirm": [
-      "confirm",
-      "confirm print",
-      "confirm scan",
-      "yes proceed",
-      "execute",
-      "do it",
-      "start",
-      "begin"
+      "confirm", "yes", "proceed", "go ahead", "okay", "ok", "sure", "do it",
+      "execute", "start", "begin", "confirm print", "confirm scan", "yes proceed"
     ],
     "cancel": [
-      "cancel",
-      "stop",
-      "abort",
-      "don't do it",
-      "nevermind",
-      "forget it"
+      "cancel", "stop", "abort", "nevermind", "forget it", "close", "exit",
+      "quit", "end", "don't do it"
     ],
     "status": [
-      "status",
-      "what's happening",
-      "progress",
-      "where are we",
-      "current state"
+      "status", "what's happening", "progress", "where are we", "current state",
+      "show status", "check status"
     ],
     "repeat_settings": [
-      "repeat",
-      "repeat settings",
-      "read settings",
-      "what settings",
-      "show settings",
-      "current settings"
+      "repeat", "repeat settings", "read settings", "what settings",
+      "show settings", "current settings", "tell me settings"
     ],
     "help": [
-      "help",
-      "what can you do",
-      "commands",
-      "options",
-      "guide"
+      "help", "what can you do", "commands", "options", "guide", "assist",
+      "available commands", "show help"
     ],
     "stop_recording": [
-      "stop recording",
-      "stop listening",
-      "end session",
-      "bye",
-      "goodbye",
-      "stop voice"
+      "stop recording", "stop listening", "end session", "bye", "goodbye",
+      "stop voice", "end voice"
+    ],
+    "scroll_down": [
+      "scroll down", "go down", "move down", "scroll to bottom", "page down"
+    ],
+    "scroll_up": [
+      "scroll up", "go up", "move up", "scroll to top", "page up"
+    ],
+    "apply_settings": [
+      "apply", "continue", "next step", "submit", "move on", "go next"
+    ],
+    "go_back": [
+      "go back", "previous step", "back", "return"
     ]
   },
   "friendly_responses": {
-    "select_document": "Selecting document {document_number}",
-    "switch_section": "Switching to {section} section",
+    "select_document": "Selected document #{document_number}",
+    "switch_section": "Switched to {section} documents",
     "next_document": "Moving to next document",
     "previous_document": "Moving to previous document",
     "upload_document": "Opening upload dialog",
-    "confirm": "Executing now!",
-    "cancel": "Cancelled",
-    "status": "Checking status...",
-    "repeat_settings": "Reading settings...",
-    "help": "Here's what I can do...",
-    "stop_recording": "Stopping recording"
+    "set_layout": "Layout set to {value}",
+    "set_paper_size": "Paper size set to {value}",
+    "set_color_mode": "Color mode set to {value}",
+    "set_pages": "Page selection set to {value}",
+    "set_copies": "Copies set to {value}",
+    "set_duplex": "Double-sided {value}",
+    "set_scale": "Scale set to {value}%",
+    "set_margins": "Margins set to {value}",
+    "set_resolution": "Resolution set to {value} DPI",
+    "set_quality": "Quality set to {value}",
+    "set_pages_per_sheet": "Pages per sheet set to {value}",
+    "toggle_ocr": "OCR {value}",
+    "set_scan_mode": "Scan mode set to {value}",
+    "set_format": "Output format set to {value}",
+    "feed_documents": "Feeding {count} document(s) through printer",
+    "confirm": "Executing {action} now!",
+    "cancel": "Operation cancelled",
+    "status": "Currently in {mode} mode, step {step} of 3",
+    "repeat_settings": "Current settings: {settings}",
+    "help": "You can say: select document, set landscape, 2 copies, or confirm print.",
+    "stop_recording": "Voice session ended"
   },
   "confirmation_words": [
-    "yes",
-    "proceed",
-    "go ahead",
-    "okay",
-    "ok",
-    "sure",
-    "yep",
-    "yeah",
-    "ye"
+    "yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye",
+    "confirm", "do it", "execute", "start", "begin"
   ],
   "print_keywords": [
-    "print",
-    "printing",
-    "printout",
-    "print doc",
-    "print file",
-    "print paper"
+    "print", "printing", "printout", "print doc", "print file", "print paper",
+    "print document", "i want to print", "need to print"
   ],
   "scan_keywords": [
-    "scan",
-    "scanning",
-    "capture",
-    "scan doc",
-    "scan file",
-    "capture doc",
-    "capture document",
-    "scan document"
+    "scan", "scanning", "capture", "scan doc", "scan file", "capture doc",
+    "capture document", "scan document", "i want to scan", "need to scan"
   ],
   "question_words": [
-    "what",
-    "can you",
-    "how do",
-    "help",
-    "how to",
-    "tell me",
-    "can i",
-    "what is",
-    "can print",
-    "help me",
-    "show me"
+    "what", "can you", "how do", "help", "how to", "tell me", "can i",
+    "what is", "can print", "help me", "show me", "why", "where"
   ],
+  "setting_value_mappings": {
+    "layout": {
+      "portrait": ["portrait", "vertical", "tall"],
+      "landscape": ["landscape", "horizontal", "wide"]
+    },
+    "colorMode": {
+      "color": ["color", "colour", "full color"],
+      "grayscale": ["grayscale", "grey", "gray", "greyscale"],
+      "bw": ["black and white", "b&w", "bw", "monochrome"]
+    },
+    "pages": {
+      "all": ["all", "all pages", "everything", "entire"],
+      "odd": ["odd", "odd pages", "odd only"],
+      "even": ["even", "even pages", "even only"],
+      "custom": ["custom", "specific", "range"]
+    },
+    "margins": {
+      "default": ["default", "normal", "standard"],
+      "narrow": ["narrow", "thin", "small"],
+      "none": ["none", "zero", "borderless", "no margins"]
+    },
+    "quality": {
+      "draft": ["draft", "fast", "quick"],
+      "normal": ["normal", "standard"],
+      "high": ["high", "fine", "detailed"],
+      "professional": ["professional", "best", "maximum"]
+    },
+    "paperSize": {
+      "A4": ["a4", "a 4"],
+      "Letter": ["letter", "us letter"],
+      "Legal": ["legal"],
+      "A3": ["a3", "a 3"],
+      "A5": ["a5", "a 5"]
+    }
+  },
+  "number_words": {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5
+  },
   "ollama": {
     "options": {
       "temperature": 0.7,
       "top_p": 0.9,
       "top_k": 40,
-      "num_predict": 30,
-      "num_ctx": 1024,
+      "num_predict": 50,
+      "num_ctx": 2048,
       "repeat_penalty": 1.2,
-      "stop": [
-        "\\n\\n",
-        "User:",
-        "Assistant:"
-      ]
+      "stop": ["\\n\\n", "User:", "Assistant:"]
     },
     "timeout": 15
   }

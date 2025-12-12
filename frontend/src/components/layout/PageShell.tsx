@@ -8,8 +8,8 @@ interface PageShellProps extends BoxProps {
 
 const PageShell: React.FC<PageShellProps> = ({ children, commands, ...rest }) => {
   const background = useColorModeValue(
-    'radial-gradient(circle at 10% -20%, rgba(121, 95, 238, 0.35), transparent 45%), linear-gradient(180deg, #f8f6ff 0%, #ffffff 60%, #eef2ff 100%)',
-    'radial-gradient(circle at 20% -10%, rgba(69, 202, 255, 0.25), transparent 45%), linear-gradient(180deg, #050711 0%, #090f19 55%, #03050b 100%)'
+    'linear-gradient(135deg, #f8f9ff 0%, #f0f2ff 50%, #e8ecff 100%)',
+    'linear-gradient(180deg, #080c18 0%, #0a0f1c 100%)'
   );
 
   return (
@@ -18,16 +18,16 @@ const PageShell: React.FC<PageShellProps> = ({ children, commands, ...rest }) =>
       commands={commands}
       styleOverrides={{
         bg: background,
-        minH: '100vh',
-        px: { base: 4, md: 6, lg: 10 },
-        py: { base: 6, md: 10 },
+        minH: '100dvh',
+        px: { base: 3, sm: 4, md: 6, lg: 8 },
+        py: { base: 4, md: 6 },
         position: 'relative',
         overflow: 'hidden',
         w: '100%',
       }}
       {...rest}
     >
-      <Box maxW="1400px" mx="auto" w="100%">
+      <Box maxW="1600px" mx="auto" w="100%">
         {children}
       </Box>
     </StyledSection>

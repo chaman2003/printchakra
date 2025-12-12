@@ -58,6 +58,7 @@ export interface DocumentSelectorProps {
   convertedDocuments?: Document[];
   allowMultiple?: boolean;
   mode: 'scan' | 'print';
+  isChatVisible?: boolean;
 }
 
 export interface DocumentSelectorHandle {
@@ -81,6 +82,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
     convertedDocuments = [],
     allowMultiple = true,
     mode,
+    isChatVisible = false,
   }, ref) => {
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null);
@@ -323,9 +325,29 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} size="6xl" scrollBehavior="inside">
-      <ModalOverlay bg="blackAlpha.700" backdropFilter="blur(10px)" />
-      <ModalContent bg={bgColor} maxH="90vh" borderRadius="2xl" boxShadow="2xl">
+    <Modal 
+      isOpen={isOpen} 
+      onClose={onClose} 
+      size="6xl" 
+      scrollBehavior="inside" 
+      isCentered={!isChatVisible}
+      closeOnEsc={!isChatVisible}
+      closeOnOverlayClick={!isChatVisible}
+    >
+      <ModalOverlay 
+        bg="blackAlpha.700" 
+        backdropFilter="blur(10px)"
+        pointerEvents={isChatVisible ? 'none' : 'auto'}
+      />
+      <ModalContent 
+        bg={bgColor} 
+        maxH="90vh" 
+        borderRadius="2xl" 
+        boxShadow="2xl"
+        mr={isChatVisible ? { base: 0, lg: '37vw' } : 0}
+        maxW={isChatVisible ? { base: '95vw', lg: '60vw' } : '6xl'}
+        pointerEvents="auto"
+      >
         <ModalHeader
           fontSize="2xl"
           fontWeight="700"

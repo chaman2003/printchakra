@@ -1,11 +1,12 @@
-.processing-progress {
+w.processing-progress {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  margin-bottom: 2rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border-radius: clamp(8px, 2vw, 12px);
+  margin-bottom: clamp(1rem, 3vw, 2rem);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
   animation: slideIn 0.3s ease-out;
+  width: 100%;
 }
 
 @keyframes slideIn {
@@ -24,18 +25,18 @@
 }
 
 .progress-header h4 {
-  margin: 0 0 1rem 0;
-  font-size: 1.1rem;
+  margin: 0 0 clamp(0.5rem, 2vw, 1rem) 0;
+  font-size: clamp(0.95rem, 2.5vw, 1.1rem);
   font-weight: 600;
 }
 
 .progress-bar {
   width: 100%;
-  height: 8px;
+  height: clamp(6px, 1.5vw, 8px);
   background-color: rgba(255, 255, 255, 0.3);
   border-radius: 10px;
   overflow: hidden;
-  margin-bottom: 0.75rem;
+  margin-bottom: clamp(0.5rem, 1.5vw, 0.75rem);
 }
 
 .progress-fill {
@@ -48,15 +49,16 @@
 
 .progress-message {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
   opacity: 0.95;
 }
 
 .dashboard-actions {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  gap: clamp(0.5rem, 2vw, 1rem);
+  margin-bottom: clamp(1rem, 3vw, 2rem);
   flex-wrap: wrap;
+  width: 100%;
 }
 
 .status-dot {
@@ -101,29 +103,30 @@
 .pipeline-status {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  margin-bottom: 2rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border-radius: clamp(8px, 2vw, 12px);
+  margin-bottom: clamp(1rem, 3vw, 2rem);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  width: 100%;
 }
 
 .pipeline-status h4 {
-  margin: 0 0 1rem 0;
-  font-size: 1.2rem;
+  margin: 0 0 clamp(0.5rem, 2vw, 1rem) 0;
+  font-size: clamp(1rem, 2.5vw, 1.2rem);
 }
 
 .features-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: clamp(0.3rem, 1vw, 0.5rem);
+  margin-bottom: clamp(0.5rem, 2vw, 1rem);
 }
 
 .feature-badge {
   display: inline-block;
-  padding: 0.4rem 0.8rem;
+  padding: clamp(0.3rem, 1vw, 0.4rem) clamp(0.5rem, 1.5vw, 0.8rem);
   border-radius: 20px;
-  font-size: 0.85rem;
+  font-size: clamp(0.75rem, 2vw, 0.85rem);
   font-weight: 500;
   background-color: rgba(255, 255, 255, 0.2);
   backdrop-filter: blur(10px);
@@ -141,17 +144,18 @@
 
 .advanced-options {
   background-color: rgba(255, 255, 255, 0.15);
-  padding: 1.5rem;
-  border-radius: 8px;
-  margin-top: 1rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border-radius: clamp(6px, 1.5vw, 8px);
+  margin-top: clamp(0.5rem, 2vw, 1rem);
   backdrop-filter: blur(10px);
+  width: 100%;
 }
 
 .option-group {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: clamp(0.5rem, 1.5vw, 0.75rem);
+  margin-bottom: clamp(0.5rem, 2vw, 1rem);
 }
 
 .option-group:last-child {
@@ -161,39 +165,43 @@
 .option-group label {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.95rem;
+  gap: clamp(0.3rem, 1vw, 0.5rem);
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
   cursor: pointer;
+  flex-wrap: wrap;
 }
 
 .option-group input[type='checkbox'] {
-  width: 18px;
-  height: 18px;
+  width: clamp(16px, 3vw, 18px);
+  height: clamp(16px, 3vw, 18px);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .option-group select {
-  margin-left: 0.5rem;
-  padding: 0.4rem 0.8rem;
+  margin-left: clamp(0.3rem, 1vw, 0.5rem);
+  padding: clamp(0.3rem, 1vw, 0.4rem) clamp(0.5rem, 1.5vw, 0.8rem);
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.3);
   background-color: rgba(255, 255, 255, 0.2);
   color: white;
-  font-size: 0.9rem;
+  font-size: clamp(0.8rem, 2vw, 0.9rem);
   cursor: pointer;
+  max-width: 100%;
 }
 
 .option-group input[type='range'] {
   flex: 1;
-  margin-left: 0.5rem;
+  margin-left: clamp(0.3rem, 1vw, 0.5rem);
   cursor: pointer;
+  min-width: 0;
 }
 
 .btn {
-  padding: 0.75rem 1.5rem;
+  padding: clamp(0.5rem, 1.5vw, 0.75rem) clamp(1rem, 3vw, 1.5rem);
   border: none;
-  border-radius: 8px;
-  font-size: 1rem;
+  border-radius: clamp(6px, 1.5vw, 8px);
+  font-size: clamp(0.85rem, 2vw, 1rem);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s;

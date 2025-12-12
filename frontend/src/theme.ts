@@ -358,34 +358,36 @@ const components = {
 const styles = {
   global: (props: StyleFunctionProps) => ({
     'html, body': {
-      bg: mode('#f6f8ff', '#050711')(props),
+      bg: mode('#f5f7ff', '#080c18')(props),
       color: mode('#1a1f36', '#e6ebff')(props),
       fontFeatureSettings: '"clig" off, "liga" off',
-      minHeight: '100%',
+      minHeight: '100dvh',
+      width: '100%',
+      overflowX: 'hidden',
+    },
+    html: {
+      scrollBehavior: 'smooth',
+      // Responsive font sizing that scales with viewport
+      fontSize: 'clamp(14px, 0.9vw + 0.5rem, 18px)',
     },
     body: {
-      backgroundImage: mode(
-        'radial-gradient(circle at 20% 20%, rgba(121,95,238,0.18), transparent 55%), radial-gradient(circle at 80% 0%, rgba(69,202,255,0.12), transparent 45%)',
-        'radial-gradient(circle at 10% -10%, rgba(69,202,255,0.16), transparent 55%), radial-gradient(circle at 90% 10%, rgba(121,95,238,0.24), transparent 45%)'
+      // Cleaner, more uniform background
+      background: mode(
+        'linear-gradient(180deg, #f5f7ff 0%, #eef2ff 100%)',
+        'linear-gradient(180deg, #080c18 0%, #0a0f1c 100%)'
       )(props),
       backgroundAttachment: 'fixed',
       position: 'relative',
-      _before: {
-        content: '""',
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        bgGradient: mode(
-          'radial(circle at 50% 50%, brand.50 0%, transparent 70%)',
-          'radial(circle at 50% 50%, nebula.900 0%, transparent 60%)'
-        )(props),
-        opacity: mode(0.5, 0.3)(props),
-        pointerEvents: 'none',
-        zIndex: -1,
-        animation: 'pulse 10s ease-in-out infinite',
-      },
+      minWidth: '0', // Prevent flex overflow
+    },
+    '#root': {
+      minHeight: '100dvh',
+      width: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+    },
+    '*, *::before, *::after': {
+      boxSizing: 'border-box',
     },
     '::selection': {
       background: mode('brand.200', 'nebula.600')(props),
@@ -394,13 +396,27 @@ const styles = {
     '*::placeholder': {
       color: mode('gray.400', 'whiteAlpha.500')(props),
     },
-    '@keyframes pulse': {
-      '0%, 100%': {
-        opacity: mode(0.4, 0.25)(props),
-      },
-      '50%': {
-        opacity: mode(0.6, 0.4)(props),
-      },
+    // Responsive images
+    'img, picture, video, canvas, svg': {
+      display: 'block',
+      maxWidth: '100%',
+      height: 'auto',
+    },
+    // Custom scrollbar
+    '::-webkit-scrollbar': {
+      width: '8px',
+      height: '8px',
+    },
+    '::-webkit-scrollbar-track': {
+      background: mode('rgba(0, 0, 0, 0.05)', 'rgba(255, 255, 255, 0.05)')(props),
+      borderRadius: '10px',
+    },
+    '::-webkit-scrollbar-thumb': {
+      background: mode('rgba(121, 95, 238, 0.3)', 'rgba(69, 202, 255, 0.3)')(props),
+      borderRadius: '10px',
+    },
+    '::-webkit-scrollbar-thumb:hover': {
+      background: mode('rgba(121, 95, 238, 0.5)', 'rgba(69, 202, 255, 0.5)')(props),
     },
   }),
 };

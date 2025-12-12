@@ -1,25 +1,29 @@
 .phone-content {
-  max-width: 600px;
+  width: 100%;
+  max-width: min(600px, 95vw);
   margin: 0 auto;
+  padding: 0 clamp(0.5rem, 2vw, 1rem);
 }
 
 .phone-options {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  margin-bottom: 2rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border-radius: clamp(8px, 2vw, 12px);
+  margin-bottom: clamp(1rem, 3vw, 2rem);
   box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  width: 100%;
 }
 
 .option-label {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-  font-size: 0.95rem;
+  gap: clamp(0.5rem, 1.5vw, 0.75rem);
+  margin-bottom: clamp(0.5rem, 1.5vw, 0.75rem);
+  font-size: clamp(0.85rem, 2vw, 0.95rem);
   cursor: pointer;
   user-select: none;
+  flex-wrap: wrap;
 }
 
 .option-label:last-child {
@@ -27,18 +31,20 @@
 }
 
 .option-label input[type='checkbox'] {
-  width: 20px;
-  height: 20px;
+  width: clamp(18px, 4vw, 20px);
+  height: clamp(18px, 4vw, 20px);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .quality-indicator {
   background-color: white;
-  padding: 1.5rem;
-  border-radius: 12px;
-  margin-bottom: 2rem;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border-radius: clamp(8px, 2vw, 12px);
+  margin-bottom: clamp(1rem, 3vw, 2rem);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   border-left: 4px solid;
+  width: 100%;
 }
 
 .quality-indicator.good {
@@ -52,22 +58,23 @@
 }
 
 .quality-indicator h4 {
-  margin: 0 0 1rem 0;
-  font-size: 1.1rem;
+  margin: 0 0 clamp(0.5rem, 2vw, 1rem) 0;
+  font-size: clamp(0.95rem, 2.5vw, 1.1rem);
   color: #333;
 }
 
 .quality-metrics {
   display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: clamp(0.5rem, 2vw, 1rem);
+  margin-bottom: clamp(0.5rem, 2vw, 1rem);
+  flex-wrap: wrap;
 }
 
 .metric {
-  padding: 0.5rem 1rem;
+  padding: clamp(0.35rem, 1vw, 0.5rem) clamp(0.6rem, 2vw, 1rem);
   border-radius: 8px;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: clamp(0.8rem, 2vw, 0.9rem);
 }
 
 .metric.good {
@@ -81,23 +88,23 @@
 }
 
 .quality-issues ul {
-  margin: 0.5rem 0 0 1.5rem;
+  margin: clamp(0.3rem, 1vw, 0.5rem) 0 0 clamp(1rem, 3vw, 1.5rem);
   color: #666;
-  font-size: 0.9rem;
+  font-size: clamp(0.8rem, 2vw, 0.9rem);
 }
 
 .quality-issues li {
-  margin-bottom: 0.25rem;
+  margin-bottom: clamp(0.15rem, 0.5vw, 0.25rem);
 }
 
 .message-banner {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 1rem;
-  border-radius: 8px;
+  padding: clamp(0.75rem, 2vw, 1rem);
+  border-radius: clamp(6px, 1.5vw, 8px);
   text-align: center;
   font-weight: 500;
-  margin-bottom: 2rem;
+  margin-bottom: clamp(1rem, 3vw, 2rem);
   animation: slideDown 0.3s ease-out;
 }
 
