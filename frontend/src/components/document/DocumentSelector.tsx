@@ -330,22 +330,20 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
       onClose={onClose} 
       size="6xl" 
       scrollBehavior="inside" 
-      isCentered={!isChatVisible}
-      closeOnEsc={!isChatVisible}
-      closeOnOverlayClick={!isChatVisible}
+      isCentered={true}
+      closeOnEsc={true}
+      closeOnOverlayClick={true}
     >
       <ModalOverlay 
         bg="blackAlpha.700" 
         backdropFilter="blur(10px)"
-        pointerEvents={isChatVisible ? 'none' : 'auto'}
+        pointerEvents="auto"
       />
       <ModalContent 
         bg={bgColor} 
         maxH="90vh" 
         borderRadius="2xl" 
         boxShadow="2xl"
-        mr={isChatVisible ? { base: 0, lg: '37vw' } : 0}
-        maxW={isChatVisible ? { base: '95vw', lg: '60vw' } : '6xl'}
         pointerEvents="auto"
       >
         <ModalHeader
