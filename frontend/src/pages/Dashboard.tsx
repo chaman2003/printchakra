@@ -1075,6 +1075,21 @@ const Dashboard: React.FC = () => {
   const enhanceDocumentsWithPages = useCallback(async (docs: any[]) => {
     const enhanced = await Promise.all(
       docs.map(async (doc) => {
+        // Check if this is an uploaded/local file (has blob URL)
+        const isUploadedFile = doc.thumbnailUrl?.startsWith('blob:');
+        
+        if (isUploadedFile) {
+          // For uploaded files, use the blob URL directly without API call
+          return {
+            ...doc,
+            pages: [{
+              pageNumber: 1,
+              thumbnailUrl: doc.thumbnailUrl
+            }]
+          };
+        }
+        
+        // For server-side documents, fetch page information
         const docInfo = await fetchDocumentInfo(doc.filename);
         return {
           ...doc,
