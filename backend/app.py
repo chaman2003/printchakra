@@ -9,6 +9,14 @@ from datetime import datetime
 import io
 import json
 
+# CRITICAL: Set PaddleOCR environment variables before any paddle imports
+os.environ['DISABLE_MODEL_SOURCE_CHECK'] = 'True'
+os.environ['PADDLEX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
+os.environ['HUB_HOME'] = os.path.expanduser('~/.paddlex')
+os.environ['FLAGS_check_nan_inf'] = '0'
+os.environ['GLOG_v'] = '0'
+os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'
+
 import cv2
 import numpy as np
 import pytesseract
@@ -605,6 +613,9 @@ for directory in [PUBLIC_DIR, DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRI
 # Format: { 'filename': { 'step': 1, 'total_steps': 12, 'stage_name': '...', 'is_complete': False, 'error': None } }
 processing_status = {}
 processing_lock = threading.Lock()
+
+# Scan configuration storage (shared between endpoints)
+current_scan_config = {}
 
 
 def update_processing_status(
@@ -1560,6 +1571,7 @@ def process_document_image(input_path, output_path, filename=None):
                     ext = os.path.splitext(output_path)[1]
                     new_filename = f"{suggested_filename}{ext}"
                     new_output_path = os.path.join(output_dir, new_filename)
+                    old_basename = os.path.basename(output_path)
                     
                     # Avoid overwriting existing files
                     counter = 1
@@ -1584,8 +1596,9 @@ def process_document_image(input_path, output_path, filename=None):
                     print(f"  ✓ File renamed based on OCR content: {new_filename}")
                     print(f"    Derived title: {ocr_result.derived_title}")
                 
-                # Save OCR result
-                ocr_processor.save_result(os.path.basename(output_path), ocr_result)
+                # Save OCR result with the correct filename (new or original)
+                ocr_result_filename = os.path.basename(output_path)
+                ocr_processor.save_result(ocr_result_filename, ocr_result)
                 print(f"  ✓ OCR result saved ({ocr_result.word_count} words, {len(ocr_result.raw_results)} regions)")
             else:
                 print(f"  ? No text detected by PaddleOCR, keeping original filename")
@@ -2275,6 +2288,11 @@ def upload_file():
 def list_files():
     """List all processed files with processing status"""
     try:
+        from app.modules.ocr.paddle_ocr import get_ocr_processor
+        
+        # Get OCR processor to check for OCR results
+        ocr_processor = get_ocr_processor(OCR_DATA_DIR)
+        
         files = []
 
         # First, add files that are currently being processed (uploaded but not yet in processed dir)
@@ -2293,6 +2311,7 @@ def list_files():
                             "size": file_stat.st_size,
                             "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
                             "has_text": False,
+                            "has_ocr": False,
                             "processing": True,
                             "processing_step": status["step"],
                             "processing_total": status["total_steps"],
@@ -2314,6 +2333,9 @@ def list_files():
                 text_filename = f"{os.path.splitext(filename)[0]}.txt"
                 text_path = os.path.join(TEXT_DIR, text_filename)
                 has_text = os.path.exists(text_path)
+                
+                # Check if OCR result exists
+                has_ocr = ocr_processor.has_ocr_result(filename)
 
                 # Check if still processing (edge case where file exists but processing not complete)
                 status = get_processing_status(filename)
@@ -2324,6 +2346,7 @@ def list_files():
                     "size": file_stat.st_size,
                     "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
                     "has_text": has_text,
+                    "has_ocr": has_ocr,
                     "processing": is_processing,
                 }
 
@@ -4625,6 +4648,16 @@ def chat_with_ai():
             response["orchestration_mode"] = orchestration_mode
             response["config_params"] = config_params
             
+            # Add follow-up question based on orchestration mode
+            if orchestration_trigger and orchestration_mode:
+                if orchestration_mode == "print":
+                    # For print, ask which document to print
+                    ai_response = "Print mode activated. Which document would you like to print? You can say 'select document 1' or browse your files."
+                elif orchestration_mode == "scan":
+                    # For scan, ask about document source
+                    ai_response = "Scan mode activated. Do you want to select or upload a document, or use the printer's feed tray?"
+                response["response"] = ai_response
+            
             logger.info(f"[OK] Final AI response: {ai_response}")
             if orchestration_trigger:
                 logger.info(f"[TRIGGER] Orchestration will trigger: {orchestration_mode} with params: {config_params}")
@@ -4744,7 +4777,7 @@ def process_voice_complete():
                     logger.info(f"[FALLBACK] Print command detected: '{result.get('user_text')}'")
                     result["orchestration_trigger"] = True
                     result["orchestration_mode"] = "print"
-                    result["ai_response"] = "Opening print interface!"
+                    result["ai_response"] = "Print mode activated. Which document would you like to print? You can say 'select document 1' or browse your files."
                 
                 # Check for scan intent
                 scan_keywords = ["scan", "scanning", "capture", "scan doc", "capture document"]
@@ -4755,7 +4788,7 @@ def process_voice_complete():
                     logger.info(f"[FALLBACK] Scan command detected: '{result.get('user_text')}'")
                     result["orchestration_trigger"] = True
                     result["orchestration_mode"] = "scan"
-                    result["ai_response"] = "Opening scan interface!"
+                    result["ai_response"] = "Scan mode activated. Do you want to select or upload a document, or use the printer's feed tray?"
 
             # Check if user text contains orchestration commands
             user_text = result.get("user_text", "")
@@ -5390,6 +5423,202 @@ def orchestrate_configure():
 
     except Exception as e:
         logger.error(f"[ERROR] Orchestration configure error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/orchestrate/print", methods=["POST"])
+def orchestrate_print():
+    """
+    Execute print job with configuration from frontend
+    Accepts multipart/form-data with:
+        - convertedFiles: JSON array of converted PDF filenames
+        - selectedDocuments: JSON array of document filenames to print
+        - dashboardFiles: JSON array of dashboard file names
+        - options: JSON object with print configuration
+    """
+    try:
+        # Parse form data
+        converted_files = json.loads(request.form.get("convertedFiles", "[]"))
+        selected_documents = json.loads(request.form.get("selectedDocuments", "[]"))
+        dashboard_files = json.loads(request.form.get("dashboardFiles", "[]"))
+        options = json.loads(request.form.get("options", "{}"))
+
+        # Collect all files to print
+        files_to_print = []
+
+        # Add converted PDFs from converted directory
+        for filename in converted_files:
+            file_path = os.path.join(CONVERTED_DIR, filename)
+            if os.path.exists(file_path):
+                files_to_print.append({"filename": filename, "path": file_path, "source": "converted"})
+
+        # Add selected documents from processed directory
+        for filename in selected_documents:
+            file_path = os.path.join(PROCESSED_DIR, filename)
+            if os.path.exists(file_path):
+                files_to_print.append({"filename": filename, "path": file_path, "source": "processed"})
+
+        # Add dashboard files
+        for filename in dashboard_files:
+            file_path = os.path.join(PROCESSED_DIR, filename)
+            if os.path.exists(file_path):
+                files_to_print.append({"filename": filename, "path": file_path, "source": "dashboard"})
+
+        if not files_to_print:
+            return jsonify({
+                "success": False,
+                "error": "No valid files found to print"
+            }), 400
+
+        logger.info(f"[PRINT] Starting print job for {len(files_to_print)} file(s)")
+        logger.info(f"[PRINT] Options: {options}")
+
+        # Extract print options
+        copies = int(options.get("copies", 1))
+        color_mode = options.get("colorMode", "color")
+        duplex = options.get("duplex", False)
+        pages = options.get("pages", "all")
+        custom_range = options.get("customRange", "")
+        layout = options.get("layout", "portrait")
+
+        # Try to print each file
+        successful_prints = []
+        failed_prints = []
+
+        try:
+            import win32api
+            import win32print
+
+            printer_name = win32print.GetDefaultPrinter()
+            if not printer_name:
+                return jsonify({
+                    "success": False,
+                    "error": "No default printer configured"
+                }), 500
+
+            for file_info in files_to_print:
+                file_path = file_info["path"]
+                filename = file_info["filename"]
+
+                try:
+                    for copy_num in range(copies):
+                        # Use ShellExecute to print
+                        win32api.ShellExecute(0, "print", file_path, None, ".", 0)
+                        logger.info(f"[PRINT] Sent to printer: {filename} (copy {copy_num + 1}/{copies})")
+
+                    successful_prints.append(filename)
+                except Exception as print_err:
+                    logger.error(f"[PRINT] Failed to print {filename}: {print_err}")
+                    failed_prints.append({"filename": filename, "error": str(print_err)})
+
+        except ImportError:
+            # Windows print modules not available, try alternative methods
+            logger.warning("[PRINT] win32 modules not available, using alternative print method")
+
+            for file_info in files_to_print:
+                file_path = file_info["path"]
+                filename = file_info["filename"]
+
+                try:
+                    for copy_num in range(copies):
+                        # Use subprocess with PowerShell
+                        cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
+                        subprocess.run(["powershell", "-Command", cmd], timeout=30, check=True)
+                        logger.info(f"[PRINT] Sent via PowerShell: {filename} (copy {copy_num + 1}/{copies})")
+
+                    successful_prints.append(filename)
+                except Exception as print_err:
+                    logger.error(f"[PRINT] Failed to print {filename}: {print_err}")
+                    failed_prints.append({"filename": filename, "error": str(print_err)})
+
+        # Emit Socket.IO notification
+        socketio.emit("print_job_update", {
+            "type": "print_completed",
+            "successful": successful_prints,
+            "failed": failed_prints,
+            "options": options,
+            "timestamp": datetime.now().isoformat()
+        })
+
+        if failed_prints and not successful_prints:
+            return jsonify({
+                "success": False,
+                "error": "All print jobs failed",
+                "failed": failed_prints
+            }), 500
+
+        return jsonify({
+            "success": True,
+            "message": f"Print job sent: {len(successful_prints)} file(s) ({copies} cop{'y' if copies == 1 else 'ies'} each)",
+            "printed": successful_prints,
+            "failed": failed_prints,
+            "copies": copies,
+            "colorMode": color_mode,
+            "timestamp": datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"[ERROR] Orchestrate print error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/orchestrate/scan", methods=["POST"])
+def orchestrate_scan():
+    """
+    Initialize scan job with configuration from frontend
+    Accepts JSON with scan options:
+        - pageMode: 'all' | 'odd' | 'even' | 'custom'
+        - customRange: string (e.g., "1-3,5,7-9")
+        - layout: 'portrait' | 'landscape'
+        - paperSize: string
+        - resolution: string
+        - colorMode: 'color' | 'bw'
+        - saveAsDefault: boolean
+    """
+    try:
+        data = request.get_json() or {}
+
+        scan_config = {
+            "pageMode": data.get("pageMode", "all"),
+            "customRange": data.get("customRange", ""),
+            "layout": data.get("layout", "portrait"),
+            "paperSize": data.get("paperSize", "A4"),
+            "resolution": data.get("resolution", "300"),
+            "colorMode": data.get("colorMode", "color"),
+            "saveAsDefault": data.get("saveAsDefault", False),
+            "timestamp": datetime.now().isoformat()
+        }
+
+        logger.info(f"[SCAN] Scan job initialized with config: {scan_config}")
+
+        # Store scan configuration for the phone interface
+        # This will be retrieved when capturing
+        global current_scan_config
+        current_scan_config = scan_config
+
+        # Emit Socket.IO notification to phone
+        socketio.emit("scan_job_init", {
+            "type": "scan_ready",
+            "config": scan_config,
+            "message": "Scanner ready. Use phone interface to capture documents.",
+            "timestamp": datetime.now().isoformat()
+        })
+
+        return jsonify({
+            "success": True,
+            "message": "Scan job initialized. Open phone interface to capture documents.",
+            "config": scan_config,
+            "next_steps": [
+                "Open phone capture interface",
+                "Position document in frame",
+                "Capture when ready"
+            ]
+        })
+
+    except Exception as e:
+        logger.error(f"[ERROR] Orchestrate scan error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

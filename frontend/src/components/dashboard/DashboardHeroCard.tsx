@@ -1,9 +1,21 @@
 import React from 'react';
 import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, Button } from '@chakra-ui/react';
+import { keyframes } from '@emotion/react';
 import { FiRefreshCw } from 'react-icons/fi';
 import SurfaceCard from '../layout/SurfaceCard';
 import { Iconify } from '../common';
 import DeviceAndConnectivityPanel from './DeviceAndConnectivityPanel';
+
+// Pulse animation for live connection indicator
+const pulseGreen = keyframes`
+  0%, 100% { box-shadow: 0 0 8px rgba(72, 187, 120, 0.6); }
+  50% { box-shadow: 0 0 16px rgba(72, 187, 120, 1); }
+`;
+
+const pulseRed = keyframes`
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 101, 101, 0.6); }
+  50% { box-shadow: 0 0 16px rgba(245, 101, 101, 1); }
+`;
 
 interface DashboardHeroCardProps {
   statusDotColor: string;
@@ -30,6 +42,8 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   children,
 }) => {
   const dividerColor = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(69, 202, 255, 0.1)');
+  const isConnected = statusDotColor === 'green.400';
+  const pulseAnimation = isConnected ? `${pulseGreen} 2s ease-in-out infinite` : `${pulseRed} 1.5s ease-in-out infinite`;
 
   return (
     <SurfaceCard>
@@ -71,16 +85,20 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
             borderRadius="full"
             bg="surface.blur"
             border="1px solid"
-            borderColor="rgba(69, 202, 255, 0.2)"
+            borderColor={isConnected ? "rgba(72, 187, 120, 0.3)" : "rgba(245, 101, 101, 0.3)"}
             flexShrink={0}
             whiteSpace="nowrap"
+            cursor={!isConnected ? "pointer" : "default"}
+            onClick={!isConnected ? onCheckConnectivity : undefined}
+            _hover={!isConnected ? { borderColor: "rgba(245, 101, 101, 0.5)" } : undefined}
+            title={!isConnected ? "Click to check connectivity" : "Connected to backend"}
           >
             <Box
               w={{ base: 2, md: 3 }}
               h={{ base: 2, md: 3 }}
               borderRadius="full"
               bg={error ? 'orange.400' : statusDotColor}
-              boxShadow={`0 0 12px ${error ? 'rgba(246,164,76,0.6)' : 'rgba(129,230,217,0.8)'}`}
+              animation={pulseAnimation}
               flexShrink={0}
             />
             <Text fontWeight="600" color={statusTextColor} fontSize={{ base: 'xs', md: 'sm' }} whiteSpace="nowrap">

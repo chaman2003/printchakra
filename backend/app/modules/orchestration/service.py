@@ -225,10 +225,8 @@ class PrintScanOrchestrator:
                     break
             
             # Extract parameters
-            if "color" in user_input_lower:
+            if "color" in user_input_lower or "black" in user_input_lower or "grayscale" in user_input_lower:
                 parameters["color_mode"] = "color"
-            elif "black" in user_input_lower or "grayscale" in user_input_lower:
-                parameters["color_mode"] = "grayscale"
 
             # Extract number of copies
             copy_match = re.search(r"(\d+)\s*cop(?:y|ies)", user_input_lower)
@@ -769,11 +767,9 @@ class PrintScanOrchestrator:
                 updates["copies"] = 1
 
             # Color mode
-            if contains_any(["full color", "print in color", "color mode"]):
+            if contains_any(["full color", "print in color", "color mode", "black and white", "black & white", "bw", "monochrome", "mono", "gray scale", "grey scale", "grayscale", "greyscale"]):
                 updates["color_mode"] = "color"
-            elif contains_any(["black and white", "black & white", "bw", "monochrome", "mono", "gray scale", "grey scale", "grayscale", "greyscale"]):
-                updates["color_mode"] = "bw"
-            elif "color" in text_lower and "black" not in text_lower:
+            elif "color" in text_lower:
                 updates["color_mode"] = "color"
 
             # Duplex
@@ -861,9 +857,7 @@ class PrintScanOrchestrator:
             # Color mode
             if contains_any(["full color", "color scan", "scan in color"]):
                 updates["color_mode"] = "color"
-            elif contains_any(["black and white", "black & white", "grayscale", "greyscale", "mono", "monochrome"]):
-                updates["color_mode"] = "grayscale"
-            elif "color" in text_lower and "black" not in text_lower:
+            elif contains_any(["black and white", "black & white", "grayscale", "greyscale", "mono", "monochrome"]) or "color" in text_lower:
                 updates["color_mode"] = "color"
 
             # Format

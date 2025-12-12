@@ -243,10 +243,6 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
       onCommand('SET_COLOR', { colorMode: 'color' });
       return;
     }
-    if (text.includes('grayscale') || text.includes('black and white')) {
-      onCommand('SET_COLOR', { colorMode: 'grayscale' });
-      return;
-    }
 
     // Layout commands
     if (text.includes('portrait')) {
@@ -293,6 +289,14 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
       startSession();
     }
   };
+
+  const handleClose = useCallback((e?: React.MouseEvent) => {
+    // Prevent event from bubbling up
+    if (e) {
+      e.stopPropagation();
+    }
+    setIsExpanded(false);
+  }, []);
 
   const handleTextCommand = async () => {
     if (!textInput.trim()) return;
@@ -391,7 +395,27 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
           size="sm"
           variant="ghost"
           ml={2}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleExpanded();
+          }}
         />
+        {isExpanded && (
+          <IconButton
+            aria-label="Close AI Assist"
+            icon={<Iconify icon="solar:close-circle-bold-duotone" width={20} height={20} />}
+            size="sm"
+            variant="ghost"
+            colorScheme="red"
+            ml={1}
+            onClick={handleClose}
+            _hover={{
+              bg: 'rgba(255,0,0,0.1)',
+              transform: 'scale(1.1)',
+            }}
+            transition="all 0.2s"
+          />
+        )}
       </Flex>
 
       {/* Expandable Content */}
@@ -509,7 +533,6 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
               <Text>• "Apply settings" - Continue to next step</Text>
               <Text>• "Go back" - Return to previous step</Text>
               <Text>• "Enable/disable OCR" - Toggle text detection</Text>
-              <Text>• "Color/Grayscale" - Change color mode</Text>
               <Text>• "Portrait/Landscape" - Change orientation</Text>
             </VStack>
           </Box>

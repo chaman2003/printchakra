@@ -8,6 +8,7 @@ export interface FileInfo {
   size: number;
   created: string;
   has_text: boolean;
+  has_ocr?: boolean;
   page_count?: number;
   mime_type?: string;
   processing?: boolean;
@@ -39,7 +40,7 @@ export interface Document {
 
 export interface ScanConfig {
   resolution: number;
-  colorMode: 'color' | 'grayscale' | 'bw';
+  colorMode: 'color';
   paperSize: string;
   orientation: 'portrait' | 'landscape';
   autoDetect: boolean;
@@ -52,7 +53,7 @@ export interface PrintConfig {
   copies: number;
   paperSize: string;
   orientation: 'portrait' | 'landscape';
-  colorMode: 'color' | 'grayscale' | 'bw';
+  colorMode: 'color';
   quality: 'draft' | 'normal' | 'high';
   printResolution: number;
   duplex: boolean;
@@ -64,7 +65,7 @@ export interface PrintConfig {
 export interface PreviewSettings {
   layout?: 'portrait' | 'landscape';
   scale?: number;
-  colorMode?: 'color' | 'grayscale' | 'bw';
+  colorMode?: 'color';
   paperSize?: string;
 }
 

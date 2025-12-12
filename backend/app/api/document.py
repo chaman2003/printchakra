@@ -209,9 +209,13 @@ def upload_file():
                     except Exception as text_error:
                         print(f"  [WARN] Warning: Failed to save text file: {str(text_error)}")
 
-                # Mark as complete
+                # Mark as complete - clear the original filename's status
                 if update_processing_status:
                     update_processing_status(processed_filename, 12, 12, "Complete", is_complete=True)
+                
+                # Clear the status immediately for renamed files to avoid confusion
+                if new_filename and clear_processing_status:
+                    clear_processing_status(processed_filename)
 
                 # Notify completion with the final filename (might be OCR-renamed)
                 if socketio:
@@ -230,8 +234,8 @@ def upload_file():
                 if new_filename:
                     print(f"    (OCR-renamed from {processed_filename})")
 
-                # Clear status after 60 seconds
-                if clear_processing_status:
+                # Clear status after 60 seconds (for non-renamed files)
+                if not new_filename and clear_processing_status:
                     threading.Timer(60.0, lambda: clear_processing_status(processed_filename)).start()
 
             except Exception as e:
@@ -276,14 +280,29 @@ def list_files():
     TEXT_DIR = dirs['TEXT_DIR']
     get_processing_status = funcs['get']
     processing_status = funcs['processing_status'] or {}
+    clear_processing_status = funcs['clear']
     
     try:
         files = []
+        processed_files_set = set()
 
-        # First, add files that are currently being processed (uploaded but not yet in processed dir)
+        # First, get list of all actual processed files on disk
+        for filename in os.listdir(PROCESSED_DIR):
+            if filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                processed_files_set.add(filename)
+
+        # Add files that are currently being processed (uploaded but not yet in processed dir)
+        # Only include if the file is NOT already in processed dir (handles rename case)
         for filename in list(processing_status.keys()):
             status = get_processing_status(filename) if get_processing_status else None
             if status and not status["is_complete"]:
+                # Skip if a processed file already exists with this name
+                if filename in processed_files_set:
+                    # Clear stale processing status
+                    if clear_processing_status:
+                        clear_processing_status(filename)
+                    continue
+                    
                 # Get the upload filename (without "processed_" prefix)
                 upload_filename = filename.replace("processed_", "")
                 upload_path = os.path.join(UPLOAD_DIR, upload_filename)
@@ -302,40 +321,37 @@ def list_files():
                             "processing_stage": status["stage_name"],
                         }
                     )
+                else:
+                    # Upload file doesn't exist and processed file doesn't exist - stale status
+                    if clear_processing_status:
+                        clear_processing_status(filename)
 
         # Then add all processed files
-        for filename in os.listdir(PROCESSED_DIR):
-            if filename.lower().endswith((".png", ".jpg", ".jpeg")):
-                file_path = os.path.join(PROCESSED_DIR, filename)
-                # Verify file still exists (it may have been deleted)
-                if not os.path.exists(file_path):
-                    print(f"[WARN] File listed but doesn't exist: {file_path}")
-                    continue
-                file_stat = os.stat(file_path)
+        for filename in processed_files_set:
+            file_path = os.path.join(PROCESSED_DIR, filename)
+            # Verify file still exists (it may have been deleted)
+            if not os.path.exists(file_path):
+                print(f"[WARN] File listed but doesn't exist: {file_path}")
+                continue
+            file_stat = os.stat(file_path)
 
-                # Check if text file exists
-                text_filename = f"{os.path.splitext(filename)[0]}.txt"
-                text_path = os.path.join(TEXT_DIR, text_filename)
-                has_text = os.path.exists(text_path)
+            # Check if text file exists
+            text_filename = f"{os.path.splitext(filename)[0]}.txt"
+            text_path = os.path.join(TEXT_DIR, text_filename)
+            has_text = os.path.exists(text_path)
 
-                # Check if still processing (edge case where file exists but processing not complete)
-                status = get_processing_status(filename) if get_processing_status else None
-                is_processing = status and not status["is_complete"]
+            # Processed files that exist on disk are NOT processing anymore
+            # The only exception is if the file was just created and processing is still running
+            # but in that case, the processing status should be marked complete
+            file_info = {
+                "filename": filename,
+                "size": file_stat.st_size,
+                "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
+                "has_text": has_text,
+                "processing": False,  # File exists on disk = processing is done
+            }
 
-                file_info = {
-                    "filename": filename,
-                    "size": file_stat.st_size,
-                    "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-                    "has_text": has_text,
-                    "processing": is_processing,
-                }
-
-                if is_processing:
-                    file_info["processing_step"] = status["step"]
-                    file_info["processing_total"] = status["total_steps"]
-                    file_info["processing_stage"] = status["stage_name"]
-
-                files.append(file_info)
+            files.append(file_info)
 
         # Sort by creation time (newest first)
         files.sort(key=lambda x: x["created"], reverse=True)

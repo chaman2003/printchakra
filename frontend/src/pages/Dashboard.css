@@ -362,7 +362,7 @@ w.processing-progress {
 
 .file-preview img.processing-image {
   opacity: 0.5;
-  filter: grayscale(0.5) blur(1px);
+/* Removed grayscale filter */
 }
 
 /* Loading placeholder for images */

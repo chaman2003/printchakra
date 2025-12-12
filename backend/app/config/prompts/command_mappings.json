@@ -1,5 +1,41 @@
 {
   "voice_commands": {
+    "clear_print_queue": [
+      "clear print queue", "clear queue", "cancel all prints", "clear all jobs",
+      "delete print jobs", "clear printer queue", "empty print queue", "purge queue"
+    ],
+    "check_connectivity": [
+      "check connectivity", "check connection", "test connection", "verify connection",
+      "connectivity status", "check device", "test device connection", "check devices"
+    ],
+    "device_info": [
+      "device info", "show device info", "device information", "printer info",
+      "system info", "show printers", "what printers", "list printers"
+    ],
+    "show_converted": [
+      "show converted", "show converted files", "converted documents", "view converted",
+      "list converted", "converted pdfs", "show pdfs"
+    ],
+    "convert_file": [
+      "convert file", "convert document", "convert to pdf", "convert files",
+      "make pdf", "create pdf", "convert selected"
+    ],
+    "selection_mode_on": [
+      "selection mode on", "enable selection", "turn on selection", "select mode on",
+      "enable select mode", "start selecting", "selection on"
+    ],
+    "selection_mode_off": [
+      "selection mode off", "disable selection", "turn off selection", "select mode off",
+      "disable select mode", "stop selecting", "selection off", "deselect all"
+    ],
+    "select_range": [
+      "select from", "select 1 to", "select range", "select 1-", "select all",
+      "select 1 and", "select documents", "select files"
+    ],
+    "close_panel": [
+      "close", "close panel", "close modal", "close chat", "close window", "dismiss",
+      "close this", "hide panel", "hide chat", "close all"
+    ],
     "select_document": [
       "select document", "choose document", "pick document", "open document",
       "select original document", "select converted document", "select uploaded document",
@@ -62,6 +98,18 @@
       "pages per sheet", "multiple pages", "2 per page", "4 per page", "n-up",
       "booklet", "1 page per sheet", "2 pages per sheet", "4 pages per sheet"
     ],
+    "toggle_auto_capture": [
+      "auto capture", "enable auto capture", "disable auto capture", "start auto capture",
+      "stop auto capture", "turn on auto capture", "turn off auto capture", "auto scan"
+    ],
+    "use_feed_tray": [
+      "use feed tray", "feed tray", "printer feed", "use tray", "document feeder",
+      "auto feeder", "paper tray"
+    ],
+    "select_documents": [
+      "select documents", "choose files", "select files", "upload documents",
+      "upload files", "browse documents"
+    ],
     "toggle_ocr": [
       "ocr", "text mode", "text recognition", "recognize text", "enable ocr",
       "disable ocr", "turn on ocr", "turn off ocr", "image only"
@@ -114,6 +162,15 @@
     ]
   },
   "friendly_responses": {
+    "clear_print_queue": "Print queue cleared successfully",
+    "check_connectivity": "Checking device connectivity...",
+    "device_info": "Opening device information panel",
+    "show_converted": "Showing converted files",
+    "convert_file": "Starting file conversion",
+    "selection_mode_on": "Selection mode enabled",
+    "selection_mode_off": "Selection mode disabled, all selections cleared",
+    "select_range": "Selected {count} documents",
+    "close_panel": "Panel closed",
     "select_document": "Selected document #{document_number}",
     "switch_section": "Switched to {section} documents",
     "next_document": "Moving to next document",

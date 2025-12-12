@@ -136,7 +136,7 @@ DEFAULT_COMMAND_CONFIG = {
     ],
     "print_keywords": [
         "print", "printing", "printout",
-        "print doc", "print file", "print paper"
+        "print doc", "print file", "print paper", "print document", "i want to print", "need to print"
     ],
     "scan_keywords": [
         "scan", "scanning", "capture",
@@ -296,6 +296,8 @@ class VoicePromptManager:
         
         Applies these transformations:
         - Remove markdown formatting (**text**, *text*)
+        - Remove code blocks and special symbols
+        - Only allow English letters, numbers, and basic punctuation
         - Limit to 2 sentences max
         - Limit to 25 words max for natural speech
         - Ensure proper punctuation
@@ -304,7 +306,7 @@ class VoicePromptManager:
             ai_response: Raw response from the selected model
             
         Returns:
-            Formatted, voice-friendly response
+            Formatted, voice-friendly response with only English and numbers
             
         Example:
             >>> raw = "**Opening print interface** now! This will start the printing process."
@@ -312,8 +314,32 @@ class VoicePromptManager:
             >>> print(formatted)
             Opening print interface now.
         """
-        # Clean up markdown
+        import re
+        
+        # Clean up markdown formatting
         ai_response = ai_response.replace("**", "").replace("*", "")
+        
+        # Remove code blocks (```code```)
+        ai_response = re.sub(r'```[\s\S]*?```', '', ai_response)
+        ai_response = re.sub(r'`[^`]*`', '', ai_response)
+        
+        # Remove URLs
+        ai_response = re.sub(r'https?://\S+', '', ai_response)
+        
+        # Remove emojis and special unicode characters
+        ai_response = re.sub(r'[\U0001F600-\U0001F64F]', '', ai_response)  # emoticons
+        ai_response = re.sub(r'[\U0001F300-\U0001F5FF]', '', ai_response)  # symbols & pictographs
+        ai_response = re.sub(r'[\U0001F680-\U0001F6FF]', '', ai_response)  # transport & map symbols
+        ai_response = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', ai_response)  # flags
+        ai_response = re.sub(r'[\U00002702-\U000027B0]', '', ai_response)  # dingbats
+        ai_response = re.sub(r'[\U0001F900-\U0001F9FF]', '', ai_response)  # supplemental symbols
+        
+        # Only allow: English letters (a-z, A-Z), numbers (0-9), 
+        # basic punctuation (. , ! ? ' - : ;), and spaces
+        ai_response = re.sub(r"[^a-zA-Z0-9\s.,!?'\-:;]", '', ai_response)
+        
+        # Clean up multiple spaces
+        ai_response = re.sub(r'\s+', ' ', ai_response).strip()
         
         # Take first sentence or two (max 2 sentences for voice)
         sentences = ai_response.split(". ")
@@ -337,9 +363,10 @@ class VoicePromptManager:
             ai_response += "."
         
         # Filter out gibberish or single-word responses
+        words = ai_response.split()
         if len(words) < 2 or not any(c.isalpha() for c in ai_response):
             logger.warning(f"[WARN] Invalid response detected: '{ai_response}'")
-            ai_response = "I'm here to help with document scanning and printing!"
+            ai_response = "I am here to help with document scanning and printing."
         
         return ai_response
     

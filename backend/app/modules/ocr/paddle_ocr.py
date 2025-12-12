@@ -5,8 +5,13 @@ Advanced OCR with bounding boxes, confidence scores, and Ollama post-processing
 
 # CRITICAL: Set environment variables BEFORE any imports
 import os
+# Disable all connectivity checks for faster startup
 os.environ['DISABLE_MODEL_SOURCE_CHECK'] = 'True'  # Skip slow connectivity check
+os.environ['PADDLEX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'  # PaddleX specific
+os.environ['HUB_HOME'] = os.path.expanduser('~/.paddlex')  # Use local cache
 os.environ['FLAGS_check_nan_inf'] = '0'  # Disable NaN checking for speed
+os.environ['GLOG_v'] = '0'  # Reduce logging verbosity
+os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'  # Memory optimization
 
 import json
 import logging
@@ -51,20 +56,35 @@ def get_paddle_ocr():
     global _paddle_ocr_instance
     if _paddle_ocr_instance is None:
         try:
-            from paddleocr import PaddleOCR
+            import sys
+            from io import StringIO
             
-            # Detect best device (gpu/cpu)
-            device = _detect_paddle_device()
+            # Suppress PaddleOCR startup messages and connectivity checks
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
             
-            # Initialize PaddleOCR v3.3+ API
-            # NOTE: use_angle_cls is now part of the pipeline, not a separate parameter
-            _paddle_ocr_instance = PaddleOCR(
-                lang='en',  # Primary language
-                det_db_thresh=0.3,  # Text detection threshold
-                det_db_box_thresh=0.5,  # Box threshold
-                rec_batch_num=6,  # Recognition batch size
-                device=device,  # 'gpu' or 'cpu' (NOT 'cuda')
-            )
+            try:
+                from paddleocr import PaddleOCR
+                
+                # Detect best device (gpu/cpu)
+                device = _detect_paddle_device()
+                
+                # Initialize PaddleOCR v3.3+ API
+                # NOTE: use_angle_cls is now part of the pipeline, not a separate parameter
+                _paddle_ocr_instance = PaddleOCR(
+                    lang='en',  # Primary language
+                    det_db_thresh=0.3,  # Text detection threshold
+                    det_db_box_thresh=0.5,  # Box threshold
+                    rec_batch_num=6,  # Recognition batch size
+                    device=device,  # 'gpu' or 'cpu' (NOT 'cuda')
+                )
+            finally:
+                # Restore stdout/stderr
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+            
             logger.info(f"[OK] PaddleOCR v3.3+ initialized successfully on {device.upper()}")
         except Exception as e:
             logger.error(f"[ERROR] Failed to initialize PaddleOCR: {e}")
@@ -162,8 +182,23 @@ class PaddleOCRProcessor:
             logger.info(f"[OCR] Image dimensions: {result.image_dimensions}")
             
             # Run PaddleOCR v3.3+ (cls parameter removed - angle classification is automatic)
+            # Suppress any connectivity check messages during OCR processing
+            import sys
+            from io import StringIO
+            
             ocr = get_paddle_ocr()
-            ocr_output = ocr.ocr(image_path)
+            
+            # Suppress output from ocr.ocr() call to prevent connectivity check messages
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = StringIO()
+            sys.stderr = StringIO()
+            
+            try:
+                ocr_output = ocr.ocr(image_path)
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
             
             print(f"[DEBUG] OCR raw output type: {type(ocr_output)}, has data: {bool(ocr_output)}")
             

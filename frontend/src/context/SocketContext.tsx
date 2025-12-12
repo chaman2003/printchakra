@@ -1,15 +1,17 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { API_BASE_URL, SOCKET_CONFIG, SOCKET_IO_ENABLED, ENVIRONMENT } from '../config';
 
 interface SocketContextType {
   socket: Socket | null;
   connected: boolean;
+  reconnect: () => void;
 }
 
 const SocketContext = createContext<SocketContextType>({
   socket: null,
   connected: false,
+  reconnect: () => {},
 });
 
 export const useSocket = () => {
@@ -28,10 +30,10 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const connectionAttemptRef = useRef(0);
-  const maxRetries = 5;
+  const maxRetries = 10;
   const initializingRef = useRef(false);
 
-  useEffect(() => {
+  const initSocket = useCallback(() => {
     if (!SOCKET_IO_ENABLED) {
       console.log('[Socket] Socket.IO disabled - using HTTP polling only');
       setConnected(true);
@@ -47,6 +49,15 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       socketRef.current = existingSocket;
       setConnected(true);
       return;
+    }
+    
+    // Disconnect existing socket if it exists but isn't connected
+    if (existingSocket) {
+      try {
+        existingSocket.disconnect();
+      } catch (e) {
+        // Ignore
+      }
     }
     
     // Prevent multiple simultaneous initialization attempts (React StrictMode safety)
@@ -67,6 +78,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         reconnectionAttempts: maxRetries,
+        timeout: 20000,
       });
 
       newSocket.on('connect', () => {
@@ -80,11 +92,31 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       newSocket.on('disconnect', (reason: string) => {
         console.log('[Socket] Disconnected:', reason);
         setConnected(false);
+        
+        // Auto-reconnect for certain disconnect reasons
+        if (reason === 'io server disconnect' || reason === 'transport close') {
+          console.log('[Socket] Attempting to reconnect...');
+          setTimeout(() => {
+            if (!socketRef.current?.connected) {
+              newSocket.connect();
+            }
+          }, 2000);
+        }
+      });
+
+      newSocket.on('reconnect', (attemptNumber: number) => {
+        console.log('[Socket] Reconnected after', attemptNumber, 'attempts');
+        setConnected(true);
+      });
+
+      newSocket.on('reconnect_attempt', (attemptNumber: number) => {
+        console.log('[Socket] Reconnection attempt', attemptNumber);
       });
 
       newSocket.on('connect_error', (error: any) => {
         connectionAttemptRef.current++;
         console.warn('[Socket] Connection error:', error.message || error);
+        setConnected(false);
         if (error.data) {
           console.warn('[Socket] Error details:', error.data);
         }
@@ -111,15 +143,45 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setConnected(false);
       initializingRef.current = false;
     }
+  }, []);
+
+  const reconnect = useCallback(() => {
+    console.log('[Socket] Manual reconnect requested');
+    initializingRef.current = false;
+    connectionAttemptRef.current = 0;
+    
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+    
+    setTimeout(() => {
+      initSocket();
+    }, 500);
+  }, [initSocket]);
+
+  useEffect(() => {
+    initSocket();
 
     // Cleanup: Only disconnect on actual unmount, not on React StrictMode remount
     return () => {
       // Don't disconnect - keep the connection alive for reuse
     };
-  }, []);
+  }, [initSocket]);
+
+  // Periodic connection check - if disconnected, try to reconnect
+  useEffect(() => {
+    const checkConnection = setInterval(() => {
+      if (!connected && socketRef.current && !socketRef.current.connected) {
+        console.log('[Socket] Connection lost, attempting reconnect...');
+        socketRef.current.connect();
+      }
+    }, 5000);
+
+    return () => clearInterval(checkConnection);
+  }, [connected]);
 
   return (
-    <SocketContext.Provider value={{ socket: socketRef.current, connected }}>
+    <SocketContext.Provider value={{ socket: socketRef.current, connected, reconnect }}>
       {children}
     </SocketContext.Provider>
   );

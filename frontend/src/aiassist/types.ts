@@ -57,7 +57,7 @@ export interface ParsedCommand {
 // ==================== Settings Types ====================
 export type WorkflowMode = 'print' | 'scan';
 export type LayoutOrientation = 'portrait' | 'landscape';
-export type ColorMode = 'color' | 'grayscale' | 'bw';
+export type ColorMode = 'color';
 export type PaperSize = 'A4' | 'Letter' | 'Legal' | 'A3' | 'A5';
 export type PageSelection = 'all' | 'odd' | 'even' | 'custom';
 export type MarginPreset = 'default' | 'narrow' | 'none' | 'custom';

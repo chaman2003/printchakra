@@ -869,7 +869,61 @@ class VoiceChatService:
             
             logger.info(f"[SEARCH] Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
 
-            # PRIORITY 0: Try to interpret as a voice command (navigation, control)
+            # PRIORITY 0: Check for DIRECT print/scan commands FIRST - HIGHEST PRIORITY
+            # These should take precedence over any other command interpretation
+            is_print_command = False
+            is_scan_command = False
+            
+            if VOICE_PROMPT_AVAILABLE:
+                is_print_command = VoicePromptManager.is_print_command(user_message)
+                is_scan_command = VoicePromptManager.is_scan_command(user_message)
+            else:
+                print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper", "print document", "i want to print", "need to print"]
+                scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
+                question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
+                is_question = any(word in user_lower for word in question_words)
+                is_print_command = any(keyword in user_lower for keyword in print_keywords) and not is_question
+                is_scan_command = any(keyword in user_lower for keyword in scan_keywords) and not is_question
+            
+            if is_print_command:
+                # Direct print command detected - TRIGGER IMMEDIATELY
+                ai_response = f"TRIGGER_ORCHESTRATION:print Opening print interface now!"
+                logger.info(f"[PRINT] DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
+                
+                self.conversation_history.append({"role": "user", "content": user_message})
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+                
+                return {
+                    "success": True,
+                    "response": "Opening print interface!",
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "tts_enabled": TTS_AVAILABLE,
+                    "spoken": False,
+                    "orchestration_trigger": True,
+                    "orchestration_mode": "print",
+                }
+            
+            if is_scan_command:
+                # Direct scan command detected - TRIGGER IMMEDIATELY
+                ai_response = f"TRIGGER_ORCHESTRATION:scan Opening scan interface now!"
+                logger.info(f"[SCAN] DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
+                
+                self.conversation_history.append({"role": "user", "content": user_message})
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+                
+                return {
+                    "success": True,
+                    "response": "Opening scan interface!",
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "tts_enabled": TTS_AVAILABLE,
+                    "spoken": False,
+                    "orchestration_trigger": True,
+                    "orchestration_mode": "scan",
+                }
+
+            # PRIORITY 1: Try to interpret as a voice command (navigation, control)
             command_type, confidence = self.interpret_voice_command(user_message)
             if command_type and confidence > 0.7:  # High confidence command match
                 # Parse command parameters for document selector
@@ -907,7 +961,7 @@ class VoiceChatService:
                     "command_params": command_params,
                 }
 
-            # PRIORITY 1: Check for confirmation if we have pending orchestration
+            # PRIORITY 2: Check for confirmation if we have pending orchestration
             if self.pending_orchestration:
                 is_confirmation = False
                 if VOICE_PROMPT_AVAILABLE:
@@ -940,64 +994,6 @@ class VoiceChatService:
                     # User said something else - clear pending and continue conversation
                     logger.info(f"[WARN] User response not a confirmation, clearing pending state")
                     self.pending_orchestration = None
-            
-            # PRIORITY 2: Check for DIRECT print/scan commands - TRIGGER IMMEDIATELY
-            # Look for print intent
-            is_print_command = False
-            if VOICE_PROMPT_AVAILABLE:
-                is_print_command = VoicePromptManager.is_print_command(user_message)
-            else:
-                print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper"]
-                question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
-                is_question = any(word in user_lower for word in question_words)
-                is_print_command = any(keyword in user_lower for keyword in print_keywords) and not is_question
-            
-            if is_print_command:
-                # Direct print command detected
-                ai_response = f"TRIGGER_ORCHESTRATION:print Opening print interface now!"
-                logger.info(f"[PRINT] DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
-                
-                self.conversation_history.append({"role": "user", "content": user_message})
-                self.conversation_history.append({"role": "assistant", "content": ai_response})
-                
-                return {
-                    "success": True,
-                    "response": "Opening print interface!",
-                    "model": self.model_name,
-                    "timestamp": datetime.now().isoformat(),
-                    "tts_enabled": TTS_AVAILABLE,
-                    "spoken": False,
-                    "orchestration_trigger": True,
-                    "orchestration_mode": "print",
-                }
-            
-            # Look for scan intent
-            if VOICE_PROMPT_AVAILABLE:
-                is_scan_command = VoicePromptManager.is_scan_command(user_message)
-            else:
-                scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
-                question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
-                is_question = any(word in user_lower for word in question_words)
-                is_scan_command = any(keyword in user_lower for keyword in scan_keywords) and not is_question
-            
-            if is_scan_command:
-                # Direct scan command detected
-                ai_response = f"TRIGGER_ORCHESTRATION:scan Opening scan interface now!"
-                logger.info(f"[SCAN] DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
-                
-                self.conversation_history.append({"role": "user", "content": user_message})
-                self.conversation_history.append({"role": "assistant", "content": ai_response})
-                
-                return {
-                    "success": True,
-                    "response": "Opening scan interface!",
-                    "model": self.model_name,
-                    "timestamp": datetime.now().isoformat(),
-                    "tts_enabled": TTS_AVAILABLE,
-                    "spoken": False,
-                    "orchestration_trigger": True,
-                    "orchestration_mode": "scan",
-                }
 
             # Add user message to history for general conversation
             self.conversation_history.append({"role": "user", "content": user_message})
@@ -1301,13 +1297,9 @@ class VoiceAIOrchestrator:
             return any(phrase in text for phrase in phrases)
 
         # Color / mono detection
-        if contains_any(["full color", "color copy", "print in color", "color mode"]):
+        if contains_any(["full color", "color copy", "print in color", "color mode", "black and white", "black & white", "bw", "mono", "monochrome", "greyscale", "gray scale", "grey scale", "grayscale", "grey scale", "gray mode"]):
             params["colorMode"] = "color"
-        elif contains_any(["black and white", "black & white", "bw", "mono", "monochrome", "greyscale", "gray scale", "grey scale"]):
-            params["colorMode"] = "bw"
-        elif contains_any(["grayscale", "grey scale", "gray mode"]):
-            params["colorMode"] = "grayscale"
-        elif "color" in text and "black" not in text:
+        elif "color" in text:
             params["colorMode"] = "color"
 
         # Layout detection

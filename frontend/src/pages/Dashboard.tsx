@@ -477,10 +477,27 @@ const Dashboard: React.FC = () => {
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
 
-  // PaddleOCR state
-  const [ocrResults, setOcrResults] = useState<Record<string, OCRResult>>({});
+  // PaddleOCR state - initialize from localStorage for persistence across page reloads
+  const [ocrResults, setOcrResults] = useState<Record<string, OCRResult>>(() => {
+    try {
+      const saved = localStorage.getItem('printchakra_ocr_results');
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      console.warn('Failed to load OCR results from localStorage:', e);
+      return {};
+    }
+  });
   const [ocrLoading, setOcrLoading] = useState<Record<string, boolean>>({});
   const [activeOCRView, setActiveOCRView] = useState<string | null>(null);
+
+  // Persist OCR results to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('printchakra_ocr_results', JSON.stringify(ocrResults));
+    } catch (e) {
+      console.warn('Failed to save OCR results to localStorage:', e);
+    }
+  }, [ocrResults]);
 
   // File conversion state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -542,7 +559,7 @@ const Dashboard: React.FC = () => {
     scanPaperSizeCustom: '',
     scanResolution: '300' as string,
     scanResolutionCustom: '',
-    scanColorMode: 'color' as 'color' | 'grayscale' | 'bw',
+    scanColorMode: 'color' as 'color',
     scanFormat: 'pdf' as string,
     scanQuality: 'normal' as string,
     // Print options
@@ -552,7 +569,7 @@ const Dashboard: React.FC = () => {
     printPaperSize: 'A4' as string,
     printPaperSizeCustom: '',
     printResolution: '300' as string,
-    printColorMode: 'color' as 'color' | 'grayscale' | 'bw',
+    printColorMode: 'color' as 'color',
     printScale: '100' as string,
     printScaleCustom: '',
     printMargins: 'default' as 'default' | 'narrow' | 'none',
@@ -574,6 +591,14 @@ const Dashboard: React.FC = () => {
   const convertedDrawer = useDisclosure();
   const orchestrateModal = useDisclosure();
   const documentSelectorModal = useDisclosure(); // Document selector modal
+  const deviceInfoModal = useDisclosure(); // Device info modal
+
+  // Socket connection for real-time updates
+  const { socket, connected: socketConnected, reconnect: socketReconnect } = useSocket();
+  const socketRef = React.useRef(socket);
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
 
   // Document feeder state for scan workflow
   const [isFeedingDocuments, setIsFeedingDocuments] = useState(false);
@@ -644,6 +669,9 @@ const Dashboard: React.FC = () => {
       index: 1,
     }
   );
+  // Refs for async callbacks that are defined later
+  const executePrintJobRef = React.useRef<(() => Promise<void>) | null>(null);
+  const executeScanJobRef = React.useRef<(() => Promise<void>) | null>(null);
 
   const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
   const [orchestrationContext, setOrchestrationContext] = useState<'manual' | 'voice'>('manual');
@@ -1383,6 +1411,251 @@ const Dashboard: React.FC = () => {
         : undefined;
 
       switch (command) {
+        // ==================== New Commands ====================
+        case 'clear_print_queue': {
+          try {
+            await apiClient.post(API_ENDPOINTS.printerClearQueue);
+            toast({
+              title: 'Print Queue Cleared',
+              description: 'All print jobs have been cancelled',
+              status: 'success',
+              duration: 3000,
+            });
+          } catch (error) {
+            toast({
+              title: 'Error',
+              description: 'Failed to clear print queue',
+              status: 'error',
+              duration: 3000,
+            });
+          }
+          break;
+        }
+
+        case 'check_connectivity': {
+          connectivityModal.onOpen();
+          connectionStatusRef.current?.runCheck();
+          toast({
+            title: 'Connectivity Check',
+            description: 'Checking device connections...',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'device_info': {
+          deviceInfoModal.onOpen();
+          toast({
+            title: 'Device Information',
+            description: 'Opening device info panel',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'show_converted': {
+          convertedDrawer.onOpen();
+          toast({
+            title: 'Converted Files',
+            description: 'Showing converted documents',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'convert_file': {
+          if (selectedFiles.length > 0) {
+            conversionModal.onOpen();
+            toast({
+              title: 'File Conversion',
+              description: `Ready to convert ${selectedFiles.length} file(s)`,
+              status: 'info',
+              duration: 2000,
+            });
+          } else {
+            toast({
+              title: 'No Files Selected',
+              description: 'Please select files first by saying "selection mode on"',
+              status: 'warning',
+              duration: 3000,
+            });
+          }
+          break;
+        }
+
+        case 'selection_mode_on': {
+          setSelectionMode(true);
+          toast({
+            title: 'Selection Mode',
+            description: 'Selection mode enabled. Tap files to select them.',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'selection_mode_off': {
+          setSelectionMode(false);
+          setSelectedFiles([]);
+          toast({
+            title: 'Selection Mode',
+            description: 'Selection disabled, all files deselected',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'select_range': {
+          // Parse range params like "select 1 to 5" or "select 1 and 4"
+          const rangeText = params?.range || params?.text || '';
+          const rangeMatch = rangeText.match(/(\d+)\s*(?:to|-)\s*(\d+)/i);
+          const andMatch = rangeText.match(/(\d+)\s+and\s+(\d+)/i);
+          const singleMatch = rangeText.match(/select\s+(\d+)/i);
+          
+          if (!selectionMode) {
+            setSelectionMode(true);
+          }
+          
+          if (rangeMatch) {
+            // Range selection: "select 1 to 5"
+            const start = parseInt(rangeMatch[1], 10) - 1;
+            const end = parseInt(rangeMatch[2], 10) - 1;
+            const newSelection = files
+              .slice(Math.min(start, end), Math.max(start, end) + 1)
+              .map(f => f.filename);
+            setSelectedFiles(newSelection);
+            toast({
+              title: 'Range Selected',
+              description: `Selected files ${rangeMatch[1]} to ${rangeMatch[2]}`,
+              status: 'success',
+              duration: 2000,
+            });
+          } else if (andMatch) {
+            // Multiple selection: "select 1 and 4"
+            const idx1 = parseInt(andMatch[1], 10) - 1;
+            const idx2 = parseInt(andMatch[2], 10) - 1;
+            const newSelection: string[] = [];
+            if (files[idx1]) newSelection.push(files[idx1].filename);
+            if (files[idx2]) newSelection.push(files[idx2].filename);
+            setSelectedFiles(prev => Array.from(new Set([...prev, ...newSelection])));
+            toast({
+              title: 'Files Selected',
+              description: `Selected files ${andMatch[1]} and ${andMatch[2]}`,
+              status: 'success',
+              duration: 2000,
+            });
+          } else if (singleMatch) {
+            // Single selection: "select 1"
+            const idx = parseInt(singleMatch[1], 10) - 1;
+            if (files[idx]) {
+              setSelectedFiles(prev => 
+                prev.includes(files[idx].filename)
+                  ? prev.filter(f => f !== files[idx].filename)
+                  : [...prev, files[idx].filename]
+              );
+              toast({
+                title: 'File Toggled',
+                description: `Toggled file ${singleMatch[1]}`,
+                status: 'info',
+                duration: 2000,
+              });
+            }
+          } else if (rangeText.toLowerCase().includes('all')) {
+            // Select all
+            setSelectedFiles(files.map(f => f.filename));
+            toast({
+              title: 'All Selected',
+              description: `Selected all ${files.length} files`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'toggle_auto_capture': {
+          // Toggle auto-capture for scan
+          const currentSocket = socketRef.current;
+          if (currentSocket) {
+            if (autoCaptureEnabled) {
+              currentSocket.emit('stop_auto_capture');
+              setAutoCaptureEnabled(false);
+              toast({
+                title: 'Auto Capture',
+                description: 'Auto capture stopped',
+                status: 'info',
+                duration: 2000,
+              });
+            } else {
+              currentSocket.emit('start_auto_capture', {
+                session_id: 'voice-capture',
+                settings: orchestrateOptions,
+              });
+              setAutoCaptureEnabled(true);
+              toast({
+                title: 'Auto Capture',
+                description: 'Auto capture started on phone',
+                status: 'success',
+                duration: 2000,
+              });
+            }
+          }
+          break;
+        }
+
+        case 'use_feed_tray': {
+          // Set scan document source to feed tray
+          setScanDocumentSource('feed');
+          toast({
+            title: 'Feed Tray Selected',
+            description: 'Using printer feed tray for scanning',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'select_documents': {
+          // Open document selector for selecting/uploading
+          if (orchestrateMode === 'scan') {
+            setScanDocumentSource('select');
+          }
+          documentSelectorModal.onOpen();
+          toast({
+            title: 'Document Selection',
+            description: 'Opening document selector',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        case 'close_panel': {
+          // Close any open modal or panel
+          if (orchestrateModal.isOpen) orchestrateModal.onClose();
+          if (documentSelectorModal.isOpen) documentSelectorModal.onClose();
+          if (conversionModal.isOpen) conversionModal.onClose();
+          if (convertedDrawer.isOpen) convertedDrawer.onClose();
+          if (deviceInfoModal.isOpen) deviceInfoModal.onClose();
+          if (connectivityModal.isOpen) connectivityModal.onClose();
+          if (imageModal.isOpen) imageModal.onClose();
+          if (isChatVisible) {
+            forceCloseChat();
+          }
+          toast({
+            title: 'Panels Closed',
+            description: 'All panels and modals closed',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
+        }
+
+        // ==================== Existing Commands ====================
         case 'select_document': {
           if (sectionParam === 'upload') {
             documentSelectorModal.onOpen();
@@ -1482,9 +1755,9 @@ const Dashboard: React.FC = () => {
 
         case 'confirm': {
           if (orchestrateMode === 'print') {
-            executePrintJob();
+            executePrintJobRef.current?.();
           } else if (orchestrateMode === 'scan') {
-            executeScanJob();
+            executeScanJobRef.current?.();
           }
           toast({
             title: 'Executing',
@@ -1552,15 +1825,22 @@ const Dashboard: React.FC = () => {
       }
     },
     [
+      connectivityModal,
+      connectionStatusRef,
+      convertedDrawer,
+      conversionModal,
       convertedDocumentOptions,
       currentDocumentOptions,
+      deviceInfoModal,
       documentSelectorModal,
       documentSelectorRef,
-      getSectionFromParam,
+      files,
       forceCloseChat,
-      handleDockedChatClose,
+      getSectionFromParam,
+      imageModal,
       isChatVisible,
       orchestrateMode,
+      orchestrateOptions,
       orchestrateOptions.printColorMode,
       orchestrateOptions.printLayout,
       orchestrateOptions.printPaperSize,
@@ -1569,7 +1849,10 @@ const Dashboard: React.FC = () => {
       orchestrateOptions.scanResolution,
       orchestrateModal,
       selectDocumentForVoice,
+      selectedFiles.length,
+      selectionMode,
       toast,
+      autoCaptureEnabled,
     ]
   );
 
@@ -1599,11 +1882,19 @@ const Dashboard: React.FC = () => {
   const chatSidebarBg = useColorModeValue('white', 'gray.800');
   const chatSidebarBorderColor = useColorModeValue('gray.200', 'gray.700');
 
-  const { socket, connected: socketConnected } = useSocket();
-
   useEffect(() => {
     setConnected(socketConnected);
   }, [socketConnected]);
+  
+  // Handle reconnect attempt from UI
+  const handleReconnect = useCallback(() => {
+    console.log('Attempting manual reconnection...');
+    if (socketReconnect) {
+      socketReconnect();
+    }
+    // Also refresh files after a short delay
+    setTimeout(() => loadFiles(false), 1000);
+  }, [socketReconnect]);
 
   useEffect(() => {
     if (!socket) {
@@ -1681,14 +1972,25 @@ const Dashboard: React.FC = () => {
     const processingCompleteListener = (data: any) => {
       console.log('Processing complete:', data);
       setProcessingProgress(null);
-      // Immediately update file state
-      if (data?.filename) {
+      
+      // Handle renamed files - match by original_filename if file was renamed
+      const filenameToMatch = data?.original_filename || data?.filename;
+      const newFilename = data?.filename;
+      
+      if (filenameToMatch) {
         setFiles((prevFiles: FileInfo[]) => 
-          prevFiles.map(f => 
-            f.filename === data.filename 
-              ? { ...f, processing: false, has_text: data.has_text || false }
-              : f
-          )
+          prevFiles.map(f => {
+            // Match against original filename (before rename) or current filename
+            if (f.filename === filenameToMatch || f.filename === newFilename) {
+              return { 
+                ...f, 
+                filename: newFilename, // Update to new filename if renamed
+                processing: false, 
+                has_text: data.has_text || false 
+              };
+            }
+            return f;
+          })
         );
         // Force thumbnail refresh by updating the refresh token
         setRefreshToken(prev => prev + 1);
@@ -1825,6 +2127,47 @@ const Dashboard: React.FC = () => {
     };
   }, [socket, toast]);
 
+  // Safety mechanism: Clear stuck processing states after 2 minutes
+  useEffect(() => {
+    const PROCESSING_TIMEOUT_MS = 120000; // 2 minutes
+    const processingStartTimes = new Map<string, number>();
+    
+    const checkStuckProcessing = () => {
+      const now = Date.now();
+      setFiles((prevFiles: FileInfo[]) => {
+        let hasChanges = false;
+        const updatedFiles = prevFiles.map(f => {
+          if (f.processing) {
+            // Track when processing started
+            if (!processingStartTimes.has(f.filename)) {
+              processingStartTimes.set(f.filename, now);
+            }
+            
+            const startTime = processingStartTimes.get(f.filename) || now;
+            if (now - startTime > PROCESSING_TIMEOUT_MS) {
+              console.warn(`Processing timeout for ${f.filename} - clearing stuck state`);
+              hasChanges = true;
+              processingStartTimes.delete(f.filename);
+              return { ...f, processing: false };
+            }
+          } else {
+            // Clear tracking when processing is done
+            processingStartTimes.delete(f.filename);
+          }
+          return f;
+        });
+        
+        return hasChanges ? updatedFiles : prevFiles;
+      });
+    };
+    
+    const intervalId = setInterval(checkStuckProcessing, 10000); // Check every 10 seconds
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
+
   const lastLoadFilesRunRef = React.useRef<number>(0);
   const minLoadFilesInterval = 200; // ms - reduced for faster real-time updates during capture
 
@@ -1910,6 +2253,12 @@ const Dashboard: React.FC = () => {
     try {
       await apiClient.delete(`${API_ENDPOINTS.delete}/${filename}`);
       setFiles(files.filter((f: FileInfo) => f.filename !== filename));
+      // Also remove OCR results for deleted file
+      setOcrResults(prev => {
+        const updated = { ...prev };
+        delete updated[filename];
+        return updated;
+      });
       if (selectedFile === filename) {
         setSelectedFile(null);
         setOcrText('');
@@ -2105,6 +2454,13 @@ const Dashboard: React.FC = () => {
       setScanDocumentSource(null);
     }
 
+    // For print mode, reset userClosedDocSelector so document selector auto-opens
+    if (mode === 'print') {
+      setUserClosedDocSelector(false);
+      // Clear any previously selected documents to show fresh selection screen
+      setSelectedDocuments([]);
+    }
+
     const resolvedVoiceOptions = resolveInitialVoiceConfigOptions(mode, config);
     if (Object.keys(resolvedVoiceOptions).length > 0) {
       setOrchestrateOptions(prev => ({
@@ -2243,6 +2599,12 @@ const Dashboard: React.FC = () => {
       });
     }
   };
+
+  // Assign refs for voice command handlers
+  useEffect(() => {
+    executePrintJobRef.current = executePrintJob;
+    executeScanJobRef.current = executeScanJob;
+  });
 
   // Feed documents through printer (uses printer as document feeder)
   // Also triggers auto-capture on phone with 5-second countdown
@@ -2691,7 +3053,7 @@ const Dashboard: React.FC = () => {
             statusText={statusText}
             error={error}
             onRefresh={handleRefreshClick}
-            onCheckConnectivity={connectivityModal.onOpen}
+            onCheckConnectivity={!connected ? handleReconnect : connectivityModal.onOpen}
           >
             <DashboardActionPanel
               isChatVisible={isChatVisible}
@@ -3478,12 +3840,12 @@ const Dashboard: React.FC = () => {
           borderColor="brand.300"
           boxShadow="0 25px 60px rgba(121, 95, 238, 0.4)"
           maxH={isVoiceOrchestration ? '90vh' : MODAL_CONFIG.modal.maxHeight}
-          maxW={isChatVisible ? { base: '95vw', lg: '60vw' } : (isVoiceOrchestration ? '95vw' : MODAL_CONFIG.modal.maxWidth)}
-          w={isChatVisible ? { base: '95vw', lg: '60vw' } : (isVoiceOrchestration ? '95vw' : 'auto')}
+          maxW={isChatVisible ? 'calc(100vw - 400px)' : (isVoiceOrchestration ? '95vw' : MODAL_CONFIG.modal.maxWidth)}
+          w={isChatVisible ? 'calc(100vw - 400px)' : (isVoiceOrchestration ? '95vw' : 'auto')}
           h={isVoiceOrchestration ? '90vh' : 'auto'}
-          mx={isChatVisible ? { base: 'auto', lg: '2' } : 'auto'}
-          ml={isChatVisible ? { base: 'auto', lg: '2' } : 'auto'}
-          mr={isChatVisible ? { base: 'auto', lg: '37vw' } : 'auto'}
+          ml={isChatVisible ? '8px' : 'auto'}
+          mr={isChatVisible ? '392px' : 'auto'}
+          mt={isChatVisible ? '8px' : 'auto'}
           my={isVoiceOrchestration ? '5vh' : 'auto'}
           overflow="hidden"
           display="flex"
@@ -4068,7 +4430,8 @@ const Dashboard: React.FC = () => {
                     </Box>
                     )}
 
-                    {/* Select Page Scan Mode */}
+                    {/* Select Page Scan Mode - Only show for 'select' source */}
+                    {scanDocumentSource === 'select' && (
                     <Box
                       p="1.25rem"
                       borderRadius="xl"
@@ -4113,8 +4476,10 @@ const Dashboard: React.FC = () => {
                         <option value="multi">📚 Multi-Page Document</option>
                       </Select>
                     </Box>
+                    )}
 
-                    {/* Text Detection */}
+                    {/* Text Detection - Only show for 'select' source */}
+                    {scanDocumentSource === 'select' && (
                     <Box
                       p="1.25rem"
                       borderRadius="xl"
@@ -4160,6 +4525,7 @@ const Dashboard: React.FC = () => {
                         </Checkbox>
                       </Flex>
                     </Box>
+                    )}
 
                     {/* Page Selection / Printable Range */}
                     <Box
@@ -4294,7 +4660,8 @@ const Dashboard: React.FC = () => {
                       </RadioGroup>
                     </Box>
 
-                    {/* Layout */}
+                    {/* Layout - Only show for 'select' source */}
+                    {scanDocumentSource === 'select' && (
                     <Box
                       p="1.25rem"
                       borderRadius="xl"
@@ -4357,8 +4724,10 @@ const Dashboard: React.FC = () => {
                         </Button>
                       </ButtonGroup>
                     </Box>
+                    )}
 
-                    {/* Paper Size */}
+                    {/* Paper Size - Only show for 'select' source */}
+                    {scanDocumentSource === 'select' && (
                     <Box
                       p={5}
                       borderRadius="xl"
@@ -4385,8 +4754,10 @@ const Dashboard: React.FC = () => {
                         }
                       />
                     </Box>
+                    )}
 
-                    {/* Resolution */}
+                    {/* Resolution - Only show for 'select' source */}
+                    {scanDocumentSource === 'select' && (
                     <Box
                       p={5}
                       borderRadius="xl"
@@ -4423,6 +4794,7 @@ const Dashboard: React.FC = () => {
                         }
                       />
                     </Box>
+                    )}
 
                     {/* Color Mode */}
                     <Box
@@ -4464,26 +4836,6 @@ const Dashboard: React.FC = () => {
                           transition="all 0.2s"
                         >
                           Color
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={
-                            orchestrateOptions.scanColorMode === 'grayscale' ? 'solid' : 'outline'
-                          }
-                          colorScheme={
-                            orchestrateOptions.scanColorMode === 'grayscale' ? 'brand' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              scanColorMode: 'grayscale',
-                            })
-                          }
-                          leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
-                          _hover={{ transform: 'scale(1.02)' }}
-                          transition="all 0.2s"
-                        >
-                          Grayscale
                         </Button>
                         <Button
                           flex={1}
@@ -4725,6 +5077,42 @@ const Dashboard: React.FC = () => {
                         : 'Select Documents to Print'}
                     </Button>
 
+                    {/* Number of Copies - Moved to top */}
+                    <Box
+                      p={4}
+                      borderRadius="lg"
+                      border="1px solid"
+                      borderColor="whiteAlpha.200"
+                      bg="whiteAlpha.50"
+                      transition="all 0.2s"
+                      _hover={{ borderColor: 'brand.400' }}
+                    >
+                      <Heading size="sm" mb={3}>
+                        📄 Number of Copies
+                      </Heading>
+                      <Flex align="center" gap={3}>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="999"
+                          value={orchestrateOptions.printCopies}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setOrchestrateOptions({
+                              ...orchestrateOptions,
+                              printCopies: e.target.value,
+                            })
+                          }
+                          bg="whiteAlpha.100"
+                          borderColor="brand.300"
+                          _hover={{ borderColor: 'brand.400' }}
+                          w="100px"
+                          textAlign="center"
+                          fontWeight="bold"
+                        />
+                        <Text>copies</Text>
+                      </Flex>
+                    </Box>
+
                     {/* Pages to Print */}
                     <Box
                       p={5}
@@ -4844,282 +5232,80 @@ const Dashboard: React.FC = () => {
                       </ButtonGroup>
                     </Box>
 
-                    {/* Paper Size */}
-                    <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor="whiteAlpha.200"
-                      bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400' }}
-                    >
-                      <FancySelect
-                        label="📏 Paper Size"
-                        options={[
-                          { value: 'A4', label: 'A4 (210×297 mm)' },
-                          { value: 'Letter', label: 'Letter (8.5×11 in)' },
-                          { value: 'Legal', label: 'Legal (8.5×14 in)' },
-                        ]}
-                        value={orchestrateOptions.printPaperSize}
-                        onChange={(value: string) =>
-                          setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })
-                        }
-                      />
-                    </Box>
-
-                    {/* Print Resolution (DPI) */}
-                    <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor="whiteAlpha.200"
-                      bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400' }}
-                    >
-                      <FancySelect
-                        label="🔍 Scan Resolution (DPI)"
-                        options={[
-                          { value: '150', label: '150 DPI - Draft Quality' },
-                          { value: '300', label: '300 DPI - Standard (Recommended)' },
-                          { value: '600', label: '600 DPI - High Quality' },
-                          { value: '1200', label: '1200 DPI - Professional' },
-                        ]}
-                        value={orchestrateOptions.printResolution}
-                        onChange={(value: string) =>
-                          setOrchestrateOptions({ ...orchestrateOptions, printResolution: value })
-                        }
-                      />
-                    </Box>
-
-                    {/* Color Mode */}
-                    <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor="whiteAlpha.200"
-                      bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400' }}
-                    >
-                      <Heading size="sm" mb={3}>
-                        Color Mode
-                      </Heading>
-                      <ButtonGroup isAttached width="full" size="md">
-                        <Button
-                          flex={1}
-                          variant={
-                            orchestrateOptions.printColorMode === 'color' ? 'solid' : 'outline'
+                    {/* Paper Size & Color Mode - Side by Side */}
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                      {/* Paper Size */}
+                      <Box
+                        p={4}
+                        borderRadius="lg"
+                        border="1px solid"
+                        borderColor="whiteAlpha.200"
+                        bg="whiteAlpha.50"
+                        transition="all 0.2s"
+                        _hover={{ borderColor: 'brand.400' }}
+                      >
+                        <FancySelect
+                          label="📏 Paper Size"
+                          options={[
+                            { value: 'A4', label: 'A4 (210×297 mm)' },
+                            { value: 'Letter', label: 'Letter (8.5×11 in)' },
+                            { value: 'Legal', label: 'Legal (8.5×14 in)' },
+                          ]}
+                          value={orchestrateOptions.printPaperSize}
+                          onChange={(value: string) =>
+                            setOrchestrateOptions({ ...orchestrateOptions, printPaperSize: value })
                           }
-                          colorScheme={
-                            orchestrateOptions.printColorMode === 'color' ? 'nebula' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              printColorMode: 'color',
-                            })
-                          }
-                          leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
-                        >
-                          Color
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={
-                            orchestrateOptions.printColorMode === 'grayscale' ? 'solid' : 'outline'
-                          }
-                          colorScheme={
-                            orchestrateOptions.printColorMode === 'grayscale' ? 'nebula' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              printColorMode: 'grayscale',
-                            })
-                          }
-                          leftIcon={<Iconify icon="solar:sun-fog-bold" width={18} height={18} />}
-                        >
-                          Grayscale
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={orchestrateOptions.printColorMode === 'bw' ? 'solid' : 'outline'}
-                          colorScheme={
-                            orchestrateOptions.printColorMode === 'bw' ? 'nebula' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'bw' })
-                          }
-                          leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
-                        >
-                          B&W
-                        </Button>
-                      </ButtonGroup>
-                    </Box>
-
-                    {/* Print Scale */}
-                    <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor="whiteAlpha.200"
-                      bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400' }}
-                    >
-                      <Heading size="sm" mb={3}>
-                        🔍 Print Scale (%)
-                      </Heading>
-                      <Flex align="center" gap={3}>
-                        <Input
-                          type="number"
-                          min="25"
-                          max="400"
-                          value={orchestrateOptions.printScale}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              printScale: e.target.value,
-                            })
-                          }
-                          bg="whiteAlpha.100"
-                          borderColor="brand.300"
-                          _hover={{ borderColor: 'brand.400' }}
                         />
-                        <Text minW="40px">%</Text>
-                      </Flex>
-                      <Text fontSize="xs" color="text.muted" mt={2}>
-                        Default: 100% (Actual Size)
-                      </Text>
-                    </Box>
+                      </Box>
 
-                    {/* Margins */}
-                    <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor="whiteAlpha.200"
-                      bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400' }}
-                    >
-                      <Heading size="sm" mb={3}>
-                        📏 Margins
-                      </Heading>
-                      <ButtonGroup isAttached width="full" size="sm">
-                        <Button
-                          flex={1}
-                          variant={
-                            orchestrateOptions.printMargins === 'default' ? 'solid' : 'outline'
-                          }
-                          colorScheme={
-                            orchestrateOptions.printMargins === 'default' ? 'brand' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              printMargins: 'default',
-                            })
-                          }
-                        >
-                          Default (1")
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={
-                            orchestrateOptions.printMargins === 'narrow' ? 'solid' : 'outline'
-                          }
-                          colorScheme={
-                            orchestrateOptions.printMargins === 'narrow' ? 'brand' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'narrow' })
-                          }
-                        >
-                          Narrow
-                        </Button>
-                        <Button
-                          flex={1}
-                          variant={orchestrateOptions.printMargins === 'none' ? 'solid' : 'outline'}
-                          colorScheme={
-                            orchestrateOptions.printMargins === 'none' ? 'brand' : 'gray'
-                          }
-                          onClick={() =>
-                            setOrchestrateOptions({ ...orchestrateOptions, printMargins: 'none' })
-                          }
-                        >
-                          None
-                        </Button>
-                      </ButtonGroup>
-                    </Box>
-
-                    {/* Pages per Sheet - Fancy Select */}
-                    <Box>
-                      <FancySelect
-                        label="Pages per Sheet"
-                        options={[
-                          { value: '1', label: '1 Page per Sheet (Normal)' },
-                          { value: '2', label: '2 Pages per Sheet (A5 Size)' },
-                          { value: '4', label: '4 Pages per Sheet (Booklet)' },
-                          { value: '6', label: '6 Pages per Sheet' },
-                          { value: '9', label: '9 Pages per Sheet' },
-                          { value: 'custom', label: '✏️ Custom Layout' },
-                        ]}
-                        value={orchestrateOptions.printPagesPerSheet}
-                        onChange={(value: string) =>
-                          setOrchestrateOptions({
-                            ...orchestrateOptions,
-                            printPagesPerSheet: value,
-                          })
-                        }
-                        allowCustom={true}
-                        customValue={orchestrateOptions.printPagesPerSheetCustom}
-                        onCustomChange={(value: string) =>
-                          setOrchestrateOptions({
-                            ...orchestrateOptions,
-                            printPagesPerSheetCustom: value,
-                          })
-                        }
-                      />
-                    </Box>
-
-                    {/* Copies */}
-                    <Box
-                      p={4}
-                      borderRadius="lg"
-                      border="1px solid"
-                      borderColor="whiteAlpha.200"
-                      bg="whiteAlpha.50"
-                      transition="all 0.2s"
-                      _hover={{ borderColor: 'brand.400' }}
-                    >
-                      <Heading size="sm" mb={3}>
-                        📄 Number of Copies
-                      </Heading>
-                      <Flex align="center" gap={3}>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="999"
-                          value={orchestrateOptions.printCopies}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            setOrchestrateOptions({
-                              ...orchestrateOptions,
-                              printCopies: e.target.value,
-                            })
-                          }
-                          bg="whiteAlpha.100"
-                          borderColor="brand.300"
-                          _hover={{ borderColor: 'brand.400' }}
-                          w="100px"
-                          textAlign="center"
-                          fontWeight="bold"
-                        />
-                        <Text>copies</Text>
-                      </Flex>
-                    </Box>
+                      {/* Color Mode */}
+                      <Box
+                        p={4}
+                        borderRadius="lg"
+                        border="1px solid"
+                        borderColor="whiteAlpha.200"
+                        bg="whiteAlpha.50"
+                        transition="all 0.2s"
+                        _hover={{ borderColor: 'brand.400' }}
+                      >
+                        <Heading size="sm" mb={3}>
+                          Color Mode
+                        </Heading>
+                        <ButtonGroup isAttached width="full" size="md">
+                          <Button
+                            flex={1}
+                            variant={
+                              orchestrateOptions.printColorMode === 'color' ? 'solid' : 'outline'
+                            }
+                            colorScheme={
+                              orchestrateOptions.printColorMode === 'color' ? 'nebula' : 'gray'
+                            }
+                            onClick={() =>
+                              setOrchestrateOptions({
+                                ...orchestrateOptions,
+                                printColorMode: 'color',
+                              })
+                            }
+                            leftIcon={<Iconify icon="solar:pallete-bold" width={18} height={18} />}
+                          >
+                            Color
+                          </Button>
+                          <Button
+                            flex={1}
+                            variant={orchestrateOptions.printColorMode === 'bw' ? 'solid' : 'outline'}
+                            colorScheme={
+                              orchestrateOptions.printColorMode === 'bw' ? 'nebula' : 'gray'
+                            }
+                            onClick={() =>
+                              setOrchestrateOptions({ ...orchestrateOptions, printColorMode: 'bw' })
+                            }
+                            leftIcon={<Iconify icon="solar:contrast-bold" width={18} height={18} />}
+                          >
+                            B&W
+                          </Button>
+                        </ButtonGroup>
+                      </Box>
+                    </SimpleGrid>
 
                     {/* Double-sided (Duplex) */}
                     <Box
@@ -5147,61 +5333,6 @@ const Dashboard: React.FC = () => {
                           Print on both sides of the paper
                         </Text>
                       </Checkbox>
-                    </Box>
-
-                    {/* Select Converted PDFs */}
-                    <Box>
-                      <Heading size="sm" mb={3}>
-                        Select Converted PDFs
-                      </Heading>
-                      {convertedFiles.length === 0 ? (
-                        <Text fontSize="sm" color="text.muted">
-                          No converted PDFs available
-                        </Text>
-                      ) : (
-                        <VStack spacing={2}>
-                          {convertedFiles.map((file: any, index: number) => {
-                            const convertedIndex = index + 1;
-                            return (
-                              <Box
-                                key={file.filename}
-                              p={2}
-                              borderRadius="md"
-                              border="1px"
-                              borderColor="whiteAlpha.200"
-                              width="full"
-                              cursor="pointer"
-                              onClick={() => {
-                                const isSelected = orchestrateOptions.printConvertedFiles.includes(
-                                  file.filename
-                                );
-                                setOrchestrateOptions({
-                                  ...orchestrateOptions,
-                                  printConvertedFiles: isSelected
-                                    ? orchestrateOptions.printConvertedFiles.filter(
-                                        (f: string) => f !== file.filename
-                                      )
-                                    : [...orchestrateOptions.printConvertedFiles, file.filename],
-                                });
-                              }}
-                              bg={
-                                orchestrateOptions.printConvertedFiles.includes(file.filename)
-                                  ? 'rgba(121,95,238,0.1)'
-                                  : 'transparent'
-                              }
-                                >
-                                  <Checkbox
-                                    isChecked={orchestrateOptions.printConvertedFiles.includes(
-                                      file.filename
-                                    )}
-                                  >
-                                    #{convertedIndex} · {file.filename} ({(file.size / 1024).toFixed(2)} KB)
-                                  </Checkbox>
-                                </Box>
-                            );
-                          })}
-                        </VStack>
-                      )}
                     </Box>
 
                     {/* Save as Default */}
@@ -5484,31 +5615,9 @@ const Dashboard: React.FC = () => {
                             bg="whiteAlpha.200"
                             borderRadius="lg"
                           >
-                            <Text fontWeight="600">Scale:</Text>
-                            <Badge colorScheme="green" fontSize="md" px={3} py={1}>
-                              {orchestrateOptions.printScale}%
-                            </Badge>
-                          </HStack>
-                          <HStack
-                            justify="space-between"
-                            p={4}
-                            bg="whiteAlpha.200"
-                            borderRadius="lg"
-                          >
-                            <Text fontWeight="600">Pages per Sheet:</Text>
-                            <Badge colorScheme="orange" fontSize="md" px={3} py={1}>
-                              {orchestrateOptions.printPagesPerSheet}
-                            </Badge>
-                          </HStack>
-                          <HStack
-                            justify="space-between"
-                            p={4}
-                            bg="whiteAlpha.200"
-                            borderRadius="lg"
-                          >
-                            <Text fontWeight="600">Margins:</Text>
+                            <Text fontWeight="600">Color Mode:</Text>
                             <Badge colorScheme="pink" fontSize="md" px={3} py={1}>
-                              {orchestrateOptions.printMargins}
+                              {orchestrateOptions.printColorMode}
                             </Badge>
                           </HStack>
                           {orchestrateOptions.printConvertedFiles.length > 0 && (
@@ -5701,7 +5810,7 @@ const Dashboard: React.FC = () => {
         convertedDocuments={convertedDocumentOptions}
         allowMultiple={true}
         mode={orchestrateMode || 'print'}
-        isChatVisible={false}
+        isChatVisible={isChatVisible || orchestrationContext === 'voice'}
       />
         </DashboardShell>
       </PageShell>
@@ -5793,13 +5902,20 @@ const Dashboard: React.FC = () => {
         </MotionModalContent>
       </Modal>
 
+      {/* Device Info Modal */}
+      <DeviceInfoPanel
+        isOpen={deviceInfoModal.isOpen}
+        onClose={deviceInfoModal.onClose}
+        showButton={false}
+      />
+
       {/* AI Chat Sidebar - Independent Fixed Position */}
       {isChatVisible && (
         <Box
           position="fixed"
           top="0"
           right="0"
-          w={{ base: '100%', lg: '35vw' }}
+          w={{ base: '100%', lg: '380px' }}
           h="100vh"
           bg={chatSidebarBg}
           boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
@@ -5818,6 +5934,7 @@ const Dashboard: React.FC = () => {
             isMinimized={false}
             onToggleMinimize={handleDockedChatClose}
             onVoiceCommand={handleVoiceCommand}
+            autoStartRecording={isChatVisible}
           />
         </Box>
       )}

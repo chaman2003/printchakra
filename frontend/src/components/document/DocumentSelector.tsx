@@ -364,16 +364,17 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
     <Modal 
       isOpen={isOpen} 
       onClose={onClose} 
-      size="6xl" 
+      size={isChatVisible ? "4xl" : "6xl"}
       scrollBehavior="inside" 
-      isCentered={true}
+      isCentered={!isChatVisible}
       closeOnEsc={true}
       closeOnOverlayClick={true}
     >
       <ModalOverlay 
-        bg="blackAlpha.700" 
-        backdropFilter="blur(10px)"
-        pointerEvents="auto"
+        bg={isChatVisible ? "transparent" : "blackAlpha.700"} 
+        backdropFilter={isChatVisible ? "none" : "blur(10px)"}
+        pointerEvents={isChatVisible ? "none" : "auto"}
+        zIndex={2100}
       />
       <ModalContent 
         bg={bgColor} 
@@ -381,6 +382,12 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
         borderRadius="2xl" 
         boxShadow="2xl"
         pointerEvents="auto"
+        zIndex={2101}
+        maxW={isChatVisible ? "calc(100vw - 400px)" : undefined}
+        w={isChatVisible ? "calc(100vw - 400px)" : undefined}
+        ml={isChatVisible ? "8px" : "auto"}
+        mr={isChatVisible ? "392px" : "auto"}
+        mt={isChatVisible ? "8px" : "auto"}
       >
         <ModalHeader
           fontSize="2xl"

@@ -35,6 +35,7 @@ interface VoiceAIChatProps {
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
   onVoiceCommand?: (payload: { command: string; params?: Record<string, any> }) => void;
+  autoStartRecording?: boolean;
 }
 
 const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
@@ -44,6 +45,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   isMinimized = false,
   onToggleMinimize,
   onVoiceCommand,
+  autoStartRecording = false,
 }) => {
   const [messages, setMessages] = useState<VoiceMessage[]>([]);
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -130,6 +132,18 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, isSessionActive]);
+
+  // Auto-start recording when chat opens if autoStartRecording is true
+  useEffect(() => {
+    if (isOpen && autoStartRecording && isSessionActive && !isRecording) {
+      // Delay to ensure session is fully initialized
+      const timer = setTimeout(() => {
+        startRecording();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, autoStartRecording, isSessionActive]);
 
   // Ensure chat input can receive focus when clicked, even with modal open
   useEffect(() => {
@@ -517,8 +531,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         // Add user message (command part only)
         addMessage('user', user_text);
 
-        // 1. Display AI response FIRST (with Voice AI attribution)
-        addMessage('ai', `[Voice AI]: ${ai_response}`);
+        // 1. Display AI response FIRST
+        addMessage('ai', ai_response);
 
         setIsProcessing(false);
 
@@ -745,8 +759,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           configParams,
         });
 
-        // 1. Display AI message FIRST (with Voice AI attribution)
-        addMessage('ai', `[Voice AI]: ${aiResponse}`);
+        // 1. Display AI message FIRST
+        addMessage('ai', aiResponse);
         setIsProcessing(false);
 
         // Handle voice commands (document selector control)

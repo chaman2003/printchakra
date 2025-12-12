@@ -105,8 +105,24 @@ interface PrinterQueueSnapshot {
   jobs: PrintJobInfo[];
 }
 
-export const DeviceInfoPanel: React.FC = () => {
-  const { isOpen, onOpen, onClose } = useDisclosure();
+export interface DeviceInfoPanelProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  showButton?: boolean;
+}
+
+export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
+  isOpen: externalIsOpen,
+  onClose: externalOnClose,
+  showButton = true,
+}) => {
+  const { isOpen: internalIsOpen, onOpen: internalOnOpen, onClose: internalOnClose } = useDisclosure();
+  
+  // Use external state if provided, otherwise use internal state
+  const isOpen = externalIsOpen !== undefined ? externalIsOpen : internalIsOpen;
+  const onOpen = internalOnOpen;
+  const onClose = externalOnClose || internalOnClose;
+  
   const printQueuesRef = React.useRef<HTMLDivElement | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(false);
@@ -282,17 +298,19 @@ export const DeviceInfoPanel: React.FC = () => {
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        leftIcon={<Iconify icon={FiMonitor} />}
-        color={textMuted}
-        _hover={{ color: 'brand.400', bg: 'rgba(121, 95, 238, 0.1)' }}
-        fontWeight="medium"
-        onClick={onOpen}
-      >
-        Device Info
-      </Button>
+      {showButton && (
+        <Button
+          variant="ghost"
+          size="sm"
+          leftIcon={<Iconify icon={FiMonitor} />}
+          color={textMuted}
+          _hover={{ color: 'brand.400', bg: 'rgba(121, 95, 238, 0.1)' }}
+          fontWeight="medium"
+          onClick={onOpen}
+        >
+          Device Info
+        </Button>
+      )}
 
       <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered scrollBehavior="inside">
         <ModalOverlay backdropFilter="blur(4px)" />

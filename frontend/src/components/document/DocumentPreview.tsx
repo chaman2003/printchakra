@@ -726,12 +726,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                             width: '100%',
                             height: '100%',
                             objectFit: 'contain',
-                            filter:
-                              previewSettings?.colorMode === 'grayscale'
-                                ? 'grayscale(100%)'
-                                : previewSettings?.colorMode === 'bw'
-                                  ? 'grayscale(100%) contrast(2)'
-                                  : 'none',
+                            filter: 'none',
                           }}
                         />
                       ) : (
@@ -810,12 +805,7 @@ const DocumentPreview: React.FC<DocumentPreviewProps> = ({
                     display: 'block',
                     transformOrigin: 'center center',
                     transform: `rotate(${rotation}deg)`,
-                    filter:
-                      previewSettings?.colorMode === 'grayscale'
-                        ? 'grayscale(100%)'
-                        : previewSettings?.colorMode === 'bw'
-                          ? 'grayscale(100%) contrast(2)'
-                          : 'none',
+                    filter: 'none',
                     transition: 'transform 0.3s ease-out',
                   }}
                 />

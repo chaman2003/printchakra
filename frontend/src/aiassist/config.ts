@@ -37,9 +37,7 @@ const AIAssistConfig = {
       'A5': ['a5', 'a 5', 'a-5']
     },
     colorMode: {
-      color: ['color', 'colour', 'full color', 'color mode'],
-      grayscale: ['grayscale', 'grey', 'gray', 'greyscale', 'black and white simple'],
-      bw: ['black and white', 'b&w', 'monochrome', 'black white', 'bw']
+      color: ['color', 'colour', 'full color', 'color mode']
     },
     pages: {
       all: ['all pages', 'all', 'everything', 'full document', 'entire document'],

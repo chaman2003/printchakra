@@ -12,32 +12,66 @@ export interface VoiceMessage {
 }
 
 /**
+ * Sanitize text for chat display - removes code, symbols, and special characters
+ * Only allows English letters, numbers, basic punctuation, and spaces
+ */
+export const sanitizeChatText = (text: string): string => {
+  if (!text) return '';
+  
+  // Remove code blocks
+  let sanitized = text.replace(/```[\s\S]*?```/g, '');
+  sanitized = sanitized.replace(/`[^`]*`/g, '');
+  
+  // Remove URLs
+  sanitized = sanitized.replace(/https?:\/\/\S+/g, '');
+  
+  // Remove emoji patterns
+  sanitized = sanitized.replace(/[\u{1F600}-\u{1F64F}]/gu, '');
+  sanitized = sanitized.replace(/[\u{1F300}-\u{1F5FF}]/gu, '');
+  sanitized = sanitized.replace(/[\u{1F680}-\u{1F6FF}]/gu, '');
+  sanitized = sanitized.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '');
+  sanitized = sanitized.replace(/[\u{2702}-\u{27B0}]/gu, '');
+  sanitized = sanitized.replace(/[\u{1F900}-\u{1F9FF}]/gu, '');
+  
+  // Only allow: English letters, numbers, basic punctuation, and spaces
+  sanitized = sanitized.replace(/[^a-zA-Z0-9\s.,!?'\-:;]/g, '');
+  
+  // Clean up multiple spaces
+  sanitized = sanitized.replace(/\s+/g, ' ').trim();
+  
+  return sanitized || 'Message received';
+};
+
+/**
  * Add a message with automatic duplicate detection
  * System messages that repeat will increment count instead of duplicating
+ * All messages are sanitized to remove symbols and code
  */
 export const addMessageWithDedup = (
   messages: VoiceMessage[],
   type: 'user' | 'ai' | 'system',
   text: string
 ): VoiceMessage[] => {
+  // Sanitize the text to remove symbols, code, and special characters
+  const sanitizedText = sanitizeChatText(text);
   const lastMessage = messages[messages.length - 1];
 
   // Check for duplicate system messages
   if (
     lastMessage &&
     lastMessage.type === type &&
-    lastMessage.text === text &&
+    lastMessage.text === sanitizedText &&
     type === 'system'
   ) {
     const newCount = (lastMessage.count || 1) + 1;
     return [...messages.slice(0, -1), { ...lastMessage, count: newCount }];
   }
 
-  // Add new message
+  // Add new message with sanitized text
   const message: VoiceMessage = {
     id: `${Date.now()}-${Math.random()}`,
     type,
-    text,
+    text: sanitizedText,
     timestamp: new Date().toISOString(),
     count: 1,
   };
