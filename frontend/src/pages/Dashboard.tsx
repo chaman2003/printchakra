@@ -2555,19 +2555,16 @@ const Dashboard: React.FC = () => {
 
   const executePrintJob = async () => {
     try {
-      // Debug logging
       console.log('[PRINT] executePrintJob called');
       console.log('[PRINT] selectedDocuments:', selectedDocuments);
       
       // Collect all documents to print
       const documentsToprint: string[] = [];
       
-      // Add selected documents from DocumentSelector
       if (selectedDocuments.length > 0) {
         selectedDocuments.forEach(doc => documentsToprint.push(doc.filename));
       }
       
-      // Add converted files
       if (orchestrateOptions.printConvertedFiles.length > 0) {
         orchestrateOptions.printConvertedFiles.forEach((f: string) => documentsToprint.push(f));
       }
@@ -2584,45 +2581,53 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      // Trigger auto-capture on phone FIRST (12-second delay for phone to be ready)
+      // Close modal immediately
+      orchestrateModal.onClose();
+
+      // Schedule auto-capture to enable AFTER 12 seconds (non-blocking)
       if (socket && !autoCaptureEnabled) {
-        socket.emit('start_auto_capture', {
-          documentCount: documentsToprint.length,
-          timestamp: Date.now(),
-        });
-        setAutoCaptureEnabled(true);
         toast({
-          title: '📱 Phone Auto-Capture Starting',
-          description: '12-second delay for phone to be ready...',
+          title: '📱 Auto-Capture Scheduled',
+          description: 'Phone auto-capture will enable in 12 seconds...',
           status: 'info',
           duration: 3000,
         });
+        
+        // Enable auto-capture after 12 seconds (doesn't block printing)
+        setTimeout(() => {
+          socket.emit('start_auto_capture', {
+            documentCount: documentsToprint.length,
+            timestamp: Date.now(),
+          });
+          setAutoCaptureEnabled(true);
+          toast({
+            title: '📱 Auto-Capture Enabled',
+            description: 'Phone is now capturing documents!',
+            status: 'success',
+            duration: 2000,
+          });
+        }, 12000);
       }
 
-      // Close modal so user can see progress
-      orchestrateModal.onClose();
+      // Print ALL documents INSTANTLY (no delays)
+      toast({
+        title: '🖨️ Printing Started',
+        description: `Sending ${documentsToprint.length} document(s) to printer...`,
+        status: 'info',
+        duration: 2000,
+      });
 
       let successCount = 0;
       let failCount = 0;
 
-      // Print each document with frontend-controlled delays (like feed does)
+      // Print all documents immediately (no waiting)
       for (let i = 0; i < documentsToprint.length; i++) {
         const filename = documentsToprint[i];
         
-        // Delay BEFORE printing: 12 seconds for first doc (phone setup), 2 seconds for subsequent
-        const delayMs = i === 0 ? 12000 : 2000;
-        toast({
-          title: `⏳ Waiting ${delayMs / 1000}s`,
-          description: i === 0 ? 'Waiting for phone auto-capture to be ready...' : `Preparing document ${i + 1}...`,
-          status: 'info',
-          duration: delayMs - 500,
-        });
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-        
         try {
-          // Print single document
           console.log(`[PRINT] Printing document ${i + 1}/${documentsToprint.length}: ${filename}`);
           
+          // Backend will convert images to PDF if needed
           const response = await apiClient.post('/print/document', { 
             filename,
             copies: orchestrateOptions.printCopies || 1,
@@ -2630,42 +2635,26 @@ const Dashboard: React.FC = () => {
 
           if (response.data.success) {
             successCount++;
-            toast({
-              title: `🖨️ Document ${i + 1} Printed`,
-              description: `Successfully printed: ${filename}`,
-              status: 'success',
-              duration: 2000,
-            });
+            console.log(`[PRINT] Success: ${filename}`);
           } else {
             failCount++;
-            toast({
-              title: `Print Failed`,
-              description: response.data.error || `Failed to print: ${filename}`,
-              status: 'error',
-              duration: 3000,
-            });
+            console.error(`[PRINT] Failed: ${filename}`, response.data.error);
           }
         } catch (err: any) {
           failCount++;
           console.error(`[PRINT] Error printing ${filename}:`, err);
-          toast({
-            title: `Print Error`,
-            description: err.response?.data?.error || err.message,
-            status: 'error',
-            duration: 3000,
-          });
         }
       }
 
       // Final summary
       if (successCount > 0) {
         toast({
-          title: `Printed ${successCount} Document${successCount !== 1 ? 's' : ''}`,
+          title: `🖨️ Printed ${successCount} Document${successCount !== 1 ? 's' : ''}`,
           description: failCount > 0 
-            ? `${successCount} printed successfully, ${failCount} failed.` 
-            : 'All documents printed successfully!',
+            ? `${successCount} printed, ${failCount} failed.` 
+            : 'All documents sent to printer!',
           status: failCount > 0 ? 'warning' : 'success',
-          duration: 5000,
+          duration: 4000,
         });
       } else {
         toast({
@@ -2737,48 +2726,50 @@ const Dashboard: React.FC = () => {
     let successCount = 0;
     let failCount = 0;
     
-    // Trigger auto-capture on phone with countdown BEFORE feeding starts
+    // Schedule auto-capture to enable AFTER 12 seconds (non-blocking)
     if (socket && !autoCaptureEnabled) {
-      socket.emit('start_auto_capture', {
-        documentCount: documentsToFeed,
-        timestamp: Date.now(),
-      });
-      setAutoCaptureEnabled(true);
       toast({
-        title: '📱 Phone Auto-Capture Starting',
-        description: '12-second delay before first document feeds...',
+        title: '📱 Auto-Capture Scheduled',
+        description: 'Phone auto-capture will enable in 12 seconds...',
         status: 'info',
         duration: 3000,
       });
+      
+      // Enable auto-capture after 12 seconds (doesn't block feeding)
+      setTimeout(() => {
+        socket.emit('start_auto_capture', {
+          documentCount: documentsToFeed,
+          timestamp: Date.now(),
+        });
+        setAutoCaptureEnabled(true);
+        toast({
+          title: '📱 Auto-Capture Enabled',
+          description: 'Phone is now capturing documents!',
+          status: 'success',
+          duration: 2000,
+        });
+      }, 12000);
     }
 
+    // Feed documents INSTANTLY (no waiting)
+    toast({
+      title: '🖨️ Feeding Started',
+      description: `Feeding ${documentsToFeed} document(s) through printer...`,
+      status: 'info',
+      duration: 2000,
+    });
+
     try {
-      // Loop through the number of documents to feed
+      // Loop through the number of documents to feed - NO DELAYS
       for (let i = 0; i < documentsToFeed; i++) {
         try {
-          // Delay BEFORE feeding: 12 seconds for first document, 2 seconds for subsequent
-          // This gives phone time to capture the previous document
-          const delayMs = i === 0 ? 12000 : 2000;
-          toast({
-            title: `⏳ Waiting ${delayMs / 1000}s`,
-            description: i === 0 ? 'Preparing to feed first document...' : `Waiting before document ${i + 1}...`,
-            status: 'info',
-            duration: delayMs - 500,
-          });
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          
           // Use the /print endpoint with type: "blank" - this triggers the printer to feed paper
           const response = await apiClient.post('/print', { type: 'blank' });
 
           if (response.data.status === 'success') {
             successCount++;
             setFeedCount(prev => prev + 1);
-            toast({
-              title: `📄 Document ${i + 1} Fed`,
-              description: `Successfully fed document ${i + 1} of ${documentsToFeed}`,
-              status: 'success',
-              duration: 2000,
-            });
+            console.log(`[FEED] Document ${i + 1} fed successfully`);
           } else if (response.data.message?.includes('not found')) {
             // If blank.pdf doesn't exist, try to create it first (only on first failure)
             if (i === 0) {
@@ -2805,10 +2796,10 @@ const Dashboard: React.FC = () => {
       if (successCount > 0) {
         setDocumentsFed(true);
         toast({
-          title: `Fed ${successCount} Document${successCount !== 1 ? 's' : ''}`,
+          title: `🖨️ Fed ${successCount} Document${successCount !== 1 ? 's' : ''}`,
           description: failCount > 0 
-            ? `${successCount} fed successfully, ${failCount} failed.` 
-            : 'Documents ready! Phone auto-capture should be active.',
+            ? `${successCount} fed, ${failCount} failed. Auto-capture will enable soon.` 
+            : 'All documents fed! Auto-capture will enable in a moment.',
           status: failCount > 0 ? 'warning' : 'success',
           duration: 5000,
         });

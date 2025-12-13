@@ -1076,8 +1076,8 @@ def order_points(pts):
     return rect
 
 
-def four_point_transform(image, pts):
-    """Apply perspective transform to get bird's-eye view"""
+def four_point_transform(image, pts, enforce_a4_ratio=True):
+    """Apply perspective transform to get bird's-eye view with A4 ratio"""
     rect = order_points(pts)
     (tl, tr, br, bl) = rect
 
@@ -1091,6 +1091,23 @@ def four_point_transform(image, pts):
     heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
     maxHeight = max(int(heightA), int(heightB))
 
+    # Enforce A4 aspect ratio (1:1.414 or 1:√2)
+    if enforce_a4_ratio:
+        A4_RATIO = 1.4142  # √2 ≈ 1.4142 (height/width for portrait)
+        current_ratio = maxHeight / maxWidth if maxWidth > 0 else 1
+        
+        # Determine if portrait or landscape
+        if current_ratio > 1:  # Portrait
+            # Height is greater, adjust to A4 portrait ratio
+            target_height = int(maxWidth * A4_RATIO)
+            maxHeight = target_height
+        else:  # Landscape
+            # Width is greater, adjust to A4 landscape ratio
+            target_width = int(maxHeight * A4_RATIO)
+            maxWidth = target_width
+        
+        print(f"  ✓ Enforced A4 ratio: {maxWidth}x{maxHeight}")
+
     # Destination points
     dst = np.array(
         [[0, 0], [maxWidth - 1, 0], [maxWidth - 1, maxHeight - 1], [0, maxHeight - 1]],
@@ -1102,6 +1119,48 @@ def four_point_transform(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
 
     return warped
+
+
+def auto_crop_borders(image, threshold=30, min_crop_percent=0.02):
+    """
+    Automatically crop dark borders from a document image.
+    Works on grayscale images.
+    """
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image.copy()
+    
+    h, w = gray.shape
+    
+    # Find rows and columns that are mostly dark (borders)
+    row_means = np.mean(gray, axis=1)
+    col_means = np.mean(gray, axis=0)
+    
+    # Find content boundaries (where brightness exceeds threshold)
+    content_rows = np.where(row_means > threshold)[0]
+    content_cols = np.where(col_means > threshold)[0]
+    
+    if len(content_rows) == 0 or len(content_cols) == 0:
+        return image  # No cropping possible
+    
+    # Get crop boundaries with minimum margin
+    min_margin_h = int(h * min_crop_percent)
+    min_margin_w = int(w * min_crop_percent)
+    
+    top = max(0, content_rows[0] - min_margin_h)
+    bottom = min(h, content_rows[-1] + min_margin_h)
+    left = max(0, content_cols[0] - min_margin_w)
+    right = min(w, content_cols[-1] + min_margin_w)
+    
+    # Only crop if we're removing significant borders
+    if (top > min_margin_h or bottom < h - min_margin_h or 
+        left > min_margin_w or right < w - min_margin_w):
+        cropped = image[top:bottom, left:right]
+        print(f"  ✓ Auto-cropped borders: {w}x{h} -> {right-left}x{bottom-top}")
+        return cropped
+    
+    return image
 
 
 def find_document_contour(image):
@@ -1148,24 +1207,52 @@ def find_document_contour(image):
             if area > 500:
                 candidates.append((c, area, scale, "Laplacian"))
 
-        # Approach C: White paper detection (HSV)
+        # Approach C: White paper detection (HSV) - IMPROVED for various lighting
         hsv = cv2.cvtColor(scaled, cv2.COLOR_BGR2HSV)
-        lower_white = np.array([0, 0, 175])
-        upper_white = np.array([180, 45, 255])
-        mask = cv2.inRange(hsv, lower_white, upper_white)
+        
+        # Multiple white detection ranges for different lighting conditions
+        white_ranges = [
+            (np.array([0, 0, 175]), np.array([180, 45, 255])),   # Bright white
+            (np.array([0, 0, 140]), np.array([180, 60, 255])),   # Slightly off-white
+            (np.array([0, 0, 120]), np.array([180, 80, 255])),   # Grayish white (poor lighting)
+        ]
+        
+        for lower_white, upper_white in white_ranges:
+            mask = cv2.inRange(hsv, lower_white, upper_white)
 
-        # Morphological operations
-        kernel_small = np.ones((2, 2), np.uint8)
-        kernel_med = np.ones((5, 5), np.uint8)
-        mask = cv2.erode(mask, kernel_small, iterations=1)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_med, iterations=2)
-        mask = cv2.dilate(mask, kernel_small, iterations=1)
+            # Stronger morphological operations for cleaner detection
+            kernel_small = np.ones((3, 3), np.uint8)
+            kernel_med = np.ones((7, 7), np.uint8)
+            kernel_large = np.ones((11, 11), np.uint8)
+            
+            # Close small gaps in the paper
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_large, iterations=3)
+            # Remove small noise
+            mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel_small, iterations=2)
+            # Fill holes
+            mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel_med, iterations=2)
 
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            for c in contours:
+                area = cv2.contourArea(c)
+                if area > 500:
+                    candidates.append((c, area, scale, "ColorWhite"))
+        
+        # Approach C2: Brightness-based detection (for paper on dark background)
+        # Convert to LAB color space for better brightness detection
+        lab = cv2.cvtColor(scaled, cv2.COLOR_BGR2LAB)
+        l_channel = lab[:, :, 0]
+        
+        # Threshold based on brightness
+        _, bright_mask = cv2.threshold(l_channel, 150, 255, cv2.THRESH_BINARY)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, kernel_large, iterations=2)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_OPEN, kernel_small, iterations=1)
+        
+        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         for c in contours:
             area = cv2.contourArea(c)
             if area > 500:
-                candidates.append((c, area, scale, "ColorWhite"))
+                candidates.append((c, area, scale, "BrightnessDetect"))
 
         # Approach D: Adaptive threshold with edge focus
         adaptive = cv2.adaptiveThreshold(
@@ -1219,18 +1306,28 @@ def find_document_contour(image):
                 elif area_ratio < 0.10:
                     score -= 200
 
-                # Factor 2: Aspect ratio
+                # Factor 2: Aspect ratio - PREFER A4 RATIO (√2 ≈ 1.414)
                 rect = cv2.minAreaRect(approx)
                 width, height = rect[1]
                 aspect = 1.0
+                A4_RATIO = 1.4142  # √2 for A4 paper
                 if width > 0 and height > 0:
                     aspect = max(width, height) / min(width, height)
-                    if 1.2 <= aspect <= 1.8:
+                    
+                    # Strong bonus for A4 aspect ratio
+                    aspect_diff = abs(aspect - A4_RATIO)
+                    if aspect_diff < 0.05:  # Very close to A4
+                        score += 80
+                    elif aspect_diff < 0.1:  # Close to A4
+                        score += 60
+                    elif aspect_diff < 0.2:  # Reasonably close
                         score += 40
-                    elif 1.0 <= aspect <= 2.5:
+                    elif 1.2 <= aspect <= 1.8:  # Acceptable range
                         score += 25
+                    elif 1.0 <= aspect <= 2.5:
+                        score += 10
                     else:
-                        score -= 20
+                        score -= 30
 
                 # Factor 3: Convexity
                 hull_area = cv2.contourArea(cv2.convexHull(approx))
@@ -1271,13 +1368,17 @@ def find_document_contour(image):
                     elif avg_error < 30:
                         score += 15
 
-                # Factor 5: Method bonuses
+                # Factor 5: Method bonuses - prioritize paper detection methods
                 if method == "ColorWhite":
-                    score += 60
+                    score += 70
+                elif method == "BrightnessDetect":
+                    score += 65  # Good for paper on dark backgrounds
                 elif method.startswith("Canny"):
                     score += 10
                 elif method == "Laplacian":
                     score += 15
+                elif method == "AdaptiveEdge":
+                    score += 12
 
                 # Factor 6: Compactness
                 if peri > 0:
@@ -1406,12 +1507,28 @@ def process_document_image(input_path, output_path, filename=None):
         gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
         print(f"  ? Converted to grayscale: {gray.shape}")
 
-        # Step 4: Gaussian Blur
-        print(f"[STEP 4/12] Gaussian Blur")
-        emit_progress(4, "Gaussian Blur", "Applying blur to reduce noise...")
+        # Step 4: Noise Reduction (Enhanced)
+        print(f"[STEP 4/12] Noise Reduction")
+        emit_progress(4, "Noise Reduction", "Applying advanced denoising...")
 
+        # First apply Gaussian blur
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        print(f"  ? Blur applied: {blurred.shape}")
+        
+        # Apply Non-local Means Denoising - STRONGER settings for noisy scans
+        # h=15 (increased filter strength), larger search window for better noise removal
+        denoised = cv2.fastNlMeansDenoising(blurred, None, h=15, templateWindowSize=7, searchWindowSize=25)
+        
+        # Apply bilateral filter TWICE - smooths while preserving text edges
+        denoised = cv2.bilateralFilter(denoised, d=9, sigmaColor=75, sigmaSpace=75)
+        denoised = cv2.bilateralFilter(denoised, d=5, sigmaColor=50, sigmaSpace=50)
+        
+        # Morphological opening to remove small noise specks
+        kernel_noise = np.ones((2, 2), np.uint8)
+        denoised = cv2.morphologyEx(denoised, cv2.MORPH_OPEN, kernel_noise)
+        
+        # Use denoised for further processing
+        blurred = denoised
+        print(f"  ✓ Advanced denoising applied: {blurred.shape}")
 
         # Step 5: Edge Detection (Canny)
         print(f"[STEP 5/12] Edge Detection (Canny)")
@@ -1483,7 +1600,31 @@ def process_document_image(input_path, output_path, filename=None):
 
         # Final blend
         enhanced = cv2.addWeighted(equalized_gentle, 0.5, equalized_clahe, 0.5, 0)
-        print(f"  ? Enhancement complete: brightness +{brightness_boost}, contrast improved")
+        
+        # Final denoising pass - stronger to remove all visible noise
+        enhanced = cv2.fastNlMeansDenoising(enhanced, None, h=10, templateWindowSize=7, searchWindowSize=21)
+        
+        # Bilateral filter to smooth background while keeping text sharp
+        enhanced = cv2.bilateralFilter(enhanced, d=7, sigmaColor=50, sigmaSpace=50)
+        
+        # Median blur for salt-and-pepper noise
+        enhanced = cv2.medianBlur(enhanced, 3)
+        
+        # Auto-crop any remaining black borders
+        enhanced = auto_crop_borders(enhanced, threshold=40)
+        
+        # Resize to standard A4 dimensions at 150 DPI (1240x1754 pixels)
+        A4_WIDTH = 1240
+        A4_HEIGHT = 1754
+        h_curr, w_curr = enhanced.shape[:2]
+        
+        # Determine orientation and resize to A4
+        if h_curr > w_curr:  # Portrait
+            enhanced = cv2.resize(enhanced, (A4_WIDTH, A4_HEIGHT), interpolation=cv2.INTER_LANCZOS4)
+        else:  # Landscape
+            enhanced = cv2.resize(enhanced, (A4_HEIGHT, A4_WIDTH), interpolation=cv2.INTER_LANCZOS4)
+        
+        print(f"  ✓ Enhancement complete: brightness +{brightness_boost}, contrast improved, A4 sized ({enhanced.shape[1]}x{enhanced.shape[0]})")
 
         # Step 11: Advanced OCR
         print(f"[STEP 11/12] Advanced OCR")
@@ -2942,8 +3083,8 @@ def trigger_print():
 def print_single_document():
     """
     Print a single document by filename
+    Converts images to PDF before printing for better compatibility
     Expects JSON: { "filename": "document.jpg", "copies": 1 }
-    Searches in processed, converted, uploads directories
     """
     try:
         data = request.get_json() if request.is_json else {}
@@ -2974,18 +3115,51 @@ def print_single_document():
         
         if not file_path:
             logger.error(f"[PRINT_DOC] File not found: {filename}")
-            logger.error(f"[PRINT_DOC] Searched in: {search_dirs}")
-            # List files in processed dir for debugging
-            if os.path.exists(PROCESSED_DIR):
-                files_in_processed = os.listdir(PROCESSED_DIR)[:10]
-                logger.error(f"[PRINT_DOC] Files in processed: {files_in_processed}")
             return jsonify({
                 "success": False, 
                 "error": f"File not found: {filename}",
-                "searched": [os.path.basename(d) for d in search_dirs]
             }), 404
         
-        logger.info(f"[PRINT_DOC] Printing: {file_path}")
+        # Check if it's an image - if so, convert to PDF first
+        file_ext = os.path.splitext(filename)[1].lower()
+        print_path = file_path
+        temp_pdf = None
+        
+        if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.gif']:
+            logger.info(f"[PRINT_DOC] Converting image to PDF: {filename}")
+            try:
+                from PIL import Image
+                import tempfile
+                
+                # Open image and convert to PDF
+                img = Image.open(file_path)
+                
+                # Convert to RGB if necessary (for PNG with transparency)
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+                
+                # Create temp PDF
+                temp_pdf = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+                temp_pdf_path = temp_pdf.name
+                temp_pdf.close()
+                
+                # Save as PDF
+                img.save(temp_pdf_path, 'PDF', resolution=100.0)
+                print_path = temp_pdf_path
+                logger.info(f"[PRINT_DOC] Created temp PDF: {temp_pdf_path}")
+                
+            except Exception as convert_err:
+                logger.error(f"[PRINT_DOC] Image to PDF conversion failed: {convert_err}")
+                # Continue with original file if conversion fails
+                print_path = file_path
+        
+        logger.info(f"[PRINT_DOC] Printing: {print_path}")
         
         # Print the document
         print_success = False
@@ -3004,7 +3178,7 @@ def print_single_document():
             for copy_num in range(copies):
                 # Method 1: ShellExecute with "print"
                 try:
-                    result = win32api.ShellExecute(0, "print", file_path, None, ".", 0)
+                    result = win32api.ShellExecute(0, "print", print_path, None, ".", 0)
                     logger.info(f"[PRINT_DOC] ShellExecute result: {result}")
                     if result > 32:
                         print_success = True
@@ -3016,7 +3190,7 @@ def print_single_document():
                 # Method 2: PrintTo with printer name
                 if not print_success:
                     try:
-                        result = win32api.ShellExecute(0, "printto", file_path, f'"{printer_name}"', ".", 0)
+                        result = win32api.ShellExecute(0, "printto", print_path, f'"{printer_name}"', ".", 0)
                         if result > 32:
                             print_success = True
                             logger.info(f"[PRINT_DOC] PrintTo succeeded (copy {copy_num + 1})")
@@ -3027,7 +3201,7 @@ def print_single_document():
                 # Method 3: PowerShell
                 if not print_success:
                     try:
-                        cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
+                        cmd = f'Start-Process -FilePath "{print_path}" -Verb Print -WindowStyle Hidden'
                         result = subprocess.run(["powershell", "-Command", cmd], 
                                                timeout=30, capture_output=True, text=True)
                         if result.returncode == 0:
@@ -3044,7 +3218,7 @@ def print_single_document():
             logger.warning("[PRINT_DOC] win32 modules not available, using PowerShell")
             for copy_num in range(copies):
                 try:
-                    cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
+                    cmd = f'Start-Process -FilePath "{print_path}" -Verb Print -WindowStyle Hidden'
                     result = subprocess.run(["powershell", "-Command", cmd], 
                                            timeout=30, capture_output=True, text=True)
                     if result.returncode == 0:
@@ -3054,6 +3228,19 @@ def print_single_document():
                         error_msg = result.stderr
                 except Exception as e:
                     error_msg = str(e)
+        
+        # Clean up temp PDF after a delay (give print spooler time)
+        if temp_pdf:
+            def cleanup_temp():
+                import time
+                time.sleep(10)  # Wait for print spooler
+                try:
+                    os.unlink(temp_pdf.name)
+                    logger.info(f"[PRINT_DOC] Cleaned up temp PDF")
+                except:
+                    pass
+            import threading
+            threading.Thread(target=cleanup_temp, daemon=True).start()
         
         if print_success:
             # Emit capture_now event to phone
@@ -3071,7 +3258,8 @@ def print_single_document():
                 "success": True,
                 "message": f"Printed: {filename}",
                 "filename": filename,
-                "copies": copies
+                "copies": copies,
+                "converted_to_pdf": temp_pdf is not None
             })
         else:
             return jsonify({

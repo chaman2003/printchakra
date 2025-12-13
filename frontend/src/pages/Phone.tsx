@@ -627,18 +627,23 @@ const Phone: React.FC = () => {
 
   const startCamera = async () => {
     try {
-      // Request 3:4 aspect ratio (portrait mode for documents)
+      // Request high-resolution camera with A4 aspect ratio preference
+      // Most phone cameras will provide the best matching resolution
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1080 },
-          height: { ideal: 1440 },  // 3:4 aspect ratio
-          aspectRatio: { ideal: 3/4 },
+          width: { ideal: 1920, min: 1080 },
+          height: { ideal: 2560, min: 1440 },  // ~3:4 to A4-like ratio
+          aspectRatio: { ideal: 0.75 },  // 3:4 portrait
         },
       });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Wait for video metadata to load then play
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play();
+        };
       }
     } catch (err) {
       alert('Failed to access camera: ' + (err as Error).message);
@@ -1235,17 +1240,28 @@ const Phone: React.FC = () => {
                   border="1px solid rgba(69,202,255,0.25)"
                   boxShadow="halo"
                   className="camera-container-normal"
+                  bg="black"
                   sx={{
-                    // Fixed stable size for camera preview
-                    aspectRatio: '3 / 4',
-                    height: isFullScreen ? '100vh' : '500px',
-                    width: isFullScreen ? '100%' : 'auto',
-                    maxWidth: isFullScreen ? '100%' : '375px',
-                    minWidth: isFullScreen ? '100%' : '300px',
+                    // Full width container, let video determine height
+                    width: isFullScreen ? '100vw' : '100%',
+                    height: isFullScreen ? '100vh' : 'auto',
+                    maxWidth: isFullScreen ? '100vw' : '100%',
+                    minHeight: isFullScreen ? '100vh' : '400px',
                     mx: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
-                  <Box position="relative" bg="black" width="100%" height="100%">
+                  <Box 
+                    position="relative" 
+                    bg="black" 
+                    width="100%" 
+                    height="100%"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="center"
+                  >
                     <video
                       ref={videoRef}
                       autoPlay
@@ -1254,8 +1270,9 @@ const Phone: React.FC = () => {
                       style={{ 
                         width: '100%', 
                         height: '100%', 
-                        objectFit: 'cover',
+                        objectFit: 'contain',  // Show full video without cropping
                         display: 'block',
+                        backgroundColor: 'black',
                       }}
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
