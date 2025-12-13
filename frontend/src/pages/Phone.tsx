@@ -627,14 +627,13 @@ const Phone: React.FC = () => {
 
   const startCamera = async () => {
     try {
-      // Request high-resolution camera with A4 aspect ratio preference
-      // Most phone cameras will provide the best matching resolution
+      // Request portrait orientation camera (3:4 ratio = 0.75 width/height)
+      // For portrait: width < height, so we request width:height as 3:4
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1920, min: 1080 },
-          height: { ideal: 2560, min: 1440 },  // ~3:4 to A4-like ratio
-          aspectRatio: { ideal: 0.75 },  // 3:4 portrait
+          width: { ideal: 1080, min: 720 },
+          height: { ideal: 1440, min: 960 },  // 3:4 portrait ratio
         },
       });
       setStream(mediaStream);
@@ -1242,11 +1241,12 @@ const Phone: React.FC = () => {
                   className="camera-container-normal"
                   bg="black"
                   sx={{
-                    // Full width container, let video determine height
+                    // Portrait aspect ratio container (3:4)
+                    aspectRatio: '3 / 4',
                     width: isFullScreen ? '100vw' : '100%',
                     height: isFullScreen ? '100vh' : 'auto',
-                    maxWidth: isFullScreen ? '100vw' : '100%',
-                    minHeight: isFullScreen ? '100vh' : '400px',
+                    maxWidth: isFullScreen ? '100vw' : '400px',
+                    maxHeight: isFullScreen ? '100vh' : '600px',
                     mx: 'auto',
                     display: 'flex',
                     alignItems: 'center',
@@ -1270,7 +1270,7 @@ const Phone: React.FC = () => {
                       style={{ 
                         width: '100%', 
                         height: '100%', 
-                        objectFit: 'contain',  // Show full video without cropping
+                        objectFit: 'cover',  // Fill the portrait container
                         display: 'block',
                         backgroundColor: 'black',
                       }}
