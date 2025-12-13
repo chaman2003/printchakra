@@ -736,7 +736,59 @@ class VoiceChatService:
         params = {}
         text_lower = user_message.lower().strip()
         
-        # Parse document selection (e.g., "select original number 2")
+        # Parse multiple document selection (e.g., "select first two documents")
+        if command_type == "select_multiple_documents":
+            import re
+            
+            # Extract section keywords
+            if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
+                params["section"] = "current"
+            elif "converted" in text_lower:
+                params["section"] = "converted"
+            elif any(keyword in text_lower for keyword in ["uploaded", "upload", "new"]):
+                params["section"] = "upload"
+            else:
+                params["section"] = "current"
+            
+            # Check for "select all"
+            if "all" in text_lower:
+                params["count"] = -1  # -1 means select all
+                params["selection_type"] = "all"
+                return params
+            
+            # Word numbers mapping
+            word_to_num = {
+                "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+                "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5
+            }
+            
+            # Extract count from "first two", "first three", etc.
+            for word, num in word_to_num.items():
+                if f"first {word}" in text_lower or f"{word} documents" in text_lower:
+                    params["count"] = num
+                    params["selection_type"] = "first_n"
+                    break
+            
+            # Try to parse explicit numbers like "1 and 2" or "1, 2, 3"
+            if "count" not in params:
+                number_matches = re.findall(r'\b(\d+)\b', text_lower)
+                if len(number_matches) >= 2:
+                    params["document_numbers"] = [int(n) for n in number_matches]
+                    params["count"] = len(params["document_numbers"])
+                    params["selection_type"] = "specific"
+                elif number_matches:
+                    params["count"] = int(number_matches[0])
+                    params["selection_type"] = "first_n"
+            
+            # Default to 2 if nothing parsed
+            if "count" not in params:
+                params["count"] = 2
+                params["selection_type"] = "first_n"
+            
+            return params
+        
+        # Parse single document selection (e.g., "select original number 2")
         if command_type == "select_document":
             import re
             
@@ -879,8 +931,9 @@ class VoiceChatService:
             
             if is_greeting:
                 # Greeting detected - Return friendly concise introduction
-                greeting_response = "Hello! I'm PrintChakra AI. Say print or scan to get started."
+                greeting_response = "I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. What would you like to do?"
                 logger.info(f"[GREETING] Recognized greeting: '{user_message}'")
+                logger.info(f"[GREETING] Responding with introduction: {greeting_response}")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": greeting_response})

@@ -35,7 +35,6 @@ function App() {
             position="sticky"
             top={0}
             zIndex={999}
-            backdropFilter="blur(18px)"
             bg={navBg}
             borderBottom={`1px solid ${navBorder}`}
             boxShadow={navShadow}

@@ -1689,6 +1689,68 @@ const Dashboard: React.FC = () => {
           break;
         }
 
+        case 'select_multiple_documents': {
+          const targetSection = (sectionParam as 'current' | 'converted') || 'current';
+          const count = params?.count || 2;
+          const selectionType = params?.selection_type || 'first_n';
+          const documentNumbers = params?.document_numbers;
+
+          // Open document selector and focus on correct section
+          documentSelectorModal.onOpen();
+          documentSelectorRef.current?.focusSection(targetSection);
+
+          // Get the right document list
+          const docs = targetSection === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
+
+          if (docs.length === 0) {
+            toast({
+              title: 'No documents',
+              description: `No documents available in ${targetSection} section`,
+              status: 'warning',
+              duration: 2000,
+            });
+            break;
+          }
+
+          // Determine which documents to select
+          let indicesToSelect: number[] = [];
+
+          if (selectionType === 'all' || count === -1) {
+            // Select all documents
+            indicesToSelect = docs.map((_, idx) => idx);
+          } else if (selectionType === 'specific' && documentNumbers) {
+            // Specific document numbers (1-based from user)
+            indicesToSelect = documentNumbers
+              .filter((n: number) => n >= 1 && n <= docs.length)
+              .map((n: number) => n - 1);
+          } else {
+            // First N documents
+            const numToSelect = Math.min(count, docs.length);
+            indicesToSelect = Array.from({ length: numToSelect }, (_, i) => i);
+          }
+
+          // Select the documents via ref method
+          if (documentSelectorRef.current?.selectMultipleDocuments) {
+            documentSelectorRef.current.selectMultipleDocuments(targetSection, indicesToSelect);
+            toast({
+              title: 'Documents Selected',
+              description: `Selected ${indicesToSelect.length} document(s) from ${targetSection}`,
+              status: 'success',
+              duration: 2000,
+            });
+          } else {
+            // Fallback: select first document if method not available
+            await selectDocumentForVoice(targetSection, 1);
+            toast({
+              title: 'Document Selected',
+              description: `Selected first document from ${targetSection}`,
+              status: 'info',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
         case 'switch_section': {
           documentSelectorModal.onOpen();
           documentSelectorRef.current?.focusSection(sectionParam);
@@ -2412,6 +2474,8 @@ const Dashboard: React.FC = () => {
     setDocumentsFed(false);
     setFeedCount(0);
     setDocumentsToFeed(1);
+    // Reset the "user closed doc selector" flag to allow auto-opening
+    setUserClosedDocSelector(false);
 
     // If files are selected, auto-select print mode
     if (selectedFiles.length > 0) {
@@ -2491,10 +2555,26 @@ const Dashboard: React.FC = () => {
 
   const executePrintJob = async () => {
     try {
-      // Validate that documents are selected
-      if (selectedDocuments.length === 0 && 
-          orchestrateOptions.printFiles.length === 0 && 
-          orchestrateOptions.printConvertedFiles.length === 0) {
+      // Debug logging
+      console.log('[PRINT] executePrintJob called');
+      console.log('[PRINT] selectedDocuments:', selectedDocuments);
+      
+      // Collect all documents to print
+      const documentsToprint: string[] = [];
+      
+      // Add selected documents from DocumentSelector
+      if (selectedDocuments.length > 0) {
+        selectedDocuments.forEach(doc => documentsToprint.push(doc.filename));
+      }
+      
+      // Add converted files
+      if (orchestrateOptions.printConvertedFiles.length > 0) {
+        orchestrateOptions.printConvertedFiles.forEach((f: string) => documentsToprint.push(f));
+      }
+      
+      console.log('[PRINT] documentsToprint:', documentsToprint);
+      
+      if (documentsToprint.length === 0) {
         toast({
           title: 'No Documents Selected',
           description: 'Please select documents to print first.',
@@ -2504,66 +2584,97 @@ const Dashboard: React.FC = () => {
         return;
       }
 
-      const formData = new FormData();
-
-      // Add uploaded files from print dialog
-      orchestrateOptions.printFiles.forEach((file: File, index: number) => {
-        formData.append('files', file);
-      });
-
-      // Add converted PDFs selected from print dialog
-      formData.append('convertedFiles', JSON.stringify(orchestrateOptions.printConvertedFiles));
-
-      // Add selected documents from DocumentSelector (main source for printing)
-      if (selectedDocuments.length > 0) {
-        const selectedFilenames = selectedDocuments.map(doc => doc.filename);
-        formData.append('selectedDocuments', JSON.stringify(selectedFilenames));
+      // Trigger auto-capture on phone FIRST (12-second delay for phone to be ready)
+      if (socket && !autoCaptureEnabled) {
+        socket.emit('start_auto_capture', {
+          documentCount: documentsToprint.length,
+          timestamp: Date.now(),
+        });
+        setAutoCaptureEnabled(true);
+        toast({
+          title: '📱 Phone Auto-Capture Starting',
+          description: '12-second delay for phone to be ready...',
+          status: 'info',
+          duration: 3000,
+        });
       }
 
-      // Add selected dashboard files if any
-      if (selectedFiles.length > 0) {
-        formData.append('dashboardFiles', JSON.stringify(selectedFiles));
-      }
-
-      // Add comprehensive print options
-      formData.append(
-        'options',
-        JSON.stringify({
-          pages: orchestrateOptions.printPages,
-          customRange: orchestrateOptions.printCustomRange,
-          layout: orchestrateOptions.printLayout,
-          paperSize: orchestrateOptions.printPaperSize,
-          resolution: orchestrateOptions.printResolution,
-          colorMode: orchestrateOptions.printColorMode,
-          scale: orchestrateOptions.printScale,
-          margins: orchestrateOptions.printMargins,
-          pagesPerSheet: orchestrateOptions.printPagesPerSheet,
-          copies: orchestrateOptions.printCopies,
-          duplex: orchestrateOptions.printDuplex,
-          quality: orchestrateOptions.printQuality,
-          saveAsDefault: orchestrateOptions.saveAsDefault,
-        })
-      );
-
-      toast({
-        title: 'Submitting Print Job',
-        description: `Sending ${selectedDocuments.length || orchestrateOptions.printConvertedFiles.length} document(s) to printer...`,
-        status: 'info',
-        duration: 2000,
-      });
-
-      const response = await apiClient.post('/orchestrate/print', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      toast({
-        title: 'Print Job Submitted',
-        description: response.data.message || 'Documents sent to printer successfully!',
-        status: 'success',
-        duration: 4000,
-      });
-
+      // Close modal so user can see progress
       orchestrateModal.onClose();
+
+      let successCount = 0;
+      let failCount = 0;
+
+      // Print each document with frontend-controlled delays (like feed does)
+      for (let i = 0; i < documentsToprint.length; i++) {
+        const filename = documentsToprint[i];
+        
+        // Delay BEFORE printing: 12 seconds for first doc (phone setup), 2 seconds for subsequent
+        const delayMs = i === 0 ? 12000 : 2000;
+        toast({
+          title: `⏳ Waiting ${delayMs / 1000}s`,
+          description: i === 0 ? 'Waiting for phone auto-capture to be ready...' : `Preparing document ${i + 1}...`,
+          status: 'info',
+          duration: delayMs - 500,
+        });
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        
+        try {
+          // Print single document
+          console.log(`[PRINT] Printing document ${i + 1}/${documentsToprint.length}: ${filename}`);
+          
+          const response = await apiClient.post('/print/document', { 
+            filename,
+            copies: orchestrateOptions.printCopies || 1,
+          });
+
+          if (response.data.success) {
+            successCount++;
+            toast({
+              title: `🖨️ Document ${i + 1} Printed`,
+              description: `Successfully printed: ${filename}`,
+              status: 'success',
+              duration: 2000,
+            });
+          } else {
+            failCount++;
+            toast({
+              title: `Print Failed`,
+              description: response.data.error || `Failed to print: ${filename}`,
+              status: 'error',
+              duration: 3000,
+            });
+          }
+        } catch (err: any) {
+          failCount++;
+          console.error(`[PRINT] Error printing ${filename}:`, err);
+          toast({
+            title: `Print Error`,
+            description: err.response?.data?.error || err.message,
+            status: 'error',
+            duration: 3000,
+          });
+        }
+      }
+
+      // Final summary
+      if (successCount > 0) {
+        toast({
+          title: `Printed ${successCount} Document${successCount !== 1 ? 's' : ''}`,
+          description: failCount > 0 
+            ? `${successCount} printed successfully, ${failCount} failed.` 
+            : 'All documents printed successfully!',
+          status: failCount > 0 ? 'warning' : 'success',
+          duration: 5000,
+        });
+      } else {
+        toast({
+          title: 'Print Failed',
+          description: 'Could not print any documents.',
+          status: 'error',
+          duration: 5000,
+        });
+      }
     } catch (err: any) {
       toast({
         title: 'Print Failed',
@@ -2610,6 +2721,7 @@ const Dashboard: React.FC = () => {
 
   // Feed documents through printer (uses printer as document feeder)
   // Also triggers auto-capture on phone with 5-second countdown
+  // First document has 12-second delay BEFORE feeding, subsequent documents have 2-second delay
   const feedDocumentsThroughPrinter = async () => {
     if (documentsToFeed < 1) {
       toast({
@@ -2634,7 +2746,7 @@ const Dashboard: React.FC = () => {
       setAutoCaptureEnabled(true);
       toast({
         title: '📱 Phone Auto-Capture Starting',
-        description: '5-second countdown on Phone while documents are feeding...',
+        description: '12-second delay before first document feeds...',
         status: 'info',
         duration: 3000,
       });
@@ -2644,12 +2756,29 @@ const Dashboard: React.FC = () => {
       // Loop through the number of documents to feed
       for (let i = 0; i < documentsToFeed; i++) {
         try {
+          // Delay BEFORE feeding: 12 seconds for first document, 2 seconds for subsequent
+          // This gives phone time to capture the previous document
+          const delayMs = i === 0 ? 12000 : 2000;
+          toast({
+            title: `⏳ Waiting ${delayMs / 1000}s`,
+            description: i === 0 ? 'Preparing to feed first document...' : `Waiting before document ${i + 1}...`,
+            status: 'info',
+            duration: delayMs - 500,
+          });
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          
           // Use the /print endpoint with type: "blank" - this triggers the printer to feed paper
           const response = await apiClient.post('/print', { type: 'blank' });
 
           if (response.data.status === 'success') {
             successCount++;
             setFeedCount(prev => prev + 1);
+            toast({
+              title: `📄 Document ${i + 1} Fed`,
+              description: `Successfully fed document ${i + 1} of ${documentsToFeed}`,
+              status: 'success',
+              duration: 2000,
+            });
           } else if (response.data.message?.includes('not found')) {
             // If blank.pdf doesn't exist, try to create it first (only on first failure)
             if (i === 0) {
@@ -2666,11 +2795,6 @@ const Dashboard: React.FC = () => {
             }
           } else {
             failCount++;
-          }
-
-          // Small delay between feeds to let printer process
-          if (i < documentsToFeed - 1) {
-            await new Promise(resolve => setTimeout(resolve, 1500));
           }
         } catch (innerErr) {
           failCount++;
@@ -3180,7 +3304,6 @@ const Dashboard: React.FC = () => {
               <Card
                 border="1px solid rgba(121,95,238,0.2)"
                 bg={surfaceCard}
-                backdropFilter="blur(10px)"
                 textAlign="center"
                 py={10}
               >
@@ -3423,7 +3546,7 @@ const Dashboard: React.FC = () => {
         scrollBehavior="inside"
         isCentered
       >
-        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <ModalContent
           bg={surfaceCard}
           borderRadius="2xl"
@@ -3508,7 +3631,7 @@ const Dashboard: React.FC = () => {
         scrollBehavior="inside"
         isCentered
       >
-        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <ModalContent
           bg={surfaceCard}
           borderRadius="2xl"
@@ -3565,7 +3688,7 @@ const Dashboard: React.FC = () => {
       </Modal>
 
       <Modal isOpen={conversionModal.isOpen} onClose={closeConversionModal} size="lg">
-        <ModalOverlay backdropFilter="blur(12px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <ModalContent bg={surfaceCard} borderRadius="2xl" border="1px solid rgba(121,95,238,0.25)">
           <ModalHeader>Convert Files</ModalHeader>
           <ModalCloseButton />
@@ -3695,7 +3818,7 @@ const Dashboard: React.FC = () => {
         onClose={convertedDrawer.onClose}
         size="md"
       >
-        <DrawerOverlay backdropFilter="blur(8px)" />
+        <DrawerOverlay bg="blackAlpha.600" />
         <DrawerContent bg={surfaceCard} borderColor="rgba(121,95,238,0.25)" borderLeftWidth="1px">
           <DrawerHeader display="flex" alignItems="center" justifyContent="space-between">
             <Heading size="sm">Converted Files</Heading>
@@ -3818,7 +3941,8 @@ const Dashboard: React.FC = () => {
         </DrawerContent>
       </Drawer>
 
-      {/* Orchestrate Print & Capture Modal */}
+      {/* Orchestrate Print & Capture Modal - Only render when DocumentSelector is closed */}
+      {!documentSelectorModal.isOpen && (
       <Modal
         isOpen={orchestrateModal.isOpen}
         onClose={orchestrateModal.onClose}
@@ -3828,12 +3952,13 @@ const Dashboard: React.FC = () => {
         motionPreset={isVoiceOrchestration ? 'slideInBottom' : 'scale'}
         trapFocus={!isChatVisible}
         preserveScrollBarGap
+        blockScrollOnMount={true}
       >
         <ModalOverlay
-          backdropFilter={isVoiceOrchestration ? 'none' : 'blur(16px)'}
-          bg={isVoiceOrchestration ? 'transparent' : 'blackAlpha.700'}
+          backdropFilter="none"
+          bg={isVoiceOrchestration ? 'transparent' : 'blackAlpha.500'}
           zIndex={isChatVisible ? 2001 : undefined}
-          pointerEvents={isChatVisible || isVoiceOrchestration ? 'none' : 'auto'}
+          pointerEvents="none"
         />
         <MotionModalContent
           bg={surfaceCard}
@@ -3852,7 +3977,7 @@ const Dashboard: React.FC = () => {
           overflow="hidden"
           display="flex"
           flexDirection="column"
-          zIndex={isChatVisible ? 2002 : undefined}
+          zIndex={2050}
           pointerEvents="auto"
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -5790,6 +5915,7 @@ const Dashboard: React.FC = () => {
           </Flex>
         </MotionModalContent>
       </Modal>
+      )}
 
       {/* Document Selector Modal */}
       <DocumentSelector
@@ -5800,8 +5926,10 @@ const Dashboard: React.FC = () => {
           documentSelectorModal.onClose();
         }}
         onSelect={async (docs) => {
+          console.log('[DOC_SELECT] onSelect called with docs:', docs);
           // Enhance documents with page information before setting
           const enhancedDocs = await enhanceDocumentsWithPages(docs);
+          console.log('[DOC_SELECT] Enhanced docs:', enhancedDocs);
           setSelectedDocuments(enhancedDocs);
           if (enhancedDocs.length > 0) {
             bumpPreviewFocus({ docIndex: 0, page: 1, source: 'manual' });
@@ -5824,7 +5952,7 @@ const Dashboard: React.FC = () => {
         size="lg"
         isCentered
       >
-        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <MotionModalContent
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -5852,7 +5980,6 @@ const Dashboard: React.FC = () => {
           <ModalBody py={4}>
             <Box
               bg={validatorBoxBg}
-              backdropFilter="blur(10px)"
               borderRadius="xl"
               p={4}
               border="1px solid"

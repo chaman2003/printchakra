@@ -76,6 +76,13 @@ DEFAULT_COMMAND_CONFIG = {
             "select original document", "select converted document", "select uploaded document",
             "document number", "file number", "document", "file"
         ],
+        "select_multiple_documents": [
+            "select first two", "select first three", "select first four", "select first five",
+            "select two documents", "select three documents", "select four documents",
+            "select documents 1 and 2", "select documents 1 2", "select 1 and 2",
+            "first two documents", "first three documents", "first four documents",
+            "select all documents", "select all", "choose all"
+        ],
         "switch_section": [
             "switch to", "show", "go to", "open section",
             "switch section", "change to"
@@ -124,6 +131,7 @@ DEFAULT_COMMAND_CONFIG = {
     },
     "friendly_responses": {
         "select_document": "Selecting document {document_number}",
+        "select_multiple_documents": "Selecting {count} documents",
         "switch_section": "Switching to {section} section",
         "next_document": "Moving to next document",
         "previous_document": "Moving to previous document",
@@ -134,7 +142,7 @@ DEFAULT_COMMAND_CONFIG = {
         "repeat_settings": "Reading settings...",
         "help": "Here's what I can do...",
         "stop_recording": "Stopping recording",
-        "greeting": "Hello! I'm PrintChakra AI. Say print or scan to get started.",
+        "greeting": "I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. What would you like to do?",
     },
     "confirmation_words": [
         "yes", "proceed", "go ahead", "okay", "ok",

@@ -6,8 +6,7 @@ export const styleCommandLibrary: Record<string, SystemStyleObject> = {
     borderRadius: '24px',
     borderWidth: '1px',
     borderColor: { base: 'rgba(121, 95, 238, 0.08)', _dark: 'rgba(255,255,255,0.12)' },
-    backdropFilter: 'blur(24px)',
-    bg: { base: 'rgba(255, 248, 240, 0.85)', _dark: 'rgba(8, 15, 37, 0.72)' },
+    bg: { base: 'rgba(255, 248, 240, 0.95)', _dark: 'rgba(8, 15, 37, 0.95)' },
   },
   'soft glow border': {
     boxShadow: {

@@ -313,7 +313,7 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
       )}
 
       <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered scrollBehavior="inside">
-        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <ModalContent
           bg={bgCard}
           borderRadius="2xl"

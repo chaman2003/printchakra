@@ -201,6 +201,63 @@ const Phone: React.FC = () => {
     return (diffCount / (pixelCount / 4)) * 100;
   };
 
+  // Check if an image is blank/uniform (like gray captures with no document)
+  // Returns true if image appears to be blank/invalid
+  const isBlankImage = (imageData: ImageData): boolean => {
+    const data = imageData.data;
+    const pixelCount = data.length / 4;
+    
+    if (pixelCount === 0) return true;
+    
+    // Calculate mean and variance of grayscale values
+    let sum = 0;
+    let sumSq = 0;
+    let minVal = 255;
+    let maxVal = 0;
+    
+    // Sample pixels for performance
+    const step = 16;
+    let sampledCount = 0;
+    
+    for (let i = 0; i < data.length; i += step * 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      
+      // Convert to grayscale
+      const gray = (r + g + b) / 3;
+      
+      sum += gray;
+      sumSq += gray * gray;
+      sampledCount++;
+      
+      if (gray < minVal) minVal = gray;
+      if (gray > maxVal) maxVal = gray;
+    }
+    
+    const mean = sum / sampledCount;
+    const variance = (sumSq / sampledCount) - (mean * mean);
+    const stdDev = Math.sqrt(variance);
+    const range = maxVal - minVal;
+    
+    // Log for debugging
+    console.log(`Image analysis: mean=${mean.toFixed(1)}, stdDev=${stdDev.toFixed(1)}, range=${range}`);
+    
+    // Image is considered blank if:
+    // 1. Very low variance (uniform color) - stdDev < 15
+    // 2. Narrow color range - range < 50
+    // 3. OR if it's mostly gray (mean between 80-180) with low contrast
+    const isLowContrast = stdDev < 15 && range < 50;
+    const isUniformGray = mean > 80 && mean < 180 && stdDev < 20 && range < 60;
+    
+    if (isLowContrast || isUniformGray) {
+      console.log('⚠️ Blank/uniform image detected - will be rejected');
+      return true;
+    }
+    
+    return false;
+  };
+
   // Get current frame as ImageData (scaled down for comparison)
   const getCurrentFrameData = (): ImageData | null => {
     try {
@@ -508,6 +565,23 @@ const Phone: React.FC = () => {
       const capturedFrame = getCurrentFrameData();
       if (capturedFrame) {
         lastCapturedImageDataRef.current = capturedFrame;
+        
+        // Check if the image is blank/uniform (gray, no document content)
+        if (isBlankImage(capturedFrame)) {
+          console.log('⚠️ Blank image detected - skipping upload');
+          toast({
+            title: 'Blank Image Detected',
+            description: 'No document content found - capture skipped',
+            status: 'warning',
+            duration: 2000,
+            position: 'top',
+          });
+          // Reset and wait for next document
+          stableFrameCountRef.current = 0;
+          lastFrameImageDataRef.current = null;
+          setFrameChangeStatus('waiting');
+          return;
+        }
       }
       
       // Convert to blob
@@ -544,7 +618,7 @@ const Phone: React.FC = () => {
       // Allow next capture immediately (uploads continue async)
       isCapturingRef.current = false;
     }
-  }, [processingOptions, startAsyncUpload]);
+  }, [processingOptions, startAsyncUpload, toast]);
 
   // Keep ref updated with latest captureInBackground
   useEffect(() => {
@@ -690,6 +764,18 @@ const Phone: React.FC = () => {
     canvas.height = video.videoHeight;
     context.drawImage(video, 0, 0);
 
+    // Check if the image is blank before processing
+    const frameData = getCurrentFrameData();
+    if (frameData && isBlankImage(frameData)) {
+      toast({
+        title: 'Blank Image Detected',
+        description: 'No document content found - capture skipped',
+        status: 'warning',
+        duration: 3000,
+      });
+      return;
+    }
+
     canvas.toBlob(
       async (blob: Blob | null) => {
         if (blob) {
@@ -715,7 +801,7 @@ const Phone: React.FC = () => {
       'image/jpeg',
       0.9
     );
-  }, [checkImageQuality, qualityCheck, uploadImage, validateQuality]);
+  }, [checkImageQuality, qualityCheck, uploadImage, validateQuality, toast]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];

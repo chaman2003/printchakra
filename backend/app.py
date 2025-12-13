@@ -2938,6 +2938,155 @@ def trigger_print():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/print/document", methods=["POST"])
+def print_single_document():
+    """
+    Print a single document by filename
+    Expects JSON: { "filename": "document.jpg", "copies": 1 }
+    Searches in processed, converted, uploads directories
+    """
+    try:
+        data = request.get_json() if request.is_json else {}
+        filename = data.get("filename")
+        copies = int(data.get("copies", 1))
+        
+        if not filename:
+            return jsonify({"success": False, "error": "No filename provided"}), 400
+        
+        logger.info(f"[PRINT_DOC] Print request for: {filename}")
+        
+        # Search for file in multiple directories
+        search_dirs = [
+            PROCESSED_DIR,
+            CONVERTED_DIR,
+            UPLOAD_DIR,
+            PDF_DIR,
+            os.path.join(DATA_DIR, "ocr_results"),
+        ]
+        
+        file_path = None
+        for search_dir in search_dirs:
+            candidate = os.path.join(search_dir, filename)
+            if os.path.exists(candidate):
+                file_path = candidate
+                logger.info(f"[PRINT_DOC] Found file in: {search_dir}")
+                break
+        
+        if not file_path:
+            logger.error(f"[PRINT_DOC] File not found: {filename}")
+            logger.error(f"[PRINT_DOC] Searched in: {search_dirs}")
+            # List files in processed dir for debugging
+            if os.path.exists(PROCESSED_DIR):
+                files_in_processed = os.listdir(PROCESSED_DIR)[:10]
+                logger.error(f"[PRINT_DOC] Files in processed: {files_in_processed}")
+            return jsonify({
+                "success": False, 
+                "error": f"File not found: {filename}",
+                "searched": [os.path.basename(d) for d in search_dirs]
+            }), 404
+        
+        logger.info(f"[PRINT_DOC] Printing: {file_path}")
+        
+        # Print the document
+        print_success = False
+        error_msg = None
+        
+        try:
+            import win32api
+            import win32print
+            
+            printer_name = win32print.GetDefaultPrinter()
+            logger.info(f"[PRINT_DOC] Default printer: {printer_name}")
+            
+            if not printer_name:
+                return jsonify({"success": False, "error": "No default printer configured"}), 500
+            
+            for copy_num in range(copies):
+                # Method 1: ShellExecute with "print"
+                try:
+                    result = win32api.ShellExecute(0, "print", file_path, None, ".", 0)
+                    logger.info(f"[PRINT_DOC] ShellExecute result: {result}")
+                    if result > 32:
+                        print_success = True
+                        logger.info(f"[PRINT_DOC] ShellExecute succeeded (copy {copy_num + 1})")
+                except Exception as e:
+                    logger.warning(f"[PRINT_DOC] ShellExecute failed: {e}")
+                    error_msg = str(e)
+                
+                # Method 2: PrintTo with printer name
+                if not print_success:
+                    try:
+                        result = win32api.ShellExecute(0, "printto", file_path, f'"{printer_name}"', ".", 0)
+                        if result > 32:
+                            print_success = True
+                            logger.info(f"[PRINT_DOC] PrintTo succeeded (copy {copy_num + 1})")
+                    except Exception as e:
+                        logger.warning(f"[PRINT_DOC] PrintTo failed: {e}")
+                        error_msg = str(e)
+                
+                # Method 3: PowerShell
+                if not print_success:
+                    try:
+                        cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
+                        result = subprocess.run(["powershell", "-Command", cmd], 
+                                               timeout=30, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print_success = True
+                            logger.info(f"[PRINT_DOC] PowerShell succeeded (copy {copy_num + 1})")
+                        else:
+                            error_msg = result.stderr
+                    except Exception as e:
+                        logger.warning(f"[PRINT_DOC] PowerShell failed: {e}")
+                        error_msg = str(e)
+                        
+        except ImportError:
+            # win32 not available, use PowerShell only
+            logger.warning("[PRINT_DOC] win32 modules not available, using PowerShell")
+            for copy_num in range(copies):
+                try:
+                    cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
+                    result = subprocess.run(["powershell", "-Command", cmd], 
+                                           timeout=30, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        print_success = True
+                        logger.info(f"[PRINT_DOC] PowerShell succeeded (copy {copy_num + 1})")
+                    else:
+                        error_msg = result.stderr
+                except Exception as e:
+                    error_msg = str(e)
+        
+        if print_success:
+            # Emit capture_now event to phone
+            try:
+                socketio.emit("capture_now", {
+                    "message": f"Capture: {filename}",
+                    "document": filename,
+                    "timestamp": datetime.now().isoformat()
+                })
+                logger.info(f"[PRINT_DOC] Sent capture_now for: {filename}")
+            except Exception as socket_err:
+                logger.warning(f"[PRINT_DOC] Socket emit failed: {socket_err}")
+            
+            return jsonify({
+                "success": True,
+                "message": f"Printed: {filename}",
+                "filename": filename,
+                "copies": copies
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": error_msg or "Print failed",
+                "filename": filename
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"[PRINT_DOC] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/printer/diagnostics", methods=["GET", "POST"])
 def printer_diagnostics():
     """
@@ -5443,31 +5592,62 @@ def orchestrate_print():
         dashboard_files = json.loads(request.form.get("dashboardFiles", "[]"))
         options = json.loads(request.form.get("options", "{}"))
 
+        logger.info(f"[PRINT] Received print request:")
+        logger.info(f"[PRINT]   - converted_files: {converted_files}")
+        logger.info(f"[PRINT]   - selected_documents: {selected_documents}")
+        logger.info(f"[PRINT]   - dashboard_files: {dashboard_files}")
+
         # Collect all files to print
         files_to_print = []
 
+        # Helper function to find file in multiple directories
+        def find_file(filename):
+            """Search for file in multiple possible directories"""
+            search_dirs = [
+                PROCESSED_DIR,
+                CONVERTED_DIR,
+                UPLOAD_DIR,
+                PDF_DIR,
+                os.path.join(DATA_DIR, "ocr_results"),
+            ]
+            for search_dir in search_dirs:
+                file_path = os.path.join(search_dir, filename)
+                if os.path.exists(file_path):
+                    logger.info(f"[PRINT] Found {filename} in {search_dir}")
+                    return file_path
+            logger.warning(f"[PRINT] File not found: {filename}")
+            logger.warning(f"[PRINT]   Searched in: {search_dirs}")
+            return None
+
         # Add converted PDFs from converted directory
         for filename in converted_files:
-            file_path = os.path.join(CONVERTED_DIR, filename)
-            if os.path.exists(file_path):
+            file_path = find_file(filename)
+            if file_path:
                 files_to_print.append({"filename": filename, "path": file_path, "source": "converted"})
 
-        # Add selected documents from processed directory
+        # Add selected documents - search in multiple directories
         for filename in selected_documents:
-            file_path = os.path.join(PROCESSED_DIR, filename)
-            if os.path.exists(file_path):
+            file_path = find_file(filename)
+            if file_path:
                 files_to_print.append({"filename": filename, "path": file_path, "source": "processed"})
 
         # Add dashboard files
         for filename in dashboard_files:
-            file_path = os.path.join(PROCESSED_DIR, filename)
-            if os.path.exists(file_path):
+            file_path = find_file(filename)
+            if file_path:
                 files_to_print.append({"filename": filename, "path": file_path, "source": "dashboard"})
 
+        logger.info(f"[PRINT] Files to print: {[f['filename'] for f in files_to_print]}")
+
         if not files_to_print:
+            logger.error(f"[PRINT] No valid files found to print!")
+            logger.error(f"[PRINT]   PROCESSED_DIR: {PROCESSED_DIR}")
+            logger.error(f"[PRINT]   Contents: {os.listdir(PROCESSED_DIR) if os.path.exists(PROCESSED_DIR) else 'DIR NOT FOUND'}")
             return jsonify({
                 "success": False,
-                "error": "No valid files found to print"
+                "error": "No valid files found to print",
+                "searched_documents": selected_documents,
+                "searched_dirs": [PROCESSED_DIR, CONVERTED_DIR, UPLOAD_DIR]
             }), 400
 
         logger.info(f"[PRINT] Starting print job for {len(files_to_print)} file(s)")
@@ -5480,6 +5660,9 @@ def orchestrate_print():
         pages = options.get("pages", "all")
         custom_range = options.get("customRange", "")
         layout = options.get("layout", "portrait")
+        # Delay options: first document gets longer delay, subsequent get shorter delay
+        first_delay = int(options.get("firstDelay", 12))  # 12 seconds default for first doc
+        subsequent_delay = int(options.get("subsequentDelay", 2))  # 2 seconds default for subsequent docs
 
         # Try to print each file
         successful_prints = []
@@ -5488,25 +5671,110 @@ def orchestrate_print():
         try:
             import win32api
             import win32print
+            import time
 
             printer_name = win32print.GetDefaultPrinter()
+            logger.info(f"[PRINT] Default printer: {printer_name}")
+            
             if not printer_name:
                 return jsonify({
                     "success": False,
                     "error": "No default printer configured"
                 }), 500
 
-            for file_info in files_to_print:
+            for idx, file_info in enumerate(files_to_print):
                 file_path = file_info["path"]
                 filename = file_info["filename"]
+                
+                logger.info(f"[PRINT] Processing file {idx + 1}/{len(files_to_print)}: {filename}")
+                logger.info(f"[PRINT]   Path: {file_path}")
+                logger.info(f"[PRINT]   Exists: {os.path.exists(file_path)}")
 
                 try:
+                    # Apply delay BEFORE printing (except for first document if no delay needed)
+                    # First document gets first_delay seconds, subsequent get subsequent_delay seconds
+                    if idx == 0 and first_delay > 0:
+                        logger.info(f"[PRINT] Waiting {first_delay}s before first document...")
+                        # Emit progress update
+                        socketio.emit("print_progress", {
+                            "type": "waiting",
+                            "document": filename,
+                            "index": idx + 1,
+                            "total": len(files_to_print),
+                            "delay": first_delay,
+                            "message": f"Waiting {first_delay}s before first document..."
+                        })
+                        time.sleep(first_delay)
+                    elif idx > 0 and subsequent_delay > 0:
+                        logger.info(f"[PRINT] Waiting {subsequent_delay}s before document {idx + 1}...")
+                        # Emit progress update
+                        socketio.emit("print_progress", {
+                            "type": "waiting",
+                            "document": filename,
+                            "index": idx + 1,
+                            "total": len(files_to_print),
+                            "delay": subsequent_delay,
+                            "message": f"Waiting {subsequent_delay}s before document {idx + 1}..."
+                        })
+                        time.sleep(subsequent_delay)
+                    
                     for copy_num in range(copies):
-                        # Use ShellExecute to print
-                        win32api.ShellExecute(0, "print", file_path, None, ".", 0)
-                        logger.info(f"[PRINT] Sent to printer: {filename} (copy {copy_num + 1}/{copies})")
+                        # Try multiple print methods for reliability
+                        print_success = False
+                        
+                        # Method 1: ShellExecute with "print" verb
+                        try:
+                            result = win32api.ShellExecute(0, "print", file_path, None, ".", 0)
+                            logger.info(f"[PRINT] ShellExecute result: {result}")
+                            if result > 32:  # Success if > 32
+                                print_success = True
+                                logger.info(f"[PRINT] ShellExecute succeeded for: {filename}")
+                        except Exception as shell_err:
+                            logger.warning(f"[PRINT] ShellExecute failed: {shell_err}")
+                        
+                        # Method 2: PowerShell Start-Process if ShellExecute failed
+                        if not print_success:
+                            try:
+                                cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
+                                result = subprocess.run(["powershell", "-Command", cmd], 
+                                                       timeout=30, capture_output=True, text=True)
+                                if result.returncode == 0:
+                                    print_success = True
+                                    logger.info(f"[PRINT] PowerShell Print succeeded for: {filename}")
+                                else:
+                                    logger.warning(f"[PRINT] PowerShell Print failed: {result.stderr}")
+                            except Exception as ps_err:
+                                logger.warning(f"[PRINT] PowerShell method failed: {ps_err}")
+                        
+                        # Method 3: PrintTo with printer name
+                        if not print_success:
+                            try:
+                                result = win32api.ShellExecute(0, "printto", file_path, f'"{printer_name}"', ".", 0)
+                                logger.info(f"[PRINT] PrintTo result: {result}")
+                                if result > 32:
+                                    print_success = True
+                                    logger.info(f"[PRINT] PrintTo succeeded for: {filename}")
+                            except Exception as printto_err:
+                                logger.warning(f"[PRINT] PrintTo failed: {printto_err}")
+                        
+                        if print_success:
+                            logger.info(f"[PRINT] Sent to printer: {filename} (copy {copy_num + 1}/{copies})")
+                        else:
+                            logger.error(f"[PRINT] All print methods failed for: {filename}")
 
                     successful_prints.append(filename)
+                    
+                    # Emit capture_now event after each document is printed
+                    # This tells the phone to capture the document coming out of the printer
+                    socketio.emit("capture_now", {
+                        "message": f"Capture document {idx + 1}: {filename}",
+                        "document": filename,
+                        "index": idx + 1,
+                        "total": len(files_to_print),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    logger.info(f"[PRINT] Sent capture_now for document {idx + 1}: {filename}")
+                    
                 except Exception as print_err:
                     logger.error(f"[PRINT] Failed to print {filename}: {print_err}")
                     failed_prints.append({"filename": filename, "error": str(print_err)})
@@ -5514,12 +5782,39 @@ def orchestrate_print():
         except ImportError:
             # Windows print modules not available, try alternative methods
             logger.warning("[PRINT] win32 modules not available, using alternative print method")
+            import time
 
-            for file_info in files_to_print:
+            for idx, file_info in enumerate(files_to_print):
                 file_path = file_info["path"]
                 filename = file_info["filename"]
 
                 try:
+                    # Apply delay BEFORE printing
+                    if idx == 0 and first_delay > 0:
+                        logger.info(f"[PRINT] Waiting {first_delay}s before first document...")
+                        # Emit progress update
+                        socketio.emit("print_progress", {
+                            "type": "waiting",
+                            "document": filename,
+                            "index": idx + 1,
+                            "total": len(files_to_print),
+                            "delay": first_delay,
+                            "message": f"Waiting {first_delay}s before first document..."
+                        })
+                        time.sleep(first_delay)
+                    elif idx > 0 and subsequent_delay > 0:
+                        logger.info(f"[PRINT] Waiting {subsequent_delay}s before document {idx + 1}...")
+                        # Emit progress update
+                        socketio.emit("print_progress", {
+                            "type": "waiting",
+                            "document": filename,
+                            "index": idx + 1,
+                            "total": len(files_to_print),
+                            "delay": subsequent_delay,
+                            "message": f"Waiting {subsequent_delay}s before document {idx + 1}..."
+                        })
+                        time.sleep(subsequent_delay)
+                    
                     for copy_num in range(copies):
                         # Use subprocess with PowerShell
                         cmd = f'Start-Process -FilePath "{file_path}" -Verb Print -WindowStyle Hidden'
@@ -5527,6 +5822,17 @@ def orchestrate_print():
                         logger.info(f"[PRINT] Sent via PowerShell: {filename} (copy {copy_num + 1}/{copies})")
 
                     successful_prints.append(filename)
+                    
+                    # Emit capture_now event after each document is printed
+                    socketio.emit("capture_now", {
+                        "message": f"Capture document {idx + 1}: {filename}",
+                        "document": filename,
+                        "index": idx + 1,
+                        "total": len(files_to_print),
+                        "timestamp": datetime.now().isoformat()
+                    })
+                    logger.info(f"[PRINT] Sent capture_now for document {idx + 1}: {filename}")
+                    
                 except Exception as print_err:
                     logger.error(f"[PRINT] Failed to print {filename}: {print_err}")
                     failed_prints.append({"filename": filename, "error": str(print_err)})

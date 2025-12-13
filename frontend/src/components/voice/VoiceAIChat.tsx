@@ -927,7 +927,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         borderColor={borderColor}
         p={4} 
         bg={bgColor}
-        backdropFilter="blur(20px)"
       >
         <Flex align="center" gap={3} justify="space-between">
           <Flex align="center" gap={3} flex="1">
@@ -1067,7 +1066,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           </Box>
 
           {isSessionActive && (
-          <Box borderTopWidth="1px" borderColor={borderColor} p={4} bg={chatBoxBg} backdropFilter="blur(10px)">
+          <Box borderTopWidth="1px" borderColor={borderColor} p={4} bg={chatBoxBg}>
             <InputGroup size="md" mb={2}>
               <Input
                 ref={chatInputRef}

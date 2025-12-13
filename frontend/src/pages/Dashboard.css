@@ -128,8 +128,7 @@ w.processing-progress {
   border-radius: 20px;
   font-size: clamp(0.75rem, 2vw, 0.85rem);
   font-weight: 500;
-  background-color: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.35);
   text-transform: capitalize;
 }
 
@@ -143,11 +142,10 @@ w.processing-progress {
 }
 
 .advanced-options {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.25);
   padding: clamp(1rem, 3vw, 1.5rem);
   border-radius: clamp(6px, 1.5vw, 8px);
   margin-top: clamp(0.5rem, 2vw, 1rem);
-  backdrop-filter: blur(10px);
   width: 100%;
 }
 

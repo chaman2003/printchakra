@@ -398,7 +398,6 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
         p={3}
         position="relative"
         overflow="hidden"
-        backdropFilter="blur(12px)"
         boxShadow="0 4px 20px rgba(0, 0, 0, 0.08)"
         _before={{
           content: '""',

@@ -324,7 +324,7 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
       </ButtonGroup>
 
       <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered scrollBehavior="inside">
-        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <ModalContent
           bg={bgCard}
           borderRadius="2xl"
@@ -583,7 +583,7 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
 
       {/* Print Queue Modal */}
       <Modal isOpen={printQueueModal.isOpen} onClose={printQueueModal.onClose} size="3xl" isCentered scrollBehavior="inside">
-        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalOverlay bg="blackAlpha.600" />
         <ModalContent
           bg={bgCard}
           borderRadius="2xl"

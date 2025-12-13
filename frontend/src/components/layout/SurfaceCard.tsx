@@ -34,7 +34,6 @@ const SurfaceCard = React.forwardRef<HTMLDivElement, SurfaceCardProps>((props, r
         borderRadius: 'xl',
         p: { base: 4, md: 5, lg: 6 },
         position: 'relative',
-        backdropFilter: 'blur(12px)',
       }}
       {...rest}
     >

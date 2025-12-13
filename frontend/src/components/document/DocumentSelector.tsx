@@ -59,6 +59,7 @@ export interface DocumentSelectorProps {
 export interface DocumentSelectorHandle {
   focusSection: (section: 'current' | 'converted' | 'upload') => void;
   selectDocumentByIndex: (section: 'current' | 'converted', position: number) => Document | null;
+  selectMultipleDocuments: (section: 'current' | 'converted', indices: number[]) => void;
   clearSelections: () => void;
 }
 
@@ -86,11 +87,11 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<number>(0);
 
-  // Updated to match SurfaceCard theme
-  const bgColor = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
+  // Updated to match SurfaceCard theme - fully opaque for better visibility
+  const bgColor = useColorModeValue('white', 'gray.900');
   const hoverBg = useColorModeValue('orange.50', 'whiteAlpha.100');
   const selectedBg = useColorModeValue('brand.50', 'rgba(121,95,238,0.15)');
-  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
+  const borderColor = useColorModeValue('gray.200', 'gray.700');
 
   const handleDocumentClick = useCallback(
     (filename: string, index: number, shiftKey: boolean, docs: Document[]) => {
@@ -197,8 +198,17 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
   }, []);
 
   const handleConfirm = () => {
+    console.log('[DOC_SELECTOR] handleConfirm called');
+    console.log('[DOC_SELECTOR] selectedDocs Set:', selectedDocs);
+    console.log('[DOC_SELECTOR] currentDocuments:', currentDocuments);
+    console.log('[DOC_SELECTOR] convertedDocuments:', convertedDocuments);
+    console.log('[DOC_SELECTOR] uploadedFiles:', uploadedFiles);
+    
     const allDocs = [...currentDocuments, ...convertedDocuments, ...uploadedFiles];
     const selected = allDocs.filter(doc => selectedDocs.has(doc.filename));
+    
+    console.log('[DOC_SELECTOR] allDocs:', allDocs);
+    console.log('[DOC_SELECTOR] selected:', selected);
     
     // Ensure all selected documents have proper pages structure
     const docsWithPages = selected.map(doc => ({
@@ -208,6 +218,8 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
         thumbnailUrl: doc.thumbnailUrl
       }]
     }));
+    
+    console.log('[DOC_SELECTOR] docsWithPages:', docsWithPages);
     
     onSelect(docsWithPages);
     onClose();
@@ -225,7 +237,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
         borderRadius="xl"
         border="2px solid"
         borderColor={isSelected ? 'brand.400' : borderColor}
-        bg={isSelected ? selectedBg : bgColor}
+        bg={isSelected ? selectedBg : 'white'}
         overflow="hidden"
         cursor="pointer"
         transition="all 0.2s ease"
@@ -235,6 +247,9 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           borderColor: 'brand.400',
         }}
         onClick={e => handleDocumentClick(doc.filename, index, e.shiftKey, allDocs)}
+        _dark={{
+          bg: isSelected ? selectedBg : 'gray.800',
+        }}
       >
         {/* Document order badge */}
         <Badge
@@ -282,7 +297,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           </Box>
         )}
 
-        <Box position="relative" h={{ base: '120px', md: '150px' }} bg="gray.800" overflow="hidden">
+        <Box position="relative" h={{ base: '120px', md: '150px' }} bg="gray.100" overflow="hidden" _dark={{ bg: 'gray.700' }}>
           {doc.thumbnailUrl ? (
             <img 
               src={doc.thumbnailUrl} 
@@ -292,15 +307,16 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
                 height: '100%',
                 objectFit: 'contain',
                 display: 'block',
-                backgroundColor: '#1a1a2e'
+                backgroundColor: '#f5f5f5'
               }}
             />
           ) : (
-            <Flex align="center" justify="center" h="100%" bg="gray.700">
+            <Flex align="center" justify="center" h="100%" bg="gray.200" _dark={{ bg: 'gray.700' }}>
               <Iconify 
                 icon="solar:document-bold" 
                 boxSize={10} 
-                color="whiteAlpha.400" 
+                color="gray.400" 
+                _dark={{ color: 'whiteAlpha.400' }}
               />
             </Flex>
           )}
@@ -352,6 +368,26 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
         setLastClickedIndex(position - 1);
         return target;
       },
+      selectMultipleDocuments: (section, indices) => {
+        const docs = section === 'current' ? currentDocuments : convertedDocuments;
+        const newSelected = new Set<string>();
+        let lastValidIndex: number | null = null;
+        
+        for (const idx of indices) {
+          if (docs[idx]) {
+            newSelected.add(docs[idx].filename);
+            lastValidIndex = idx;
+          }
+        }
+        
+        if (newSelected.size > 0) {
+          setActiveTab(TAB_INDEX[section]);
+          setSelectedDocs(newSelected);
+          if (lastValidIndex !== null) {
+            setLastClickedIndex(lastValidIndex);
+          }
+        }
+      },
       clearSelections: () => {
         setSelectedDocs(new Set());
         setLastClickedIndex(null);
@@ -369,22 +405,21 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
       isCentered={!isChatVisible}
       closeOnEsc={true}
       closeOnOverlayClick={true}
+      blockScrollOnMount={true}
     >
       <ModalOverlay 
-        bg={isChatVisible ? "transparent" : "blackAlpha.700"} 
-        backdropFilter={isChatVisible ? "none" : "blur(10px)"}
-        pointerEvents={isChatVisible ? "none" : "auto"}
-        zIndex={2100}
+        bg="blackAlpha.600"
+        backdropFilter="none"
       />
       <ModalContent 
         bg={bgColor} 
         maxH="90vh" 
         borderRadius="2xl" 
-        boxShadow="2xl"
-        pointerEvents="auto"
-        zIndex={2101}
-        maxW={isChatVisible ? "calc(100vw - 400px)" : undefined}
-        w={isChatVisible ? "calc(100vw - 400px)" : undefined}
+        boxShadow="0 30px 80px rgba(0, 0, 0, 0.5)"
+        border="2px solid"
+        borderColor="brand.500"
+        maxW={isChatVisible ? "calc(100vw - 400px)" : "1200px"}
+        w={isChatVisible ? "calc(100vw - 400px)" : "95vw"}
         ml={isChatVisible ? "8px" : "auto"}
         mr={isChatVisible ? "392px" : "auto"}
         mt={isChatVisible ? "8px" : "auto"}

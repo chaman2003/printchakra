@@ -195,9 +195,8 @@ const components = {
   Card: {
     baseStyle: (props: StyleFunctionProps) => ({
       container: {
-        bg: mode('rgba(255, 255, 255, 0.95)', 'rgba(12, 16, 35, 0.92)')(props),
+        bg: mode('rgba(255, 255, 255, 0.98)', 'rgba(12, 16, 35, 0.95)')(props),
         borderRadius: '24px',
-        backdropFilter: 'blur(18px)',
         boxShadow: mode(
           '0 14px 30px rgba(12, 20, 56, 0.12)',
           '0 14px 30px rgba(0, 0, 0, 0.55)'
@@ -221,7 +220,6 @@ const components = {
     baseStyle: {
       field: {
         borderRadius: '16px',
-        backdropFilter: 'blur(12px)',
         transition: 'all 0.3s ease',
       },
     },
@@ -270,8 +268,7 @@ const components = {
           '1px solid rgba(121, 95, 238, 0.18)',
           '1px solid rgba(69, 202, 255, 0.25)'
         )(props),
-        backdropFilter: 'blur(12px)',
-        bg: mode('rgba(255, 255, 255, 0.95)', 'rgba(12, 16, 35, 0.95)')(props),
+        bg: mode('rgba(255, 255, 255, 0.98)', 'rgba(12, 16, 35, 0.98)')(props),
       },
       item: {
         borderRadius: '12px',
@@ -288,15 +285,15 @@ const components = {
     baseStyle: (props: StyleFunctionProps) => ({
       dialog: {
         bg: mode('rgba(255, 255, 255, 0.98)', 'rgba(12, 16, 35, 0.98)')(props),
-        backdropFilter: 'blur(20px)',
+        backdropFilter: 'none',
         boxShadow: mode(
           '0 25px 60px rgba(121, 95, 238, 0.3)',
           '0 25px 60px rgba(0, 0, 0, 0.7)'
         )(props),
       },
       overlay: {
-        backdropFilter: 'blur(8px)',
-        bg: mode('rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.7)')(props),
+        backdropFilter: 'none',
+        bg: mode('rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.75)')(props),
       },
     }),
   },
@@ -304,11 +301,11 @@ const components = {
     baseStyle: (props: StyleFunctionProps) => ({
       dialog: {
         bg: mode('rgba(255, 255, 255, 0.98)', 'rgba(12, 16, 35, 0.98)')(props),
-        backdropFilter: 'blur(20px)',
+        backdropFilter: 'none',
       },
       overlay: {
-        backdropFilter: 'blur(8px)',
-        bg: mode('rgba(0, 0, 0, 0.4)', 'rgba(0, 0, 0, 0.7)')(props),
+        backdropFilter: 'none',
+        bg: mode('rgba(0, 0, 0, 0.5)', 'rgba(0, 0, 0, 0.75)')(props),
       },
     }),
   },
