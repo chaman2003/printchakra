@@ -1,1 +1,2 @@
 ggml-small-q5_1.bin filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
