@@ -747,38 +747,44 @@ const Phone: React.FC = () => {
       
       // Request camera with appropriate orientation
       const isPortrait = targetOrientation === 'portrait';
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
+      
+      // Force constraints more strictly
+      const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: { ideal: isPortrait ? 1080 : 1440, min: isPortrait ? 720 : 960 },
-          height: { ideal: isPortrait ? 1440 : 1080, min: isPortrait ? 960 : 720 },
-          aspectRatio: isPortrait ? 3 / 4 : 4 / 3,
+          width: isPortrait ? { ideal: 1080, min: 720 } : { ideal: 1920, min: 1280 },
+          height: isPortrait ? { ideal: 1440, min: 960 } : { ideal: 1080, min: 720 },
+          aspectRatio: { ideal: isPortrait ? 0.75 : 1.3333333333 }
         },
-      });
+      };
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(mediaStream);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         // Wait for video metadata to load then play
         videoRef.current.onloadedmetadata = () => {
           const v = videoRef.current;
           if (!v) return;
-          v.play();
-
-          // If the actual stream orientation differs, sync the UI label
-          if (v.videoWidth && v.videoHeight) {
-            const actualOrientation = v.videoHeight >= v.videoWidth ? 'portrait' : 'landscape';
-            setCameraOrientation(actualOrientation);
-          }
+          v.play().catch(e => console.error("Video play failed:", e));
         };
       }
     } catch (err) {
-      alert('Failed to access camera: ' + (err as Error).message);
+      console.error('Camera start error:', err);
+      toast({
+        title: 'Camera Error',
+        description: (err as Error).message,
+        status: 'error',
+        duration: 3000,
+      });
     }
   };
 
   const toggleCameraOrientation = async () => {
     const newOrientation = cameraOrientation === 'portrait' ? 'landscape' : 'portrait';
     setCameraOrientation(newOrientation);
+    // Restart camera with new constraints
     if (stream) {
       await startCamera(newOrientation);
     }
@@ -1390,6 +1396,7 @@ const Phone: React.FC = () => {
             ) : (
               <Stack spacing={6}>
                 <Box
+                  key={cameraOrientation}
                   ref={cameraContainerRef}
                   position="relative"
                   borderRadius="2xl"
@@ -1429,6 +1436,7 @@ const Phone: React.FC = () => {
                     justifyContent="center"
                   >
                     <video
+                      key={cameraOrientation}
                       ref={videoRef}
                       autoPlay
                       playsInline
@@ -1443,77 +1451,43 @@ const Phone: React.FC = () => {
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                     
-                    {/* Document Frame Guide Overlay */}
-                    <Box
-                      position="absolute"
-                      top={overlayBoxStyles.top}
-                      left={overlayBoxStyles.left}
-                      right={overlayBoxStyles.right}
-                      bottom={overlayBoxStyles.bottom}
-                      border="3px dashed rgba(69, 202, 255, 0.7)"
-                      borderRadius="lg"
-                      pointerEvents="none"
-                      zIndex={2}
-                      sx={{
-                        boxShadow: 'inset 0 0 30px rgba(69, 202, 255, 0.15)',
+                    {/* Adaptive Document Frame Overlay (SVG Polygon) */}
+                    <svg
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        pointerEvents: 'none',
+                        zIndex: 2,
                       }}
                     >
-                      {/* Corner markers */}
-                      <Box position="absolute" top="-3px" left="-3px" w="25px" h="25px" borderTop="4px solid #45CAFF" borderLeft="4px solid #45CAFF" borderTopLeftRadius="md" />
-                      <Box position="absolute" top="-3px" right="-3px" w="25px" h="25px" borderTop="4px solid #45CAFF" borderRight="4px solid #45CAFF" borderTopRightRadius="md" />
-                      <Box position="absolute" bottom="-3px" left="-3px" w="25px" h="25px" borderBottom="4px solid #45CAFF" borderLeft="4px solid #45CAFF" borderBottomLeftRadius="md" />
-                      <Box position="absolute" bottom="-3px" right="-3px" w="25px" h="25px" borderBottom="4px solid #45CAFF" borderRight="4px solid #45CAFF" borderBottomRightRadius="md" />
-
-                      {/* Detected corner dots (normalized positions) */}
-                      <Box
-                        position="absolute"
-                        w="10px"
-                        h="10px"
-                        borderRadius="full"
-                        bg="rgba(69,202,255,0.85)"
-                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
-                        transform="translate(-50%, -50%)"
-                        left={`${overlayQuad.topLeft.x * 100}%`}
-                        top={`${overlayQuad.topLeft.y * 100}%`}
-                      />
-                      <Box
-                        position="absolute"
-                        w="10px"
-                        h="10px"
-                        borderRadius="full"
-                        bg="rgba(69,202,255,0.85)"
-                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
-                        transform="translate(-50%, -50%)"
-                        left={`${overlayQuad.topRight.x * 100}%`}
-                        top={`${overlayQuad.topRight.y * 100}%`}
-                      />
-                      <Box
-                        position="absolute"
-                        w="10px"
-                        h="10px"
-                        borderRadius="full"
-                        bg="rgba(69,202,255,0.85)"
-                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
-                        transform="translate(-50%, -50%)"
-                        left={`${overlayQuad.bottomRight.x * 100}%`}
-                        top={`${overlayQuad.bottomRight.y * 100}%`}
-                      />
-                      <Box
-                        position="absolute"
-                        w="10px"
-                        h="10px"
-                        borderRadius="full"
-                        bg="rgba(69,202,255,0.85)"
-                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
-                        transform="translate(-50%, -50%)"
-                        left={`${overlayQuad.bottomLeft.x * 100}%`}
-                        top={`${overlayQuad.bottomLeft.y * 100}%`}
+                      <polygon
+                        points={`
+                          ${overlayQuad.topLeft.x * 100},${overlayQuad.topLeft.y * 100} 
+                          ${overlayQuad.topRight.x * 100},${overlayQuad.topRight.y * 100} 
+                          ${overlayQuad.bottomRight.x * 100},${overlayQuad.bottomRight.y * 100} 
+                          ${overlayQuad.bottomLeft.x * 100},${overlayQuad.bottomLeft.y * 100}
+                        `}
+                        fill="rgba(69, 202, 255, 0.15)"
+                        stroke="#45CAFF"
+                        strokeWidth="0.8"
+                        strokeDasharray="2,2"
                       />
                       
-                      {/* Center crosshair */}
-                      <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="30px" h="1px" bg="rgba(69, 202, 255, 0.5)" />
-                      <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="1px" h="30px" bg="rgba(69, 202, 255, 0.5)" />
-                    </Box>
+                      {/* Corner Markers */}
+                      <circle cx={overlayQuad.topLeft.x * 100} cy={overlayQuad.topLeft.y * 100} r="1.5" fill="#45CAFF" />
+                      <circle cx={overlayQuad.topRight.x * 100} cy={overlayQuad.topRight.y * 100} r="1.5" fill="#45CAFF" />
+                      <circle cx={overlayQuad.bottomRight.x * 100} cy={overlayQuad.bottomRight.y * 100} r="1.5" fill="#45CAFF" />
+                      <circle cx={overlayQuad.bottomLeft.x * 100} cy={overlayQuad.bottomLeft.y * 100} r="1.5" fill="#45CAFF" />
+                      
+                      {/* Center Crosshair */}
+                      <line x1="48" y1="50" x2="52" y2="50" stroke="rgba(69, 202, 255, 0.5)" strokeWidth="0.5" />
+                      <line x1="50" y1="48" x2="50" y2="52" stroke="rgba(69, 202, 255, 0.5)" strokeWidth="0.5" />
+                    </svg>
 
                     {/* Eye Toggle Button - Top Right */}
                     <Tooltip
@@ -1707,7 +1681,7 @@ const Phone: React.FC = () => {
                               </Box>
                             }
                           >
-                            {cameraOrientation === 'portrait' ? 'Portrait' : 'Landscape'}
+                            {cameraOrientation === 'portrait' ? 'Switch to Landscape' : 'Switch to Portrait'}
                           </Button>
                         </Tooltip>
                       </VStack>
@@ -1773,7 +1747,7 @@ const Phone: React.FC = () => {
                           </Box>
                         }
                       >
-                        {cameraOrientation === 'portrait' ? 'Portrait' : 'Landscape'}
+                        {cameraOrientation === 'portrait' ? 'Switch to Landscape' : 'Switch to Portrait'}
                       </Button>
                     </Tooltip>
                     <Tooltip
