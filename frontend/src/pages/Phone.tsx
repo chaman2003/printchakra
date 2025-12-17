@@ -748,12 +748,12 @@ const Phone: React.FC = () => {
       // Request camera with appropriate orientation
       const isPortrait = targetOrientation === 'portrait';
       
-      // Force constraints more strictly
+      // Use consistent 3:4 / 4:3 aspect ratio for both orientations to avoid cropping
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: 'environment',
-          width: isPortrait ? { ideal: 1080, min: 720 } : { ideal: 1920, min: 1280 },
-          height: isPortrait ? { ideal: 1440, min: 960 } : { ideal: 1080, min: 720 },
+          width: { ideal: isPortrait ? 1080 : 1440 },
+          height: { ideal: isPortrait ? 1440 : 1080 },
           aspectRatio: { ideal: isPortrait ? 0.75 : 1.3333333333 }
         },
       };
@@ -1413,17 +1413,16 @@ const Phone: React.FC = () => {
                     maxWidth: isFullScreen
                       ? '100vw'
                       : cameraOrientation === 'portrait'
-                        ? { base: '92vw', md: '400px' }
-                        : { base: '92vw', md: '640px' },
+                        ? { base: '100%', md: '450px' }
+                        : { base: '100%', md: '800px' },
                     maxHeight: isFullScreen
                       ? '100vh'
-                      : cameraOrientation === 'portrait'
-                        ? { base: '70vh', md: '600px' }
-                        : { base: '60vh', md: '480px' },
+                      : { base: '80vh', md: '700px' },
                     mx: 'auto',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    transition: 'all 0.3s ease-in-out',
                   }}
                 >
                   <Box 
@@ -1447,6 +1446,7 @@ const Phone: React.FC = () => {
                         objectFit: 'contain',  // Show full camera preview without cropping
                         display: 'block',
                         backgroundColor: 'black',
+                        borderRadius: 'inherit',
                       }}
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
