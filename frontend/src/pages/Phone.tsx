@@ -1260,8 +1260,16 @@ const Phone: React.FC = () => {
                     aspectRatio: cameraOrientation === 'portrait' ? '3 / 4' : '4 / 3',
                     width: isFullScreen ? '100vw' : '100%',
                     height: isFullScreen ? '100vh' : 'auto',
-                    maxWidth: isFullScreen ? '100vw' : cameraOrientation === 'portrait' ? '400px' : '600px',
-                    maxHeight: isFullScreen ? '100vh' : cameraOrientation === 'portrait' ? '600px' : '450px',
+                    maxWidth: isFullScreen
+                      ? '100vw'
+                      : cameraOrientation === 'portrait'
+                        ? { base: '92vw', md: '400px' }
+                        : { base: '92vw', md: '640px' },
+                    maxHeight: isFullScreen
+                      ? '100vh'
+                      : cameraOrientation === 'portrait'
+                        ? { base: '70vh', md: '600px' }
+                        : { base: '60vh', md: '480px' },
                     mx: 'auto',
                     display: 'flex',
                     alignItems: 'center',
@@ -1316,21 +1324,6 @@ const Phone: React.FC = () => {
                       {/* Center crosshair */}
                       <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="30px" h="1px" bg="rgba(69, 202, 255, 0.5)" />
                       <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="1px" h="30px" bg="rgba(69, 202, 255, 0.5)" />
-                      
-                      {/* Frame guide label */}
-                      <Text
-                        position="absolute"
-                        bottom="-28px"
-                        left="50%"
-                        transform="translateX(-50%)"
-                        fontSize="xs"
-                        color="cyan.300"
-                        fontWeight="semibold"
-                        textShadow="0 0 10px rgba(0,0,0,0.8)"
-                        whiteSpace="nowrap"
-                      >
-                        📄 Align document within frame
-                      </Text>
                     </Box>
 
                     {/* Eye Toggle Button - Top Right */}
@@ -1532,6 +1525,15 @@ const Phone: React.FC = () => {
                     )}
                   </Box>
                 </Box>
+
+                <Stack spacing={1} align="center">
+                  <Text fontSize="sm" color={muted} fontWeight="600">
+                    📄 Align document within frame
+                  </Text>
+                  <Tag size="sm" colorScheme="cyan" variant="subtle">
+                    {cameraOrientation === 'portrait' ? 'Portrait view' : 'Landscape view'}
+                  </Tag>
+                </Stack>
 
                 {/* Controls - Hidden in fullscreen, shown in normal mode */}
                 {!isFullScreen && showControls && (
