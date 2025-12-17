@@ -58,6 +58,15 @@ interface QualityCheck {
   };
 }
 
+type DetectedQuad = {
+  topLeft: { x: number; y: number };
+  topRight: { x: number; y: number };
+  bottomRight: { x: number; y: number };
+  bottomLeft: { x: number; y: number };
+};
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
 const Phone: React.FC = () => {
   const [connected, setConnected] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -81,10 +90,13 @@ const Phone: React.FC = () => {
   const [autoCaptureCount, setAutoCaptureCount] = useState(0);
   const autoCaptureIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const canvasOverlayRef = useRef<HTMLCanvasElement>(null);
+  const docDetectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const detectionRafRef = useRef<number | null>(null);
   const [showControls, setShowControls] = useState(true);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
   const [cameraOrientation, setCameraOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [detectedQuad, setDetectedQuad] = useState<DetectedQuad | null>(null);
   
   // Countdown state for auto-capture from dashboard
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -626,6 +638,105 @@ const Phone: React.FC = () => {
     captureInBackgroundRef.current = captureInBackground;
   }, [captureInBackground]);
 
+  const detectDocumentQuad = useCallback((): DetectedQuad | null => {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) return null;
+
+    // Use a small offscreen canvas to keep detection light-weight
+    const targetWidth = 320;
+    const aspectRatio = video.videoHeight && video.videoWidth
+      ? video.videoHeight / video.videoWidth
+      : cameraOrientation === 'portrait' ? 4 / 3 : 3 / 4;
+    const targetHeight = Math.max(1, Math.round(targetWidth * aspectRatio));
+
+    const canvas = docDetectionCanvasRef.current ?? document.createElement('canvas');
+    docDetectionCanvasRef.current = canvas;
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+    const { data } = ctx.getImageData(0, 0, targetWidth, targetHeight);
+
+    const totalPixels = targetWidth * targetHeight;
+    if (!totalPixels) return null;
+
+    let sum = 0;
+    for (let i = 0; i < totalPixels; i++) {
+      const idx = i * 4;
+      const v = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+      sum += v;
+    }
+    const mean = sum / totalPixels;
+    const thresholdDelta = 25; // sensitivity to detect contrast edges
+
+    let minX = targetWidth;
+    let minY = targetHeight;
+    let maxX = 0;
+    let maxY = 0;
+    let hits = 0;
+
+    for (let y = 0; y < targetHeight; y++) {
+      for (let x = 0; x < targetWidth; x++) {
+        const idx = (y * targetWidth + x) * 4;
+        const v = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        if (Math.abs(v - mean) > thresholdDelta) {
+          hits++;
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+      }
+    }
+
+    // If not enough contrast pixels, skip
+    if (hits < totalPixels * 0.01) return null;
+
+    const padX = targetWidth * 0.02;
+    const padY = targetHeight * 0.02;
+    minX = clamp(minX - padX, 0, targetWidth);
+    maxX = clamp(maxX + padX, 0, targetWidth);
+    minY = clamp(minY - padY, 0, targetHeight);
+    maxY = clamp(maxY + padY, 0, targetHeight);
+
+    // Normalize to [0,1]
+    const toNorm = (v: number, denom: number) => (denom ? v / denom : 0);
+    const tl = { x: toNorm(minX, targetWidth), y: toNorm(minY, targetHeight) };
+    const br = { x: toNorm(maxX, targetWidth), y: toNorm(maxY, targetHeight) };
+    const tr = { x: br.x, y: tl.y };
+    const bl = { x: tl.x, y: br.y };
+
+    return {
+      topLeft: tl,
+      topRight: tr,
+      bottomRight: br,
+      bottomLeft: bl,
+    };
+  }, [cameraOrientation]);
+
+  useEffect(() => {
+    if (!stream) {
+      setDetectedQuad(null);
+      return;
+    }
+
+    const tick = () => {
+      const quad = detectDocumentQuad();
+      if (quad) setDetectedQuad(quad);
+      detectionRafRef.current = requestAnimationFrame(tick);
+    };
+
+    detectionRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (detectionRafRef.current) {
+        cancelAnimationFrame(detectionRafRef.current);
+        detectionRafRef.current = null;
+      }
+    };
+  }, [stream, detectDocumentQuad]);
+
   const startCamera = async (orientation?: 'portrait' | 'landscape') => {
     const targetOrientation = orientation || cameraOrientation;
     try {
@@ -641,6 +752,7 @@ const Phone: React.FC = () => {
           facingMode: 'environment',
           width: { ideal: isPortrait ? 1080 : 1440, min: isPortrait ? 720 : 960 },
           height: { ideal: isPortrait ? 1440 : 1080, min: isPortrait ? 960 : 720 },
+          aspectRatio: isPortrait ? 3 / 4 : 4 / 3,
         },
       });
       setStream(mediaStream);
@@ -648,7 +760,15 @@ const Phone: React.FC = () => {
         videoRef.current.srcObject = mediaStream;
         // Wait for video metadata to load then play
         videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play();
+          const v = videoRef.current;
+          if (!v) return;
+          v.play();
+
+          // If the actual stream orientation differs, sync the UI label
+          if (v.videoWidth && v.videoHeight) {
+            const actualOrientation = v.videoHeight >= v.videoWidth ? 'portrait' : 'landscape';
+            setCameraOrientation(actualOrientation);
+          }
         };
       }
     } catch (err) {
@@ -668,6 +788,10 @@ const Phone: React.FC = () => {
     if (stream) {
       stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       setStream(null);
+    }
+    if (detectionRafRef.current) {
+      cancelAnimationFrame(detectionRafRef.current);
+      detectionRafRef.current = null;
     }
     // Stop auto-capture if running
     if (autoCaptureIntervalRef.current) {
@@ -972,8 +1096,27 @@ const Phone: React.FC = () => {
       if (autoCaptureIntervalRef.current) {
         clearInterval(autoCaptureIntervalRef.current);
       }
+      if (detectionRafRef.current) {
+        cancelAnimationFrame(detectionRafRef.current);
+        detectionRafRef.current = null;
+      }
     };
   }, [stream]);
+
+  const defaultInset = 0.08;
+  const overlayQuad: DetectedQuad = detectedQuad ?? {
+    topLeft: { x: defaultInset, y: defaultInset },
+    topRight: { x: 1 - defaultInset, y: defaultInset },
+    bottomRight: { x: 1 - defaultInset, y: 1 - defaultInset },
+    bottomLeft: { x: defaultInset, y: 1 - defaultInset },
+  };
+
+  const overlayBoxStyles = {
+    top: `${overlayQuad.topLeft.y * 100}%`,
+    left: `${overlayQuad.topLeft.x * 100}%`,
+    right: `${(1 - overlayQuad.topRight.x) * 100}%`,
+    bottom: `${(1 - overlayQuad.bottomLeft.y) * 100}%`,
+  } as const;
 
   return (
     <VStack align="stretch" spacing={10} pb={16}>
@@ -1303,10 +1446,10 @@ const Phone: React.FC = () => {
                     {/* Document Frame Guide Overlay */}
                     <Box
                       position="absolute"
-                      top="8%"
-                      left="8%"
-                      right="8%"
-                      bottom="8%"
+                      top={overlayBoxStyles.top}
+                      left={overlayBoxStyles.left}
+                      right={overlayBoxStyles.right}
+                      bottom={overlayBoxStyles.bottom}
                       border="3px dashed rgba(69, 202, 255, 0.7)"
                       borderRadius="lg"
                       pointerEvents="none"
@@ -1320,6 +1463,52 @@ const Phone: React.FC = () => {
                       <Box position="absolute" top="-3px" right="-3px" w="25px" h="25px" borderTop="4px solid #45CAFF" borderRight="4px solid #45CAFF" borderTopRightRadius="md" />
                       <Box position="absolute" bottom="-3px" left="-3px" w="25px" h="25px" borderBottom="4px solid #45CAFF" borderLeft="4px solid #45CAFF" borderBottomLeftRadius="md" />
                       <Box position="absolute" bottom="-3px" right="-3px" w="25px" h="25px" borderBottom="4px solid #45CAFF" borderRight="4px solid #45CAFF" borderBottomRightRadius="md" />
+
+                      {/* Detected corner dots (normalized positions) */}
+                      <Box
+                        position="absolute"
+                        w="10px"
+                        h="10px"
+                        borderRadius="full"
+                        bg="rgba(69,202,255,0.85)"
+                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
+                        transform="translate(-50%, -50%)"
+                        left={`${overlayQuad.topLeft.x * 100}%`}
+                        top={`${overlayQuad.topLeft.y * 100}%`}
+                      />
+                      <Box
+                        position="absolute"
+                        w="10px"
+                        h="10px"
+                        borderRadius="full"
+                        bg="rgba(69,202,255,0.85)"
+                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
+                        transform="translate(-50%, -50%)"
+                        left={`${overlayQuad.topRight.x * 100}%`}
+                        top={`${overlayQuad.topRight.y * 100}%`}
+                      />
+                      <Box
+                        position="absolute"
+                        w="10px"
+                        h="10px"
+                        borderRadius="full"
+                        bg="rgba(69,202,255,0.85)"
+                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
+                        transform="translate(-50%, -50%)"
+                        left={`${overlayQuad.bottomRight.x * 100}%`}
+                        top={`${overlayQuad.bottomRight.y * 100}%`}
+                      />
+                      <Box
+                        position="absolute"
+                        w="10px"
+                        h="10px"
+                        borderRadius="full"
+                        bg="rgba(69,202,255,0.85)"
+                        boxShadow="0 0 10px rgba(69,202,255,0.6)"
+                        transform="translate(-50%, -50%)"
+                        left={`${overlayQuad.bottomLeft.x * 100}%`}
+                        top={`${overlayQuad.bottomLeft.y * 100}%`}
+                      />
                       
                       {/* Center crosshair */}
                       <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="30px" h="1px" bg="rgba(69, 202, 255, 0.5)" />
