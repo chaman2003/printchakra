@@ -84,6 +84,7 @@ const Phone: React.FC = () => {
   const [showControls, setShowControls] = useState(true);
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
+  const [cameraOrientation, setCameraOrientation] = useState<'portrait' | 'landscape'>('portrait');
   
   // Countdown state for auto-capture from dashboard
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -625,15 +626,21 @@ const Phone: React.FC = () => {
     captureInBackgroundRef.current = captureInBackground;
   }, [captureInBackground]);
 
-  const startCamera = async () => {
+  const startCamera = async (orientation?: 'portrait' | 'landscape') => {
+    const targetOrientation = orientation || cameraOrientation;
     try {
-      // Request portrait orientation camera (3:4 ratio = 0.75 width/height)
-      // For portrait: width < height, so we request width:height as 3:4
+      // Stop existing stream first
+      if (stream) {
+        stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
+      }
+      
+      // Request camera with appropriate orientation
+      const isPortrait = targetOrientation === 'portrait';
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: 1080, min: 720 },
-          height: { ideal: 1440, min: 960 },  // 3:4 portrait ratio
+          width: { ideal: isPortrait ? 1080 : 1440, min: isPortrait ? 720 : 960 },
+          height: { ideal: isPortrait ? 1440 : 1080, min: isPortrait ? 960 : 720 },
         },
       });
       setStream(mediaStream);
@@ -646,6 +653,14 @@ const Phone: React.FC = () => {
       }
     } catch (err) {
       alert('Failed to access camera: ' + (err as Error).message);
+    }
+  };
+
+  const toggleCameraOrientation = async () => {
+    const newOrientation = cameraOrientation === 'portrait' ? 'landscape' : 'portrait';
+    setCameraOrientation(newOrientation);
+    if (stream) {
+      await startCamera(newOrientation);
     }
   };
 
@@ -1241,12 +1256,12 @@ const Phone: React.FC = () => {
                   className="camera-container-normal"
                   bg="black"
                   sx={{
-                    // Portrait aspect ratio container (3:4)
-                    aspectRatio: '3 / 4',
+                    // Dynamic aspect ratio based on orientation
+                    aspectRatio: cameraOrientation === 'portrait' ? '3 / 4' : '4 / 3',
                     width: isFullScreen ? '100vw' : '100%',
                     height: isFullScreen ? '100vh' : 'auto',
-                    maxWidth: isFullScreen ? '100vw' : '400px',
-                    maxHeight: isFullScreen ? '100vh' : '600px',
+                    maxWidth: isFullScreen ? '100vw' : cameraOrientation === 'portrait' ? '400px' : '600px',
+                    maxHeight: isFullScreen ? '100vh' : cameraOrientation === 'portrait' ? '600px' : '450px',
                     mx: 'auto',
                     display: 'flex',
                     alignItems: 'center',
@@ -1270,22 +1285,53 @@ const Phone: React.FC = () => {
                       style={{ 
                         width: '100%', 
                         height: '100%', 
-                        objectFit: 'cover',  // Fill the portrait container
+                        objectFit: 'contain',  // Show full camera preview without cropping
                         display: 'block',
                         backgroundColor: 'black',
                       }}
                     />
                     <canvas ref={canvasRef} style={{ display: 'none' }} />
                     
-                    {/* Center guide line */}
+                    {/* Document Frame Guide Overlay */}
                     <Box
                       position="absolute"
-                      left="50%"
-                      top="10%"
-                      transform="translateX(-50%)"
-                      h="80%"
-                      borderLeft="1px dashed rgba(255,255,255,0.35)"
-                    />
+                      top="8%"
+                      left="8%"
+                      right="8%"
+                      bottom="8%"
+                      border="3px dashed rgba(69, 202, 255, 0.7)"
+                      borderRadius="lg"
+                      pointerEvents="none"
+                      zIndex={2}
+                      sx={{
+                        boxShadow: 'inset 0 0 30px rgba(69, 202, 255, 0.15)',
+                      }}
+                    >
+                      {/* Corner markers */}
+                      <Box position="absolute" top="-3px" left="-3px" w="25px" h="25px" borderTop="4px solid #45CAFF" borderLeft="4px solid #45CAFF" borderTopLeftRadius="md" />
+                      <Box position="absolute" top="-3px" right="-3px" w="25px" h="25px" borderTop="4px solid #45CAFF" borderRight="4px solid #45CAFF" borderTopRightRadius="md" />
+                      <Box position="absolute" bottom="-3px" left="-3px" w="25px" h="25px" borderBottom="4px solid #45CAFF" borderLeft="4px solid #45CAFF" borderBottomLeftRadius="md" />
+                      <Box position="absolute" bottom="-3px" right="-3px" w="25px" h="25px" borderBottom="4px solid #45CAFF" borderRight="4px solid #45CAFF" borderBottomRightRadius="md" />
+                      
+                      {/* Center crosshair */}
+                      <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="30px" h="1px" bg="rgba(69, 202, 255, 0.5)" />
+                      <Box position="absolute" top="50%" left="50%" transform="translate(-50%, -50%)" w="1px" h="30px" bg="rgba(69, 202, 255, 0.5)" />
+                      
+                      {/* Frame guide label */}
+                      <Text
+                        position="absolute"
+                        bottom="-28px"
+                        left="50%"
+                        transform="translateX(-50%)"
+                        fontSize="xs"
+                        color="cyan.300"
+                        fontWeight="semibold"
+                        textShadow="0 0 10px rgba(0,0,0,0.8)"
+                        whiteSpace="nowrap"
+                      >
+                        📄 Align document within frame
+                      </Text>
+                    </Box>
 
                     {/* Eye Toggle Button - Top Right */}
                     <Tooltip
@@ -1458,6 +1504,30 @@ const Phone: React.FC = () => {
                             Capture
                           </Button>
                         </Tooltip>
+                        <Tooltip
+                          label={`Switch to ${cameraOrientation === 'portrait' ? 'landscape' : 'portrait'} mode`}
+                          hasArrow
+                        >
+                          <Button
+                            colorScheme="purple"
+                            variant="outline"
+                            size="lg"
+                            onClick={toggleCameraOrientation}
+                            isDisabled={!stream || autoCapture}
+                            minW="160px"
+                            leftIcon={
+                              <Box
+                                as="span"
+                                transform={cameraOrientation === 'landscape' ? 'rotate(90deg)' : 'none'}
+                                transition="transform 0.3s"
+                              >
+                                📱
+                              </Box>
+                            }
+                          >
+                            {cameraOrientation === 'portrait' ? 'Portrait' : 'Landscape'}
+                          </Button>
+                        </Tooltip>
                       </VStack>
                     )}
                   </Box>
@@ -1491,6 +1561,28 @@ const Phone: React.FC = () => {
                         animation={autoCapture ? 'pulse 2s infinite' : 'none'}
                       >
                         {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
+                      </Button>
+                    </Tooltip>
+                    <Tooltip
+                      label={`Switch to ${cameraOrientation === 'portrait' ? 'landscape' : 'portrait'} mode`}
+                      hasArrow
+                    >
+                      <Button
+                        variant="outline"
+                        colorScheme="purple"
+                        onClick={toggleCameraOrientation}
+                        isDisabled={!stream || autoCapture}
+                        leftIcon={
+                          <Box
+                            as="span"
+                            transform={cameraOrientation === 'landscape' ? 'rotate(90deg)' : 'none'}
+                            transition="transform 0.3s"
+                          >
+                            📱
+                          </Box>
+                        }
+                      >
+                        {cameraOrientation === 'portrait' ? 'Portrait' : 'Landscape'}
                       </Button>
                     </Tooltip>
                     <Tooltip

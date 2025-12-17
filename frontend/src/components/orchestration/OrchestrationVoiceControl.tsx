@@ -2,6 +2,8 @@
  * OrchestrationVoiceControl Component
  * Compact voice AI assistant embedded in the Orchestration Modal
  * Handles commands like "scroll down", "select document", "apply settings"
+ * 
+ * Integrates with AI Assist command parsing for consistent command recognition
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -26,15 +28,20 @@ import {
 import apiClient from '../../apiClient';
 import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../../utils/audioUtils';
 import Iconify from '../common/Iconify';
+import { parseCommand } from '../../aiassist';
 
 interface OrchestrationVoiceControlProps {
   mode: 'print' | 'scan';
   onCommand: (command: string, params?: any) => void;
+  currentStep?: number;
+  onStepChange?: (step: number) => void;
 }
 
 const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
   mode,
   onCommand,
+  currentStep = 1,
+  onStepChange,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -204,6 +211,43 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
   const parseAndExecuteCommand = (transcription: string, aiResponse: string) => {
     const text = transcription.toLowerCase();
 
+    // Use AI Assist command parser for consistent recognition
+    const parsed = parseCommand(text);
+    
+    if (parsed && parsed.confidence > 0.6) {
+      // Map parsed action to command
+      const commandMap: Record<string, { cmd: string; params?: any }> = {
+        'SELECT_DOCUMENT': { cmd: 'SELECT_DOCUMENT' },
+        'SWITCH_SECTION': { cmd: 'SWITCH_SECTION', params: parsed.params },
+        'NEXT_DOCUMENT': { cmd: 'NEXT_DOCUMENT' },
+        'PREV_DOCUMENT': { cmd: 'PREV_DOCUMENT' },
+        'SCROLL_DOWN': { cmd: 'SCROLL_DOWN' },
+        'SCROLL_UP': { cmd: 'SCROLL_UP' },
+        'APPLY_SETTINGS': { cmd: 'APPLY_SETTINGS' },
+        'GO_BACK': { cmd: 'GO_BACK' },
+        'CANCEL': { cmd: 'CANCEL' },
+        'CONFIRM': { cmd: 'CONFIRM' },
+        'SET_LAYOUT': { cmd: 'SET_LAYOUT', params: parsed.params },
+        'SET_COLOR_MODE': { cmd: 'SET_COLOR_MODE', params: parsed.params },
+        'SET_PAPER_SIZE': { cmd: 'SET_PAPER_SIZE', params: parsed.params },
+        'SET_RESOLUTION': { cmd: 'SET_RESOLUTION', params: parsed.params },
+        'SET_COPIES': { cmd: 'SET_COPIES', params: parsed.params },
+        'SET_DUPLEX': { cmd: 'SET_DUPLEX', params: parsed.params },
+        'SET_QUALITY': { cmd: 'SET_QUALITY', params: parsed.params },
+        'TOGGLE_OCR': { cmd: 'TOGGLE_OCR', params: { enabled: true } },
+        'TOGGLE_TEXT_MODE': { cmd: 'TOGGLE_TEXT_MODE', params: parsed.params },
+        'HELP': { cmd: 'HELP' },
+        'STATUS': { cmd: 'STATUS' },
+      };
+
+      const mapping = commandMap[parsed.action];
+      if (mapping) {
+        onCommand(mapping.cmd, mapping.params);
+        return;
+      }
+    }
+
+    // Fallback: Direct text matching for common commands
     // Document selection commands
     if (text.includes('select') && (text.includes('document') || text.includes('file'))) {
       onCommand('SELECT_DOCUMENT');
@@ -211,24 +255,30 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
     }
 
     // Scrolling commands
-    if (text.includes('scroll down') || text.includes('scroll to bottom')) {
+    if (text.includes('scroll down') || text.includes('scroll to bottom') || text.includes('go down')) {
       onCommand('SCROLL_DOWN');
       return;
     }
-    if (text.includes('scroll up') || text.includes('scroll to top')) {
+    if (text.includes('scroll up') || text.includes('scroll to top') || text.includes('go up')) {
       onCommand('SCROLL_UP');
       return;
     }
 
     // Apply/Submit commands
-    if (text.includes('apply') || text.includes('submit') || text.includes('continue')) {
+    if (text.includes('apply') || text.includes('submit') || text.includes('continue') || text.includes('next')) {
       onCommand('APPLY_SETTINGS');
+      if (onStepChange && currentStep < 3) {
+        onStepChange(currentStep + 1);
+      }
       return;
     }
 
     // Back/Previous commands
     if (text.includes('back') || text.includes('previous') || text.includes('go back')) {
       onCommand('GO_BACK');
+      if (onStepChange && currentStep > 1) {
+        onStepChange(currentStep - 1);
+      }
       return;
     }
 
@@ -238,46 +288,87 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
       return;
     }
 
+    // Confirm commands
+    if (text.includes('confirm') || text.includes('execute') || text.includes('start print') || text.includes('start scan')) {
+      onCommand('CONFIRM');
+      return;
+    }
+
     // Color mode commands
-    if (text.includes('color')) {
-      onCommand('SET_COLOR', { colorMode: 'color' });
+    if (text.includes('grayscale') || text.includes('grey') || text.includes('gray')) {
+      onCommand('SET_COLOR_MODE', { colorMode: 'grayscale' });
+      return;
+    }
+    if (text.includes('black and white') || text.includes('black & white') || text.includes('monochrome')) {
+      onCommand('SET_COLOR_MODE', { colorMode: 'bw' });
+      return;
+    }
+    if (text.includes('full color') || (text.includes('color') && !text.includes('grayscale'))) {
+      onCommand('SET_COLOR_MODE', { colorMode: 'color' });
       return;
     }
 
     // Layout commands
-    if (text.includes('portrait')) {
+    if (text.includes('portrait') || text.includes('vertical')) {
       onCommand('SET_LAYOUT', { layout: 'portrait' });
       return;
     }
-    if (text.includes('landscape')) {
+    if (text.includes('landscape') || text.includes('horizontal')) {
       onCommand('SET_LAYOUT', { layout: 'landscape' });
       return;
     }
 
-    // Resolution commands
-    if (text.includes('high') && text.includes('quality')) {
-      onCommand('SET_RESOLUTION', { dpi: 600 });
+    // Resolution/Quality commands
+    if (text.includes('high') && (text.includes('quality') || text.includes('resolution') || text.includes('dpi'))) {
+      onCommand('SET_RESOLUTION', { resolution: 600 });
+      onCommand('SET_QUALITY', { quality: 'high' });
       return;
     }
-    if (text.includes('low') && text.includes('quality')) {
-      onCommand('SET_RESOLUTION', { dpi: 150 });
+    if (text.includes('low') && (text.includes('quality') || text.includes('resolution') || text.includes('dpi'))) {
+      onCommand('SET_RESOLUTION', { resolution: 150 });
+      onCommand('SET_QUALITY', { quality: 'draft' });
+      return;
+    }
+    if (text.includes('300') && text.includes('dpi')) {
+      onCommand('SET_RESOLUTION', { resolution: 300 });
+      return;
+    }
+    if (text.includes('600') && text.includes('dpi')) {
+      onCommand('SET_RESOLUTION', { resolution: 600 });
       return;
     }
 
     // OCR toggle commands
-    if (text.includes('enable') && text.includes('ocr')) {
+    if ((text.includes('enable') || text.includes('turn on')) && (text.includes('ocr') || text.includes('text'))) {
       onCommand('TOGGLE_OCR', { enabled: true });
       return;
     }
-    if (text.includes('disable') && text.includes('ocr')) {
+    if ((text.includes('disable') || text.includes('turn off')) && (text.includes('ocr') || text.includes('text'))) {
       onCommand('TOGGLE_OCR', { enabled: false });
+      return;
+    }
+
+    // Copies command
+    const copiesMatch = text.match(/(\d+)\s*(copies|copy)/);
+    if (copiesMatch) {
+      onCommand('SET_COPIES', { copies: parseInt(copiesMatch[1], 10) });
+      return;
+    }
+
+    // Duplex command
+    if (text.includes('double sided') || text.includes('duplex') || text.includes('both sides')) {
+      onCommand('SET_DUPLEX', { duplex: true });
+      return;
+    }
+    if (text.includes('single sided') || text.includes('one side')) {
+      onCommand('SET_DUPLEX', { duplex: false });
       return;
     }
 
     // If no command matched, show info toast
     toast({
       title: 'Command not recognized',
-      description: 'Try: "select document", "scroll down", "apply settings"',
+      description: 'Try: "select document", "scroll down", "apply settings", "landscape", "color mode"',
       status: 'info',
       duration: 3000,
     });

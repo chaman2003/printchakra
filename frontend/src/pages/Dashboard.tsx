@@ -1884,6 +1884,235 @@ const Dashboard: React.FC = () => {
           break;
         }
 
+        // ==================== Settings Commands ====================
+        case 'set_layout': {
+          const layout = params?.layout || params?.orientation;
+          if (layout && orchestrateMode) {
+            const key = orchestrateMode === 'print' ? 'printLayout' : 'scanLayout';
+            setOrchestrateOptions(prev => ({ ...prev, [key]: layout }));
+            toast({
+              title: 'Layout Updated',
+              description: `Set to ${layout}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_color':
+        case 'set_color_mode': {
+          const colorMode = params?.colorMode || params?.color_mode;
+          if (colorMode && orchestrateMode) {
+            const key = orchestrateMode === 'print' ? 'printColorMode' : 'scanColorMode';
+            setOrchestrateOptions(prev => ({ ...prev, [key]: colorMode }));
+            const displayMode = colorMode === 'bw' ? 'Black & White' : colorMode;
+            toast({
+              title: 'Color Mode Updated',
+              description: `Set to ${displayMode}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_paper_size': {
+          const paperSize = params?.paperSize || params?.paper_size;
+          if (paperSize && orchestrateMode) {
+            const key = orchestrateMode === 'print' ? 'printPaperSize' : 'scanPaperSize';
+            setOrchestrateOptions(prev => ({ ...prev, [key]: paperSize }));
+            toast({
+              title: 'Paper Size Updated',
+              description: `Set to ${paperSize}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_resolution': {
+          const resolution = params?.resolution || params?.dpi;
+          if (resolution && orchestrateMode) {
+            const key = orchestrateMode === 'print' ? 'printResolution' : 'scanResolution';
+            setOrchestrateOptions(prev => ({ ...prev, [key]: String(resolution) }));
+            toast({
+              title: 'Resolution Updated',
+              description: `Set to ${resolution} DPI`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_copies': {
+          const copies = params?.copies || params?.count;
+          if (copies && orchestrateMode === 'print') {
+            setOrchestrateOptions(prev => ({ ...prev, printCopies: String(copies) }));
+            toast({
+              title: 'Copies Updated',
+              description: `Set to ${copies} copies`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_duplex': {
+          const duplex = params?.duplex ?? params?.double_sided ?? true;
+          if (orchestrateMode === 'print') {
+            setOrchestrateOptions(prev => ({ ...prev, printDuplex: duplex }));
+            toast({
+              title: 'Duplex Updated',
+              description: `Double-sided ${duplex ? 'enabled' : 'disabled'}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_margins': {
+          const margins = params?.margins;
+          if (margins && orchestrateMode === 'print') {
+            setOrchestrateOptions(prev => ({ ...prev, printMargins: margins }));
+            toast({
+              title: 'Margins Updated',
+              description: `Set to ${margins}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_scale': {
+          const scale = params?.scale;
+          if (scale && orchestrateMode === 'print') {
+            setOrchestrateOptions(prev => ({ ...prev, printScale: String(scale) }));
+            toast({
+              title: 'Scale Updated',
+              description: `Set to ${scale}%`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_quality': {
+          const quality = params?.quality;
+          if (quality && orchestrateMode) {
+            const key = orchestrateMode === 'print' ? 'printQuality' : 'scanQuality';
+            setOrchestrateOptions(prev => ({ ...prev, [key]: quality }));
+            toast({
+              title: 'Quality Updated',
+              description: `Set to ${quality}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_pages': {
+          const pages = params?.pages || params?.page_mode;
+          if (pages && orchestrateMode) {
+            const key = orchestrateMode === 'print' ? 'printPages' : 'scanPageMode';
+            setOrchestrateOptions(prev => ({ ...prev, [key]: pages }));
+            if (params?.customRange || params?.custom_range) {
+              const rangeKey = orchestrateMode === 'print' ? 'printCustomRange' : 'scanCustomRange';
+              setOrchestrateOptions(prev => ({ 
+                ...prev, 
+                [rangeKey]: params?.customRange || params?.custom_range 
+              }));
+            }
+            toast({
+              title: 'Page Selection Updated',
+              description: `Set to ${pages}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'toggle_ocr':
+        case 'toggle_text_mode': {
+          const enabled = params?.enabled ?? params?.textMode ?? true;
+          if (orchestrateMode === 'scan') {
+            setOrchestrateOptions(prev => ({ ...prev, scanTextMode: enabled }));
+            toast({
+              title: 'OCR Mode Updated',
+              description: `OCR ${enabled ? 'enabled' : 'disabled'}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'set_format': {
+          const format = params?.format;
+          if (format && orchestrateMode === 'scan') {
+            setOrchestrateOptions(prev => ({ ...prev, scanFormat: format }));
+            toast({
+              title: 'Format Updated',
+              description: `Set to ${format.toUpperCase()}`,
+              status: 'success',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'scroll_down': {
+          // Dispatch scroll event for orchestration modal
+          const modalBody = document.querySelector('[data-orchestration-scroll]');
+          if (modalBody) {
+            modalBody.scrollBy({ top: 300, behavior: 'smooth' });
+          }
+          break;
+        }
+
+        case 'scroll_up': {
+          const modalBody = document.querySelector('[data-orchestration-scroll]');
+          if (modalBody) {
+            modalBody.scrollBy({ top: -300, behavior: 'smooth' });
+          }
+          break;
+        }
+
+        case 'apply_settings':
+        case 'go_next': {
+          if (orchestrateStep < 3) {
+            setOrchestrateStep(prev => prev + 1);
+            toast({
+              title: 'Moving Forward',
+              description: `Step ${orchestrateStep + 1} of 3`,
+              status: 'info',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
+        case 'go_back': {
+          if (orchestrateStep > 1) {
+            setOrchestrateStep(prev => prev - 1);
+            toast({
+              title: 'Going Back',
+              description: `Step ${orchestrateStep - 1} of 3`,
+              status: 'info',
+              duration: 2000,
+            });
+          }
+          break;
+        }
+
         default:
           console.warn(`Unknown voice command: ${command}`);
       }
@@ -1912,9 +2141,12 @@ const Dashboard: React.FC = () => {
       orchestrateOptions.scanLayout,
       orchestrateOptions.scanResolution,
       orchestrateModal,
+      orchestrateStep,
       selectDocumentForVoice,
       selectedFiles.length,
       selectionMode,
+      setOrchestrateOptions,
+      setOrchestrateStep,
       toast,
       autoCaptureEnabled,
     ]
@@ -4281,6 +4513,7 @@ const Dashboard: React.FC = () => {
                 <>
               <ModalBody
                 ref={modalBodyRef}
+                data-orchestration-scroll="scan"
                 py="1rem"
                 px="1.5rem"
                 maxH={`calc(${MODAL_CONFIG.modalBody.maxHeight})`}
@@ -5102,6 +5335,7 @@ const Dashboard: React.FC = () => {
               />
               <ModalBody
                 ref={modalBodyRef}
+                data-orchestration-scroll="print"
                 py={4}
                 px={6}
                 maxH="calc(85vh - 140px)"
