@@ -640,81 +640,109 @@ const Phone: React.FC = () => {
 
   const detectDocumentQuad = useCallback((): DetectedQuad | null => {
     const video = videoRef.current;
-    if (!video || video.readyState < 2) return null;
+    if (!video || video.readyState < 2 || !video.videoWidth) return null;
 
-    // Use a small offscreen canvas to keep detection light-weight
+    // Use offscreen canvas for edge detection
     const targetWidth = 320;
-    const aspectRatio = video.videoHeight && video.videoWidth
-      ? video.videoHeight / video.videoWidth
-      : cameraOrientation === 'portrait' ? 4 / 3 : 3 / 4;
-    const targetHeight = Math.max(1, Math.round(targetWidth * aspectRatio));
+    const aspectRatio = video.videoHeight / video.videoWidth;
+    const targetHeight = Math.round(targetWidth * aspectRatio);
 
     const canvas = docDetectionCanvasRef.current ?? document.createElement('canvas');
     docDetectionCanvasRef.current = canvas;
     canvas.width = targetWidth;
     canvas.height = targetHeight;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
 
     ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-    const { data } = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    const { data, width, height } = imageData;
 
-    const totalPixels = targetWidth * targetHeight;
-    if (!totalPixels) return null;
+    // Apply Sobel edge detection
+    const edgeStrength: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    
+    const getGray = (x: number, y: number) => {
+      if (x < 0 || x >= width || y < 0 || y >= height) return 0;
+      const idx = (y * width + x) * 4;
+      return (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+    };
 
-    let sum = 0;
-    for (let i = 0; i < totalPixels; i++) {
-      const idx = i * 4;
-      const v = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-      sum += v;
+    // Sobel kernels
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const gx = 
+          -1 * getGray(x - 1, y - 1) + 1 * getGray(x + 1, y - 1) +
+          -2 * getGray(x - 1, y) + 2 * getGray(x + 1, y) +
+          -1 * getGray(x - 1, y + 1) + 1 * getGray(x + 1, y + 1);
+        const gy = 
+          -1 * getGray(x - 1, y - 1) - 2 * getGray(x, y - 1) - 1 * getGray(x + 1, y - 1) +
+          1 * getGray(x - 1, y + 1) + 2 * getGray(x, y + 1) + 1 * getGray(x + 1, y + 1);
+        edgeStrength[y][x] = Math.sqrt(gx * gx + gy * gy);
+      }
     }
-    const mean = sum / totalPixels;
-    const thresholdDelta = 25; // sensitivity to detect contrast edges
 
-    let minX = targetWidth;
-    let minY = targetHeight;
-    let maxX = 0;
-    let maxY = 0;
-    let hits = 0;
+    // Find edge threshold (top 10% of edge values)
+    const allEdges = edgeStrength.flat().filter(v => v > 0);
+    allEdges.sort((a, b) => b - a);
+    const threshold = allEdges[Math.floor(allEdges.length * 0.1)] || 50;
 
-    for (let y = 0; y < targetHeight; y++) {
-      for (let x = 0; x < targetWidth; x++) {
-        const idx = (y * targetWidth + x) * 4;
-        const v = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-        if (Math.abs(v - mean) > thresholdDelta) {
-          hits++;
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
+    // Collect strong edge points
+    const edgePoints: { x: number; y: number }[] = [];
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        if (edgeStrength[y][x] > threshold) {
+          edgePoints.push({ x, y });
         }
       }
     }
 
-    // If not enough contrast pixels, skip
-    if (hits < totalPixels * 0.01) return null;
+    if (edgePoints.length < 100) return null;
 
-    const padX = targetWidth * 0.02;
-    const padY = targetHeight * 0.02;
-    minX = clamp(minX - padX, 0, targetWidth);
-    maxX = clamp(maxX + padX, 0, targetWidth);
-    minY = clamp(minY - padY, 0, targetHeight);
-    maxY = clamp(maxY + padY, 0, targetHeight);
+    // Find convex hull-like bounding by scanning from each direction
+    const margin = 0.05;
+    const marginX = width * margin;
+    const marginY = height * margin;
 
-    // Normalize to [0,1]
-    const toNorm = (v: number, denom: number) => (denom ? v / denom : 0);
-    const tl = { x: toNorm(minX, targetWidth), y: toNorm(minY, targetHeight) };
-    const br = { x: toNorm(maxX, targetWidth), y: toNorm(maxY, targetHeight) };
-    const tr = { x: br.x, y: tl.y };
-    const bl = { x: tl.x, y: br.y };
+    // Find corners by scanning edge points
+    let topLeft = { x: width, y: height };
+    let topRight = { x: 0, y: height };
+    let bottomLeft = { x: width, y: 0 };
+    let bottomRight = { x: 0, y: 0 };
+
+    for (const p of edgePoints) {
+      // Top-left: minimize x + y
+      if (p.x + p.y < topLeft.x + topLeft.y) topLeft = { ...p };
+      // Top-right: maximize x - y
+      if (p.x - p.y > topRight.x - topRight.y) topRight = { ...p };
+      // Bottom-left: minimize x - y
+      if (p.x - p.y < bottomLeft.x - bottomLeft.y) bottomLeft = { ...p };
+      // Bottom-right: maximize x + y
+      if (p.x + p.y > bottomRight.x + bottomRight.y) bottomRight = { ...p };
+    }
+
+    // Validate quad - corners should form a reasonable quadrilateral
+    const minArea = width * height * 0.05;
+    const area = Math.abs(
+      (topRight.x - topLeft.x) * (bottomLeft.y - topLeft.y) -
+      (bottomLeft.x - topLeft.x) * (topRight.y - topLeft.y)
+    ) / 2 + Math.abs(
+      (bottomRight.x - topRight.x) * (bottomLeft.y - topRight.y) -
+      (bottomLeft.x - topRight.x) * (bottomRight.y - topRight.y)
+    ) / 2;
+
+    if (area < minArea) return null;
+
+    // Apply small padding and clamp
+    const pad = 2;
+    const norm = (val: number, max: number) => clamp((val + pad) / max, 0, 1);
 
     return {
-      topLeft: tl,
-      topRight: tr,
-      bottomRight: br,
-      bottomLeft: bl,
+      topLeft: { x: norm(topLeft.x - pad, width), y: norm(topLeft.y - pad, height) },
+      topRight: { x: norm(topRight.x + pad, width), y: norm(topRight.y - pad, height) },
+      bottomRight: { x: norm(bottomRight.x + pad, width), y: norm(bottomRight.y + pad, height) },
+      bottomLeft: { x: norm(bottomLeft.x - pad, width), y: norm(bottomLeft.y + pad, height) },
     };
-  }, [cameraOrientation]);
+  }, []);
 
   useEffect(() => {
     if (!stream) {
@@ -722,9 +750,39 @@ const Phone: React.FC = () => {
       return;
     }
 
+    let lastQuad: DetectedQuad | null = null;
+    const smoothingFactor = 0.3; // Lower = smoother transitions
+
     const tick = () => {
       const quad = detectDocumentQuad();
-      if (quad) setDetectedQuad(quad);
+      if (quad) {
+        // Smooth the quad transitions to reduce jitter
+        if (lastQuad) {
+          const smoothed: DetectedQuad = {
+            topLeft: {
+              x: lastQuad.topLeft.x + (quad.topLeft.x - lastQuad.topLeft.x) * smoothingFactor,
+              y: lastQuad.topLeft.y + (quad.topLeft.y - lastQuad.topLeft.y) * smoothingFactor,
+            },
+            topRight: {
+              x: lastQuad.topRight.x + (quad.topRight.x - lastQuad.topRight.x) * smoothingFactor,
+              y: lastQuad.topRight.y + (quad.topRight.y - lastQuad.topRight.y) * smoothingFactor,
+            },
+            bottomRight: {
+              x: lastQuad.bottomRight.x + (quad.bottomRight.x - lastQuad.bottomRight.x) * smoothingFactor,
+              y: lastQuad.bottomRight.y + (quad.bottomRight.y - lastQuad.bottomRight.y) * smoothingFactor,
+            },
+            bottomLeft: {
+              x: lastQuad.bottomLeft.x + (quad.bottomLeft.x - lastQuad.bottomLeft.x) * smoothingFactor,
+              y: lastQuad.bottomLeft.y + (quad.bottomLeft.y - lastQuad.bottomLeft.y) * smoothingFactor,
+            },
+          };
+          lastQuad = smoothed;
+          setDetectedQuad(smoothed);
+        } else {
+          lastQuad = quad;
+          setDetectedQuad(quad);
+        }
+      }
       detectionRafRef.current = requestAnimationFrame(tick);
     };
 
@@ -744,30 +802,30 @@ const Phone: React.FC = () => {
       if (stream) {
         stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       }
-      
-      // Request camera with appropriate orientation
-      const isPortrait = targetOrientation === 'portrait';
-      
-      // Use consistent 3:4 / 4:3 aspect ratio for both orientations to avoid cropping
-      const constraints: MediaStreamConstraints = {
+
+      // Get best available camera resolution
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
-          width: { ideal: isPortrait ? 1080 : 1440 },
-          height: { ideal: isPortrait ? 1440 : 1080 },
-          aspectRatio: { ideal: isPortrait ? 0.75 : 1.3333333333 }
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
         },
-      };
-
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      });
+      
       setStream(mediaStream);
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Wait for video metadata to load then play
         videoRef.current.onloadedmetadata = () => {
           const v = videoRef.current;
           if (!v) return;
           v.play().catch(e => console.error("Video play failed:", e));
+          
+          // Sync orientation based on actual stream dimensions
+          if (v.videoWidth && v.videoHeight) {
+            const isActualPortrait = v.videoHeight > v.videoWidth;
+            setCameraOrientation(isActualPortrait ? 'portrait' : 'landscape');
+          }
         };
       }
     } catch (err) {
@@ -1109,21 +1167,6 @@ const Phone: React.FC = () => {
     };
   }, [stream]);
 
-  const defaultInset = 0.08;
-  const overlayQuad: DetectedQuad = detectedQuad ?? {
-    topLeft: { x: defaultInset, y: defaultInset },
-    topRight: { x: 1 - defaultInset, y: defaultInset },
-    bottomRight: { x: 1 - defaultInset, y: 1 - defaultInset },
-    bottomLeft: { x: defaultInset, y: 1 - defaultInset },
-  };
-
-  const overlayBoxStyles = {
-    top: `${overlayQuad.topLeft.y * 100}%`,
-    left: `${overlayQuad.topLeft.x * 100}%`,
-    right: `${(1 - overlayQuad.topRight.x) * 100}%`,
-    bottom: `${(1 - overlayQuad.bottomLeft.y) * 100}%`,
-  } as const;
-
   return (
     <VStack align="stretch" spacing={10} pb={16}>
       <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
@@ -1394,67 +1437,45 @@ const Phone: React.FC = () => {
                 </Text>
               </Stack>
             ) : (
-              <Stack spacing={6}>
+              <Stack spacing={4}>
+                {/* Camera Feed Container */}
                 <Box
-                  key={cameraOrientation}
                   ref={cameraContainerRef}
                   position="relative"
-                  borderRadius="2xl"
+                  borderRadius="xl"
                   overflow="hidden"
-                  border="1px solid rgba(69,202,255,0.25)"
-                  boxShadow="halo"
-                  className="camera-container-normal"
                   bg="black"
+                  border="2px solid"
+                  borderColor={detectedQuad ? "green.400" : "gray.600"}
+                  transition="border-color 0.3s"
                   sx={{
-                    // Dynamic aspect ratio based on orientation
-                    aspectRatio: cameraOrientation === 'portrait' ? '3 / 4' : '4 / 3',
-                    width: isFullScreen ? '100vw' : '100%',
+                    width: '100%',
+                    maxWidth: isFullScreen ? '100vw' : '100%',
                     height: isFullScreen ? '100vh' : 'auto',
-                    maxWidth: isFullScreen
-                      ? '100vw'
-                      : cameraOrientation === 'portrait'
-                        ? { base: '100%', md: '450px' }
-                        : { base: '100%', md: '800px' },
-                    maxHeight: isFullScreen
-                      ? '100vh'
-                      : { base: '80vh', md: '700px' },
+                    aspectRatio: 'auto',
                     mx: 'auto',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'all 0.3s ease-in-out',
                   }}
                 >
-                  <Box 
-                    position="relative" 
-                    bg="black" 
-                    width="100%" 
-                    height="100%"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <video
-                      key={cameraOrientation}
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      style={{ 
-                        width: '100%', 
-                        height: '100%', 
-                        objectFit: 'contain',  // Show full camera preview without cropping
-                        display: 'block',
-                        backgroundColor: 'black',
-                        borderRadius: 'inherit',
-                      }}
-                    />
-                    <canvas ref={canvasRef} style={{ display: 'none' }} />
-                    
-                    {/* Adaptive Document Frame Overlay (SVG Polygon) */}
+                  {/* Video Element */}
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    style={{
+                      width: '100%',
+                      height: isFullScreen ? '100vh' : 'auto',
+                      maxHeight: isFullScreen ? '100vh' : '70vh',
+                      display: 'block',
+                      backgroundColor: 'black',
+                      objectFit: 'contain',
+                    }}
+                  />
+                  <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+                  {/* Document Detection Overlay - SVG with 4-point polygon */}
+                  {stream && (
                     <svg
-                      viewBox="0 0 100 100"
-                      preserveAspectRatio="none"
                       style={{
                         position: 'absolute',
                         top: 0,
@@ -1462,315 +1483,328 @@ const Phone: React.FC = () => {
                         width: '100%',
                         height: '100%',
                         pointerEvents: 'none',
-                        zIndex: 2,
                       }}
+                      viewBox="0 0 100 100"
+                      preserveAspectRatio="none"
                     >
-                      <polygon
-                        points={`
-                          ${overlayQuad.topLeft.x * 100},${overlayQuad.topLeft.y * 100} 
-                          ${overlayQuad.topRight.x * 100},${overlayQuad.topRight.y * 100} 
-                          ${overlayQuad.bottomRight.x * 100},${overlayQuad.bottomRight.y * 100} 
-                          ${overlayQuad.bottomLeft.x * 100},${overlayQuad.bottomLeft.y * 100}
-                        `}
-                        fill="rgba(69, 202, 255, 0.15)"
-                        stroke="#45CAFF"
-                        strokeWidth="0.8"
-                        strokeDasharray="2,2"
+                      {/* Semi-transparent overlay outside detected area */}
+                      <defs>
+                        <mask id="docMask">
+                          <rect x="0" y="0" width="100" height="100" fill="white" />
+                          {detectedQuad && (
+                            <polygon
+                              points={`
+                                ${detectedQuad.topLeft.x * 100},${detectedQuad.topLeft.y * 100}
+                                ${detectedQuad.topRight.x * 100},${detectedQuad.topRight.y * 100}
+                                ${detectedQuad.bottomRight.x * 100},${detectedQuad.bottomRight.y * 100}
+                                ${detectedQuad.bottomLeft.x * 100},${detectedQuad.bottomLeft.y * 100}
+                              `}
+                              fill="black"
+                            />
+                          )}
+                        </mask>
+                      </defs>
+                      
+                      {/* Darkened area outside document */}
+                      <rect
+                        x="0" y="0" width="100" height="100"
+                        fill="rgba(0,0,0,0.5)"
+                        mask="url(#docMask)"
                       />
-                      
-                      {/* Corner Markers */}
-                      <circle cx={overlayQuad.topLeft.x * 100} cy={overlayQuad.topLeft.y * 100} r="1.5" fill="#45CAFF" />
-                      <circle cx={overlayQuad.topRight.x * 100} cy={overlayQuad.topRight.y * 100} r="1.5" fill="#45CAFF" />
-                      <circle cx={overlayQuad.bottomRight.x * 100} cy={overlayQuad.bottomRight.y * 100} r="1.5" fill="#45CAFF" />
-                      <circle cx={overlayQuad.bottomLeft.x * 100} cy={overlayQuad.bottomLeft.y * 100} r="1.5" fill="#45CAFF" />
-                      
-                      {/* Center Crosshair */}
-                      <line x1="48" y1="50" x2="52" y2="50" stroke="rgba(69, 202, 255, 0.5)" strokeWidth="0.5" />
-                      <line x1="50" y1="48" x2="50" y2="52" stroke="rgba(69, 202, 255, 0.5)" strokeWidth="0.5" />
+
+                      {/* Detected document outline */}
+                      {detectedQuad && (
+                        <>
+                          {/* Main polygon outline */}
+                          <polygon
+                            points={`
+                              ${detectedQuad.topLeft.x * 100},${detectedQuad.topLeft.y * 100}
+                              ${detectedQuad.topRight.x * 100},${detectedQuad.topRight.y * 100}
+                              ${detectedQuad.bottomRight.x * 100},${detectedQuad.bottomRight.y * 100}
+                              ${detectedQuad.bottomLeft.x * 100},${detectedQuad.bottomLeft.y * 100}
+                            `}
+                            fill="none"
+                            stroke="#22c55e"
+                            strokeWidth="0.5"
+                            strokeLinejoin="round"
+                          />
+                          
+                          {/* Corner circles with glow effect */}
+                          <circle cx={detectedQuad.topLeft.x * 100} cy={detectedQuad.topLeft.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
+                          <circle cx={detectedQuad.topRight.x * 100} cy={detectedQuad.topRight.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
+                          <circle cx={detectedQuad.bottomRight.x * 100} cy={detectedQuad.bottomRight.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
+                          <circle cx={detectedQuad.bottomLeft.x * 100} cy={detectedQuad.bottomLeft.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
+                          
+                          {/* Corner L-brackets */}
+                          {/* Top-left bracket */}
+                          <path
+                            d={`M ${detectedQuad.topLeft.x * 100 + 5},${detectedQuad.topLeft.y * 100} 
+                                L ${detectedQuad.topLeft.x * 100},${detectedQuad.topLeft.y * 100} 
+                                L ${detectedQuad.topLeft.x * 100},${detectedQuad.topLeft.y * 100 + 5}`}
+                            fill="none"
+                            stroke="#22c55e"
+                            strokeWidth="1"
+                            strokeLinecap="round"
+                          />
+                          {/* Top-right bracket */}
+                          <path
+                            d={`M ${detectedQuad.topRight.x * 100 - 5},${detectedQuad.topRight.y * 100} 
+                                L ${detectedQuad.topRight.x * 100},${detectedQuad.topRight.y * 100} 
+                                L ${detectedQuad.topRight.x * 100},${detectedQuad.topRight.y * 100 + 5}`}
+                            fill="none"
+                            stroke="#22c55e"
+                            strokeWidth="1"
+                            strokeLinecap="round"
+                          />
+                          {/* Bottom-right bracket */}
+                          <path
+                            d={`M ${detectedQuad.bottomRight.x * 100 - 5},${detectedQuad.bottomRight.y * 100} 
+                                L ${detectedQuad.bottomRight.x * 100},${detectedQuad.bottomRight.y * 100} 
+                                L ${detectedQuad.bottomRight.x * 100},${detectedQuad.bottomRight.y * 100 - 5}`}
+                            fill="none"
+                            stroke="#22c55e"
+                            strokeWidth="1"
+                            strokeLinecap="round"
+                          />
+                          {/* Bottom-left bracket */}
+                          <path
+                            d={`M ${detectedQuad.bottomLeft.x * 100 + 5},${detectedQuad.bottomLeft.y * 100} 
+                                L ${detectedQuad.bottomLeft.x * 100},${detectedQuad.bottomLeft.y * 100} 
+                                L ${detectedQuad.bottomLeft.x * 100},${detectedQuad.bottomLeft.y * 100 - 5}`}
+                            fill="none"
+                            stroke="#22c55e"
+                            strokeWidth="1"
+                            strokeLinecap="round"
+                          />
+                          
+                          {/* Glow filter */}
+                          <defs>
+                            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                              <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
+                              <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                              </feMerge>
+                            </filter>
+                          </defs>
+                        </>
+                      )}
+
+                      {/* Fallback guide when no document detected */}
+                      {!detectedQuad && (
+                        <>
+                          <rect
+                            x="10" y="10" width="80" height="80"
+                            fill="none"
+                            stroke="rgba(69, 202, 255, 0.5)"
+                            strokeWidth="0.3"
+                            strokeDasharray="2,2"
+                            rx="1"
+                          />
+                          {/* Center crosshair */}
+                          <line x1="48" y1="50" x2="52" y2="50" stroke="rgba(69, 202, 255, 0.5)" strokeWidth="0.3" />
+                          <line x1="50" y1="48" x2="50" y2="52" stroke="rgba(69, 202, 255, 0.5)" strokeWidth="0.3" />
+                        </>
+                      )}
                     </svg>
+                  )}
 
-                    {/* Eye Toggle Button - Top Right */}
-                    <Tooltip
-                      label={showControls ? 'Hide controls' : 'Show controls'}
-                      hasArrow
-                      placement="left"
+                  {/* Detection Status Badge */}
+                  <Box
+                    position="absolute"
+                    top={3}
+                    left={3}
+                    bg={detectedQuad ? "green.500" : "gray.600"}
+                    color="white"
+                    px={3}
+                    py={1}
+                    borderRadius="full"
+                    fontSize="xs"
+                    fontWeight="bold"
+                    display="flex"
+                    alignItems="center"
+                    gap={2}
+                    transition="all 0.3s"
+                  >
+                    <Box
+                      w={2}
+                      h={2}
+                      borderRadius="full"
+                      bg={detectedQuad ? "green.200" : "gray.400"}
+                      animation={detectedQuad ? "pulse 1s infinite" : "none"}
+                    />
+                    {detectedQuad ? "Document Detected" : "Searching..."}
+                  </Box>
+
+                  {/* Eye Toggle Button */}
+                  <Tooltip label={showControls ? 'Hide controls' : 'Show controls'} hasArrow placement="left">
+                    <Button
+                      position="absolute"
+                      top={3}
+                      right={3}
+                      size="sm"
+                      colorScheme="brand"
+                      variant={showControls ? 'solid' : 'ghost'}
+                      onClick={() => setShowControls(!showControls)}
+                      zIndex={10}
+                      borderRadius="full"
+                      p={2}
+                      minWidth="auto"
                     >
-                      <Button
-                        position="absolute"
-                        top={4}
-                        right={4}
-                        size="sm"
-                        colorScheme="brand"
-                        variant={showControls ? 'solid' : 'outline'}
-                        onClick={() => setShowControls(!showControls)}
-                        zIndex={10}
-                        borderRadius="full"
-                        p={2}
-                        minWidth="auto"
-                      >
-                        <Iconify icon={showControls ? FiEye : FiEyeOff} boxSize={5} />
-                      </Button>
-                    </Tooltip>
+                      <Iconify icon={showControls ? FiEye : FiEyeOff} boxSize={4} />
+                    </Button>
+                  </Tooltip>
 
-                    {/* Countdown Overlay - Shows when auto-capture is about to start */}
-                    {countdown !== null && (
-                      <Flex
-                        position="absolute"
-                        top={0}
-                        left={0}
-                        right={0}
-                        bottom={0}
-                        align="center"
-                        justify="center"
-                        bg="rgba(0,0,0,0.7)"
-                        zIndex={20}
-                        flexDirection="column"
+                  {/* Countdown Overlay */}
+                  {countdown !== null && (
+                    <Flex
+                      position="absolute"
+                      top={0}
+                      left={0}
+                      right={0}
+                      bottom={0}
+                      align="center"
+                      justify="center"
+                      bg="rgba(0,0,0,0.8)"
+                      zIndex={20}
+                      flexDirection="column"
+                    >
+                      <Text
+                        fontSize="8xl"
+                        fontWeight="bold"
+                        color="white"
+                        textShadow="0 0 40px rgba(66, 153, 225, 1)"
                       >
-                        <Text
-                          fontSize="8xl"
-                          fontWeight="bold"
-                          color="white"
-                          textShadow="0 0 40px rgba(66, 153, 225, 1)"
-                          animation="pulse 1s infinite"
-                        >
-                          {countdown}
-                        </Text>
-                        <Text fontSize="xl" color="white" mt={4} fontWeight="600">
-                          📱 Auto-Capture Starting...
-                        </Text>
-                        <Text fontSize="md" color="whiteAlpha.800" mt={2}>
-                          {pendingDocumentCount} document{pendingDocumentCount !== 1 ? 's' : ''} queued
-                        </Text>
+                        {countdown}
+                      </Text>
+                      <Text fontSize="lg" color="white" mt={4}>📱 Auto-Capture Starting...</Text>
+                      <Text fontSize="sm" color="whiteAlpha.700" mt={2}>
+                        {pendingDocumentCount} document{pendingDocumentCount !== 1 ? 's' : ''} queued
+                      </Text>
+                      <Button
+                        mt={4}
+                        colorScheme="red"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (countdownIntervalRef.current) {
+                            clearInterval(countdownIntervalRef.current);
+                            countdownIntervalRef.current = null;
+                          }
+                          setCountdown(null);
+                          setPendingDocumentCount(0);
+                          toast({ title: 'Cancelled', status: 'warning', duration: 2000 });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </Flex>
+                  )}
+
+                  {/* Auto-capture Status */}
+                  {autoCapture && (
+                    <Box
+                      position="absolute"
+                      bottom={3}
+                      left={3}
+                      bg={
+                        frameChangeStatus === 'captured' ? 'green.500' :
+                        frameChangeStatus === 'ready' ? 'green.400' :
+                        frameChangeStatus === 'detecting' ? 'orange.400' :
+                        'blue.500'
+                      }
+                      color="white"
+                      px={3}
+                      py={1}
+                      borderRadius="full"
+                      fontSize="xs"
+                      fontWeight="bold"
+                      display="flex"
+                      alignItems="center"
+                      gap={2}
+                    >
+                      <Box w={2} h={2} borderRadius="full" bg="white" animation="pulse 1s infinite" />
+                      {frameChangeStatus === 'captured' ? '✓ Captured!' :
+                       frameChangeStatus === 'ready' ? '📸 Ready...' :
+                       frameChangeStatus === 'detecting' ? '👀 Detecting...' :
+                       `📷 ${autoCaptureCount} captured`}
+                      {autoCaptureSource === 'dashboard' && (
+                        <Tag size="sm" colorScheme="blue" ml={1}>Dashboard</Tag>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Fullscreen Controls */}
+                  {isFullScreen && showControls && (
+                    <VStack
+                      position="absolute"
+                      bottom={6}
+                      left="50%"
+                      transform="translateX(-50%)"
+                      spacing={2}
+                      zIndex={5}
+                    >
+                      <Flex gap={2}>
                         <Button
-                          mt={6}
-                          colorScheme="red"
-                          variant="outline"
-                          onClick={() => {
-                            if (countdownIntervalRef.current) {
-                              clearInterval(countdownIntervalRef.current);
-                              countdownIntervalRef.current = null;
-                            }
-                            setCountdown(null);
-                            setPendingDocumentCount(0);
-                            toast({
-                              title: '❌ Countdown Cancelled',
-                              status: 'warning',
-                              duration: 2000,
-                            });
-                          }}
+                          colorScheme={autoCapture ? 'green' : 'brand'}
+                          size="lg"
+                          onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
+                          isDisabled={!stream || uploading}
+                          leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
                         >
-                          Cancel
+                          {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto'}
+                        </Button>
+                        <Button
+                          colorScheme="brand"
+                          size="lg"
+                          onClick={captureFromCamera}
+                          isDisabled={!stream || uploading || autoCapture}
+                          isLoading={uploading}
+                          leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                        >
+                          Capture
                         </Button>
                       </Flex>
-                    )}
-
-                    {/* Auto-capture status indicator */}
-                    {autoCapture && (
-                      <Box
-                        position="absolute"
-                        top={4}
-                        left={4}
-                        bg={
-                          frameChangeStatus === 'captured' ? 'rgba(34,197,94,0.9)' :
-                          frameChangeStatus === 'ready' ? 'rgba(34,197,94,0.7)' :
-                          frameChangeStatus === 'detecting' ? 'rgba(245,158,11,0.7)' :
-                          'rgba(66,153,225,0.7)'
-                        }
-                        border={`2px solid ${
-                          frameChangeStatus === 'captured' ? 'rgb(34,197,94)' :
-                          frameChangeStatus === 'ready' ? 'rgb(34,197,94)' :
-                          frameChangeStatus === 'detecting' ? 'rgb(245,158,11)' :
-                          'rgb(66,153,225)'
-                        }`}
-                        borderRadius="lg"
-                        px={3}
-                        py={2}
-                        color="white"
-                        fontSize="sm"
-                        fontWeight="bold"
-                        boxShadow={
-                          frameChangeStatus === 'captured' ? '0 0 20px rgba(34,197,94,0.8)' :
-                          frameChangeStatus === 'ready' ? '0 0 15px rgba(34,197,94,0.6)' :
-                          '0 0 10px rgba(66,153,225,0.5)'
-                        }
-                        animation={autoCapture ? 'pulse 2s infinite' : 'none'}
-                      >
-                        <Flex align="center" gap={2}>
-                          <Box
-                            w={2}
-                            h={2}
-                            borderRadius="full"
-                            bg={frameChangeStatus === 'captured' ? 'green.300' : 'white'}
-                            animation="pulse 1s infinite"
-                          />
-                          {frameChangeStatus === 'captured' ? '✓ Captured!' :
-                           frameChangeStatus === 'ready' ? '📸 Ready...' :
-                           frameChangeStatus === 'detecting' ? '👀 Detecting...' :
-                           `📷 ${autoCaptureCount} captured`}
-                          {autoCaptureSource === 'dashboard' && (
-                            <Tag size="sm" colorScheme="blue" ml={1}>Dashboard</Tag>
-                          )}
-                        </Flex>
-                      </Box>
-                    )}
-
-                    {/* Full-screen controls */}
-                    {isFullScreen && showControls && (
-                      <VStack
-                        position="absolute"
-                        bottom={6}
-                        left="50%"
-                        transform="translateX(-50%)"
-                        spacing={3}
-                        zIndex={5}
-                        animation="slideUp 0.3s ease-out"
-                      >
-                        <Tooltip
-                          label={
-                            autoCapture
-                              ? `Captured ${autoCaptureCount} documents - Place next document`
-                              : 'Enable continuous auto-capture for multiple documents'
-                          }
-                          hasArrow
-                        >
-                          <Button
-                            colorScheme={autoCapture ? 'green' : 'brand'}
-                            size="lg"
-                            onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
-                            isDisabled={!stream || uploading}
-                            leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
-                            minW="160px"
-                            boxShadow={autoCapture ? '0 0 20px rgba(72, 187, 120, 0.6)' : 'none'}
-                            animation={autoCapture ? 'pulse 2s infinite' : 'none'}
-                          >
-                            {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
-                          </Button>
-                        </Tooltip>
-                        <Tooltip label="Capture instantly" hasArrow>
-                          <Button
-                            colorScheme="brand"
-                            size="lg"
-                            onClick={captureFromCamera}
-                            isDisabled={!stream || uploading || autoCapture}
-                            isLoading={uploading}
-                            loadingText="Uploading"
-                            leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
-                            minW="160px"
-                          >
-                            Capture
-                          </Button>
-                        </Tooltip>
-                        <Tooltip
-                          label={`Switch to ${cameraOrientation === 'portrait' ? 'landscape' : 'portrait'} mode`}
-                          hasArrow
-                        >
-                          <Button
-                            colorScheme="purple"
-                            variant="outline"
-                            size="lg"
-                            onClick={toggleCameraOrientation}
-                            isDisabled={!stream || autoCapture}
-                            minW="160px"
-                            leftIcon={
-                              <Box
-                                as="span"
-                                transform={cameraOrientation === 'landscape' ? 'rotate(90deg)' : 'none'}
-                                transition="transform 0.3s"
-                              >
-                                📱
-                              </Box>
-                            }
-                          >
-                            {cameraOrientation === 'portrait' ? 'Switch to Landscape' : 'Switch to Portrait'}
-                          </Button>
-                        </Tooltip>
-                      </VStack>
-                    )}
-                  </Box>
+                    </VStack>
+                  )}
                 </Box>
 
-                <Stack spacing={1} align="center">
-                  <Text fontSize="sm" color={muted} fontWeight="600">
-                    📄 Align document within frame
-                  </Text>
-                  <Tag size="sm" colorScheme="cyan" variant="subtle">
-                    {cameraOrientation === 'portrait' ? 'Portrait view' : 'Landscape view'}
-                  </Tag>
-                </Stack>
-
-                {/* Controls - Hidden in fullscreen, shown in normal mode */}
+                {/* Control Buttons - Normal Mode */}
                 {!isFullScreen && showControls && (
-                  <Flex wrap="wrap" gap={3}>
-                    <Tooltip label="Capture instantly" hasArrow>
-                      <Button
-                        colorScheme="brand"
-                        leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
-                        onClick={captureFromCamera}
-                        isDisabled={!stream || uploading || autoCapture}
-                        isLoading={uploading}
-                        loadingText="Uploading"
-                      >
-                        Capture
-                      </Button>
-                    </Tooltip>
-                    <Tooltip label={autoCapture 
-                      ? `Stop auto-capture (${autoCaptureCount} captured)` 
-                      : 'Enable continuous auto-capture for stacked documents'} hasArrow>
-                      <Button
-                        variant={autoCapture ? 'solid' : 'outline'}
-                        colorScheme={autoCapture ? 'green' : 'orange'}
-                        onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
-                        isDisabled={!stream || uploading}
-                        leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
-                        boxShadow={autoCapture ? '0 0 15px rgba(72, 187, 120, 0.5)' : 'none'}
-                        animation={autoCapture ? 'pulse 2s infinite' : 'none'}
-                      >
-                        {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
-                      </Button>
-                    </Tooltip>
-                    <Tooltip
-                      label={`Switch to ${cameraOrientation === 'portrait' ? 'landscape' : 'portrait'} mode`}
-                      hasArrow
+                  <Flex wrap="wrap" gap={2} justify="center">
+                    <Button
+                      colorScheme="brand"
+                      leftIcon={<Iconify icon={FiCamera} boxSize={5} />}
+                      onClick={captureFromCamera}
+                      isDisabled={!stream || uploading || autoCapture}
+                      isLoading={uploading}
+                      loadingText="Uploading"
                     >
-                      <Button
-                        variant="outline"
-                        colorScheme="purple"
-                        onClick={toggleCameraOrientation}
-                        isDisabled={!stream || autoCapture}
-                        leftIcon={
-                          <Box
-                            as="span"
-                            transform={cameraOrientation === 'landscape' ? 'rotate(90deg)' : 'none'}
-                            transition="transform 0.3s"
-                          >
-                            📱
-                          </Box>
-                        }
-                      >
-                        {cameraOrientation === 'portrait' ? 'Switch to Landscape' : 'Switch to Portrait'}
-                      </Button>
-                    </Tooltip>
-                    <Tooltip
-                      label={isFullScreen ? 'Exit fullscreen' : 'Fullscreen capture mode'}
-                      hasArrow
+                      Capture
+                    </Button>
+                    <Button
+                      variant={autoCapture ? 'solid' : 'outline'}
+                      colorScheme={autoCapture ? 'green' : 'orange'}
+                      onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
+                      isDisabled={!stream || uploading}
+                      leftIcon={<Iconify icon={FiAperture} boxSize={5} />}
                     >
-                      <Button
-                        variant="outline"
-                        colorScheme="brand"
-                        onClick={toggleFullScreen}
-                        isDisabled={!stream}
-                        leftIcon={
-                          <Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />
-                        }
-                      >
-                        {isFullScreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                      </Button>
-                    </Tooltip>
+                      {autoCapture ? `Stop (${autoCaptureCount})` : 'Auto Capture'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      colorScheme="brand"
+                      onClick={toggleFullScreen}
+                      isDisabled={!stream}
+                      leftIcon={<Iconify icon={isFullScreen ? FiMinimize2 : FiMaximize2} boxSize={5} />}
+                    >
+                      Fullscreen
+                    </Button>
                   </Flex>
                 )}
 
-                {/* Auto-Capture Status */}
-                {autoCapture && showControls && (
+                {/* Auto-Capture Status Panel */}
+                {autoCapture && showControls && !isFullScreen && (
                   <Flex
                     align="center"
                     gap={3}
@@ -1782,13 +1816,13 @@ const Phone: React.FC = () => {
                   >
                     <Iconify icon={FiCpu} color="brand.300" />
                     <Stack spacing={0}>
-                      <Text fontWeight="600">
+                      <Text fontWeight="600" fontSize="sm">
                         {frameChangeStatus === 'ready' ? '📸 New document detected - capturing...' :
                          frameChangeStatus === 'detecting' ? '👀 Waiting for stable document...' :
-                         frameChangeStatus === 'captured' ? '✓ Just captured! Place next document.' :
+                         frameChangeStatus === 'captured' ? '✓ Captured! Place next document.' :
                          `📷 Captured ${autoCaptureCount} documents`}
                       </Text>
-                      <Text fontSize="sm" color={muted}>
+                      <Text fontSize="xs" color={muted}>
                         Place each document in view • Auto-captures when stable
                       </Text>
                     </Stack>
