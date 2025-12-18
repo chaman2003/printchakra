@@ -3658,25 +3658,11 @@ const Dashboard: React.FC = () => {
                               />
                             )}
 
-                            {/* Badge / Run OCR text CTA */}
+                            {/* Badge for text available */}
                             {!file.processing && !ocrResults[file.filename] && file.has_text && (
-                              <Box>
-                                <Badge colorScheme="blue" borderRadius="full" px={2}>
-                                  Text available
-                                </Badge>
-
-                                {/* Visible text button for running OCR (more discoverable than icon) */}
-                                <Button
-                                  size="sm"
-                                  mt={2}
-                                  colorScheme="blue"
-                                  variant="solid"
-                                  onClick={() => handleRunOCR(file.filename)}
-                                  isLoading={!!ocrLoading[file.filename]}
-                                >
-                                  {ocrLoading[file.filename] ? 'Processing...' : 'Run OCR'}
-                                </Button>
-                              </Box>
+                              <Badge colorScheme="blue" borderRadius="full" px={2}>
+                                Text available
+                              </Badge>
                             )}
                           </Stack>
 
