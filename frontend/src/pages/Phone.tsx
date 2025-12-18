@@ -638,6 +638,16 @@ const Phone: React.FC = () => {
     captureInBackgroundRef.current = captureInBackground;
   }, [captureInBackground]);
 
+  // Helper function to calculate line continuity
+  const calculateLineContinuity = (points: number[]): number => {
+    if (points.length < 5) return 0;
+    let continuity = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+      continuity += 1 - Math.min(1, Math.abs(points[i + 1] - points[i]) / 20);
+    }
+    return continuity / points.length;
+  };
+
   const detectDocumentQuad = useCallback((): DetectedQuad | null => {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || !video.videoWidth) return null;
@@ -658,89 +668,211 @@ const Phone: React.FC = () => {
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     const { data, width, height } = imageData;
 
-    // Apply Sobel edge detection
-    const edgeStrength: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
-    
+    // Convert to grayscale
     const getGray = (x: number, y: number) => {
       if (x < 0 || x >= width || y < 0 || y >= height) return 0;
       const idx = (y * width + x) * 4;
-      return (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+      return (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114);
     };
 
-    // Sobel kernels
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const gx = 
-          -1 * getGray(x - 1, y - 1) + 1 * getGray(x + 1, y - 1) +
-          -2 * getGray(x - 1, y) + 2 * getGray(x + 1, y) +
-          -1 * getGray(x - 1, y + 1) + 1 * getGray(x + 1, y + 1);
-        const gy = 
-          -1 * getGray(x - 1, y - 1) - 2 * getGray(x, y - 1) - 1 * getGray(x + 1, y - 1) +
-          1 * getGray(x - 1, y + 1) + 2 * getGray(x, y + 1) + 1 * getGray(x + 1, y + 1);
-        edgeStrength[y][x] = Math.sqrt(gx * gx + gy * gy);
+    // Apply bilateral filtering for smoothing while preserving edges
+    const filtered: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    const bilateralRadius = 3;
+    const sigmaSpatial = bilateralRadius;
+    const sigmaRange = 50;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let sum = 0;
+        let weights = 0;
+        const centerGray = getGray(x, y);
+
+        for (let dy = -bilateralRadius; dy <= bilateralRadius; dy++) {
+          for (let dx = -bilateralRadius; dx <= bilateralRadius; dx++) {
+            const ny = y + dy;
+            const nx = x + dx;
+            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+              const grayDiff = getGray(nx, ny) - centerGray;
+              const spatialDist = dx * dx + dy * dy;
+              const spatialWeight = Math.exp(-spatialDist / (2 * sigmaSpatial * sigmaSpatial));
+              const rangeWeight = Math.exp(-(grayDiff * grayDiff) / (2 * sigmaRange * sigmaRange));
+              const weight = spatialWeight * rangeWeight;
+              sum += getGray(nx, ny) * weight;
+              weights += weight;
+            }
+          }
+        }
+        filtered[y][x] = weights > 0 ? sum / weights : centerGray;
       }
     }
 
-    // Find edge threshold (top 10% of edge values)
-    const allEdges = edgeStrength.flat().filter(v => v > 0);
-    allEdges.sort((a, b) => b - a);
-    const threshold = allEdges[Math.floor(allEdges.length * 0.1)] || 50;
+    // Apply Canny-like edge detection with thinning
+    const edgeStrength: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    const edgeDirection: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
 
-    // Collect strong edge points
-    const edgePoints: { x: number; y: number }[] = [];
     for (let y = 1; y < height - 1; y++) {
       for (let x = 1; x < width - 1; x++) {
-        if (edgeStrength[y][x] > threshold) {
-          edgePoints.push({ x, y });
+        const gx = 
+          -1 * filtered[y - 1][x - 1] + 1 * filtered[y - 1][x + 1] +
+          -2 * filtered[y][x - 1] + 2 * filtered[y][x + 1] +
+          -1 * filtered[y + 1][x - 1] + 1 * filtered[y + 1][x + 1];
+        const gy = 
+          -1 * filtered[y - 1][x - 1] - 2 * filtered[y - 1][x] - 1 * filtered[y - 1][x + 1] +
+          1 * filtered[y + 1][x - 1] + 2 * filtered[y + 1][x] + 1 * filtered[y + 1][x + 1];
+        
+        edgeStrength[y][x] = Math.sqrt(gx * gx + gy * gy);
+        edgeDirection[y][x] = Math.atan2(gy, gx);
+      }
+    }
+
+    // Non-maximum suppression for edge thinning
+    const thinned: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const angle = edgeDirection[y][x];
+        let neighbor1, neighbor2;
+
+        // Check neighbors perpendicular to edge direction
+        if ((angle > -Math.PI / 8 && angle <= Math.PI / 8) || (angle > 7 * Math.PI / 8 || angle <= -7 * Math.PI / 8)) {
+          neighbor1 = edgeStrength[y][x - 1];
+          neighbor2 = edgeStrength[y][x + 1];
+        } else if (angle > Math.PI / 8 && angle <= 3 * Math.PI / 8) {
+          neighbor1 = edgeStrength[y - 1][x + 1];
+          neighbor2 = edgeStrength[y + 1][x - 1];
+        } else if (angle > 3 * Math.PI / 8 && angle <= 5 * Math.PI / 8) {
+          neighbor1 = edgeStrength[y - 1][x];
+          neighbor2 = edgeStrength[y + 1][x];
+        } else {
+          neighbor1 = edgeStrength[y - 1][x - 1];
+          neighbor2 = edgeStrength[y + 1][x + 1];
+        }
+
+        if (edgeStrength[y][x] >= neighbor1 && edgeStrength[y][x] >= neighbor2) {
+          thinned[y][x] = edgeStrength[y][x];
         }
       }
     }
 
-    if (edgePoints.length < 100) return null;
+    // Adaptive thresholding - use high threshold for better document detection
+    const allEdges = thinned.flat().filter(v => v > 0);
+    allEdges.sort((a, b) => b - a);
+    const highThreshold = allEdges[Math.floor(allEdges.length * 0.03)] || 50;
+    const lowThreshold = highThreshold * 0.4;
 
-    // Find convex hull-like bounding by scanning from each direction
-    const margin = 0.05;
-    const marginX = width * margin;
-    const marginY = height * margin;
-
-    // Find corners by scanning edge points
-    let topLeft = { x: width, y: height };
-    let topRight = { x: 0, y: height };
-    let bottomLeft = { x: width, y: 0 };
-    let bottomRight = { x: 0, y: 0 };
-
-    for (const p of edgePoints) {
-      // Top-left: minimize x + y
-      if (p.x + p.y < topLeft.x + topLeft.y) topLeft = { ...p };
-      // Top-right: maximize x - y
-      if (p.x - p.y > topRight.x - topRight.y) topRight = { ...p };
-      // Bottom-left: minimize x - y
-      if (p.x - p.y < bottomLeft.x - bottomLeft.y) bottomLeft = { ...p };
-      // Bottom-right: maximize x + y
-      if (p.x + p.y > bottomRight.x + bottomRight.y) bottomRight = { ...p };
+    // Collect edge points
+    const edgePoints: { x: number; y: number; strength: number }[] = [];
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        if (thinned[y][x] > highThreshold) {
+          edgePoints.push({ x, y, strength: thinned[y][x] });
+        }
+      }
     }
 
-    // Validate quad - corners should form a reasonable quadrilateral
-    const minArea = width * height * 0.05;
-    const area = Math.abs(
-      (topRight.x - topLeft.x) * (bottomLeft.y - topLeft.y) -
-      (bottomLeft.x - topLeft.x) * (topRight.y - topLeft.y)
-    ) / 2 + Math.abs(
-      (bottomRight.x - topRight.x) * (bottomLeft.y - topRight.y) -
-      (bottomLeft.x - topRight.x) * (bottomRight.y - topRight.y)
-    ) / 2;
+    if (edgePoints.length < 50) return null;
 
-    if (area < minArea) return null;
+    // Find the largest rectangular contour
+    // Group edge points into horizontal and vertical lines
+    const horizontalLines: { y: number; points: number[] }[] = [];
+    const verticalLines: { x: number; points: number[] }[] = [];
 
-    // Apply small padding and clamp
-    const pad = 2;
-    const norm = (val: number, max: number) => clamp((val + pad) / max, 0, 1);
+    const hLineMap = new Map<number, number[]>();
+    const vLineMap = new Map<number, number[]>();
+
+    for (const p of edgePoints) {
+      // Group by row for horizontal lines
+      const yRound = Math.round(p.y / 5) * 5;
+      if (!hLineMap.has(yRound)) hLineMap.set(yRound, []);
+      hLineMap.get(yRound)!.push(p.x);
+
+      // Group by column for vertical lines
+      const xRound = Math.round(p.x / 5) * 5;
+      if (!vLineMap.has(xRound)) vLineMap.set(xRound, []);
+      vLineMap.get(xRound)!.push(p.y);
+    }
+
+    // Convert to lines with start/end
+    for (const entry of Array.from(hLineMap.entries())) {
+      const [y, xs] = entry;
+      if (xs.length > 10) {
+        xs.sort((a: number, b: number) => a - b);
+        horizontalLines.push({ y, points: xs });
+      }
+    }
+    for (const entry of Array.from(vLineMap.entries())) {
+      const [x, ys] = entry;
+      if (ys.length > 10) {
+        ys.sort((a: number, b: number) => a - b);
+        verticalLines.push({ x, points: ys });
+      }
+    }
+
+    if (horizontalLines.length < 2 || verticalLines.length < 2) return null;
+
+    // Find best document corners by line intersections
+    let bestQuad = null;
+    let bestScore = -Infinity;
+
+    // Try combinations of lines to find the best rectangular document
+    for (let i = 0; i < Math.min(horizontalLines.length, 10); i++) {
+      for (let j = i + 1; j < Math.min(horizontalLines.length, 10); j++) {
+        const h1 = horizontalLines[i];
+        const h2 = horizontalLines[j];
+        const yGap = Math.abs(h2.y - h1.y);
+        if (yGap < 30 || yGap > height * 0.8) continue;
+
+        for (let k = 0; k < Math.min(verticalLines.length, 10); k++) {
+          for (let l = k + 1; l < Math.min(verticalLines.length, 10); l++) {
+            const v1 = verticalLines[k];
+            const v2 = verticalLines[l];
+            const xGap = Math.abs(v2.x - v1.x);
+            if (xGap < 30 || xGap > width * 0.8) continue;
+
+            // Calculate score based on line continuity and positioning
+            const h1Continuity = calculateLineContinuity(h1.points);
+            const h2Continuity = calculateLineContinuity(h2.points);
+            const v1Continuity = calculateLineContinuity(v1.points);
+            const v2Continuity = calculateLineContinuity(v2.points);
+
+            const marginLeft = Math.min(v1.x, v2.x);
+            const marginRight = width - Math.max(v1.x, v2.x);
+            const marginTop = Math.min(h1.y, h2.y);
+            const marginBottom = height - Math.max(h1.y, h2.y);
+
+            // Prefer centered documents with good margins
+            const marginScore = Math.min(marginLeft, marginRight, marginTop, marginBottom);
+            const continuityScore = (h1Continuity + h2Continuity + v1Continuity + v2Continuity) / 4;
+            const score = continuityScore * (1 + marginScore / 100);
+
+            if (score > bestScore) {
+              bestScore = score;
+              const x1 = Math.min(v1.x, v2.x);
+              const x2 = Math.max(v1.x, v2.x);
+              const y1 = Math.min(h1.y, h2.y);
+              const y2 = Math.max(h1.y, h2.y);
+
+              bestQuad = {
+                topLeft: { x: x1, y: y1 },
+                topRight: { x: x2, y: y1 },
+                bottomRight: { x: x2, y: y2 },
+                bottomLeft: { x: x1, y: y2 },
+              };
+            }
+          }
+        }
+      }
+    }
+
+    if (!bestQuad || bestScore < 50) return null;
+
+    // Normalize to 0-1 range
+    const norm = (val: number, max: number) => clamp(val / max, 0, 1);
 
     return {
-      topLeft: { x: norm(topLeft.x - pad, width), y: norm(topLeft.y - pad, height) },
-      topRight: { x: norm(topRight.x + pad, width), y: norm(topRight.y - pad, height) },
-      bottomRight: { x: norm(bottomRight.x + pad, width), y: norm(bottomRight.y + pad, height) },
-      bottomLeft: { x: norm(bottomLeft.x - pad, width), y: norm(bottomLeft.y + pad, height) },
+      topLeft: { x: norm(bestQuad.topLeft.x, width), y: norm(bestQuad.topLeft.y, height) },
+      topRight: { x: norm(bestQuad.topRight.x, width), y: norm(bestQuad.topRight.y, height) },
+      bottomRight: { x: norm(bestQuad.bottomRight.x, width), y: norm(bestQuad.bottomRight.y, height) },
+      bottomLeft: { x: norm(bestQuad.bottomLeft.x, width), y: norm(bestQuad.bottomLeft.y, height) },
     };
   }, []);
 
