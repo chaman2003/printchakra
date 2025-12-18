@@ -643,7 +643,7 @@ const Phone: React.FC = () => {
     if (!video || video.readyState < 2 || !video.videoWidth) return null;
 
     // Use offscreen canvas for detection
-    const targetWidth = 200;
+    const targetWidth = 160;
     const aspectRatio = video.videoHeight / video.videoWidth;
     const targetHeight = Math.round(targetWidth * aspectRatio);
 
@@ -658,137 +658,246 @@ const Phone: React.FC = () => {
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     const { data, width, height } = imageData;
 
-    // Get pixel brightness and check if it's "document-like" (bright)
-    const getBrightness = (x: number, y: number): number => {
-      if (x < 0 || x >= width || y < 0 || y >= height) return 0;
-      const idx = (y * width + x) * 4;
-      return (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
-    };
-
-    // Calculate average brightness to determine threshold
-    let totalBrightness = 0;
-    for (let i = 0; i < data.length; i += 4) {
-      totalBrightness += (data[i] + data[i + 1] + data[i + 2]) / 3;
-    }
-    const avgBrightness = totalBrightness / (width * height);
-
-    // Document threshold: pixels brighter than average + some margin are likely document
-    const docThreshold = Math.min(avgBrightness + 30, 200);
-
-    // Create binary mask of document pixels
-    const isDocument: boolean[][] = Array(height).fill(null).map(() => Array(width).fill(false));
+    // Convert to grayscale
+    const gray: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        isDocument[y][x] = getBrightness(x, y) > docThreshold;
+        const idx = (y * width + x) * 4;
+        gray[y][x] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
       }
     }
 
-    // Flood fill to find the largest connected bright region
+    // Apply Gaussian blur (3x3)
+    const blurred: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+    const kernelSum = 16;
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        let sum = 0;
+        let k = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            sum += gray[y + dy][x + dx] * kernel[k++];
+          }
+        }
+        blurred[y][x] = sum / kernelSum;
+      }
+    }
+
+    // Compute gradients using Sobel operator
+    const gradMag: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const gx = -blurred[y-1][x-1] + blurred[y-1][x+1]
+                 - 2*blurred[y][x-1] + 2*blurred[y][x+1]
+                 - blurred[y+1][x-1] + blurred[y+1][x+1];
+        const gy = -blurred[y-1][x-1] - 2*blurred[y-1][x] - blurred[y-1][x+1]
+                 + blurred[y+1][x-1] + 2*blurred[y+1][x] + blurred[y+1][x+1];
+        gradMag[y][x] = Math.sqrt(gx * gx + gy * gy);
+      }
+    }
+
+    // Find edge threshold using Otsu's method
+    const histogram = new Array(256).fill(0);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const bin = Math.min(255, Math.floor(gradMag[y][x]));
+        histogram[bin]++;
+      }
+    }
+    const totalPixels = (width - 2) * (height - 2);
+    let sumTotal = 0;
+    for (let i = 0; i < 256; i++) sumTotal += i * histogram[i];
+    
+    let sumBack = 0, wBack = 0, maxVar = 0, threshold = 50;
+    for (let t = 0; t < 256; t++) {
+      wBack += histogram[t];
+      if (wBack === 0) continue;
+      const wFore = totalPixels - wBack;
+      if (wFore === 0) break;
+      sumBack += t * histogram[t];
+      const meanBack = sumBack / wBack;
+      const meanFore = (sumTotal - sumBack) / wFore;
+      const varBetween = wBack * wFore * (meanBack - meanFore) * (meanBack - meanFore);
+      if (varBetween > maxVar) {
+        maxVar = varBetween;
+        threshold = t;
+      }
+    }
+
+    // Create binary edge map
+    const edges: boolean[][] = Array(height).fill(null).map(() => Array(width).fill(false));
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        edges[y][x] = gradMag[y][x] > threshold;
+      }
+    }
+
+    // Find contours using boundary tracing
     const visited: boolean[][] = Array(height).fill(null).map(() => Array(width).fill(false));
-    const regions: { points: { x: number; y: number }[] }[] = [];
+    const contours: { x: number; y: number }[][] = [];
 
-    const floodFill = (startX: number, startY: number): { x: number; y: number }[] => {
-      const points: { x: number; y: number }[] = [];
-      const stack = [{ x: startX, y: startY }];
-
-      while (stack.length > 0) {
-        const { x, y } = stack.pop()!;
-        if (x < 0 || x >= width || y < 0 || y >= height) continue;
-        if (visited[y][x] || !isDocument[y][x]) continue;
-
+    const traceContour = (startX: number, startY: number): { x: number; y: number }[] => {
+      const contour: { x: number; y: number }[] = [];
+      const directions = [
+        { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 1 },
+        { dx: -1, dy: 0 }, { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }
+      ];
+      
+      let x = startX, y = startY;
+      let dir = 0;
+      
+      do {
+        contour.push({ x, y });
         visited[y][x] = true;
-        points.push({ x, y });
-
-        stack.push({ x: x + 1, y });
-        stack.push({ x: x - 1, y });
-        stack.push({ x, y: y + 1 });
-        stack.push({ x, y: y - 1 });
-      }
-
-      return points;
+        
+        // Search for next edge pixel
+        let found = false;
+        for (let i = 0; i < 8; i++) {
+          const checkDir = (dir + 6 + i) % 8; // Start from dir-2 (CCW)
+          const nx = x + directions[checkDir].dx;
+          const ny = y + directions[checkDir].dy;
+          
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height && edges[ny][nx]) {
+            x = nx;
+            y = ny;
+            dir = checkDir;
+            found = true;
+            break;
+          }
+        }
+        
+        if (!found) break;
+      } while (!(x === startX && y === startY) && contour.length < 5000);
+      
+      return contour;
     };
 
-    // Find all connected regions
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (!visited[y][x] && isDocument[y][x]) {
-          const regionPoints = floodFill(x, y);
-          if (regionPoints.length > 100) {
-            regions.push({ points: regionPoints });
+    // Find all contours
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        if (edges[y][x] && !visited[y][x]) {
+          const contour = traceContour(x, y);
+          if (contour.length > 50) {
+            contours.push(contour);
           }
         }
       }
     }
 
-    if (regions.length === 0) return null;
+    if (contours.length === 0) return null;
 
-    // Find the largest region
-    const largestRegion = regions.reduce((max, r) => r.points.length > max.points.length ? r : max);
+    // Douglas-Peucker simplification to approximate polygon
+    const simplifyContour = (points: { x: number; y: number }[], epsilon: number): { x: number; y: number }[] => {
+      if (points.length < 3) return points;
+      
+      let maxDist = 0;
+      let maxIdx = 0;
+      const first = points[0];
+      const last = points[points.length - 1];
+      
+      for (let i = 1; i < points.length - 1; i++) {
+        const p = points[i];
+        // Distance from point to line
+        const num = Math.abs((last.y - first.y) * p.x - (last.x - first.x) * p.y + last.x * first.y - last.y * first.x);
+        const den = Math.sqrt((last.y - first.y) ** 2 + (last.x - first.x) ** 2);
+        const dist = den > 0 ? num / den : 0;
+        
+        if (dist > maxDist) {
+          maxDist = dist;
+          maxIdx = i;
+        }
+      }
+      
+      if (maxDist > epsilon) {
+        const left = simplifyContour(points.slice(0, maxIdx + 1), epsilon);
+        const right = simplifyContour(points.slice(maxIdx), epsilon);
+        return [...left.slice(0, -1), ...right];
+      }
+      
+      return [first, last];
+    };
 
-    // Get bounding box and check if it's reasonably rectangular
-    let minX = width, maxX = 0, minY = height, maxY = 0;
-    for (const p of largestRegion.points) {
-      minX = Math.min(minX, p.x);
-      maxX = Math.max(maxX, p.x);
-      minY = Math.min(minY, p.y);
-      maxY = Math.max(maxY, p.y);
-    }
+    // Find the best quadrilateral
+    let bestQuad: { x: number; y: number }[] | null = null;
+    let bestArea = 0;
 
-    const boxWidth = maxX - minX;
-    const boxHeight = maxY - minY;
-    const boxArea = boxWidth * boxHeight;
-    const fillRatio = largestRegion.points.length / boxArea;
-
-    // Must fill at least 40% of bounding box to be considered a document
-    if (fillRatio < 0.4) return null;
-    // Must be at least 15% of frame
-    if (boxArea < width * height * 0.15) return null;
-
-    // Find corners using convex hull approach on edge points
-    const edgePoints: { x: number; y: number }[] = [];
-    for (const p of largestRegion.points) {
-      // Check if this point is on the edge of the region
-      const neighbors = [
-        { x: p.x + 1, y: p.y },
-        { x: p.x - 1, y: p.y },
-        { x: p.x, y: p.y + 1 },
-        { x: p.x, y: p.y - 1 },
-      ];
-      const isEdge = neighbors.some(n => 
-        n.x < 0 || n.x >= width || n.y < 0 || n.y >= height || !isDocument[n.y][n.x]
-      );
-      if (isEdge) {
-        edgePoints.push(p);
+    for (const contour of contours) {
+      // Simplify to find approximate polygon
+      const simplified = simplifyContour(contour, 5);
+      
+      // If we got close to 4 vertices, try to extract quad
+      if (simplified.length >= 4 && simplified.length <= 8) {
+        // Find 4 most extreme corners
+        let tl = simplified[0], tr = simplified[0], bl = simplified[0], br = simplified[0];
+        
+        for (const p of simplified) {
+          if (p.x + p.y < tl.x + tl.y) tl = p;
+          if (p.x - p.y > tr.x - tr.y) tr = p;
+          if (p.x - p.y < bl.x - bl.y) bl = p;
+          if (p.x + p.y > br.x + br.y) br = p;
+        }
+        
+        // Calculate area using shoelace formula
+        const area = 0.5 * Math.abs(
+          (tl.x * tr.y - tr.x * tl.y) +
+          (tr.x * br.y - br.x * tr.y) +
+          (br.x * bl.y - bl.x * br.y) +
+          (bl.x * tl.y - tl.x * bl.y)
+        );
+        
+        // Must cover significant portion of frame
+        if (area > width * height * 0.1 && area > bestArea) {
+          bestArea = area;
+          bestQuad = [tl, tr, br, bl];
+        }
       }
     }
 
-    if (edgePoints.length < 20) return null;
-
-    // Find the 4 corners using extreme points method
-    let topLeft = edgePoints[0];
-    let topRight = edgePoints[0];
-    let bottomLeft = edgePoints[0];
-    let bottomRight = edgePoints[0];
-
-    for (const p of edgePoints) {
-      // Top-left: minimize x + y
-      if (p.x + p.y < topLeft.x + topLeft.y) topLeft = p;
-      // Top-right: maximize x - y
-      if (p.x - p.y > topRight.x - topRight.y) topRight = p;
-      // Bottom-left: minimize x - y
-      if (p.x - p.y < bottomLeft.x - bottomLeft.y) bottomLeft = p;
-      // Bottom-right: maximize x + y
-      if (p.x + p.y > bottomRight.x + bottomRight.y) bottomRight = p;
+    // If no good quad found from contours, try convex hull on all edge points
+    if (!bestQuad) {
+      const allEdgePoints: { x: number; y: number }[] = [];
+      for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          if (edges[y][x]) allEdgePoints.push({ x, y });
+        }
+      }
+      
+      if (allEdgePoints.length < 100) return null;
+      
+      // Find extreme points for quad corners
+      let tl = allEdgePoints[0], tr = allEdgePoints[0], bl = allEdgePoints[0], br = allEdgePoints[0];
+      
+      for (const p of allEdgePoints) {
+        if (p.x + p.y < tl.x + tl.y) tl = p;
+        if (p.x - p.y > tr.x - tr.y) tr = p;
+        if (p.x - p.y < bl.x - bl.y) bl = p;
+        if (p.x + p.y > br.x + br.y) br = p;
+      }
+      
+      const area = 0.5 * Math.abs(
+        (tl.x * tr.y - tr.x * tl.y) +
+        (tr.x * br.y - br.x * tr.y) +
+        (br.x * bl.y - bl.x * br.y) +
+        (bl.x * tl.y - tl.x * bl.y)
+      );
+      
+      if (area > width * height * 0.1) {
+        bestQuad = [tl, tr, br, bl];
+      }
     }
+
+    if (!bestQuad) return null;
 
     // Normalize to 0-1 range
     const norm = (val: number, max: number) => clamp(val / max, 0, 1);
+    const [tl, tr, br, bl] = bestQuad;
 
     return {
-      topLeft: { x: norm(topLeft.x, width), y: norm(topLeft.y, height) },
-      topRight: { x: norm(topRight.x, width), y: norm(topRight.y, height) },
-      bottomRight: { x: norm(bottomRight.x, width), y: norm(bottomRight.y, height) },
-      bottomLeft: { x: norm(bottomLeft.x, width), y: norm(bottomLeft.y, height) },
+      topLeft: { x: norm(tl.x, width), y: norm(tl.y, height) },
+      topRight: { x: norm(tr.x, width), y: norm(tr.y, height) },
+      bottomRight: { x: norm(br.x, width), y: norm(br.y, height) },
+      bottomLeft: { x: norm(bl.x, width), y: norm(bl.y, height) },
     };
   }, []);
 
