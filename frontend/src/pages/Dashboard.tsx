@@ -3657,10 +3657,26 @@ const Dashboard: React.FC = () => {
                                 onClick={() => handleViewOCRResult(file.filename)}
                               />
                             )}
+
+                            {/* Badge / Run OCR text CTA */}
                             {!file.processing && !ocrResults[file.filename] && file.has_text && (
-                              <Badge colorScheme="blue" borderRadius="full" px={2}>
-                                Text available
-                              </Badge>
+                              <Box>
+                                <Badge colorScheme="blue" borderRadius="full" px={2}>
+                                  Text available
+                                </Badge>
+
+                                {/* Visible text button for running OCR (more discoverable than icon) */}
+                                <Button
+                                  size="sm"
+                                  mt={2}
+                                  colorScheme="blue"
+                                  variant="solid"
+                                  onClick={() => handleRunOCR(file.filename)}
+                                  isLoading={!!ocrLoading[file.filename]}
+                                >
+                                  {ocrLoading[file.filename] ? 'Processing...' : 'Run OCR'}
+                                </Button>
+                              </Box>
                             )}
                           </Stack>
 
@@ -3677,14 +3693,20 @@ const Dashboard: React.FC = () => {
                             {/* Run PaddleOCR button - shows when pipeline complete but no OCR yet */}
                             {!file.processing && !ocrResults[file.filename] && (
                               <Tooltip label={ocrLoading[file.filename] ? 'Processing OCR...' : 'Run OCR (PaddleOCR)'} hasArrow>
-                                <IconButton
+                                <Button
                                   aria-label="Run OCR"
-                                  icon={ocrLoading[file.filename] ? <Spinner size="sm" /> : <Iconify icon="mdi:text-recognition" boxSize={5} />}
                                   onClick={() => handleRunOCR(file.filename)}
-                                  isLoading={ocrLoading[file.filename]}
-                                  colorScheme="blue"
+                                  isLoading={!!ocrLoading[file.filename]}
+                                  colorScheme="brown"
                                   variant="solid"
-                                />
+                                  size="sm"
+                                  borderRadius="full"
+                                  minW="44px"
+                                  h="38px"
+                                  px={3}
+                                >
+                                  OCR
+                                </Button>
                               </Tooltip>
                             )}
                             {/* View OCR result button - shows when OCR is complete */}
