@@ -405,19 +405,19 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
       isCentered={!isChatVisible}
       closeOnEsc={true}
       closeOnOverlayClick={true}
-      blockScrollOnMount={true}
+      blockScrollOnMount={false}
     >
       <ModalOverlay 
-        bg="blackAlpha.600"
+        bg={isChatVisible ? "transparent" : "blackAlpha.600"}
         backdropFilter="none"
-        // When chat is visible, don't cover the right-side chat panel (leave ~400px clear)
-        {...(isChatVisible ? { right: '400px', zIndex: 1000 } : {})}
+        pointerEvents={isChatVisible ? "none" : "auto"}
       />
       <ModalContent 
         bg={bgColor} 
         maxH="90vh" 
         borderRadius="2xl" 
         boxShadow="0 30px 80px rgba(0, 0, 0, 0.5)"
+        pointerEvents="auto"
         border="2px solid"
         borderColor="brand.500"
         maxW={isChatVisible ? "calc(100vw - 400px)" : "1200px"}
