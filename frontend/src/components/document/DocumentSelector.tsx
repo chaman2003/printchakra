@@ -410,6 +410,8 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
       <ModalOverlay 
         bg="blackAlpha.600"
         backdropFilter="none"
+        // When chat is visible, don't cover the right-side chat panel (leave ~400px clear)
+        {...(isChatVisible ? { right: '400px', zIndex: 1000 } : {})}
       />
       <ModalContent 
         bg={bgColor} 
