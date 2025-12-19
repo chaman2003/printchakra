@@ -10,26 +10,8 @@
  */
 
 // ==================== App States ====================
-export type AppState = 
-  | 'DASHBOARD'           // Dashboard with AI chat, no active workflow
-  | 'PRINT_WORKFLOW'      // Print workflow active
-  | 'SCAN_WORKFLOW';      // Scan workflow active
+import type { AppState, PrintWorkflowStep, ScanWorkflowStep, ScanDocumentSource } from './types';
 
-// ==================== Workflow Steps ====================
-export type PrintWorkflowStep = 
-  | 'SELECT_DOCUMENT'     // Document selection screen
-  | 'CONFIGURATION'       // Print configuration screen
-  | 'REVIEW'              // Review settings screen
-  | 'EXECUTING';          // Print in progress
-
-export type ScanWorkflowStep = 
-  | 'SOURCE_SELECTION'    // Choose: upload/select or feed tray
-  | 'SELECT_DOCUMENT'     // Document selection (if not feed tray)
-  | 'CONFIGURATION'       // Scan configuration screen
-  | 'REVIEW'              // Review settings screen
-  | 'EXECUTING';          // Scan in progress
-
-export type ScanDocumentSource = 'select' | 'feed' | null;
 
 // ==================== State Transition Types ====================
 export interface StateTransition {
