@@ -131,38 +131,64 @@ const AIAssistConfig = {
     }
   },
 
-  // ==================== Response Templates ====================
+  // ==================== Response Templates (Human-like, Concise) ====================
   responses: {
+    // Document operations - short and natural
     documentSelected: (num: number, section: string) => 
-      `Selected document ${num} from ${section}`,
+      `Got it, document ${num}.`,
     sectionSwitched: (section: string) => 
-      `Switched to ${section} documents`,
+      `Showing ${section}.`,
+    
+    // Settings - brief confirmations
     settingChanged: (setting: string, value: string) => 
-      `${setting} set to ${value}`,
+      `${value}.`,
+    
+    // Workflow - action-oriented
     confirmRequired: (action: string) => 
-      `Ready to ${action}. Say "confirm" to proceed.`,
+      `Ready. Confirm?`,
     cancelled: () => 
-      `Operation cancelled`,
+      `Cancelled.`,
     statusReport: (mode: string, step: number) => 
-      `Currently in ${mode} mode, step ${step} of 3`,
+      `${mode} mode, step ${step}.`,
+    
+    // Errors - helpful but brief
     noDocuments: () => 
-      `No documents available. Please upload or select documents first.`,
+      `No documents yet. Upload one first.`,
     invalidCommand: () => 
-      `I didn't understand that. Try "help" for available commands.`,
+      `Didn't catch that. Say help for options.`,
+    
+    // Actions - concise
     feedingStarted: (count: number) => 
-      `Feeding ${count} document${count > 1 ? 's' : ''} through printer...`,
+      `Feeding ${count} document${count > 1 ? 's' : ''}.`,
     printStarted: () => 
-      `Print job submitted successfully!`,
+      `Printing now!`,
     scanStarted: () => 
-      `Scan operation initiated`,
+      `Scanning.`,
+    
+    // Help - short
     helpMessage: () => 
-      `You can say: select document, set layout to landscape, change to color mode, confirm print, cancel, or ask for status.`,
+      `Say: select document, set color, landscape, confirm, or cancel.`,
+    
+    // Settings readout - simplified
     settingsReadout: (settings: Record<string, any>) => {
       const parts = Object.entries(settings)
         .filter(([_, v]) => v !== undefined && v !== '')
-        .map(([k, v]) => `${k}: ${v}`);
+        .slice(0, 3)  // Only top 3 settings for brevity
+        .map(([k, v]) => `${v}`);
       return parts.length > 0 ? parts.join(', ') : 'Default settings';
-    }
+    },
+    
+    // Mode switching
+    modeOpened: (mode: string) => 
+      `Opening ${mode}.`,
+    modeSwitchNeedsSorry: (targetMode: string) => 
+      `Say "sorry" first to switch to ${targetMode}.`,
+    
+    // Greetings
+    greeting: () =>
+      `Hi! Print or scan?`,
+    welcome: () =>
+      `Ready. What would you like to do?`,
   },
 
   // ==================== Confidence Thresholds ====================

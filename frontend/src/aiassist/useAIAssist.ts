@@ -1,6 +1,7 @@
 /**
  * useAIAssist Hook
  * React hook for integrating AI assist functionality into components
+ * Enhanced with state machine for strict workflow control
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -14,9 +15,13 @@ import {
   DocumentSection,
   PrintSettings,
   ScanSettings,
+  AppState,
+  PrintWorkflowStep,
+  ScanWorkflowStep,
+  ScanDocumentSource,
 } from './types';
-import { parseCommand, parseCommandWithContext } from './commandParser';
-import { handleCommand } from './actionHandler';
+import { parseCommand, parseCommandWithContext, parseCommandWithState, StateAwareParseContext } from './commandParser';
+import { handleCommand, handleCommandWithState } from './actionHandler';
 import {
   createInitialContext,
   updateContextMode,
@@ -28,17 +33,29 @@ import {
   describeContext,
   isReadyForExecution,
   buildContextSummary,
+  updateAppState,
+  updatePrintStep,
+  updateScanStep,
+  updateScanSource,
+  updateSelectedDocumentIndices,
 } from './contextManager';
 
 export interface UseAIAssistOptions {
   initialMode?: WorkflowMode | null;
   onSettingsChange?: (settings: Partial<PrintSettings | ScanSettings>) => void;
   onDocumentSelect?: (index: number, section: DocumentSection) => void;
+  onMultipleDocumentSelect?: (indices: number[], section: DocumentSection) => void;
+  onDocumentDeselect?: (index: number, section: DocumentSection) => void;
+  onClearSelection?: () => void;
   onSectionSwitch?: (section: DocumentSection) => void;
   onNavigate?: (direction: 'next' | 'prev' | 'back') => void;
   onExecute?: (action: 'print' | 'scan' | 'cancel' | 'confirm') => void;
   onFeedDocuments?: (count: number) => void;
   onToast?: (title: string, description: string, status: 'success' | 'error' | 'warning' | 'info') => void;
+  onModeSwitch?: (mode: WorkflowMode, hasSorry: boolean) => boolean;
+  onScanSourceChange?: (source: ScanDocumentSource) => void;
+  onStateChange?: (appState: AppState, step: PrintWorkflowStep | ScanWorkflowStep | null) => void;
+  totalDocuments?: number;
 }
 
 export interface UseAIAssistReturn {
@@ -49,12 +66,20 @@ export interface UseAIAssistReturn {
   
   // Actions
   processInput: (text: string) => AIResponse;
+  processInputWithState: (text: string) => AIResponse;
   setMode: (mode: WorkflowMode | null) => void;
   setStep: (step: number) => void;
   setDocuments: (documents: DocumentInfo[]) => void;
   setSettings: (settings: Partial<PrintSettings | ScanSettings>) => void;
   setFeedStatus: (fed: boolean, count: number) => void;
   setModalState: (isOpen: boolean, chatVisible: boolean) => void;
+  
+  // State machine actions
+  setAppState: (appState: AppState) => void;
+  setPrintStep: (step: PrintWorkflowStep) => void;
+  setScanStep: (step: ScanWorkflowStep) => void;
+  setScanSource: (source: ScanDocumentSource) => void;
+  setSelectedIndices: (indices: number[]) => void;
   
   // Utilities
   getContextDescription: () => string;
@@ -77,21 +102,33 @@ export function useAIAssist(options: UseAIAssistOptions = {}): UseAIAssistReturn
   useEffect(() => {
     callbacksRef.current = {
       onSelectDocument: options.onDocumentSelect,
+      onSelectMultipleDocuments: options.onMultipleDocumentSelect,
+      onDeselectDocument: options.onDocumentDeselect,
+      onClearDocumentSelection: options.onClearSelection,
       onSwitchSection: options.onSectionSwitch,
       onUpdateSettings: options.onSettingsChange,
       onNavigate: options.onNavigate,
       onExecuteAction: options.onExecute,
       onFeedDocuments: options.onFeedDocuments,
       onShowToast: options.onToast,
+      onModeSwitch: options.onModeSwitch,
+      onSetScanSource: options.onScanSourceChange,
+      onStateChange: options.onStateChange,
     };
   }, [
     options.onDocumentSelect,
+    options.onMultipleDocumentSelect,
+    options.onDocumentDeselect,
+    options.onClearSelection,
     options.onSectionSwitch,
     options.onSettingsChange,
     options.onNavigate,
     options.onExecute,
     options.onFeedDocuments,
     options.onToast,
+    options.onModeSwitch,
+    options.onScanSourceChange,
+    options.onStateChange,
   ]);
   
   // Initialize with mode if provided
@@ -102,7 +139,71 @@ export function useAIAssist(options: UseAIAssistOptions = {}): UseAIAssistReturn
   }, [options.initialMode]);
   
   /**
-   * Process natural language input and execute corresponding action
+   * Process natural language input with state machine validation
+   */
+  const processInputWithState = useCallback((text: string): AIResponse => {
+    // Build state-aware parse context
+    const parseContext: StateAwareParseContext = {
+      appState: context.appState,
+      printStep: context.printStep,
+      scanStep: context.scanStep,
+      scanSource: context.scanSource,
+      totalDocuments: options.totalDocuments || 20,
+    };
+    
+    // Parse the command with state awareness
+    const command = parseCommandWithState(text, parseContext);
+    
+    if (!command) {
+      // In dashboard state, provide helpful guidance
+      if (context.appState === 'DASHBOARD') {
+        return {
+          text: 'Print or scan?',
+          shouldSpeak: true,
+          feedbackType: 'info',
+        };
+      }
+      
+      const fallbackResponse: AIResponse = {
+        text: "Didn't catch that. Say help.",
+        shouldSpeak: true,
+        feedbackType: 'info',
+      };
+      setLastResponse(fallbackResponse);
+      return fallbackResponse;
+    }
+    
+    setLastCommand(command);
+    
+    // Handle the command with state validation
+    const response = handleCommandWithState(command, context, callbacksRef.current);
+    setLastResponse(response);
+    
+    // Update context based on state changes
+    if (response.stateUpdate) {
+      if (response.stateUpdate.newState) {
+        setContext(prev => updateAppState(prev, response.stateUpdate!.newState!));
+      }
+      if (response.stateUpdate.newStep) {
+        const step = response.stateUpdate.newStep;
+        if (context.appState === 'PRINT_WORKFLOW') {
+          setContext(prev => updatePrintStep(prev, step as PrintWorkflowStep));
+        } else if (context.appState === 'SCAN_WORKFLOW') {
+          setContext(prev => updateScanStep(prev, step as ScanWorkflowStep));
+        }
+      }
+    }
+    
+    // Handle cancel/reset
+    if (response.action === 'CANCEL') {
+      setContext(createInitialContext());
+    }
+    
+    return response;
+  }, [context, options.totalDocuments]);
+  
+  /**
+   * Process natural language input and execute corresponding action (legacy)
    */
   const processInput = useCallback((text: string): AIResponse => {
     // Parse the command
@@ -183,6 +284,43 @@ export function useAIAssist(options: UseAIAssistOptions = {}): UseAIAssistReturn
   const setModalState = useCallback((isOpen: boolean, chatVisible: boolean) => {
     setContext(prev => updateContextModalState(prev, isOpen, chatVisible));
   }, []);
+
+  // ==================== State Machine Actions ====================
+  
+  /**
+   * Set app state directly
+   */
+  const setAppState = useCallback((appState: AppState) => {
+    setContext(prev => updateAppState(prev, appState));
+  }, []);
+  
+  /**
+   * Set print workflow step
+   */
+  const setPrintStep = useCallback((step: PrintWorkflowStep) => {
+    setContext(prev => updatePrintStep(prev, step));
+  }, []);
+  
+  /**
+   * Set scan workflow step
+   */
+  const setScanStep = useCallback((step: ScanWorkflowStep) => {
+    setContext(prev => updateScanStep(prev, step));
+  }, []);
+  
+  /**
+   * Set scan document source
+   */
+  const setScanSource = useCallback((source: ScanDocumentSource) => {
+    setContext(prev => updateScanSource(prev, source));
+  }, []);
+  
+  /**
+   * Set selected document indices
+   */
+  const setSelectedIndices = useCallback((indices: number[]) => {
+    setContext(prev => updateSelectedDocumentIndices(prev, indices));
+  }, []);
   
   /**
    * Get human-readable context description
@@ -219,12 +357,20 @@ export function useAIAssist(options: UseAIAssistOptions = {}): UseAIAssistReturn
     lastCommand,
     lastResponse,
     processInput,
+    processInputWithState,
     setMode,
     setStep,
     setDocuments,
     setSettings,
     setFeedStatus,
     setModalState,
+    // State machine actions
+    setAppState,
+    setPrintStep,
+    setScanStep,
+    setScanSource,
+    setSelectedIndices,
+    // Utilities
     getContextDescription,
     getContextSummary,
     isReady,

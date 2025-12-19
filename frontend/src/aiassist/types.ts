@@ -3,6 +3,27 @@
  * Core types for voice commands, settings, and AI interactions
  */
 
+// ==================== App State Types ====================
+export type AppState = 
+  | 'DASHBOARD'           // Dashboard with AI chat, no active workflow
+  | 'PRINT_WORKFLOW'      // Print workflow active
+  | 'SCAN_WORKFLOW';      // Scan workflow active
+
+export type PrintWorkflowStep = 
+  | 'SELECT_DOCUMENT'     // Document selection screen
+  | 'CONFIGURATION'       // Print configuration screen
+  | 'REVIEW'              // Review settings screen
+  | 'EXECUTING';          // Print in progress
+
+export type ScanWorkflowStep = 
+  | 'SOURCE_SELECTION'    // Choose: upload/select or feed tray
+  | 'SELECT_DOCUMENT'     // Document selection (if not feed tray)
+  | 'CONFIGURATION'       // Scan configuration screen
+  | 'REVIEW'              // Review settings screen
+  | 'EXECUTING';          // Scan in progress
+
+export type ScanDocumentSource = 'select' | 'feed' | null;
+
 // ==================== Command Types ====================
 export type CommandCategory =
   | 'document_selection'
@@ -44,7 +65,14 @@ export type CommandAction =
   | 'STOP_RECORDING'
   | 'FEED_DOCUMENTS'
   | 'START_PRINT'
-  | 'START_SCAN';
+  | 'START_SCAN'
+  | 'OPEN_PRINT_MODE'
+  | 'OPEN_SCAN_MODE'
+  | 'REQUEST_MODE_SWITCH'
+  | 'SET_SCAN_SOURCE'
+  | 'SELECT_MULTIPLE_DOCUMENTS'
+  | 'DESELECT_DOCUMENT'
+  | 'CLEAR_DOCUMENT_SELECTION';
 
 export interface ParsedCommand {
   action: CommandAction;
@@ -52,6 +80,10 @@ export interface ParsedCommand {
   params?: Record<string, any>;
   confidence: number;
   originalText: string;
+  stateValidation?: {
+    valid: boolean;
+    reason?: string;
+  };
 }
 
 // ==================== Settings Types ====================
@@ -137,6 +169,12 @@ export interface WorkflowContext {
   feedCount: number;
   selectedDocuments: DocumentInfo[];
   currentSettings: Partial<PrintSettings> | Partial<ScanSettings> | Record<string, unknown>;
+  // New state machine fields
+  appState: AppState;
+  printStep: PrintWorkflowStep | null;
+  scanStep: ScanWorkflowStep | null;
+  scanSource: ScanDocumentSource;
+  selectedDocumentIndices: number[];
 }
 
 // ==================== Response Types ====================
@@ -146,6 +184,10 @@ export interface AIResponse {
   params?: Record<string, any>;
   shouldSpeak?: boolean;
   feedbackType?: 'success' | 'info' | 'warning' | 'error';
+  stateUpdate?: {
+    newState?: AppState;
+    newStep?: PrintWorkflowStep | ScanWorkflowStep;
+  };
 }
 
 // ==================== Handler Types ====================
@@ -161,6 +203,9 @@ export interface CommandHandlerMap {
 // ==================== Callback Types ====================
 export interface AIAssistCallbacks {
   onSelectDocument?: (index: number, section: DocumentSection) => void;
+  onSelectMultipleDocuments?: (indices: number[], section: DocumentSection) => void;
+  onDeselectDocument?: (index: number, section: DocumentSection) => void;
+  onClearDocumentSelection?: () => void;
   onSwitchSection?: (section: DocumentSection) => void;
   onUpdateSettings?: (settings: Partial<PrintSettings | ScanSettings>) => void;
   onNavigate?: (direction: 'next' | 'prev' | 'back') => void;
@@ -169,4 +214,7 @@ export interface AIAssistCallbacks {
   onOpenModal?: () => void;
   onCloseModal?: () => void;
   onShowToast?: (title: string, description: string, status: 'success' | 'error' | 'warning' | 'info') => void;
+  onModeSwitch?: (mode: WorkflowMode, hasSorry: boolean) => boolean;
+  onSetScanSource?: (source: ScanDocumentSource) => void;
+  onStateChange?: (appState: AppState, step: PrintWorkflowStep | ScanWorkflowStep | null) => void;
 }

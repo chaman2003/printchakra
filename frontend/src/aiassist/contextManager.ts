@@ -1,6 +1,7 @@
 /**
  * AI Assist Context Manager
  * Manages workflow state and context for AI interactions
+ * Integrates with state machine for strict state control
  */
 
 import {
@@ -10,32 +11,55 @@ import {
   OrchestrateOptions,
   PrintSettings,
   ScanSettings,
+  AppState,
+  PrintWorkflowStep,
+  ScanWorkflowStep,
+  ScanDocumentSource,
 } from './types';
 import { defaultPrintSettings, defaultScanSettings } from './settingsHandler';
 
 /**
- * Create initial workflow context
+ * Create initial workflow context with state machine
  */
 export function createInitialContext(): WorkflowContext {
   return {
     mode: null,
     step: 1,
     isModalOpen: false,
-    isChatVisible: false,
+    isChatVisible: true, // Chat should always be accessible
     documentsFed: false,
     feedCount: 0,
     selectedDocuments: [],
     currentSettings: {},
+    // State machine fields
+    appState: 'DASHBOARD',
+    printStep: null,
+    scanStep: null,
+    scanSource: null,
+    selectedDocumentIndices: [],
   };
 }
 
 /**
  * Update context when workflow mode changes
+ * Now also updates the state machine
  */
 export function updateContextMode(
   context: WorkflowContext,
   mode: WorkflowMode | null
 ): WorkflowContext {
+  let appState: AppState = 'DASHBOARD';
+  let printStep: PrintWorkflowStep | null = null;
+  let scanStep: ScanWorkflowStep | null = null;
+
+  if (mode === 'print') {
+    appState = 'PRINT_WORKFLOW';
+    printStep = 'SELECT_DOCUMENT';
+  } else if (mode === 'scan') {
+    appState = 'SCAN_WORKFLOW';
+    scanStep = 'SOURCE_SELECTION';
+  }
+
   return {
     ...context,
     mode,
@@ -45,6 +69,108 @@ export function updateContextMode(
       : mode === 'scan'
         ? { ...defaultScanSettings }
         : {},
+    appState,
+    printStep,
+    scanStep,
+    scanSource: mode === 'scan' ? null : context.scanSource,
+    selectedDocumentIndices: [],
+  };
+}
+
+/**
+ * Update app state directly
+ */
+export function updateAppState(
+  context: WorkflowContext,
+  appState: AppState
+): WorkflowContext {
+  let mode: WorkflowMode | null = null;
+  if (appState === 'PRINT_WORKFLOW') mode = 'print';
+  if (appState === 'SCAN_WORKFLOW') mode = 'scan';
+
+  return {
+    ...context,
+    appState,
+    mode,
+  };
+}
+
+/**
+ * Update print workflow step
+ */
+export function updatePrintStep(
+  context: WorkflowContext,
+  printStep: PrintWorkflowStep
+): WorkflowContext {
+  // Map step to legacy step number
+  const stepMap: Record<PrintWorkflowStep, number> = {
+    'SELECT_DOCUMENT': 1,
+    'CONFIGURATION': 2,
+    'REVIEW': 3,
+    'EXECUTING': 3,
+  };
+
+  return {
+    ...context,
+    printStep,
+    step: stepMap[printStep],
+    isChatVisible: true, // Always keep chat accessible
+  };
+}
+
+/**
+ * Update scan workflow step
+ */
+export function updateScanStep(
+  context: WorkflowContext,
+  scanStep: ScanWorkflowStep
+): WorkflowContext {
+  // Map step to legacy step number
+  const stepMap: Record<ScanWorkflowStep, number> = {
+    'SOURCE_SELECTION': 1,
+    'SELECT_DOCUMENT': 1,
+    'CONFIGURATION': 2,
+    'REVIEW': 3,
+    'EXECUTING': 3,
+  };
+
+  return {
+    ...context,
+    scanStep,
+    step: stepMap[scanStep],
+    isChatVisible: true, // Always keep chat accessible
+  };
+}
+
+/**
+ * Update scan document source
+ */
+export function updateScanSource(
+  context: WorkflowContext,
+  scanSource: ScanDocumentSource
+): WorkflowContext {
+  // Auto-advance to next step based on source
+  const nextStep: ScanWorkflowStep = scanSource === 'feed' 
+    ? 'CONFIGURATION' 
+    : 'SELECT_DOCUMENT';
+
+  return {
+    ...context,
+    scanSource,
+    scanStep: nextStep,
+  };
+}
+
+/**
+ * Update selected document indices
+ */
+export function updateSelectedDocumentIndices(
+  context: WorkflowContext,
+  indices: number[]
+): WorkflowContext {
+  return {
+    ...context,
+    selectedDocumentIndices: indices,
   };
 }
 
@@ -155,6 +281,31 @@ export function isReadyForExecution(context: WorkflowContext): {
     return { ready: false, reason: 'No workflow mode selected' };
   }
 
+  // Use state machine to check readiness
+  if (context.appState === 'PRINT_WORKFLOW') {
+    if (context.printStep !== 'REVIEW' && context.printStep !== 'EXECUTING') {
+      return { ready: false, reason: 'Please complete all configuration steps' };
+    }
+    if (context.selectedDocuments.length === 0 && context.selectedDocumentIndices.length === 0) {
+      return { ready: false, reason: 'No documents selected for printing' };
+    }
+  }
+
+  if (context.appState === 'SCAN_WORKFLOW') {
+    if (context.scanStep !== 'REVIEW' && context.scanStep !== 'EXECUTING') {
+      return { ready: false, reason: 'Please complete all configuration steps' };
+    }
+    if (context.scanSource === 'select' && 
+        context.selectedDocuments.length === 0 && 
+        context.selectedDocumentIndices.length === 0) {
+      return { ready: false, reason: 'No documents selected for scanning' };
+    }
+    if (context.scanSource === 'feed' && !context.documentsFed) {
+      return { ready: false, reason: 'Please feed documents through the printer first' };
+    }
+  }
+
+  // Legacy check
   if (context.step < 3) {
     return { ready: false, reason: 'Please complete all configuration steps' };
   }
@@ -194,11 +345,16 @@ export function deserializeContext(json: string): WorkflowContext {
       mode: parsed.mode || null,
       step: parsed.step || 1,
       isModalOpen: parsed.isModalOpen || false,
-      isChatVisible: parsed.isChatVisible || false,
+      isChatVisible: parsed.isChatVisible ?? true, // Default to true for accessibility
       documentsFed: parsed.documentsFed || false,
       feedCount: parsed.feedCount || 0,
       selectedDocuments: parsed.selectedDocuments || [],
       currentSettings: parsed.currentSettings || {},
+      appState: parsed.appState || 'DASHBOARD',
+      printStep: parsed.printStep || null,
+      scanStep: parsed.scanStep || null,
+      scanSource: parsed.scanSource || null,
+      selectedDocumentIndices: parsed.selectedDocumentIndices || [],
     };
   } catch {
     return createInitialContext();
@@ -207,48 +363,65 @@ export function deserializeContext(json: string): WorkflowContext {
 
 /**
  * Build context summary for AI system prompt
+ * Enhanced with state machine info
  */
 export function buildContextSummary(context: WorkflowContext): string {
   const lines: string[] = [
     '=== CURRENT WORKFLOW STATE ===',
   ];
 
-  if (context.mode) {
-    lines.push(`Mode: ${context.mode.toUpperCase()}`);
-    lines.push(`Step: ${context.step}/3`);
+  // Add state machine state
+  lines.push(`App State: ${context.appState}`);
+
+  if (context.appState === 'PRINT_WORKFLOW') {
+    lines.push(`Mode: PRINT`);
+    lines.push(`Step: ${context.printStep || 'unknown'}`);
     
+    if (context.selectedDocumentIndices.length > 0) {
+      lines.push(`Documents Selected: ${context.selectedDocumentIndices.length}`);
+    }
     if (context.selectedDocuments.length > 0) {
       lines.push(`Documents: ${context.selectedDocuments.map(d => d.filename).join(', ')}`);
     }
 
-    if (context.mode === 'scan' && context.documentsFed) {
+    // Add current settings
+    const settings = context.currentSettings as PrintSettings;
+    if (Object.keys(settings).length > 0) {
+      lines.push('Settings:');
+      if (settings.layout) lines.push(`  - Layout: ${settings.layout}`);
+      if (settings.paperSize) lines.push(`  - Paper: ${settings.paperSize}`);
+      if (settings.colorMode) lines.push(`  - Color: ${settings.colorMode}`);
+      if (settings.copies && settings.copies !== '1') lines.push(`  - Copies: ${settings.copies}`);
+      if (settings.scale && settings.scale !== '100') lines.push(`  - Scale: ${settings.scale}%`);
+    }
+  } else if (context.appState === 'SCAN_WORKFLOW') {
+    lines.push(`Mode: SCAN`);
+    lines.push(`Step: ${context.scanStep || 'unknown'}`);
+    lines.push(`Source: ${context.scanSource || 'not selected'}`);
+    
+    if (context.scanSource === 'feed' && context.documentsFed) {
       lines.push(`Fed: ${context.feedCount} page(s)`);
+    }
+    if (context.selectedDocumentIndices.length > 0) {
+      lines.push(`Documents Selected: ${context.selectedDocumentIndices.length}`);
     }
 
     // Add current settings
-    const settings = context.currentSettings;
+    const settings = context.currentSettings as ScanSettings;
     if (Object.keys(settings).length > 0) {
       lines.push('Settings:');
-      if (context.mode === 'print') {
-        const ps = settings as PrintSettings;
-        if (ps.layout) lines.push(`  - Layout: ${ps.layout}`);
-        if (ps.paperSize) lines.push(`  - Paper: ${ps.paperSize}`);
-        if (ps.colorMode) lines.push(`  - Color: ${ps.colorMode}`);
-        if (ps.copies && ps.copies !== '1') lines.push(`  - Copies: ${ps.copies}`);
-        if (ps.scale && ps.scale !== '100') lines.push(`  - Scale: ${ps.scale}%`);
-      } else {
-        const ss = settings as ScanSettings;
-        if (ss.layout) lines.push(`  - Layout: ${ss.layout}`);
-        if (ss.resolution) lines.push(`  - Resolution: ${ss.resolution} DPI`);
-        if (ss.colorMode) lines.push(`  - Color: ${ss.colorMode}`);
-        if (ss.textMode) lines.push(`  - OCR: enabled`);
-      }
+      if (settings.layout) lines.push(`  - Layout: ${settings.layout}`);
+      if (settings.resolution) lines.push(`  - Resolution: ${settings.resolution} DPI`);
+      if (settings.colorMode) lines.push(`  - Color: ${settings.colorMode}`);
+      if (settings.textMode) lines.push(`  - OCR: enabled`);
     }
   } else {
     lines.push('No active workflow');
     lines.push('Ready to start print or scan operation');
+    lines.push('Say "print" or "scan" to begin.');
   }
 
+  lines.push(`Chat Accessible: ${context.isChatVisible ? 'Yes' : 'No'}`);
   lines.push('=============================');
   
   return lines.join('\n');
@@ -257,6 +430,11 @@ export function buildContextSummary(context: WorkflowContext): string {
 export default {
   createInitialContext,
   updateContextMode,
+  updateAppState,
+  updatePrintStep,
+  updateScanStep,
+  updateScanSource,
+  updateSelectedDocumentIndices,
   updateContextStep,
   updateContextDocuments,
   updateContextSettings,

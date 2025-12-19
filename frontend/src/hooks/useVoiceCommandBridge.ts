@@ -3,10 +3,11 @@
  * Bridges voice commands from VoiceAIChat with useAIAssist and UI actions
  * 
  * This hook provides:
- * - Local command parsing with useAIAssist
+ * - Local command parsing with useAIAssist (with state machine validation)
  * - UI action dispatching (scroll, navigate, modals)
  * - Settings synchronization with orchestration options
  * - Unified command handling from both voice and text inputs
+ * - Human-like, concise responses
  */
 
 import { useCallback, useRef, useEffect } from 'react';
@@ -248,6 +249,7 @@ export function useVoiceCommandBridge(
 
   /**
    * Process voice command from backend
+   * Routes through state validation and uses concise responses
    */
   const processVoiceCommand = useCallback((payload: VoiceCommandPayload): AIResponse | null => {
     const { command, params } = payload;
@@ -261,14 +263,15 @@ export function useVoiceCommandBridge(
     }
 
     // Handle UI-specific commands that don't go through AI assist
+    // Use concise, human-like responses
     switch (frontendAction) {
       case 'SCROLL_DOWN':
         onScroll('down');
-        return { text: 'Scrolling down.', shouldSpeak: false, feedbackType: 'info' };
+        return { text: 'Down.', shouldSpeak: false, feedbackType: 'info' };
         
       case 'SCROLL_UP':
         onScroll('up');
-        return { text: 'Scrolling up.', shouldSpeak: false, feedbackType: 'info' };
+        return { text: 'Up.', shouldSpeak: false, feedbackType: 'info' };
         
       case 'CLEAR_PRINT_QUEUE':
       case 'CHECK_CONNECTIVITY':
@@ -287,7 +290,7 @@ export function useVoiceCommandBridge(
         
       case 'UPLOAD_DOCUMENT':
         onModalOpen('upload');
-        return { text: 'Opening upload dialog.', shouldSpeak: true, feedbackType: 'info' };
+        return { text: 'Upload.', shouldSpeak: true, feedbackType: 'info' };
         
       case 'SELECT_DOCUMENT':
         if (params?.section) {
@@ -297,25 +300,25 @@ export function useVoiceCommandBridge(
           const section = (params.section || 'current') as DocumentSection;
           onDocumentSelect(section, parseInt(params.document_number, 10));
         }
-        return { text: `Selecting document.`, shouldSpeak: true, feedbackType: 'success' };
+        return { text: `Got it.`, shouldSpeak: true, feedbackType: 'success' };
         
       case 'SWITCH_SECTION':
         if (params?.section) {
           onSectionSwitch(params.section as DocumentSection);
         }
-        return { text: `Switching to ${params?.section || 'documents'}.`, shouldSpeak: true, feedbackType: 'success' };
+        return { text: `${params?.section || 'documents'}.`, shouldSpeak: true, feedbackType: 'success' };
         
       case 'NEXT_DOCUMENT':
         onNavigate('next');
-        return { text: 'Moving to next document.', shouldSpeak: true, feedbackType: 'success' };
+        return { text: 'Next.', shouldSpeak: true, feedbackType: 'success' };
         
       case 'PREV_DOCUMENT':
         onNavigate('prev');
-        return { text: 'Moving to previous document.', shouldSpeak: true, feedbackType: 'success' };
+        return { text: 'Previous.', shouldSpeak: true, feedbackType: 'success' };
         
       case 'GO_BACK':
         onNavigate('back');
-        return { text: 'Going back.', shouldSpeak: true, feedbackType: 'info' };
+        return { text: 'Back.', shouldSpeak: true, feedbackType: 'info' };
         
       case 'CONFIRM':
         if (orchestrateMode) {
@@ -323,19 +326,19 @@ export function useVoiceCommandBridge(
         } else {
           onExecute('confirm');
         }
-        return { text: 'Executing now!', shouldSpeak: true, feedbackType: 'success' };
+        return { text: 'Done!', shouldSpeak: true, feedbackType: 'success' };
         
       case 'CANCEL':
         onExecute('cancel');
         onModalClose();
         return { text: 'Cancelled.', shouldSpeak: true, feedbackType: 'warning' };
         
-      // Settings commands - map params to orchestrate options
+      // Settings commands - concise confirmations
       case 'SET_LAYOUT':
         if (params?.layout && orchestrateMode) {
           const key = orchestrateMode === 'print' ? 'printLayout' : 'scanLayout';
           onSettingsChange({ [key]: params.layout });
-          return { text: `Layout set to ${params.layout}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.layout}.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
@@ -343,8 +346,8 @@ export function useVoiceCommandBridge(
         if (params?.colorMode && orchestrateMode) {
           const key = orchestrateMode === 'print' ? 'printColorMode' : 'scanColorMode';
           onSettingsChange({ [key]: params.colorMode });
-          const displayMode = params.colorMode === 'bw' ? 'Black and White' : params.colorMode;
-          return { text: `Color mode set to ${displayMode}.`, shouldSpeak: true, feedbackType: 'success' };
+          const displayMode = params.colorMode === 'bw' ? 'Black and white' : params.colorMode;
+          return { text: `${displayMode}.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
@@ -352,7 +355,7 @@ export function useVoiceCommandBridge(
         if (params?.paperSize && orchestrateMode) {
           const key = orchestrateMode === 'print' ? 'printPaperSize' : 'scanPaperSize';
           onSettingsChange({ [key]: params.paperSize });
-          return { text: `Paper size set to ${params.paperSize}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.paperSize}.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
@@ -360,7 +363,7 @@ export function useVoiceCommandBridge(
         if (params?.resolution && orchestrateMode) {
           const key = orchestrateMode === 'print' ? 'printResolution' : 'scanResolution';
           onSettingsChange({ [key]: String(params.resolution) });
-          return { text: `Resolution set to ${params.resolution} DPI.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.resolution} DPI.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
@@ -372,35 +375,35 @@ export function useVoiceCommandBridge(
             const rangeKey = orchestrateMode === 'print' ? 'printCustomRange' : 'scanCustomRange';
             onSettingsChange({ [rangeKey]: params.customRange });
           }
-          return { text: `Page selection set to ${params.pages}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.pages} pages.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
       case 'SET_COPIES':
         if (params?.copies && orchestrateMode === 'print') {
           onSettingsChange({ printCopies: String(params.copies) });
-          return { text: `Copies set to ${params.copies}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.copies} copies.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
       case 'SET_DUPLEX':
         if (params?.duplex !== undefined && orchestrateMode === 'print') {
           onSettingsChange({ printDuplex: params.duplex });
-          return { text: `Double-sided ${params.duplex ? 'enabled' : 'disabled'}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: params.duplex ? 'Double-sided.' : 'Single-sided.', shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
       case 'SET_MARGINS':
         if (params?.margins && orchestrateMode === 'print') {
           onSettingsChange({ printMargins: params.margins });
-          return { text: `Margins set to ${params.margins}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.margins} margins.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
       case 'SET_SCALE':
         if (params?.scale && orchestrateMode === 'print') {
           onSettingsChange({ printScale: String(params.scale) });
-          return { text: `Scale set to ${params.scale}%.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.scale}% scale.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
@@ -408,7 +411,7 @@ export function useVoiceCommandBridge(
         if (params?.quality && orchestrateMode) {
           const key = orchestrateMode === 'print' ? 'printQuality' : 'scanQuality';
           onSettingsChange({ [key]: params.quality });
-          return { text: `Quality set to ${params.quality}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: `${params.quality} quality.`, shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
@@ -416,14 +419,14 @@ export function useVoiceCommandBridge(
       case 'TOGGLE_TEXT_MODE':
         if (params?.enabled !== undefined && orchestrateMode === 'scan') {
           onSettingsChange({ scanTextMode: params.enabled });
-          return { text: `OCR ${params.enabled ? 'enabled' : 'disabled'}.`, shouldSpeak: true, feedbackType: 'success' };
+          return { text: params.enabled ? 'OCR on.' : 'OCR off.', shouldSpeak: true, feedbackType: 'success' };
         }
         break;
         
       case 'STATUS':
         const statusText = orchestrateMode
-          ? `${orchestrateMode.toUpperCase()} mode active.`
-          : 'No active operation.';
+          ? `${orchestrateMode} mode.`
+          : 'Ready.';
         displayToast('Status', statusText, 'info');
         return { text: statusText, shouldSpeak: true, feedbackType: 'info' };
         
@@ -432,12 +435,12 @@ export function useVoiceCommandBridge(
         return null;
         
       case 'HELP':
-        const helpText = 'You can say: select document, set layout to landscape, change to color mode, confirm print, cancel, or ask for status.';
+        const helpText = 'Say: select document, landscape, color, confirm, or cancel.';
         displayToast('Help', helpText, 'info');
         return { text: helpText, shouldSpeak: true, feedbackType: 'info' };
         
       case 'STOP_RECORDING':
-        return { text: 'Stopping recording.', shouldSpeak: true, feedbackType: 'info' };
+        return { text: 'Stopping.', shouldSpeak: true, feedbackType: 'info' };
     }
     
     return null;

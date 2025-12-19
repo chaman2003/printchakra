@@ -1,6 +1,6 @@
 /**
  * AI Assist Action Handler
- * Executes actions based on parsed commands
+ * Executes actions based on parsed commands with state machine integration
  */
 
 import {
@@ -11,9 +11,21 @@ import {
   DocumentSection,
   PrintSettings,
   ScanSettings,
+  AppState,
 } from './types';
 import AIAssistConfig from './config';
 import { applySettingChange, getSettingsSummary } from './settingsHandler';
+import {
+  describeAIState,
+  getValidActionsForState,
+  getModeSwitchRejectionMessage,
+  AIState,
+} from './stateManager';
+import {
+  applyDocumentSelection,
+  describeSelectionAction,
+  DocumentSelectionCommand,
+} from './documentSelectionParser';
 
 const responses = AIAssistConfig.responses;
 
@@ -105,6 +117,67 @@ export function handleDocumentSelection(
         feedbackType: 'info',
       };
     }
+
+    case 'SELECT_MULTIPLE_DOCUMENTS': {
+      const indices = params?.indices as number[] || [];
+      const section = (params?.section || 'current') as DocumentSection;
+      
+      if (indices.length > 0 && callbacks.onSelectMultipleDocuments) {
+        callbacks.onSelectMultipleDocuments(indices, section);
+        const description = indices.length === 1
+          ? `Selected document ${indices[0] + 1}`
+          : `Selected ${indices.length} documents`;
+        return {
+          text: description,
+          action: command.action,
+          params: { indices, section },
+          shouldSpeak: true,
+          feedbackType: 'success',
+        };
+      }
+      return {
+        text: 'Please specify which documents to select.',
+        shouldSpeak: true,
+        feedbackType: 'info',
+      };
+    }
+
+    case 'DESELECT_DOCUMENT': {
+      const indices = params?.indices as number[] || [];
+      const section = (params?.section || 'current') as DocumentSection;
+      
+      if (indices.length > 0 && callbacks.onDeselectDocument) {
+        indices.forEach(idx => callbacks.onDeselectDocument!(idx, section));
+        const description = indices.length === 1
+          ? `Deselected document ${indices[0] + 1}`
+          : `Deselected ${indices.length} documents`;
+        return {
+          text: description,
+          action: command.action,
+          params: { indices, section },
+          shouldSpeak: true,
+          feedbackType: 'success',
+        };
+      }
+      return {
+        text: 'Please specify which document to deselect.',
+        shouldSpeak: true,
+        feedbackType: 'info',
+      };
+    }
+
+    case 'CLEAR_DOCUMENT_SELECTION': {
+      if (callbacks.onClearDocumentSelection) {
+        callbacks.onClearDocumentSelection();
+        return {
+          text: 'Cleared all document selections.',
+          action: command.action,
+          shouldSpeak: true,
+          feedbackType: 'success',
+        };
+      }
+      break;
+    }
   }
 
   return {
@@ -112,6 +185,197 @@ export function handleDocumentSelection(
     shouldSpeak: true,
     feedbackType: 'warning',
   };
+}
+
+/**
+ * Handle mode switching commands with state validation
+ */
+export function handleModeSwitch(
+  command: ParsedCommand,
+  context: WorkflowContext,
+  callbacks: AIAssistCallbacks
+): AIResponse {
+  const { params, stateValidation } = command;
+  const { appState } = context;
+
+  switch (command.action) {
+    case 'OPEN_PRINT_MODE': {
+      if (appState === 'SCAN_WORKFLOW') {
+        // Rejected - should have used REQUEST_MODE_SWITCH with sorry
+        return {
+          text: getModeSwitchRejectionMessage(appState, 'print'),
+          shouldSpeak: true,
+          feedbackType: 'warning',
+        };
+      }
+      
+      if (callbacks.onModeSwitch) {
+        callbacks.onModeSwitch('print', false);
+      }
+      if (callbacks.onStateChange) {
+        callbacks.onStateChange('PRINT_WORKFLOW', 'SELECT_DOCUMENT');
+      }
+      
+      return {
+        text: 'Print mode. Select documents.',
+        action: command.action,
+        shouldSpeak: true,
+        feedbackType: 'success',
+        stateUpdate: {
+          newState: 'PRINT_WORKFLOW',
+          newStep: 'SELECT_DOCUMENT',
+        },
+      };
+    }
+
+    case 'OPEN_SCAN_MODE': {
+      if (appState === 'PRINT_WORKFLOW') {
+        // Rejected - should have used REQUEST_MODE_SWITCH with sorry
+        return {
+          text: getModeSwitchRejectionMessage(appState, 'scan'),
+          shouldSpeak: true,
+          feedbackType: 'warning',
+        };
+      }
+      
+      if (callbacks.onModeSwitch) {
+        callbacks.onModeSwitch('scan', false);
+      }
+      if (callbacks.onStateChange) {
+        callbacks.onStateChange('SCAN_WORKFLOW', 'SOURCE_SELECTION');
+      }
+      
+      return {
+        text: 'Scan mode. Select documents or use feed tray?',
+        action: command.action,
+        shouldSpeak: true,
+        feedbackType: 'success',
+        stateUpdate: {
+          newState: 'SCAN_WORKFLOW',
+          newStep: 'SOURCE_SELECTION',
+        },
+      };
+    }
+
+    case 'REQUEST_MODE_SWITCH': {
+      const targetMode = params?.targetMode as 'print' | 'scan';
+      const hasSorry = params?.hasSorry as boolean;
+      
+      // Check if state validation passed
+      if (stateValidation && !stateValidation.valid) {
+        return {
+          text: stateValidation.reason || `Say "Sorry, ${targetMode}" to switch.`,
+          shouldSpeak: true,
+          feedbackType: 'warning',
+        };
+      }
+      
+      if (!hasSorry) {
+        return {
+          text: `Say "Sorry, ${targetMode}" to switch.`,
+          shouldSpeak: true,
+          feedbackType: 'warning',
+        };
+      }
+      
+      // Perform the switch
+      if (callbacks.onModeSwitch) {
+        callbacks.onModeSwitch(targetMode, true);
+      }
+      
+      if (targetMode === 'print') {
+        if (callbacks.onStateChange) {
+          callbacks.onStateChange('PRINT_WORKFLOW', 'SELECT_DOCUMENT');
+        }
+        return {
+          text: 'Switched to print. Select documents.',
+          action: command.action,
+          shouldSpeak: true,
+          feedbackType: 'success',
+          stateUpdate: {
+            newState: 'PRINT_WORKFLOW',
+            newStep: 'SELECT_DOCUMENT',
+          },
+        };
+      } else {
+        if (callbacks.onStateChange) {
+          callbacks.onStateChange('SCAN_WORKFLOW', 'SOURCE_SELECTION');
+        }
+        return {
+          text: 'Switched to scan. Documents or feed tray?',
+          action: command.action,
+          shouldSpeak: true,
+          feedbackType: 'success',
+          stateUpdate: {
+            newState: 'SCAN_WORKFLOW',
+            newStep: 'SOURCE_SELECTION',
+          },
+        };
+      }
+    }
+  }
+
+  return {
+    text: 'Mode switch not handled.',
+    shouldSpeak: true,
+    feedbackType: 'warning',
+  };
+}
+
+/**
+ * Handle scan source selection
+ */
+export function handleScanSourceSelection(
+  command: ParsedCommand,
+  context: WorkflowContext,
+  callbacks: AIAssistCallbacks
+): AIResponse {
+  const { params } = command;
+  const source = params?.source as 'feed' | 'select';
+
+  if (context.appState !== 'SCAN_WORKFLOW') {
+    return {
+      text: 'Open scan mode first.',
+      shouldSpeak: true,
+      feedbackType: 'warning',
+    };
+  }
+
+  if (callbacks.onSetScanSource) {
+    callbacks.onSetScanSource(source);
+  }
+
+  if (source === 'feed') {
+    if (callbacks.onStateChange) {
+      callbacks.onStateChange('SCAN_WORKFLOW', 'CONFIGURATION');
+    }
+    return {
+      text: 'Feed tray. Configure settings.',
+      action: 'SET_SCAN_SOURCE',
+      params: { source },
+      shouldSpeak: true,
+      feedbackType: 'success',
+      stateUpdate: {
+        newState: 'SCAN_WORKFLOW',
+        newStep: 'CONFIGURATION',
+      },
+    };
+  } else {
+    if (callbacks.onStateChange) {
+      callbacks.onStateChange('SCAN_WORKFLOW', 'SELECT_DOCUMENT');
+    }
+    return {
+      text: 'Select your documents.',
+      action: 'SET_SCAN_SOURCE',
+      params: { source },
+      shouldSpeak: true,
+      feedbackType: 'success',
+      stateUpdate: {
+        newState: 'SCAN_WORKFLOW',
+        newStep: 'SELECT_DOCUMENT',
+      },
+    };
+  }
 }
 
 /**
@@ -125,7 +389,7 @@ export function handleNavigation(
   switch (command.action) {
     case 'SCROLL_DOWN':
       return {
-        text: 'Scrolling down.',
+        text: 'Down.',
         action: 'SCROLL_DOWN',
         shouldSpeak: false,
         feedbackType: 'info',
@@ -133,7 +397,7 @@ export function handleNavigation(
 
     case 'SCROLL_UP':
       return {
-        text: 'Scrolling up.',
+        text: 'Up.',
         action: 'SCROLL_UP',
         shouldSpeak: false,
         feedbackType: 'info',
@@ -143,7 +407,7 @@ export function handleNavigation(
       if (callbacks.onNavigate) {
         callbacks.onNavigate('back');
         return {
-          text: 'Going back.',
+          text: 'Back.',
           action: 'GO_BACK',
           shouldSpeak: true,
           feedbackType: 'info',
@@ -154,7 +418,7 @@ export function handleNavigation(
     case 'GO_NEXT':
     case 'APPLY_SETTINGS':
       return {
-        text: 'Applying settings and continuing.',
+        text: 'Applied.',
         action: 'APPLY_SETTINGS',
         shouldSpeak: true,
         feedbackType: 'success',
@@ -162,7 +426,7 @@ export function handleNavigation(
   }
 
   return {
-    text: 'Navigation command received.',
+    text: 'Ok.',
     shouldSpeak: false,
     feedbackType: 'info',
   };
@@ -180,7 +444,7 @@ export function handleWorkflowAction(
     case 'CONFIRM': {
       if (!context.mode) {
         return {
-          text: 'No active operation to confirm.',
+          text: 'Nothing to confirm.',
           shouldSpeak: true,
           feedbackType: 'warning',
         };
@@ -189,9 +453,7 @@ export function handleWorkflowAction(
       if (callbacks.onExecuteAction) {
         callbacks.onExecuteAction(context.mode);
         return {
-          text: context.mode === 'print' 
-            ? responses.printStarted()
-            : responses.scanStarted(),
+          text: responses.printStarted(),
           action: 'CONFIRM',
           shouldSpeak: true,
           feedbackType: 'success',
@@ -274,7 +536,7 @@ export function handleSystemCommand(
     case 'STATUS': {
       if (!context.mode) {
         return {
-          text: 'No active workflow. Say "print" or "scan" to start.',
+          text: 'Ready. Say print or scan.',
           action: 'STATUS',
           shouldSpeak: true,
           feedbackType: 'info',
@@ -291,7 +553,7 @@ export function handleSystemCommand(
     case 'REPEAT_SETTINGS': {
       if (!context.mode || !context.currentSettings) {
         return {
-          text: 'No settings configured yet.',
+          text: 'No settings yet.',
           action: 'REPEAT_SETTINGS',
           shouldSpeak: true,
           feedbackType: 'info',
@@ -299,7 +561,7 @@ export function handleSystemCommand(
       }
       const summary = getSettingsSummary(context.currentSettings as Partial<PrintSettings & ScanSettings>, context.mode);
       return {
-        text: `Current ${context.mode} settings: ${summary}`,
+        text: summary,
         action: 'REPEAT_SETTINGS',
         shouldSpeak: true,
         feedbackType: 'info',
@@ -317,7 +579,7 @@ export function handleSystemCommand(
 
     case 'STOP_RECORDING': {
       return {
-        text: 'Stopping voice recording.',
+        text: 'Stopping.',
         action: 'STOP_RECORDING',
         shouldSpeak: true,
         feedbackType: 'info',
@@ -326,7 +588,7 @@ export function handleSystemCommand(
   }
 
   return {
-    text: 'System command received.',
+    text: 'Ok.',
     shouldSpeak: false,
     feedbackType: 'info',
   };
@@ -334,12 +596,34 @@ export function handleSystemCommand(
 
 /**
  * Main action handler - routes command to appropriate handler
+ * Integrates state machine validation
  */
 export function handleCommand(
   command: ParsedCommand,
   context: WorkflowContext,
   callbacks: AIAssistCallbacks
 ): AIResponse {
+  // Check state validation first
+  if (command.stateValidation && !command.stateValidation.valid) {
+    return {
+      text: command.stateValidation.reason || 'This command is not available in the current state.',
+      shouldSpeak: true,
+      feedbackType: 'warning',
+    };
+  }
+
+  // Handle mode switching commands
+  if (command.action === 'OPEN_PRINT_MODE' || 
+      command.action === 'OPEN_SCAN_MODE' || 
+      command.action === 'REQUEST_MODE_SWITCH') {
+    return handleModeSwitch(command, context, callbacks);
+  }
+
+  // Handle scan source selection
+  if (command.action === 'SET_SCAN_SOURCE') {
+    return handleScanSourceSelection(command, context, callbacks);
+  }
+
   // Route based on command category
   switch (command.category) {
     case 'document_selection':
@@ -358,7 +642,7 @@ export function handleCommand(
         return result.response;
       }
       return {
-        text: 'Please start a print or scan workflow first.',
+        text: 'Say print or scan first.',
         shouldSpeak: true,
         feedbackType: 'warning',
       };
@@ -384,9 +668,46 @@ export function handleCommand(
   }
 }
 
+/**
+ * State-aware command handler with full context
+ */
+export function handleCommandWithState(
+  command: ParsedCommand,
+  context: WorkflowContext,
+  callbacks: AIAssistCallbacks
+): AIResponse {
+  const { appState, printStep, scanStep } = context;
+
+  // In Dashboard state, only allow mode commands
+  if (appState === 'DASHBOARD') {
+    const allowedActions = ['OPEN_PRINT_MODE', 'OPEN_SCAN_MODE', 'HELP', 'STATUS'];
+    if (!allowedActions.includes(command.action)) {
+      return {
+        text: 'I\'m ready to help you print or scan. Say "print" to start printing or "scan" to start scanning.',
+        shouldSpeak: true,
+        feedbackType: 'info',
+      };
+    }
+  }
+
+  // Validate command for current state
+  if (command.stateValidation && !command.stateValidation.valid) {
+    return {
+      text: command.stateValidation.reason || 'This action is not available right now.',
+      shouldSpeak: true,
+      feedbackType: 'warning',
+    };
+  }
+
+  return handleCommand(command, context, callbacks);
+}
+
 export default {
   handleCommand,
+  handleCommandWithState,
   handleDocumentSelection,
+  handleModeSwitch,
+  handleScanSourceSelection,
   handleNavigation,
   handleWorkflowAction,
   handleSystemCommand,

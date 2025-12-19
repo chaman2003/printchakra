@@ -253,6 +253,10 @@ printchakra/
 │   │       ├── file_utils.py      # File operations
 │   │       ├── image_utils.py     # Image utilities
 │   │       └── logger.py          # Logging utilities
+│   │   ├── print_scripts/             # Printing utility scripts
+│   │   │   ├── print-file.py          # File printing script
+│   │   │   ├── printer_test.py        # Printer testing utility
+│   │   │   └── README.md              # Printing scripts documentation
 │   ├── data/                      # Data storage directories
 │   │   ├── uploads/               # User uploaded files
 │   │   ├── processed/             # Processed files
@@ -274,10 +278,6 @@ printchakra/
 │   │   │   └── uploads/
 │   │   └── poppler/               # Poppler binary for PDF processing
 │   │       └── poppler-24.08.0/   # Poppler version
-│   ├── print_scripts/             # Printing utility scripts
-│   │   ├── print-file.py          # File printing script
-│   │   ├── printer_test.py        # Printer testing utility
-│   │   └── README.md              # Printing scripts documentation
 │   ├── logs/                      # Application logs
 │   └── __pycache__/               # Python cache files
 │
@@ -509,19 +509,86 @@ LOGS_DIR=backend/logs
    - Configure jobs via voice
    - Receive voice feedback and confirmations
 
-### Common Commands
+### AI Communication Commands
 
-```bash
-# Voice/Text Commands
-"Print the first document"
-"Scan a document to PDF"
-"Convert all images to PDF"
-"Show my print queue"
-"Clear all print jobs"
-"Check device connectivity"
-"Select documents 1 to 5"
-"Deselect document 3"
+PrintChakra supports comprehensive voice and text commands across all application states. Commands work identically whether spoken or typed, with concise AI responses.
+
+#### Command Categories & States
+
+| Category | State/Page | Commands | Response | Description |
+|----------|------------|----------|----------|-------------|
+| **Mode Switching** | Any | `sorry, print`<br>`sorry, scan` | `Print mode.`<br>`Scan mode.` | Switch between print/scan workflows (requires "sorry" for validation) |
+| **Document Selection** | Dashboard<br>Document Viewer | `select document 1`<br>`choose document 2`<br>`pick file 3` | `Got it, document 1.` | Select specific document by number (1-based indexing) |
+| | | `switch to converted`<br>`show uploaded`<br>`go to originals` | `Converted.`<br>`Uploaded.`<br>`Originals.` | Switch between document sections |
+| | | `next document`<br>`previous document`<br>`back` | `Next.`<br>`Previous.`<br>`Back.` | Navigate through documents |
+| | | `upload document`<br>`add file` | `Upload.` | Open file upload dialog |
+| **Print Settings** | Print Mode | `landscape`<br>`portrait` | `Landscape.`<br>`Portrait.` | Set page orientation |
+| | | `color`<br>`grayscale`<br>`black and white` | `Color.`<br>`Grayscale.` | Set color mode |
+| | | `A4`<br>`Letter`<br>`Legal`<br>`A3` | `A4.`<br>`Letter.` | Set paper size |
+| | | `1 copy`<br>`2 copies`<br>`5 copies` | `1 copy.`<br>`2 copies.` | Set number of copies |
+| | | `high quality`<br>`normal`<br>`draft` | `High quality.`<br>`Normal.`<br>`Draft.` | Set print quality |
+| | | `double sided`<br>`single sided` | `Double-sided.`<br>`Single-sided.` | Set duplex printing |
+| | | `narrow margins`<br>`default margins`<br>`no margins` | `Narrow margins.` | Set page margins |
+| | | `300 DPI`<br>`600 DPI` | `300 DPI.`<br>`600 DPI.` | Set resolution |
+| | | `all pages`<br>`odd pages`<br>`even pages`<br>`pages 1-3` | `All pages.`<br>`Odd pages.`<br>`Pages 1-3.` | Set page range |
+| **Scan Settings** | Scan Mode | `single page`<br>`multi page` | `Single page.`<br>`Multi page.` | Set scan mode |
+| | | `enable OCR`<br>`disable OCR` | `OCR on.`<br>`OCR off.` | Toggle text recognition |
+| | | `PDF`<br>`JPEG`<br>`PNG` | `PDF.`<br>`JPEG.` | Set output format |
+| | | `300 DPI`<br>`600 DPI` | `300 DPI.` | Set scan resolution |
+| **Workflow Control** | Any Active Mode | `confirm`<br>`yes`<br>`proceed` | `Done!` | Execute current operation |
+| | | `cancel`<br>`stop`<br>`nevermind` | `Cancelled.` | Abort current operation |
+| | | `status`<br>`what's happening` | `Print mode.`<br>`Ready.` | Check current state |
+| | | `help`<br>`what can you do` | `Say: select document, landscape, color, confirm, or cancel.` | Show available commands |
+| | | `repeat settings`<br>`show settings` | Settings summary | Display current configuration |
+| **UI Navigation** | Any | `scroll up`<br>`scroll down` | `Up.`<br>`Down.` | Navigate interface |
+| | | `close panel`<br>`go back` | `Back.` | Close modals/panels |
+| **System Actions** | Dashboard | `check connectivity`<br>`device info` | Status info | System diagnostics |
+| | | `clear print queue` | Queue cleared | Manage print jobs |
+| | | `show converted`<br>`convert file` | File converted | Document conversion |
+
+#### Command Examples by Workflow
+
+**Print Workflow:**
 ```
+User: "sorry, print"
+AI: "Print mode."
+
+User: "select document 2"
+AI: "Got it, document 2."
+
+User: "landscape, 2 copies, color"
+AI: "Landscape." "2 copies." "Color."
+
+User: "confirm"
+AI: "Done!"
+```
+
+**Scan Workflow:**
+```
+User: "sorry, scan"
+AI: "Scan mode."
+
+User: "enable OCR, PDF format"
+AI: "OCR on." "PDF."
+
+User: "confirm"
+AI: "Done!"
+```
+
+**Document Management:**
+```
+User: "switch to converted"
+AI: "Converted."
+
+User: "select document 1"
+AI: "Got it, document 1."
+
+User: "next document"
+AI: "Next."
+```
+
+#### Voice vs Text Parity
+All commands work identically whether spoken through voice input or typed in the text interface. The AI maintains the same state and provides consistent responses across both input methods.
 
 ---
 
@@ -559,7 +626,7 @@ cd ../frontend
 npm test
 
 # Conversion validation
-python print_scripts/print-file.py <file_path>
+python backend/app/print_scripts/print-file.py <file_path>
 ```
 
 ### Code Structure Guidelines

@@ -1,14 +1,28 @@
 /**
  * AI Assist Command Parser
  * Parses natural language input into structured commands
+ * Integrates with state machine for validation
  */
 
 import {
   ParsedCommand,
   CommandAction,
   CommandCategory,
+  AppState,
+  PrintWorkflowStep,
+  ScanWorkflowStep,
+  ScanDocumentSource,
 } from './types';
 import AIAssistConfig from './config';
+import { 
+  isCommandValidForState, 
+  requiresSorryForSwitch,
+  getModeSwitchRejectionMessage,
+} from './stateManager';
+import {
+  parseDocumentSelectionCommand,
+  DocumentSelectionCommand,
+} from './documentSelectionParser';
 
 const config = AIAssistConfig;
 
@@ -76,6 +90,155 @@ function calculateConfidence(text: string, keywords: string[]): number {
   const matchScore = Math.min(matchCount / 2, 1);
   
   return (lengthScore * 0.6 + matchScore * 0.4);
+}
+
+/**
+ * Check if text contains the "sorry" keyword for mode switching
+ */
+function containsSorryKeyword(text: string): boolean {
+  const sorryPatterns = [
+    /\bsorry\b/i,
+    /\bapologies\b/i,
+    /\bexcuse me\b/i,
+    /\bpardon\b/i,
+  ];
+  return sorryPatterns.some(pattern => pattern.test(text));
+}
+
+/**
+ * Parse mode switching commands (print/scan with optional sorry)
+ */
+function parseModeCommand(text: string, currentState: AppState): ParsedCommand | null {
+  const lowerText = text.toLowerCase();
+  const hasSorry = containsSorryKeyword(text);
+  
+  // Check for print mode
+  const printKeywords = ['print', 'printing', 'open print', 'start print'];
+  const isPrint = printKeywords.some(kw => lowerText.includes(kw));
+  
+  // Check for scan mode
+  const scanKeywords = ['scan', 'scanning', 'open scan', 'start scan'];
+  const isScan = scanKeywords.some(kw => lowerText.includes(kw));
+  
+  if (!isPrint && !isScan) {
+    return null;
+  }
+  
+  const targetMode = isPrint ? 'print' : 'scan';
+  const needsSorry = requiresSorryForSwitch(currentState, targetMode);
+  
+  // If in dashboard, directly open mode
+  if (currentState === 'DASHBOARD') {
+    return {
+      action: isPrint ? 'OPEN_PRINT_MODE' : 'OPEN_SCAN_MODE',
+      category: 'workflow_action',
+      params: { mode: targetMode },
+      confidence: 0.95,
+      originalText: text,
+    };
+  }
+  
+  // If switching modes, check for sorry keyword
+  if (needsSorry) {
+    return {
+      action: 'REQUEST_MODE_SWITCH',
+      category: 'workflow_action',
+      params: { 
+        targetMode, 
+        hasSorry,
+        needsSorry: true,
+      },
+      confidence: hasSorry ? 0.95 : 0.5,
+      originalText: text,
+      stateValidation: {
+        valid: hasSorry,
+        reason: hasSorry ? undefined : getModeSwitchRejectionMessage(currentState, targetMode),
+      },
+    };
+  }
+  
+  return {
+    action: isPrint ? 'OPEN_PRINT_MODE' : 'OPEN_SCAN_MODE',
+    category: 'workflow_action',
+    params: { mode: targetMode },
+    confidence: 0.95,
+    originalText: text,
+  };
+}
+
+/**
+ * Parse scan source selection commands
+ */
+function parseScanSourceCommand(text: string): ParsedCommand | null {
+  const lowerText = text.toLowerCase();
+  
+  // Feed tray keywords
+  const feedKeywords = ['feed', 'tray', 'feeder', 'automatic feed', 'document feeder', 'adf'];
+  if (feedKeywords.some(kw => lowerText.includes(kw))) {
+    return {
+      action: 'SET_SCAN_SOURCE',
+      category: 'workflow_action',
+      params: { source: 'feed' },
+      confidence: 0.9,
+      originalText: text,
+    };
+  }
+  
+  // Select/upload keywords
+  const selectKeywords = ['select document', 'upload', 'choose document', 'pick document', 'select file'];
+  if (selectKeywords.some(kw => lowerText.includes(kw))) {
+    return {
+      action: 'SET_SCAN_SOURCE',
+      category: 'workflow_action',
+      params: { source: 'select' },
+      confidence: 0.9,
+      originalText: text,
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * Parse natural language document selection commands
+ */
+function parseNaturalDocumentSelection(text: string, totalDocuments: number = 20): ParsedCommand | null {
+  const selectionCommand = parseDocumentSelectionCommand(text, totalDocuments);
+  
+  if (!selectionCommand) {
+    return null;
+  }
+  
+  let action: CommandAction;
+  switch (selectionCommand.type) {
+    case 'select':
+    case 'select_all':
+      action = 'SELECT_MULTIPLE_DOCUMENTS';
+      break;
+    case 'deselect':
+      action = 'DESELECT_DOCUMENT';
+      break;
+    case 'clear':
+      action = 'CLEAR_DOCUMENT_SELECTION';
+      break;
+    case 'toggle':
+      action = 'SELECT_DOCUMENT';
+      break;
+    default:
+      action = 'SELECT_DOCUMENT';
+  }
+  
+  return {
+    action,
+    category: 'document_selection',
+    params: {
+      indices: selectionCommand.indices,
+      isRange: selectionCommand.isRange,
+      selectionType: selectionCommand.type,
+    },
+    confidence: selectionCommand.confidence,
+    originalText: text,
+  };
 }
 
 /**
@@ -507,7 +670,107 @@ export function parseCommand(text: string): ParsedCommand | null {
 }
 
 /**
- * Parse and validate command with context
+ * State-aware command parsing context
+ */
+export interface StateAwareParseContext {
+  appState: AppState;
+  printStep: PrintWorkflowStep | null;
+  scanStep: ScanWorkflowStep | null;
+  scanSource: ScanDocumentSource;
+  totalDocuments: number;
+}
+
+/**
+ * Parse command with full state awareness
+ * This is the primary entry point for the state machine integration
+ */
+export function parseCommandWithState(
+  text: string,
+  context: StateAwareParseContext
+): ParsedCommand | null {
+  if (!text || text.trim().length === 0) {
+    return null;
+  }
+  
+  const { appState, printStep, scanStep, scanSource, totalDocuments } = context;
+  let result: ParsedCommand | null = null;
+  
+  // 1. Check for mode switching commands first (highest priority)
+  const modeCommand = parseModeCommand(text, appState);
+  if (modeCommand && modeCommand.confidence >= config.thresholds.mediumConfidence) {
+    return modeCommand;
+  }
+  
+  // 2. Check for scan source selection (only in SCAN_WORKFLOW at SOURCE_SELECTION step)
+  if (appState === 'SCAN_WORKFLOW' && scanStep === 'SOURCE_SELECTION') {
+    const sourceCommand = parseScanSourceCommand(text);
+    if (sourceCommand) {
+      return sourceCommand;
+    }
+  }
+  
+  // 3. Check for natural language document selection
+  // (only in SELECT_DOCUMENT steps)
+  const isDocumentSelectionStep = 
+    (appState === 'PRINT_WORKFLOW' && printStep === 'SELECT_DOCUMENT') ||
+    (appState === 'SCAN_WORKFLOW' && scanStep === 'SELECT_DOCUMENT');
+  
+  if (isDocumentSelectionStep) {
+    const naturalDocResult = parseNaturalDocumentSelection(text, totalDocuments);
+    if (naturalDocResult && naturalDocResult.confidence >= 0.7) {
+      return naturalDocResult;
+    }
+  }
+  
+  // 4. Workflow commands (confirm/cancel)
+  const workflowResult = parseWorkflowCommand(text);
+  if (workflowResult && workflowResult.confidence >= config.thresholds.mediumConfidence) {
+    result = workflowResult;
+  }
+  
+  // 5. Document selection commands (basic)
+  const docResult = parseDocumentCommand(text);
+  if (docResult && (!result || docResult.confidence > result.confidence)) {
+    result = docResult;
+  }
+  
+  // 6. Settings commands based on current workflow
+  if (appState === 'PRINT_WORKFLOW') {
+    const printResult = parsePrintSettingsCommand(text);
+    if (printResult && (!result || printResult.confidence > result.confidence)) {
+      result = printResult;
+    }
+  }
+  
+  if (appState === 'SCAN_WORKFLOW') {
+    const scanResult = parseScanSettingsCommand(text);
+    if (scanResult && (!result || scanResult.confidence > result.confidence)) {
+      result = scanResult;
+    }
+  }
+  
+  // 7. Validate command against current state
+  if (result) {
+    const stateContext = {
+      currentState: appState,
+      printStep,
+      scanStep,
+      scanSource,
+      selectedDocuments: [],
+      isChatAccessible: true,
+      lastModeSwitchAttempt: null,
+      selectedDocumentIndices: [],
+    };
+    
+    const validation = isCommandValidForState(stateContext, result.action);
+    result.stateValidation = validation;
+  }
+  
+  return result;
+}
+
+/**
+ * Parse and validate command with context (legacy support)
  */
 export function parseCommandWithContext(
   text: string, 
@@ -542,5 +805,7 @@ export function parseCommandWithContext(
 export default {
   parseCommand,
   parseCommandWithContext,
-  extractNumber
+  parseCommandWithState,
+  extractNumber,
+  containsSorryKeyword,
 };
