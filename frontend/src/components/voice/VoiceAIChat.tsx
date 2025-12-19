@@ -1044,7 +1044,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   };
 
   return (
-    <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%" bg={bgColor}>
+    <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%" bg={bgColor} position="relative" zIndex={2000} pointerEvents="auto">
       {/* Header */}
       <Box 
         borderBottomWidth="1px" 
