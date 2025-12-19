@@ -404,8 +404,11 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
       scrollBehavior="inside" 
       isCentered={!isChatVisible}
       closeOnEsc={true}
-      closeOnOverlayClick={true}
+      closeOnOverlayClick={!isChatVisible}
       blockScrollOnMount={false}
+      trapFocus={!isChatVisible}
+      autoFocus={!isChatVisible}
+      returnFocusOnClose={!isChatVisible}
     >
       <ModalOverlay 
         bg={isChatVisible ? "transparent" : "blackAlpha.600"}
