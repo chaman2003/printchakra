@@ -237,9 +237,23 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     setMessages(prev => addMessageWithDedup(prev, type, text));
   }, []);
 
-  const startRecording = async () => {
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    console.log('[startRecording] Starting... isSessionActive:', isSessionActiveRef.current);
+    
     if (!isSessionActiveRef.current) {
-      console.log('Voice session inactive - skipping recording start');
+      console.warn('[startRecording] Voice session inactive');
+      showToast({
+        title: 'Recording Error',
+        description: 'Voice session not active',
+        status: 'warning',
+      });
       return;
     }
 
@@ -366,6 +380,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       mediaRecorder.start();
       setIsRecording(true);
+      console.log('[startRecording] Recording started');
 
       const audioContext = new AudioContext();
       const source = audioContext.createMediaStreamSource(stream);
@@ -447,10 +462,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       scheduleRecordingStart(1000);
     }
-  };
+  }, [showToast]);
 
   // Ensure we only have one pending restart timer and we always wait for TTS to finish
-  const scheduleRecordingStart = (delay = 0) => {
+  const scheduleRecordingStart = useCallback((delay = 0) => {
     if (!isSessionActiveRef.current) {
       return;
     }
@@ -477,7 +492,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       startRecording();
     }, Math.max(0, delay));
-  };
+  }, []);
 
   const startSession = async () => {
     try {
@@ -524,13 +539,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         status: 'error',
         duration: 5000,
       });
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
     }
   };
 
