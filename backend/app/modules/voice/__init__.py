@@ -8,16 +8,10 @@ GPU ENHANCEMENTS:
 - Memory: Automatic GPU memory management and caching
 """
 
-import io
 import logging
 import os
-import queue
-import shutil
-import subprocess
 import tempfile
 import threading
-import time
-import wave
 from datetime import datetime
 from typing import Any, Dict, Optional
 
@@ -931,7 +925,7 @@ class VoiceChatService:
             
             if is_greeting:
                 # Greeting detected - Return friendly concise introduction
-                greeting_response = "I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. What would you like to do?"
+                greeting_response = "Hey there, I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. What would you like to do?"
                 logger.info(f"[GREETING] Recognized greeting: '{user_message}'")
                 logger.info(f"[GREETING] Responding with introduction: {greeting_response}")
                 
@@ -1118,18 +1112,26 @@ class VoiceChatService:
 
                 # Format response using centralized prompt manager
                 if VOICE_PROMPT_AVAILABLE:
+                    # Use full response for chat display
                     ai_response = VoicePromptManager.format_response(ai_response)
+                    # Create shortened version for TTS (separate endpoint)
+                    tts_response = VoicePromptManager.format_response_for_tts(ai_response)
                 else:
                     # Fallback formatting if prompt manager not available
                     ai_response = ai_response.replace("**", "").replace("*", "")
-                    words = ai_response.split()
-                    if len(words) > 25:
-                        truncated = " ".join(words[:25])
-                        if truncated and truncated[-1] not in ".!?":
-                            truncated += "."
-                        ai_response = truncated
+                    # Clean up multiple spaces
+                    import re
+                    ai_response = re.sub(r'\s+', ' ', ai_response).strip()
                     if ai_response and ai_response[-1] not in ".!?":
                         ai_response += "."
+                    # Create shortened version for TTS
+                    words = ai_response.split()
+                    if len(words) > 15:
+                        tts_response = " ".join(words[:15])
+                        if tts_response[-1] not in ".!?":
+                            tts_response += "."
+                    else:
+                        tts_response = ai_response
 
                 # Add assistant response to history
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -1145,6 +1147,7 @@ class VoiceChatService:
                 return {
                     "success": True,
                     "response": ai_response,
+                    "tts_response": tts_response,  # Short version for TTS
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,

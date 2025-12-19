@@ -59,15 +59,90 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messageCounterRef = useRef<{ [key: string]: number }>({});
   const chatInputRef = useRef<HTMLInputElement>(null);
   const sessionStartedRef = useRef<boolean>(false);
-  const toastIdRef = useRef<string | number | undefined>(undefined);
   const recordingRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSpeakingRef = useRef(false);
   const isSessionActiveRef = useRef(false);
+  const activeToastIdsRef = useRef<Map<string, {timestamp: number; id: string | number}>>(new Map());
+  const toastTimeoutRef = useRef<{[key: string]: ReturnType<typeof setTimeout>}>({});
 
   const toast = useToast();
+
+  /**
+   * Show toast with proper management - prevents duplicate toasts within time window
+   * Uses both deduplication and throttling for maximum protection
+   */
+  const showToast = useCallback((options: any) => {
+    // Validate required properties
+    if (!options || typeof options !== 'object') {
+      console.warn('Invalid toast options provided');
+      return;
+    }
+
+    // Create a toast key for deduplication
+    const toastKey = `${options.title || ''}_${options.description || ''}_${options.status || 'info'}`;
+
+    // Sanitize content first
+    const safeOptions = {
+      title: options.title?.toString()?.slice(0, 100) || '',
+      description: options.description?.toString()?.slice(0, 200) || '',
+      status: options.status || 'info',
+      duration: options.duration ?? 3000,
+      isClosable: options.isClosable ?? true,
+      position: options.position || 'bottom-right',
+    };
+
+    // Skip toast if both title and description are empty
+    if (!safeOptions.title && !safeOptions.description) {
+      console.warn('Toast has no content - skipping');
+      return;
+    }
+
+    // Check if this exact toast is already being shown
+    const existingToast = activeToastIdsRef.current.get(toastKey);
+    if (existingToast) {
+      const timeSinceShown = Date.now() - existingToast.timestamp;
+      // Prevent toast from showing again within 500ms
+      if (timeSinceShown < 500) {
+        console.log(`Toast throttled (shown ${timeSinceShown}ms ago):`, toastKey);
+        return existingToast.id;
+      } else {
+        // Enough time has passed, remove old tracking
+        activeToastIdsRef.current.delete(toastKey);
+      }
+    }
+
+    // Clear any pending timeout for this toast key
+    if (toastTimeoutRef.current[toastKey]) {
+      clearTimeout(toastTimeoutRef.current[toastKey]);
+      delete toastTimeoutRef.current[toastKey];
+    }
+
+    // Show toast
+    const toastId = toast({
+      ...safeOptions,
+      onCloseComplete: () => {
+        // Remove from tracking after a small delay to ensure it's fully closed
+        if (toastTimeoutRef.current[toastKey]) {
+          clearTimeout(toastTimeoutRef.current[toastKey]);
+        }
+        toastTimeoutRef.current[toastKey] = setTimeout(() => {
+          activeToastIdsRef.current.delete(toastKey);
+          delete toastTimeoutRef.current[toastKey];
+        }, 100);
+        options.onCloseComplete?.();
+      },
+    });
+
+    // Track this toast with timestamp
+    activeToastIdsRef.current.set(toastKey, {
+      timestamp: Date.now(),
+      id: toastId,
+    });
+
+    return toastId;
+  }, [toast]);
 
   // Color mode values - Updated to match SurfaceCard theme
   const bgColor = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
@@ -265,7 +340,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           await processAudio(audioBlob);
         } catch (error: any) {
           console.error('Error in onstop handler:', error);
-          toast({
+          showToast({
             title: 'Audio Processing Error',
             description: error.message || 'Failed to process audio',
             status: 'error',
@@ -280,7 +355,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       mediaRecorder.onerror = (event: any) => {
         console.error('MediaRecorder error:', event.error);
-        toast({
+        showToast({
           title: 'Recording Error',
           description: event.error || 'An error occurred during recording',
           status: 'error',
@@ -363,7 +438,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       }, 5000);
     } catch (error: any) {
       console.error('Recording error:', error);
-      toast({
+      showToast({
         title: 'Microphone Error',
         description: error.message || 'Could not access microphone',
         status: 'error',
@@ -424,16 +499,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           'Voice AI Ready! Just speak naturally - Say "bye printchakra" to end.'
         );
 
-        if (toastIdRef.current) {
-          toast.close(toastIdRef.current);
-        }
-
-        toastIdRef.current = toast({
+        showToast({
           title: 'Voice AI Ready',
           description: 'Recording started - Speak now',
           status: 'success',
           duration: 4000,
-          isClosable: true,
         });
 
         // Start recording immediately
@@ -445,17 +515,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       console.error('Session start error:', error);
       setSessionStatus('Failed');
 
-      if (toastIdRef.current) {
-        toast.close(toastIdRef.current);
-      }
-
-      toastIdRef.current = toast({
+      const errorMsg =
+        error.response?.data?.error || error.message || 'Could not start voice AI session';
+      
+      showToast({
         title: 'Session Start Failed',
-        description:
-          error.response?.data?.error || error.message || 'Could not start voice AI session',
+        description: errorMsg,
         status: 'error',
         duration: 5000,
-        isClosable: true,
       });
     }
   };
@@ -515,6 +582,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           user_text,
           full_text,
           ai_response,
+          tts_response,
           session_ended,
           keyword_detected,
           orchestration_trigger,
@@ -546,7 +614,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           console.log(`Voice command detected: ${voice_command}`, payload.params);
           onVoiceCommand?.(payload);
 
-          toast({
+          showToast({
             title: `Voice Command: ${voice_command.replace('_', ' ').toUpperCase()}`,
             description:
               Object.keys(payload.params || {}).length > 0
@@ -554,7 +622,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 : 'Processing command...',
             status: 'info',
             duration: 2000,
-            isClosable: true,
           });
         }
 
@@ -573,12 +640,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           );
 
           // Show notification about orchestration
-          toast({
+          showToast({
             title: `Opening ${orchestration_mode === 'print' ? 'Print' : 'Scan'} Interface`,
             description: 'Orchestration system activated',
             status: 'info',
             duration: 3000,
-            isClosable: true,
           });
 
           // Trigger orchestration in parent component
@@ -592,16 +658,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             }, 500);
           }
         }
-
         // 2. THEN play TTS (blocking - no input allowed)
         setIsSpeaking(true);
         setSessionStatus('Speaking response...');
 
         try {
+          // Use shortened TTS response if available, otherwise use full response
+          const textToSpeak = tts_response || ai_response;
           await apiClient.post(
             '/voice/speak',
             {
-              text: ai_response,
+              text: textToSpeak,
             },
             {
               timeout: 60000,
@@ -624,7 +691,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           setIsSessionActive(false);
           addMessage('system', 'Voice session ended. Thank you!');
 
-          toast({
+          showToast({
             title: 'Session Ended',
             description: 'Goodbye!',
             status: 'info',
@@ -667,7 +734,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           scheduleRecordingStart(500);
         } else {
           // Show only critical errors
-          toast({
+          showToast({
             title: 'Processing Error',
             description: errorMessage,
             status: 'error',
@@ -704,7 +771,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       setIsSessionActive(false);
       addMessage('system', '🛑 Session ended manually.');
 
-      toast({
+      showToast({
         title: 'Session Ended',
         description: 'Recording stopped and session closed',
         status: 'info',
@@ -722,11 +789,21 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   };
 
   const sendTextMessage = async (text: string) => {
-    if (!text.trim() || !isSessionActive || isSpeaking) return; // Block if TTS is speaking
+    if (!text.trim() || !isSessionActive || isSpeaking) return;
 
     try {
       setIsTextSending(true);
       setChatInput('');
+
+      // STOP recording when text message is sent
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+        setIsRecording(false);
+        if (recordingRestartTimeoutRef.current) {
+          clearTimeout(recordingRestartTimeoutRef.current);
+          recordingRestartTimeoutRef.current = null;
+        }
+      }
 
       // Add user message to chat immediately
       addMessage('user', text);
@@ -746,6 +823,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       if (response.data.success) {
         const aiResponse = response.data.response;
+        const ttsResponse = response.data.tts_response;
         const orchestrationTrigger = response.data.orchestration_trigger;
         const orchestrationMode = response.data.orchestration_mode;
         const configParams = response.data.config_params;
@@ -754,6 +832,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
         console.log('Backend response:', {
           aiResponse,
+          ttsResponse,
           orchestrationTrigger,
           orchestrationMode,
           configParams,
@@ -773,7 +852,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           console.log(`Voice command detected (text): ${voiceCommand}`, payload.params);
           onVoiceCommand?.(payload);
 
-          toast({
+          showToast({
             title: `Voice Command: ${voiceCommand.replace('_', ' ').toUpperCase()}`,
             description:
               Object.keys(payload.params || {}).length > 0
@@ -781,7 +860,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 : 'Processing command...',
             status: 'info',
             duration: 2000,
-            isClosable: true,
           });
         }
 
@@ -790,12 +868,11 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           console.log(`Orchestration triggered: ${orchestrationMode}`, configParams || {});
 
           // Show notification
-          toast({
+          showToast({
             title: `Opening ${orchestrationMode === 'print' ? 'Print' : 'Scan'} Interface`,
             description: 'Orchestration system activated',
             status: 'info',
             duration: 3000,
-            isClosable: true,
           });
 
           // Trigger orchestration
@@ -808,13 +885,16 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
         // 2. THEN play TTS (blocking - no input allowed until complete)
         setIsSpeaking(true);
+        isSpeakingRef.current = true;
         setSessionStatus('Speaking response...');
 
         try {
+          // Use shortened TTS response if available, otherwise use full response
+          const textToSpeak = ttsResponse || aiResponse;
           await apiClient.post(
             '/voice/speak',
             {
-              text: aiResponse,
+              text: textToSpeak,
             },
             {
               timeout: 60000, // TTS can take time for long responses
@@ -825,34 +905,42 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           // Don't show error to user, TTS failure is non-critical
         } finally {
           setIsSpeaking(false);
+          isSpeakingRef.current = false;
           setSessionStatus('Ready - Just speak naturally');
           // Focus chat input after TTS completes
           setTimeout(() => {
             chatInputRef.current?.focus();
           }, 100);
+          // RESUME recording only after TTS completes
           scheduleRecordingStart(200);
         }
       } else {
         setIsProcessing(false);
-        addMessage('system', `❌ Error: ${response.data.error}`);
-        toast({
+        const errorMsg = response.data.error || 'Unknown error occurred';
+        addMessage('system', `❌ Error: ${errorMsg}`);
+        showToast({
           title: 'Message Error',
-          description: response.data.error,
+          description: errorMsg,
           status: 'error',
           duration: 5000,
         });
+        // Resume recording after error
+        scheduleRecordingStart(600);
       }
     } catch (error: any) {
       console.error('Text message error:', error);
       setIsProcessing(false);
       setIsSpeaking(false);
-      addMessage('system', `❌ Error: ${error.response?.data?.error || error.message}`);
-      toast({
+      isSpeakingRef.current = false;
+      const errorMsg = error.response?.data?.error || error.message || 'Failed to process message';
+      addMessage('system', `❌ Error: ${errorMsg}`);
+      showToast({
         title: 'Message Error',
-        description: error.response?.data?.error || error.message,
+        description: errorMsg,
         status: 'error',
         duration: 5000,
       });
+      // Resume recording after error
       scheduleRecordingStart(600);
     } finally {
       setIsTextSending(false);
@@ -896,7 +984,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       setSessionStatus('');
       onClose();
 
-      toast({
+      showToast({
         title: 'Voice AI Closed',
         description: 'Recording stopped and session ended',
         status: 'info',

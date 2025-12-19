@@ -523,8 +523,6 @@ def handle_bad_request(e):
 
 
 # Suppress Flask's default error logging for 400 errors
-from werkzeug.exceptions import BadRequest
-
 app.config["TRAP_BAD_REQUEST_ERRORS"] = True
 
 # Configure CORS for frontend - Works for both local and deployed environments

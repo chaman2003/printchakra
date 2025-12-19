@@ -9,11 +9,10 @@ This module contains:
 4. Response formatting and validation
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List
 import copy
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 
 from app.config.settings import AI_PROMPT_CONFIG, COMMAND_MAPPINGS_FILE, SYSTEM_PROMPT_FILE
@@ -293,18 +292,18 @@ class VoicePromptManager:
     @staticmethod
     def format_response(ai_response: str) -> str:
         """
-        Format AI response for concise, human-like voice playback.
+        Format AI response for display.
         
         Transforms:
         - Remove markdown formatting
-        - Limit to 1 sentence, max 15 words
-        - Keep only essential information
+        - Remove code blocks and URLs
+        - Keep full text for chat display
         
         Args:
             ai_response: Raw response from the model
             
         Returns:
-            Short, voice-friendly response
+            Clean, full-text response for chat display
         """
         import re
         
@@ -321,11 +320,36 @@ class VoicePromptManager:
         # Remove emojis
         ai_response = re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF]', '', ai_response)
         
-        # Only allow English letters, numbers, basic punctuation
-        ai_response = re.sub(r"[^a-zA-Z0-9\s.,!?'\-:;]", '', ai_response)
-        
         # Clean up multiple spaces
         ai_response = re.sub(r'\s+', ' ', ai_response).strip()
+        
+        # Filter out invalid responses
+        words = ai_response.split()
+        if len(words) < 1 or not any(c.isalpha() for c in ai_response):
+            ai_response = "Ready."
+        
+        return ai_response
+    
+    @staticmethod
+    def format_response_for_tts(ai_response: str) -> str:
+        """
+        Format AI response for concise, human-like voice playback (TTS).
+        
+        Transforms:
+        - Remove markdown formatting
+        - Limit to 1 sentence, max 15 words
+        - Keep only essential information
+        
+        Args:
+            ai_response: Raw response from the model
+            
+        Returns:
+            Short, voice-friendly response for TTS
+        """
+        import re
+        
+        # Start with clean response
+        ai_response = VoicePromptManager.format_response(ai_response)
         
         # Take ONLY first sentence (max 1 sentence for brevity)
         sentences = ai_response.split(". ")
