@@ -4,7 +4,7 @@ import { API_BASE_URL, getDefaultHeaders } from './config';
 // Create axios instance with default configuration
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 120000, // Increased to 120 seconds for long-running OCR operations
   headers: getDefaultHeaders(),
 });
 

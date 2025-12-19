@@ -195,75 +195,159 @@ npm start
 
 ```
 printchakra/
-├── backend/                       # Flask backend
+│
+├── backend/                       # Flask backend application
 │   ├── app.py                     # Main application entry point
 │   ├── requirements.txt           # Python dependencies
-│   ├── app/
+│   ├── REFACTORING_PLAN.md        # Refactoring documentation
+│   ├── app/                       # Core application module
+│   │   ├── __init__.py
 │   │   ├── api/                   # REST API endpoints
-│   │   │   └── document.py        # Document endpoints
-│   │   ├── config/
+│   │   │   ├── __init__.py
+│   │   │   └── document.py        # Document management endpoints
+│   │   ├── config/                # Configuration module
+│   │   │   ├── __init__.py
 │   │   │   ├── settings.py        # Configuration management
-│   │   │   └── prompts/           # AI prompts
+│   │   │   └── prompts/           # AI system prompts
+│   │   ├── core/                  # Core utilities
+│   │   │   ├── __init__.py
+│   │   │   ├── config.py
+│   │   │   ├── extensions.py      # Flask extensions
+│   │   │   ├── logging_config.py  # Logging configuration
+│   │   │   └── middleware/        # Middleware modules
 │   │   ├── models/                # Data models
-│   │   ├── middleware/            # CORS, logging, error handling
-│   │   ├── modules/               # Feature modules
+│   │   │   ├── __init__.py
+│   │   │   ├── document.py        # Document model
+│   │   │   ├── file_info.py       # File information model
+│   │   │   ├── print_config.py    # Print configuration model
+│   │   │   └── scan_config.py     # Scan configuration model
+│   │   ├── middleware/            # Middleware handlers
+│   │   │   ├── __init__.py
+│   │   │   ├── cors_config.py     # CORS configuration
+│   │   │   ├── error_handler.py   # Error handling
+│   │   │   └── request_logger.py  # Request logging
+│   │   ├── features/              # Feature modules
+│   │   │   ├── __init__.py
+│   │   │   ├── connection/        # Connection management
+│   │   │   ├── dashboard/         # Dashboard services
+│   │   │   ├── document/          # Document features
+│   │   │   ├── orchestration/     # Workflow orchestration
+│   │   │   ├── phone/             # Phone integration
+│   │   │   ├── print/             # Printing features
+│   │   │   └── voice/             # Voice features
+│   │   ├── modules/               # Processing modules
+│   │   │   ├── __init__.py
+│   │   │   ├── api_endpoints.py   # API endpoint definitions
+│   │   │   ├── utility.py         # Utility functions
 │   │   │   ├── document/          # Document processing
 │   │   │   ├── image/             # Image enhancement
 │   │   │   ├── ocr/               # OCR pipeline
-│   │   │   ├── voice/             # Voice processing
-│   │   │   ├── orchestration/     # Workflow orchestration
-│   │   │   └── pipeline/          # Processing pipeline
+│   │   │   ├── orchestration/     # Orchestration logic
+│   │   │   ├── pipeline/          # Processing pipeline
+│   │   │   └── voice/             # Voice processing
+│   │   ├── sockets/               # WebSocket handlers
+│   │   │   ├── __init__.py
+│   │   │   └── handlers.py        # Socket.IO event handlers
 │   │   └── utils/                 # Utility functions
-│   ├── data/                      # Data directories
-│   │   ├── uploads/               # User uploads
+│   │       ├── __init__.py
+│   │       ├── file_utils.py      # File operations
+│   │       ├── image_utils.py     # Image utilities
+│   │       └── logger.py          # Logging utilities
+│   ├── data/                      # Data storage directories
+│   │   ├── uploads/               # User uploaded files
 │   │   ├── processed/             # Processed files
-│   │   ├── converted/             # Converted files
+│   │   ├── converted/             # Format-converted files
 │   │   ├── pdfs/                  # Generated PDFs
+│   │   ├── processed_text/        # Extracted text files
+│   │   ├── models/                # Model files
 │   │   └── ocr_results/           # OCR output
-│   ├── public/                    # Static files
-│   └── logs/                      # Application logs
+│   ├── public/                    # Static files and resources
+│   │   ├── blank.pcl              # Printer control language file
+│   │   ├── test_print.txt         # Test print file
+│   │   ├── data/                  # Data subdirectories
+│   │   │   ├── converted/
+│   │   │   ├── models/
+│   │   │   ├── ocr_results/
+│   │   │   ├── pdfs/
+│   │   │   ├── processed/
+│   │   │   ├── processed_text/
+│   │   │   └── uploads/
+│   │   └── poppler/               # Poppler binary for PDF processing
+│   │       └── poppler-24.08.0/   # Poppler version
+│   ├── print_scripts/             # Printing utility scripts
+│   │   ├── print-file.py          # File printing script
+│   │   ├── printer_test.py        # Printer testing utility
+│   │   └── README.md              # Printing scripts documentation
+│   ├── logs/                      # Application logs
+│   └── __pycache__/               # Python cache files
 │
 ├── frontend/                      # React + TypeScript frontend
-│   ├── package.json               # Node dependencies
+│   ├── package.json               # Node.js dependencies
 │   ├── tsconfig.json              # TypeScript configuration
 │   ├── craco.config.js            # Create React App config
-│   ├── src/
+│   ├── vercel.json                # Vercel deployment config
+│   ├── src/                       # Source code
 │   │   ├── App.tsx                # Main app component
+│   │   ├── App.css                # App styles
 │   │   ├── index.tsx              # React entry point
+│   │   ├── index.css              # Global styles
 │   │   ├── config.ts              # Frontend configuration
 │   │   ├── types.ts               # TypeScript types
-│   │   ├── apiClient.ts           # HTTP client
+│   │   ├── theme.ts               # Chakra theme configuration
+│   │   ├── apiClient.ts           # HTTP API client
 │   │   ├── ocrApi.ts              # OCR API interface
-│   │   ├── components/
+│   │   ├── react-app-env.d.ts     # React environment types
+│   │   ├── reportWebVitals.ts     # Performance metrics
+│   │   ├── setupWarnings.js       # Console warnings setup
+│   │   ├── aiassist/              # AI assistance features
+│   │   │   ├── actionHandler.ts   # Action handling
+│   │   │   ├── commandParser.ts   # Command parsing
+│   │   │   └── ...                # Other AI features
+│   │   ├── components/            # React components
 │   │   │   ├── dashboard/         # Dashboard components
-│   │   │   ├── document/          # Document management
+│   │   │   ├── document/          # Document management UI
 │   │   │   ├── layout/            # Layout components
 │   │   │   ├── orchestration/     # Workflow UI
 │   │   │   ├── voice/             # Voice control UI
 │   │   │   └── common/            # Shared components
 │   │   ├── pages/                 # Page components
 │   │   ├── context/               # React context (Socket.IO, etc)
+│   │   ├── hooks/                 # Custom React hooks
 │   │   ├── utils/                 # Frontend utilities
 │   │   ├── styles/                # Global styles
-│   │   └── theme.ts               # Chakra theme config
+│   │   └── ui/                    # UI utilities
 │   ├── public/                    # Static assets
-│   └── build/                     # Production build
+│   │   ├── index.html             # HTML entry point
+│   │   ├── manifest.json          # PWA manifest
+│   │   └── robots.txt             # SEO robots file
+│   ├── build/                     # Production build output
+│   │   ├── index.html
+│   │   ├── asset-manifest.json
+│   │   ├── manifest.json
+│   │   ├── robots.txt
+│   │   └── static/                # Built assets
+│   │       ├── css/
+│   │       ├── js/
+│   │       └── media/
+│   └── node_modules/              # Node dependencies (git-ignored)
 │
 ├── scripts/                       # Automation scripts
-│   ├── run-all.ps1                # Start all services
-│   ├── backend.ps1                # Start backend
-│   ├── frontend.ps1               # Start frontend
-│   ├── cleanup.ps1                # Cleanup
-│   ├── ngrok.ps1                  # Tunneling setup
-│   └── install_cuda_pytorch.ps1   # GPU setup
+│   ├── backend.ps1                # Backend startup script
+│   ├── frontend.ps1               # Frontend startup script
+│   ├── run-all.ps1                # Run all services script
+│   ├── cleanup.ps1                # Cleanup script
+│   ├── ngrok.ps1                  # Ngrok tunneling script
+│   └── install_cuda_pytorch.ps1   # CUDA/PyTorch installation
 │
 ├── docs/                          # Documentation
-│   ├── outcome.txt                # Project outcomes
-│   └── ENHANCEMENTS/              # Future enhancements
+│   ├── outcome.txt                # Outcome documentation
+│   ├── ENHANCEMENTS/              # Enhancement proposals
+│   └── pics/                      # Documentation images
+│       └── TECHNOLOGY_STACK.txt   # Technology stack details
 │
 ├── README.md                      # This file
-├── error.txt                      # Error logs
-└── prompt.txt                     # AI prompt specifications
+├── prompt.txt                     # Project prompt
+└── error.txt                      # Error log
 ```
 
 ---

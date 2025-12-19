@@ -70,7 +70,7 @@ import SurfaceCard from '../components/layout/SurfaceCard';
 import { DashboardShell } from '../components/layout/DashboardRegions';
 import { FileInfo, Document, OCRResult, OCRResponse } from '../types';
 import { processFileForPreview } from '../utils/pdfUtils';
-import { runOCR, getOCRResult, getBatchOCRStatus } from '../ocrApi';
+import { runOCR, getOCRResult, getBatchOCRStatus, pollOCRStatus } from '../ocrApi';
 import { OCRReadyBadge } from '../components/document/OCROverlay';
 import OCRStructuredView from '../components/document/OCRStructuredView';
 
@@ -490,6 +490,7 @@ const Dashboard: React.FC = () => {
     }
   });
   const [ocrLoading, setOcrLoading] = useState<Record<string, boolean>>({});
+  const [ocrProgress, setOcrProgress] = useState<Record<string, { elapsed: number; status: string }>>({});
   const [activeOCRView, setActiveOCRView] = useState<string | null>(null);
 
   // Persist OCR results to localStorage whenever they change
@@ -2586,9 +2587,37 @@ const Dashboard: React.FC = () => {
   const handleRunOCR = async (filename: string) => {
     // Mark as loading
     setOcrLoading(prev => ({ ...prev, [filename]: true }));
+    setOcrProgress(prev => ({ ...prev, [filename]: { elapsed: 0, status: 'Starting OCR...' } }));
+    
+    // Start a timer to show elapsed time
+    const progressInterval = setInterval(() => {
+      setOcrProgress(prev => {
+        const current = prev[filename] || { elapsed: 0, status: 'Processing...' };
+        return {
+          ...prev,
+          [filename]: { ...current, elapsed: current.elapsed + 500 }
+        };
+      });
+    }, 500);
     
     try {
+      // Show initial toast
+      const toastId = toast({
+        title: 'OCR Processing',
+        description: 'Starting OCR on document... This may take a moment.',
+        status: 'info',
+        duration: null, // Keep open until dismissed
+        isClosable: true,
+      });
+      
+      // Start OCR processing
       const response = await runOCR(filename);
+      
+      // Close the progress toast
+      if (toastId !== undefined) {
+        toast.close(toastId);
+      }
+      
       if (response.success && response.ocr_result) {
         // Store the OCR result
         setOcrResults(prev => ({ ...prev, [filename]: response.ocr_result! }));
@@ -2598,29 +2627,39 @@ const Dashboard: React.FC = () => {
           f.filename === filename ? { ...f, has_text: true } : f
         ));
         
+        const elapsedSeconds = (response.ocr_result.processing_time_ms / 1000).toFixed(1);
+        
         toast({
-          title: 'OCR Complete',
+          title: '✅ OCR Complete',
           description: response.ocr_result.derived_title 
-            ? `Document: "${response.ocr_result.derived_title}"`
-            : `Processed ${response.ocr_result.word_count} words`,
+            ? `Document: "${response.ocr_result.derived_title}"\n${response.ocr_result.word_count} words • ${elapsedSeconds}s`
+            : `Processed ${response.ocr_result.word_count} words in ${elapsedSeconds}s`,
           status: 'success',
           duration: 5000,
         });
       } else {
         toast({
-          title: 'OCR Failed',
+          title: '❌ OCR Failed',
           description: response.error || 'Unknown error',
           status: 'error',
+          duration: 5000,
         });
       }
     } catch (err: any) {
       toast({
-        title: 'OCR Error',
-        description: err.message,
+        title: '❌ OCR Error',
+        description: err.message || 'An unexpected error occurred',
         status: 'error',
+        duration: 5000,
       });
     } finally {
+      clearInterval(progressInterval);
       setOcrLoading(prev => ({ ...prev, [filename]: false }));
+      setOcrProgress(prev => {
+        const newProgress = { ...prev };
+        delete newProgress[filename];
+        return newProgress;
+      });
     }
   };
 
@@ -3678,20 +3717,28 @@ const Dashboard: React.FC = () => {
                             )}
                             {/* Run PaddleOCR button - shows when pipeline complete but no OCR yet */}
                             {!file.processing && !ocrResults[file.filename] && (
-                              <Tooltip label={ocrLoading[file.filename] ? 'Processing OCR...' : 'Run OCR (PaddleOCR)'} hasArrow>
+                              <Tooltip 
+                                label={
+                                  ocrLoading[file.filename] 
+                                    ? `OCR Processing... ${ocrProgress[file.filename]?.elapsed ? `(${(ocrProgress[file.filename].elapsed / 1000).toFixed(1)}s)` : ''}`
+                                    : 'Run OCR (PaddleOCR)'
+                                } 
+                                hasArrow
+                              >
                                 <Button
                                   aria-label="Run OCR"
                                   onClick={() => handleRunOCR(file.filename)}
                                   isLoading={!!ocrLoading[file.filename]}
-                                  colorScheme="brown"
+                                  colorScheme={ocrLoading[file.filename] ? 'blue' : 'brown'}
                                   variant="solid"
                                   size="sm"
                                   borderRadius="full"
                                   minW="44px"
                                   h="38px"
                                   px={3}
+                                  loadingText={ocrLoading[file.filename] ? `${(ocrProgress[file.filename]?.elapsed / 1000).toFixed(0)}s` : undefined}
                                 >
-                                  OCR
+                                  {ocrLoading[file.filename] ? '⏳' : 'OCR'}
                                 </Button>
                               </Tooltip>
                             )}

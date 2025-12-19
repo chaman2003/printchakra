@@ -1213,7 +1213,7 @@ const Phone: React.FC = () => {
         if (captureMode === 'camera' && stream) {
           captureFromCamera();
         } else {
-          showMessage('💡 Switch to Camera mode to auto-capture');
+          showMessage('Switch to Camera mode to auto-capture');
         }
       }, 500);
     });

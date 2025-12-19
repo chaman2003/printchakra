@@ -7,22 +7,30 @@ import apiClient from './apiClient';
 import { OCRResponse, OCRResult } from './types';
 
 /**
- * Run OCR on a processed image
+ * Run OCR on a processed image with extended timeout
  * @param filename - The filename of the processed image
  * @returns Promise with OCR results
  */
 export async function runOCR(filename: string): Promise<OCRResponse> {
   try {
-    const response = await apiClient.post<OCRResponse>(`/ocr/${filename}`);
+    // Create a request config with extended timeout for OCR operations (120 seconds)
+    const response = await apiClient.post<OCRResponse>(`/ocr/${filename}`, {}, {
+      timeout: 120000, // 120 seconds for OCR processing
+    });
     return response.data;
   } catch (error: any) {
     console.error('[OCR API] Error running OCR:', error);
+    // Check if error was due to timeout
+    const errorMessage = error.code === 'ECONNABORTED' 
+      ? 'OCR is taking longer than expected. Please check the status in a moment.'
+      : (error.message || 'OCR processing failed');
+    
     return {
       success: false,
       filename,
       ocr_result: null,
       ocr_ready: false,
-      error: error.message || 'OCR processing failed',
+      error: errorMessage,
     };
   }
 }
@@ -63,9 +71,53 @@ export async function getOCRStatus(filename: string): Promise<{ filename: string
 }
 
 /**
- * Get OCR status for multiple files at once
- * @param filenames - Array of filenames to check
- * @returns Promise with status map
+ * Poll OCR status until complete with callback for progress updates
+ * @param filename - The filename to check
+ * @param onStatusUpdate - Callback function called on each status check
+ * @param maxWaitTime - Maximum time to wait in milliseconds (default: 5 minutes)
+ * @returns Promise with final OCR result or null if timeout
+ */
+export async function pollOCRStatus(
+  filename: string,
+  onStatusUpdate?: (status: { filename: string; ocr_ready: boolean; elapsed: number }) => void,
+  maxWaitTime: number = 5 * 60 * 1000 // 5 minutes default
+): Promise<OCRResponse | null> {
+  const startTime = Date.now();
+  const pollInterval = 2000; // Check every 2 seconds
+  
+  while (Date.now() - startTime < maxWaitTime) {
+    try {
+      // Call the status endpoint
+      const statusResponse = await getOCRStatus(filename);
+      const elapsed = Date.now() - startTime;
+      
+      // Notify caller of status
+      if (onStatusUpdate) {
+        onStatusUpdate({ filename, ocr_ready: statusResponse.ocr_ready, elapsed });
+      }
+      
+      // If OCR is ready, fetch and return the full result
+      if (statusResponse.ocr_ready) {
+        const result = await getOCRResult(filename);
+        return result;
+      }
+      
+      // Wait before polling again
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    } catch (error) {
+      console.error('[OCR API] Polling error:', error);
+      // Continue polling on error
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+  }
+  
+  // Timeout reached
+  console.warn(`[OCR API] Poll timeout for ${filename} after ${maxWaitTime}ms`);
+  return null;
+}
+
+/**
+ * Batch OCR status response
  */
 export interface BatchOCRStatusResponse {
   success: boolean;
@@ -95,4 +147,5 @@ export default {
   getOCRResult,
   getOCRStatus,
   getBatchOCRStatus,
+  pollOCRStatus,
 };
