@@ -64,6 +64,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   const recordingRestartTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSpeakingRef = useRef(false);
   const isSessionActiveRef = useRef(false);
+  // When the user manually stops recording, prevent automatic restarts until they manually start again
+  const userStoppedRef = useRef(false);
   const activeToastIdsRef = useRef<Map<string, {timestamp: number; id: string | number}>>(new Map());
   const toastTimeoutRef = useRef<{[key: string]: ReturnType<typeof setTimeout>}>({});
 
@@ -238,14 +240,39 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   }, []);
 
   const stopRecording = useCallback(() => {
+    // Mark that the user explicitly stopped recording so we don't auto-restart
+    userStoppedRef.current = true;
+
+    // Clear any pending restart timers
+    if (recordingRestartTimeoutRef.current) {
+      clearTimeout(recordingRestartTimeoutRef.current);
+      recordingRestartTimeoutRef.current = null;
+    }
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {
+        console.warn('[stopRecording] Error stopping media recorder:', e);
+      }
       setIsRecording(false);
+    }
+
+    // Ensure we stop all media tracks to fully release microphone
+    try {
+      if (mediaRecorderRef.current?.stream) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+    } catch (e) {
+      console.warn('[stopRecording] Error stopping media tracks:', e);
     }
   }, []);
 
   const startRecording = useCallback(async () => {
     console.log('[startRecording] Starting... isSessionActive:', isSessionActiveRef.current);
+
+    // Clear a manual stop flag when user actively starts recording
+    userStoppedRef.current = false;
     
     if (!isSessionActiveRef.current) {
       console.warn('[startRecording] Voice session inactive');
@@ -467,6 +494,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   // Ensure we only have one pending restart timer and we always wait for TTS to finish
   const scheduleRecordingStart = useCallback((delay = 0) => {
     if (!isSessionActiveRef.current) {
+      return;
+    }
+
+    // Respect user's explicit stop - do not auto-restart until they manually start again
+    if (userStoppedRef.current) {
+      console.log('[scheduleRecordingStart] User has manually stopped recording - not auto-restarting');
       return;
     }
 
@@ -797,7 +830,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   };
 
   const sendTextMessage = async (text: string) => {
-    if (!text.trim() || !isSessionActive || isSpeaking) return;
+    if (!text.trim() || isSpeaking) return;
 
     try {
       setIsTextSending(true);
@@ -1161,7 +1194,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             </VStack>
           </Box>
 
-          {isSessionActive && (
           <Box borderTopWidth="1px" borderColor={borderColor} p={4} bg={chatBoxBg}>
             <InputGroup size="md" mb={2}>
               <Input
@@ -1170,7 +1202,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyPress={handleChatInputKeyPress}
-                isDisabled={isTextSending || isProcessing}
+                isDisabled={isTextSending || isProcessing || isSpeaking}
                 borderRadius="xl"
                 bg={useColorModeValue('white', 'rgba(0,0,0,0.2)')}
                 border="1px solid"
@@ -1193,11 +1225,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
               </InputRightElement>
             </InputGroup>
             <Text fontSize="xs" color="gray.500" textAlign="center">
-              💬 Or type a message manually
-
+              {isSessionActive ? '💬 Or type a message manually' : '💬 Type a message to chat with the AI (voice session not active)'}
             </Text>
           </Box>
-          )}
 
           <Box borderTopWidth="1px" p={4}>
           <Flex gap={2} justify="center">
