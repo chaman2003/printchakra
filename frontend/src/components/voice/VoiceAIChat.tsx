@@ -1193,11 +1193,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             <InputGroup size="md" mb={2}>
               <Input
                 ref={chatInputRef}
-                placeholder="Type your message..."
+                placeholder={isSpeaking ? "Wait for AI to finish speaking..." : "Type your message..."}
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyPress={handleChatInputKeyPress}
-                isDisabled={isTextSending || isProcessing || isSpeaking}
                 borderRadius="xl"
                 bg={useColorModeValue('white', 'rgba(0,0,0,0.2)')}
                 border="1px solid"
@@ -1220,7 +1219,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
               </InputRightElement>
             </InputGroup>
             <Text fontSize="xs" color="gray.500" textAlign="center">
-              {isSessionActive ? '💬 Or type a message manually' : '💬 Type a message to chat with the AI (voice session not active)'}
+              {isSpeaking ? '🔊 AI is speaking... type now, send when ready' : '💬 Type a message to chat with the AI'}
             </Text>
           </Box>
 
