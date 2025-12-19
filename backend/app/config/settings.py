@@ -49,7 +49,7 @@ TEXT_DIR = DATA_DIR / "processed_text"
 PDF_DIR = DATA_DIR / "pdfs"
 CONVERTED_DIR = DATA_DIR / "converted"
 MODELS_DIR = DATA_DIR / "models"
-PRINT_DIR = BASE_DIR / "print_scripts"
+PRINT_DIR = BASE_DIR / "app" / "print_scripts"
 LOGS_DIR = BASE_DIR / "logs"
 
 # Ensure all directories exist

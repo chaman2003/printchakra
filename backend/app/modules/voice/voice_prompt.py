@@ -22,51 +22,38 @@ logger = logging.getLogger(__name__)
 
 
 # ============================================================================
-DEFAULT_SYSTEM_PROMPT = """You are PrintChakra AI - a voice-controlled document assistant.
+DEFAULT_SYSTEM_PROMPT = """You are PrintChakra AI - a concise voice assistant for document printing and scanning.
 
-GREETING (always start with):
-"How can I help you? You can say print a document or scan a document."
+CRITICAL RULES:
+1. NEVER say more than 15 words.
+2. Be direct and action-focused.
+3. Use simple confirmations like "Got it", "Done", "Ready".
+4. Print/scan intents are handled automatically - don't repeat them.
 
-[WARN] CRITICAL: Print/scan intents are intercepted before reaching you.
+RESPONSE STYLE:
+- "Got it, printing." NOT "I'll start the printing process for you now."
+- "Landscape." NOT "I've changed the layout to landscape orientation."
+- "3 copies." NOT "I've set the number of copies to 3."
+- "Ready?" NOT "Are you ready to proceed with the operation?"
 
-YOUR CAPABILITIES:
+DOCUMENT CONTROL (per-section 1-based numbering):
+- select document 2 -> "Got it, document 2."
+- switch to converted -> "Converted."
+- next document -> "Next."
 
-1. DOCUMENT SELECTOR CONTROL (per-section 1-based numbering):
-   - "select original number 2" -> Select doc #2 from Originals
-   - "switch to converted" -> Switch to Converted section
-   - "show uploaded" -> Switch to Uploaded section
-   - "next document" -> Move to next in current section
-   - "previous document" -> Move to previous in current section
-   - "upload a document" -> Trigger upload modal
+SETTINGS (confirm briefly):
+- grayscale -> "Grayscale."
+- 300 DPI -> "300 DPI."
+- landscape -> "Landscape."
+- 2 copies -> "2 copies."
 
-2. PARAMETER MODIFICATION (real-time UI updates):
-   - "switch to grayscale" -> Change color mode
-   - "set DPI to 300" -> Change resolution
-   - "landscape orientation" -> Change layout
-   - "2 copies" -> Set copy count
-   - "double sided" -> Enable duplex
-   - "turn on OCR" -> Enable text mode
+GLOBAL:
+- confirm -> "Done!"
+- cancel -> "Cancelled."
+- help -> "Say: print, scan, select document, or settings."
+- status -> "Print mode." or "Ready."
 
-3. GLOBAL COMMANDS:
-   - "cancel" -> Cancel current operation
-   - "status" -> Report current workflow state
-   - "repeat settings" -> Read back current config
-   - "help" -> List available commands
-   - "stop recording" -> End voice session
-
-4. CONFIRMATION:
-   - "confirm print" / "confirm scan" -> Execute operation
-   - Always repeat settings before confirming
-
-5. REAL-TIME UPDATES (announce these):
-   - Processing progress percentages
-   - Page capture events
-   - OCR progress
-   - Completion status
-
-BE CONCISE (under 15 words). Answer questions directly.
-
-Remember: You control the ENTIRE workflow through voice."""
+Keep responses under 10 words when possible."""
 
 
 DEFAULT_COMMAND_CONFIG = {
@@ -130,19 +117,19 @@ DEFAULT_COMMAND_CONFIG = {
         ],
     },
     "friendly_responses": {
-        "select_document": "Selecting document {document_number}",
-        "select_multiple_documents": "Selecting {count} documents",
-        "switch_section": "Switching to {section} section",
-        "next_document": "Moving to next document",
-        "previous_document": "Moving to previous document",
-        "upload_document": "Opening upload dialog",
-        "confirm": "Executing now!",
-        "cancel": "Cancelled",
-        "status": "Checking status...",
-        "repeat_settings": "Reading settings...",
-        "help": "Here's what I can do...",
-        "stop_recording": "Stopping recording",
-        "greeting": "I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. What would you like to do?",
+        "select_document": "Got it, document {document_number}.",
+        "select_multiple_documents": "{count} documents selected.",
+        "switch_section": "{section}.",
+        "next_document": "Next.",
+        "previous_document": "Previous.",
+        "upload_document": "Upload.",
+        "confirm": "Done!",
+        "cancel": "Cancelled.",
+        "status": "Ready.",
+        "repeat_settings": "Settings...",
+        "help": "Say: print, scan, or select document.",
+        "stop_recording": "Stopping.",
+        "greeting": "Hi! Print or scan?",
     },
     "confirmation_words": [
         "yes", "proceed", "go ahead", "okay", "ok",
@@ -306,81 +293,57 @@ class VoicePromptManager:
     @staticmethod
     def format_response(ai_response: str) -> str:
         """
-        Format and validate AI response for voice playback
+        Format AI response for concise, human-like voice playback.
         
-        Applies these transformations:
-        - Remove markdown formatting (**text**, *text*)
-        - Remove code blocks and special symbols
-        - Only allow English letters, numbers, and basic punctuation
-        - Limit to 2 sentences max
-        - Limit to 25 words max for natural speech
-        - Ensure proper punctuation
+        Transforms:
+        - Remove markdown formatting
+        - Limit to 1 sentence, max 15 words
+        - Keep only essential information
         
         Args:
-            ai_response: Raw response from the selected model
+            ai_response: Raw response from the model
             
         Returns:
-            Formatted, voice-friendly response with only English and numbers
-            
-        Example:
-            >>> raw = "**Opening print interface** now! This will start the printing process."
-            >>> formatted = VoicePromptManager.format_response(raw)
-            >>> print(formatted)
-            Opening print interface now.
+            Short, voice-friendly response
         """
         import re
         
         # Clean up markdown formatting
         ai_response = ai_response.replace("**", "").replace("*", "")
         
-        # Remove code blocks (```code```)
+        # Remove code blocks
         ai_response = re.sub(r'```[\s\S]*?```', '', ai_response)
         ai_response = re.sub(r'`[^`]*`', '', ai_response)
         
         # Remove URLs
         ai_response = re.sub(r'https?://\S+', '', ai_response)
         
-        # Remove emojis and special unicode characters
-        ai_response = re.sub(r'[\U0001F600-\U0001F64F]', '', ai_response)  # emoticons
-        ai_response = re.sub(r'[\U0001F300-\U0001F5FF]', '', ai_response)  # symbols & pictographs
-        ai_response = re.sub(r'[\U0001F680-\U0001F6FF]', '', ai_response)  # transport & map symbols
-        ai_response = re.sub(r'[\U0001F1E0-\U0001F1FF]', '', ai_response)  # flags
-        ai_response = re.sub(r'[\U00002702-\U000027B0]', '', ai_response)  # dingbats
-        ai_response = re.sub(r'[\U0001F900-\U0001F9FF]', '', ai_response)  # supplemental symbols
+        # Remove emojis
+        ai_response = re.sub(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF]', '', ai_response)
         
-        # Only allow: English letters (a-z, A-Z), numbers (0-9), 
-        # basic punctuation (. , ! ? ' - : ;), and spaces
+        # Only allow English letters, numbers, basic punctuation
         ai_response = re.sub(r"[^a-zA-Z0-9\s.,!?'\-:;]", '', ai_response)
         
         # Clean up multiple spaces
         ai_response = re.sub(r'\s+', ' ', ai_response).strip()
         
-        # Take first sentence or two (max 2 sentences for voice)
+        # Take ONLY first sentence (max 1 sentence for brevity)
         sentences = ai_response.split(". ")
-        if len(sentences) > 2:
-            ai_response = ". ".join(sentences[:2])
-            if not ai_response.endswith("."):
-                ai_response += "."
-        
-        # Enforce reasonable word limit (max 25 words for natural speech)
-        words = ai_response.split()
-        if len(words) > 25:
-            # Try to find a natural break point
-            truncated = " ".join(words[:25])
-            # Add punctuation if missing
-            if truncated and truncated[-1] not in ".!?":
-                truncated += "."
-            ai_response = truncated
-        
-        # Ensure punctuation
+        ai_response = sentences[0]
         if ai_response and ai_response[-1] not in ".!?":
             ai_response += "."
         
-        # Filter out gibberish or single-word responses
+        # Strict word limit (max 15 words for concise speech)
         words = ai_response.split()
-        if len(words) < 2 or not any(c.isalpha() for c in ai_response):
-            logger.warning(f"[WARN] Invalid response detected: '{ai_response}'")
-            ai_response = "I am here to help with document scanning and printing."
+        if len(words) > 15:
+            ai_response = " ".join(words[:15])
+            if ai_response[-1] not in ".!?":
+                ai_response += "."
+        
+        # Filter out invalid responses
+        words = ai_response.split()
+        if len(words) < 1 or not any(c.isalpha() for c in ai_response):
+            ai_response = "Ready."
         
         return ai_response
     

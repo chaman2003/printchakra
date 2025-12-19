@@ -603,7 +603,7 @@ TEXT_DIR = os.path.join(DATA_DIR, "processed_text")
 PDF_DIR = os.path.join(DATA_DIR, "pdfs")
 CONVERTED_DIR = os.path.join(DATA_DIR, "converted")
 STATIC_DIR = os.path.join(PUBLIC_DIR, "static")
-PRINT_DIR = os.path.join(BASE_DIR, "print_scripts")
+PRINT_DIR = os.path.join(BASE_DIR, "app", "print_scripts")
 
 # Create directories if they don't exist
 for directory in [PUBLIC_DIR, DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR, CONVERTED_DIR, STATIC_DIR]:
@@ -5464,7 +5464,7 @@ def validate_printer():
             )
 
         # Try to print blank.pdf
-        blank_pdf_path = os.path.join(BASE_DIR, "print_scripts", "blank.pdf")
+        blank_pdf_path = os.path.join(BASE_DIR, "app", "print_scripts", "blank.pdf")
 
         if not os.path.exists(blank_pdf_path):
             return (
