@@ -276,11 +276,6 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     
     if (!isSessionActiveRef.current) {
       console.warn('[startRecording] Voice session inactive');
-      showToast({
-        title: 'Recording Error',
-        description: 'Voice session not active',
-        status: 'warning',
-      });
       return;
     }
 
