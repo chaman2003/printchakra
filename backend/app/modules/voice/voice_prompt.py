@@ -64,11 +64,29 @@ DEFAULT_COMMAND_CONFIG = {
         ],
         "select_multiple_documents": [
             "select first two", "select first three", "select first four", "select first five",
+            "select first 2", "select first 3", "select first 4", "select first 5",
             "select two documents", "select three documents", "select four documents",
+            "select 2 documents", "select 3 documents", "select 4 documents", "select 5 documents",
             "select documents 1 and 2", "select documents 1 2", "select 1 and 2",
             "first two documents", "first three documents", "first four documents",
-            "select all documents", "select all", "choose all"
+            "first 2 documents", "first 3 documents", "first 4 documents", "first 5 documents",
+            "select all documents", "select all", "choose all", "all documents",
+            "last two documents", "last three documents", "last 2 documents", "last 3 documents",
+            "select last two", "select last three", "select last 2", "select last 3"
         ],
+        "select_document_range": [
+            "select documents 1 to", "select document 1 to", "documents 1 to",
+            "from document 1 to", "between document", "documents between",
+            "select from 1 to", "from 1 to", "1 to 5", "2 to 4",
+            "select 1 through", "1 through 5", "documents 1 through"
+        ],
+        "deselect_document": [
+            "deselect", "unselect", "remove selection", "deselect document",
+            "unselect document", "remove document", "deselect all", "clear selection",
+            "clear document", "clear documents", "clear"
+        ],
+
+
         "switch_section": [
             "switch to", "show", "go to", "open section",
             "switch section", "change to"
@@ -114,7 +132,69 @@ DEFAULT_COMMAND_CONFIG = {
             "good morning", "good afternoon", "good evening",
             "hi there", "hello there"
         ],
+        # Settings commands
+        "set_color_mode": [
+            "grayscale", "greyscale", "gray scale", "grey scale",
+            "black and white", "black & white", "bw", "mono", "monochrome",
+            "color mode", "in color", "full color", "set color", "change color",
+            "make it gray", "make it grey", "use grayscale", "no color"
+        ],
+        "set_quality": [
+            "high quality", "best quality", "photo quality", "premium quality",
+            "draft quality", "low quality", "fast print", "economy mode",
+            "normal quality", "standard quality", "set quality", "change quality"
+        ],
+        "set_format": [
+            "save as pdf", "as pdf", "pdf format", "export pdf",
+            "save as jpeg", "as jpg", "jpeg format", "as png", "png format",
+            "save as tiff", "tiff format", "set format", "change format"
+        ],
+        "set_resolution": [
+            "150 dpi", "300 dpi", "600 dpi", "1200 dpi",
+            "low resolution", "high resolution", "set resolution", "change resolution",
+            "set dpi", "change dpi"
+        ],
+        "set_layout": [
+            "landscape", "portrait", "horizontal", "vertical",
+            "set layout", "change layout", "rotate", "set orientation"
+        ],
+        "undo_action": [
+            "undo", "revert", "go back", "oops", "undo selection",
+            "revert selection", "go back one step"
+        ],
+
+        "set_paper_size": [
+            "a4", "a3", "a5", "letter", "legal",
+            "set paper size", "change paper size", "use a4", "use letter"
+        ],
+        "set_copies": [
+            "copies", "print copies", "make copies",
+            "set copies", "change copies", "number of copies"
+        ],
+        "set_duplex": [
+            "double sided", "duplex", "both sides", "two sided",
+            "single sided", "one side", "front only"
+        ],
+        "set_margins": [
+            "no margins", "narrow margins", "default margins", "borderless",
+            "set margins", "change margins"
+        ],
+        "proceed_action": [
+            "proceed", "continue", "next step", "go ahead", "move on",
+            "confirm selection", "done selecting", "that's all", "ready",
+            "start", "begin", "let's go", "go", "proceed to next"
+        ],
+        "set_feed_count": [
+            "feed", "feed documents", "feed pages", "set feed count",
+            "number of pages to feed", "documents to feed"
+        ],
+        "set_pages": [
+            "odd pages", "odd pages only", "even pages", "even pages only",
+            "custom pages", "custom range", "pages", "only page", "page range",
+            "print odd", "print even", "all pages"
+        ],
     },
+
     "friendly_responses": {
         "select_document": "Got it, document {document_number}.",
         "select_multiple_documents": "{count} documents selected.",
@@ -129,6 +209,15 @@ DEFAULT_COMMAND_CONFIG = {
         "help": "Say: print, scan, or select document.",
         "stop_recording": "Stopping.",
         "greeting": "Hi! Print or scan?",
+        "set_color_mode": "{color_mode}.",
+        "set_quality": "{quality}.",
+        "set_format": "{format}.",
+        "set_resolution": "{resolution} DPI.",
+        "set_layout": "{layout}.",
+        "set_paper_size": "{paper_size}.",
+        "set_copies": "{copies} copies.",
+        "set_duplex": "Double-sided {duplex}.",
+        "set_margins": "{margins} margins.",
     },
     "confirmation_words": [
         "yes", "proceed", "go ahead", "okay", "ok",
@@ -146,6 +235,28 @@ DEFAULT_COMMAND_CONFIG = {
         "what", "can you", "how do", "help", "how to",
         "tell me", "can i", "what is", "can print", "help me", "show me"
     ],
+    "settings_keywords": {
+        "color_mode": {
+            "bw": ["grayscale", "greyscale", "gray scale", "grey scale", "black and white", "black & white", "bw", "mono", "monochrome", "no color"],
+            "color": ["color", "full color", "in color", "color mode"]
+        },
+        "quality": {
+            "draft": ["draft", "fast", "economy", "low quality", "quick"],
+            "normal": ["normal", "standard", "regular"],
+            "high": ["high", "fine", "detailed", "good quality"],
+            "professional": ["best", "premium", "photo", "professional", "excellent", "ultra"]
+        },
+        "format": {
+            "pdf": ["pdf", "as pdf", "save as pdf", "export pdf"],
+            "jpeg": ["jpeg", "jpg", "as jpeg", "as jpg"],
+            "png": ["png", "as png"],
+            "tiff": ["tiff", "tif", "as tiff"]
+        },
+        "layout": {
+            "landscape": ["landscape", "horizontal", "wide"],
+            "portrait": ["portrait", "vertical", "tall"]
+        }
+    },
     "ollama": {
         "options": {
             "temperature": 0.7,
@@ -159,6 +270,7 @@ DEFAULT_COMMAND_CONFIG = {
         "timeout": 60,
     },
 }
+
 
 
 def _load_system_prompt() -> str:

@@ -729,11 +729,10 @@ class VoiceChatService:
         """
         params = {}
         text_lower = user_message.lower().strip()
+        import re
         
         # Parse multiple document selection (e.g., "select first two documents")
         if command_type == "select_multiple_documents":
-            import re
-            
             # Extract section keywords
             if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
                 params["section"] = "current"
@@ -748,44 +747,262 @@ class VoiceChatService:
             if "all" in text_lower:
                 params["count"] = -1  # -1 means select all
                 params["selection_type"] = "all"
+                logger.info(f"[PARAM] Multi-doc: select ALL")
                 return params
             
             # Word numbers mapping
             word_to_num = {
                 "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
-                "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5
+                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
             }
             
-            # Extract count from "first two", "first three", etc.
+            # Check for "LAST N" patterns first (these are different from first N)
+            last_n_match = re.search(r'last\s+(\d+)', text_lower)
+            if last_n_match:
+                params["count"] = int(last_n_match.group(1))
+                params["selection_type"] = "last_n"
+                logger.info(f"[PARAM] Multi-doc: last {params['count']} (numeric)")
+                return params
+            
+            # Check for "last word" patterns (last two, last three)
             for word, num in word_to_num.items():
-                if f"first {word}" in text_lower or f"{word} documents" in text_lower:
+                if f"last {word}" in text_lower:
+                    params["count"] = num
+                    params["selection_type"] = "last_n"
+                    logger.info(f"[PARAM] Multi-doc: last {word} = {num}")
+                    return params
+            
+            # Try to extract count using regex for "first N" patterns (numeric)
+            first_n_match = re.search(r'first\s+(\d+)', text_lower)
+            if first_n_match:
+                params["count"] = int(first_n_match.group(1))
+                params["selection_type"] = "first_n"
+                logger.info(f"[PARAM] Multi-doc: first {params['count']} (numeric)")
+                return params
+            
+            # Try to extract count using regex for "select N documents" patterns
+            select_n_match = re.search(r'select\s+(\d+)\s+documents?', text_lower)
+            if select_n_match:
+                params["count"] = int(select_n_match.group(1))
+                params["selection_type"] = "first_n"
+                logger.info(f"[PARAM] Multi-doc: select {params['count']} docs (numeric)")
+                return params
+            
+            # Extract count from word forms: "first two", "first three", etc.
+            for word, num in word_to_num.items():
+                if f"first {word}" in text_lower:
                     params["count"] = num
                     params["selection_type"] = "first_n"
-                    break
+                    logger.info(f"[PARAM] Multi-doc: first {word} = {num}")
+                    return params
+                if f"{word} documents" in text_lower or f"{word} document" in text_lower:
+                    params["count"] = num
+                    params["selection_type"] = "first_n"
+                    logger.info(f"[PARAM] Multi-doc: {word} documents = {num}")
+                    return params
             
             # Try to parse explicit numbers like "1 and 2" or "1, 2, 3"
-            if "count" not in params:
-                number_matches = re.findall(r'\b(\d+)\b', text_lower)
-                if len(number_matches) >= 2:
-                    params["document_numbers"] = [int(n) for n in number_matches]
-                    params["count"] = len(params["document_numbers"])
-                    params["selection_type"] = "specific"
-                elif number_matches:
-                    params["count"] = int(number_matches[0])
-                    params["selection_type"] = "first_n"
+            number_matches = re.findall(r'\b(\d+)\b', text_lower)
+            if len(number_matches) >= 2:
+                params["document_numbers"] = [int(n) for n in number_matches]
+                params["count"] = len(params["document_numbers"])
+                params["selection_type"] = "specific"
+                logger.info(f"[PARAM] Multi-doc: specific docs {params['document_numbers']}")
+                return params
+            elif len(number_matches) == 1:
+                params["count"] = int(number_matches[0])
+                params["selection_type"] = "first_n"
+                logger.info(f"[PARAM] Multi-doc: single number {params['count']}")
+                return params
             
             # Default to 2 if nothing parsed
-            if "count" not in params:
-                params["count"] = 2
-                params["selection_type"] = "first_n"
+            params["count"] = 2
+            params["selection_type"] = "first_n"
+            logger.info(f"[PARAM] Multi-doc: defaulting to 2")
             
             return params
         
-        # Parse single document selection (e.g., "select original number 2")
-        if command_type == "select_document":
-            import re
+        # Parse specific document list selection (e.g., "select documents 4, 6, 8")
+        if command_type == "select_specific_documents":
+            if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
+                params["section"] = "current"
+            elif "converted" in text_lower:
+                params["section"] = "converted"
+            else:
+                params["section"] = "current"
             
+            # Extract all numbers from the message
+            number_matches = re.findall(r'\b(\d+)\b', text_lower)
+            if number_matches:
+                params["document_numbers"] = [int(n) for n in number_matches]
+                params["selection_type"] = "specific"
+                logger.info(f"[PARAM] Specific docs: {params['document_numbers']}")
+            else:
+                params["document_numbers"] = []
+                params["selection_type"] = "specific"
+            
+            return params
+
+
+
+        # Parse range document selection (e.g., "select documents 1 to 5")
+        if command_type == "select_document_range":
+            # Extract section keywords
+            if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
+                params["section"] = "current"
+            elif "converted" in text_lower:
+                params["section"] = "converted"
+            else:
+                params["section"] = "current"
+            
+            # Extract range using various patterns
+            range_patterns = [
+                r'(\d+)\s+(?:to|through)\s+(\d+)',  # 1 to 5
+                r'from\s+(\d+)\s+to\s+(\d+)',  # from 1 to 5
+                r'between\s+(\d+)\s+(?:and|to)\s+(\d+)',  # between 1 and 5
+                r'(\d+)\s*-\s*(\d+)',  # 1-5
+            ]
+            
+            for pattern in range_patterns:
+                match = re.search(pattern, text_lower)
+                if match:
+                    start = int(match.group(1))
+                    end = int(match.group(2))
+                    params["start"] = min(start, end)
+                    params["end"] = max(start, end)
+                    params["selection_type"] = "range"
+                    logger.info(f"[PARAM] Range selection: {params['start']} to {params['end']}")
+                    return params
+            
+            # Default if no range found
+            params["start"] = 1
+            params["end"] = 5
+            params["selection_type"] = "range"
+            logger.info(f"[PARAM] Range selection: defaulting to 1-5")
+            return params
+        
+        # Parse deselect command - mirrors select patterns
+        if command_type == "deselect_document":
+            if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
+                params["section"] = "current"
+            elif "converted" in text_lower:
+                params["section"] = "converted"
+            else:
+                params["section"] = "current"
+            
+            # Word to number mapping
+            word_to_num = {
+                "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10
+            }
+            
+            # Check for deselect all FIRST
+            if re.search(r'(?:deselect|unselect|clear)\s*(?:all|everything)', text_lower) or text_lower in ["clear selection", "remove selection"]:
+                params["deselect_all"] = True
+                params["deselect_type"] = "all"
+                logger.info(f"[PARAM] Deselect: all")
+                return params
+            
+            # Check for LAST N pattern
+            last_match = re.search(r'(?:deselect|unselect|clear)\s+(?:the\s+)?last\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)', text_lower)
+            if last_match:
+                count_str = last_match.group(1)
+                count = word_to_num.get(count_str.lower(), int(count_str) if count_str.isdigit() else 2)
+                params["count"] = count
+                params["deselect_type"] = "last_n"
+                params["deselect_all"] = False
+                logger.info(f"[PARAM] Deselect: last {count}")
+                return params
+            
+            # Check for FIRST N pattern
+            first_match = re.search(r'(?:deselect|unselect|clear)\s+(?:the\s+)?first\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)', text_lower)
+            if first_match:
+                count_str = first_match.group(1)
+                count = word_to_num.get(count_str.lower(), int(count_str) if count_str.isdigit() else 2)
+                params["count"] = count
+                params["deselect_type"] = "first_n"
+                params["deselect_all"] = False
+                logger.info(f"[PARAM] Deselect: first {count}")
+                return params
+            
+            # Check for RANGE pattern (1 to 5)
+            range_match = re.search(r'(\d+)\s+(?:to|through)\s+(\d+)', text_lower)
+            if range_match:
+                start = int(range_match.group(1))
+                end = int(range_match.group(2))
+                params["start"] = min(start, end)
+                params["end"] = max(start, end)
+                params["deselect_type"] = "range"
+                params["deselect_all"] = False
+                logger.info(f"[PARAM] Deselect: range {params['start']} to {params['end']}")
+                return params
+            
+            # Check for specific document numbers
+            number_matches = re.findall(r'\b(\d+)\b', text_lower)
+            if number_matches:
+                params["document_numbers"] = [int(n) for n in number_matches]
+                params["deselect_type"] = "specific"
+                params["deselect_all"] = False
+                logger.info(f"[PARAM] Deselect: specific {params['document_numbers']}")
+                return params
+            
+            # Default to deselect all if nothing matched
+            params["deselect_all"] = True
+            params["deselect_type"] = "all"
+            logger.info(f"[PARAM] Deselect: defaulting to all")
+            return params
+
+        # Parse feed count command (e.g., "feed 5 documents")
+        if command_type == "set_feed_count":
+            count_match = re.search(r'(\d+)', text_lower)
+            if count_match:
+                params["count"] = int(count_match.group(1))
+            else:
+                params["count"] = 1
+            logger.info(f"[PARAM] Feed count: {params['count']}")
+            return params
+
+        # Parse page selection command (e.g., "odd pages only", "pages 1 to 5")
+        if command_type == "set_pages":
+            if "odd" in text_lower:
+                params["pages"] = "odd"
+            elif "even" in text_lower:
+                params["pages"] = "even"
+            elif "all" in text_lower:
+                params["pages"] = "all"
+            else:
+                # Check for custom range
+                range_match = re.search(r'(\d+)\s*(?:to|through|-)\s*(\d+)', text_lower)
+                if range_match:
+                    params["pages"] = "custom"
+                    params["customRange"] = f"{range_match.group(1)}-{range_match.group(2)}"
+                else:
+                    # Single page
+                    single_match = re.search(r'(?:page\s+)?(\d+)(?:\s+only)?', text_lower)
+                    if single_match:
+                        params["pages"] = "custom"
+                        params["customRange"] = single_match.group(1)
+                    else:
+                        params["pages"] = "all"
+            logger.info(f"[PARAM] Pages: {params.get('pages')}, CustomRange: {params.get('customRange')}")
+            return params
+
+        # Parse switch_section command
+        if command_type == "switch_section":
+            if any(keyword in text_lower for keyword in ["converted", "converted files"]):
+                params["section"] = "converted"
+            elif any(keyword in text_lower for keyword in ["local", "upload", "local files"]):
+                params["section"] = "upload"
+            elif any(keyword in text_lower for keyword in ["current", "current documents"]):
+                params["section"] = "current"
+            logger.info(f"[PARAM] Switch section to: {params.get('section')}")
+            return params
+
+        # Parse single document selection (e.g., "select original number 2")
+
+
+        if command_type == "select_document":
+
             # Extract section keywords and normalize to dashboard terms
             if any(keyword in text_lower for keyword in ["original", "current", "recent"]):
                 params["section"] = "current"
@@ -827,7 +1044,107 @@ class VoiceChatService:
             elif any(keyword in text_lower for keyword in ["uploaded", "upload", "new"]):
                 params["section"] = "upload"
         
+        # Parse color mode settings
+        elif command_type == "set_color_mode":
+            bw_keywords = ["grayscale", "greyscale", "gray scale", "grey scale", "black and white", 
+                          "black & white", "bw", "mono", "monochrome", "no color"]
+            color_keywords = ["color", "full color", "in color"]
+            
+            if any(kw in text_lower for kw in bw_keywords):
+                params["color_mode"] = "bw"
+            elif any(kw in text_lower for kw in color_keywords):
+                params["color_mode"] = "color"
+            else:
+                params["color_mode"] = "bw"  # Default to bw if detected as color mode command
+        
+        # Parse quality settings
+        elif command_type == "set_quality":
+            if any(kw in text_lower for kw in ["draft", "fast", "economy", "low quality", "quick"]):
+                params["quality"] = "draft"
+            elif any(kw in text_lower for kw in ["best", "premium", "photo", "professional", "excellent", "ultra"]):
+                params["quality"] = "professional"
+            elif any(kw in text_lower for kw in ["high", "fine", "detailed", "good quality"]):
+                params["quality"] = "high"
+            else:
+                params["quality"] = "normal"
+        
+        # Parse format settings
+        elif command_type == "set_format":
+            if "pdf" in text_lower:
+                params["format"] = "pdf"
+            elif any(kw in text_lower for kw in ["jpeg", "jpg"]):
+                params["format"] = "jpeg"
+            elif "png" in text_lower:
+                params["format"] = "png"
+            elif any(kw in text_lower for kw in ["tiff", "tif"]):
+                params["format"] = "tiff"
+            else:
+                params["format"] = "pdf"  # Default
+        
+        # Parse resolution settings
+        elif command_type == "set_resolution":
+            dpi_match = re.search(r'(\d+)\s*dpi', text_lower)
+            if dpi_match:
+                params["resolution"] = dpi_match.group(1)
+            elif any(kw in text_lower for kw in ["low", "draft"]):
+                params["resolution"] = "150"
+            elif any(kw in text_lower for kw in ["high", "fine"]):
+                params["resolution"] = "600"
+            elif any(kw in text_lower for kw in ["ultra", "maximum"]):
+                params["resolution"] = "1200"
+            else:
+                params["resolution"] = "300"  # Default
+        
+        # Parse layout settings
+        elif command_type == "set_layout":
+            if any(kw in text_lower for kw in ["landscape", "horizontal", "wide"]):
+                params["layout"] = "landscape"
+            elif any(kw in text_lower for kw in ["portrait", "vertical", "tall"]):
+                params["layout"] = "portrait"
+            else:
+                params["layout"] = "portrait"  # Default
+        
+        # Parse paper size settings
+        elif command_type == "set_paper_size":
+            if "a4" in text_lower or "a 4" in text_lower:
+                params["paper_size"] = "A4"
+            elif "a3" in text_lower or "a 3" in text_lower:
+                params["paper_size"] = "A3"
+            elif "a5" in text_lower or "a 5" in text_lower:
+                params["paper_size"] = "A5"
+            elif "letter" in text_lower:
+                params["paper_size"] = "Letter"
+            elif "legal" in text_lower:
+                params["paper_size"] = "Legal"
+            else:
+                params["paper_size"] = "A4"  # Default
+        
+        # Parse copies settings
+        elif command_type == "set_copies":
+            copies_match = re.search(r'(\d+)\s*(?:cop(?:y|ies))?', text_lower)
+            if copies_match:
+                params["copies"] = int(copies_match.group(1))
+            else:
+                params["copies"] = 1
+        
+        # Parse duplex settings
+        elif command_type == "set_duplex":
+            if any(kw in text_lower for kw in ["single", "one side", "front only", "simplex"]):
+                params["duplex"] = False
+            else:
+                params["duplex"] = True  # Default to duplex if command detected
+        
+        # Parse margins settings
+        elif command_type == "set_margins":
+            if any(kw in text_lower for kw in ["no margin", "borderless", "none", "zero"]):
+                params["margins"] = "none"
+            elif any(kw in text_lower for kw in ["narrow", "small", "thin"]):
+                params["margins"] = "narrow"
+            else:
+                params["margins"] = "default"
+        
         return params
+
 
     def interpret_voice_command(self, user_message: str) -> tuple[Optional[str], float]:
         """
@@ -841,11 +1158,169 @@ class VoiceChatService:
         """
         try:
             from difflib import SequenceMatcher
+            import re
             
             user_lower = user_message.lower().strip()
             best_command = None
             best_confidence = 0.0
             
+            # PRIORITY CHECK: Detect multi-document selection patterns FIRST
+            # This prevents "select first 2 documents" from matching "select_document"
+            multi_doc_patterns = [
+                r'select\s+(?:the\s+)?first\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\s*(?:documents?|files?)?',
+                r'(?:first|last)\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+documents?',
+                r'select\s+(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+documents?',
+                r'select\s+all\s*(?:documents?|files?)?',
+                r'all\s+documents?',
+                r'choose\s+all',
+                r'select\s+(?:the\s+)?last\s+(\d+|two|three|four|five)',
+            ]
+            
+            for pattern in multi_doc_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] MULTI-DOCUMENT PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "select_multiple_documents", 0.95
+            
+            # PRIORITY CHECK: Detect DESELECT patterns BEFORE select patterns
+            # This prevents "deselect 4" from matching "select 4"
+            deselect_priority_patterns = [
+                r'\bdeselect\b',  # Any command containing "deselect"
+                r'\bunselect\b',  # Any command containing "unselect"
+                r'\bclear\s+(?:document|doc|file)?\s*\d+',  # "clear 4", "clear document 4"
+                r'\bclear\s+(?:the\s+)?(?:first|last)',  # "clear first 2", "clear last 3"
+                r'\bclear\s+all',  # "clear all"
+                r'\bremove\s+(?:document|doc|file)?\s*\d+',  # "remove 4", "remove document 4"
+            ]
+            for pattern in deselect_priority_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] DESELECT PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "deselect_document", 0.95
+
+            # PRIORITY CHECK: Detect SINGLE DOCUMENT selection patterns (select document 7)
+
+            single_doc_patterns = [
+                r'select\s+(?:document|doc|file)\s+(\d+)$',  # "select document 7"
+                r'(?:select|pick|choose)\s+(?:document|doc|file)?\s*#?(\d+)$',  # "select #7" or "select 7"
+                r'(?:document|doc|file)\s+(\d+)$',  # "document 7"
+            ]
+            for pattern in single_doc_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] SINGLE DOCUMENT PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "select_document", 0.95
+            
+            # PRIORITY CHECK: Detect DESELECT patterns BEFORE range (so "deselect 2 to 5" works)
+            deselect_patterns = [
+                # Deselect last N / first N
+                r'(?:deselect|unselect|clear)\s+(?:the\s+)?last\s+(\d+|two|three|four|five)',
+                r'(?:deselect|unselect|clear)\s+(?:the\s+)?first\s+(\d+|two|three|four|five)',
+                # Deselect range (1 to 5)
+                r'(?:deselect|unselect|clear)\s+(?:documents?\s+)?(\d+)\s+(?:to|through)\s+(\d+)',
+                r'(?:deselect|unselect|clear)\s+from\s+(\d+)\s+to\s+(\d+)',
+                # Deselect single document - explicit patterns
+                r'deselect\s+(?:document|doc|file)?\s*(\d+)$',  # "deselect 5", "deselect document 5"
+                r'deselect\s+(\d+)$',  # "deselect 5" - explicit
+                # Deselect specific documents (multiple)
+                r'(?:deselect|unselect|clear)\s+(?:documents?|files?)?\s*(\d+(?:\s*(?:,|and)\s*\d+)+)',
+                # Deselect all
+                r'(?:deselect|unselect|clear)\s*(?:all|everything)',
+                r'clear\s+selection',
+                r'remove\s+selection',
+            ]
+
+            
+            for pattern in deselect_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] DESELECT PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "deselect_document", 0.95
+            
+            # PRIORITY CHECK: Detect RANGE selection patterns (1 to 5, between, from X to Y)
+
+            range_patterns = [
+                r'(?:select\s+)?(?:documents?\s+)?(\d+)\s+(?:to|through)\s+(\d+)',  # 1 to 5, documents 1 to 5
+                r'from\s+(?:document\s+)?(\\d+)\s+to\s+(\d+)',  # from 1 to 5
+                r'between\s+(?:document\s+)?(\d+)\s+(?:and|to)\s+(\d+)',  # between 1 and 5
+                r'(?:select\s+)?documents?\s+(\d+)\s*-\s*(\d+)',  # documents 1-5
+            ]
+            
+            for pattern in range_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] RANGE SELECTION PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "select_document_range", 0.95
+
+            
+            # PRIORITY CHECK: Detect SPECIFIC DOCUMENT LIST patterns (select documents 4, 6, 8)
+            specific_list_patterns = [
+                r'select\s+(?:documents?|files?)\s+(\d+(?:\s*(?:,|and)\s*\d+)+)',  # select documents 4, 6, 8
+                r'select\s+(\d+)\s*,\s*(\d+)',  # select 4, 6
+                r'documents?\s+(\d+)\s*(?:,|and)\s*(\d+)',  # documents 4 and 6
+            ]
+            
+            for pattern in specific_list_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] SPECIFIC LIST PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "select_specific_documents", 0.95
+            
+
+            # PRIORITY CHECK: Detect UNDO patterns
+            undo_patterns = [
+                r'\bundo\b', r'\brevert\b', r'go\s+back', r'oops'
+            ]
+            for pattern in undo_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] UNDO PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "undo_action", 0.95
+
+            # PRIORITY CHECK: Detect PROCEED patterns (context-aware navigation)
+            proceed_patterns = [
+                r'\bproceed\b', r'\bcontinue\b', r'next\s+step', r'go\s+ahead',
+                r'move\s+on', r'confirm\s+selection', r'done\s+selecting',
+                r"that's\s+all", r'\bready\b', r'proceed\s+to\s+next',
+                r'let\'?s\s+go', r'\bstart\b', r'\bbegin\b'
+            ]
+            for pattern in proceed_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] PROCEED PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "proceed_action", 0.95
+
+            # PRIORITY CHECK: Detect SWITCH SECTION patterns
+            switch_section_patterns = [
+                r'switch\s+to\s+(?:converted|converted\s+files?)',  # "switch to converted files"
+                r'switch\s+to\s+(?:local|upload|local\s+files?)',  # "switch to local files"
+                r'switch\s+to\s+(?:current|current\s+documents?)',  # "switch to current documents"
+                r'(?:show|go\s+to|open)\s+(?:converted|converted\s+files?)',  # "show converted files"
+                r'(?:show|go\s+to|open)\s+(?:upload|local\s+files?)',  # "show upload"
+                r'(?:show|go\s+to|open)\s+(?:current|current\s+documents?)',  # "show current documents"
+            ]
+            for pattern in switch_section_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] SWITCH SECTION PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "switch_section", 0.95
+
+            # PRIORITY CHECK: Detect FEED COUNT patterns (e.g., "feed 5 documents")
+
+            feed_patterns = [
+                r'feed\s+(\d+)\s*(?:documents?|pages?)?',
+                r'(?:set\s+)?feed\s+count\s+(?:to\s+)?(\d+)',
+            ]
+            for pattern in feed_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] FEED COUNT PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "set_feed_count", 0.95
+
+            # PRIORITY CHECK: Detect PAGE SELECTION patterns
+            page_patterns = [
+                r'odd\s+pages?\s*(?:only)?',
+                r'even\s+pages?\s*(?:only)?',
+                r'(?:custom\s+)?pages?\s+(\d+)\s+(?:to|through)\s+(\d+)',
+                r'(?:custom\s+)?page\s+(\d+)\s*(?:only)?',
+                r'all\s+pages',
+            ]
+            for pattern in page_patterns:
+                if re.search(pattern, user_lower):
+                    logger.info(f"[PRIORITY] PAGE SELECTION PATTERN: '{user_message}' matches pattern '{pattern}'")
+                    return "set_pages", 0.95
+
+
             # Check each command type
             for command_type, keywords in self.command_mappings.items():
                 for keyword in keywords:
@@ -946,7 +1421,7 @@ class VoiceChatService:
                 }
 
             # PRIORITY 0: Check for DIRECT print/scan commands FIRST - HIGHEST PRIORITY
-            # These should take precedence over any other command interpretation
+            # These should ask for confirmation before triggering
             is_print_command = False
             is_scan_command = False
             
@@ -962,44 +1437,84 @@ class VoiceChatService:
                 is_scan_command = any(keyword in user_lower for keyword in scan_keywords) and not is_question
             
             if is_print_command:
-                # Direct print command detected - TRIGGER IMMEDIATELY
-                ai_response = f"TRIGGER_ORCHESTRATION:print Opening print interface now!"
-                logger.info(f"[PRINT] DIRECT PRINT COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
+                # Direct print command detected - ASK FOR CONFIRMATION
+                self.pending_orchestration = "print"
+                ai_response = "Would you like me to open the print configuration? Say 'yes' to proceed."
+                logger.info(f"[PRINT] Print command detected - asking for confirmation | Message: '{user_message}'")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
                 return {
                     "success": True,
-                    "response": "Opening print interface!",
+                    "response": ai_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
-                    "orchestration_trigger": True,
-                    "orchestration_mode": "print",
+                    "awaiting_confirmation": True,
+                    "pending_mode": "print",
                 }
             
             if is_scan_command:
-                # Direct scan command detected - TRIGGER IMMEDIATELY
-                ai_response = f"TRIGGER_ORCHESTRATION:scan Opening scan interface now!"
-                logger.info(f"[SCAN] DIRECT SCAN COMMAND - TRIGGERING IMMEDIATELY | Message: '{user_message}'")
+                # Direct scan command detected - ASK FOR CONFIRMATION
+                self.pending_orchestration = "scan"
+                ai_response = "Would you like me to open the scan configuration? Say 'yes' to proceed."
+                logger.info(f"[SCAN] Scan command detected - asking for confirmation | Message: '{user_message}'")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
                 
                 return {
                     "success": True,
-                    "response": "Opening scan interface!",
+                    "response": ai_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
-                    "orchestration_trigger": True,
-                    "orchestration_mode": "scan",
+                    "awaiting_confirmation": True,
+                    "pending_mode": "scan",
                 }
 
-            # PRIORITY 1: Try to interpret as a voice command (navigation, control)
+
+            # PRIORITY 1: Check for confirmation if we have PENDING ORCHESTRATION
+            # This MUST come before voice command interpretation so "yes" triggers orchestration
+            if self.pending_orchestration:
+                is_confirmation = False
+                if VOICE_PROMPT_AVAILABLE:
+                    is_confirmation = VoicePromptManager.is_confirmation(user_message)
+                else:
+                    confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye", "confirm"]
+                    is_confirmation = any(
+                        user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words
+                    )
+                if is_confirmation:
+                    mode = self.pending_orchestration
+                    self.pending_orchestration = None  # Clear pending state
+                    
+                    ai_response = f"Opening {mode} interface now!"
+                    logger.info(f"[OK] CONFIRMATION RECEIVED - TRIGGERING ORCHESTRATION: {mode}")
+                    
+                    # Add to history
+                    self.conversation_history.append({"role": "user", "content": user_message})
+                    self.conversation_history.append({"role": "assistant", "content": ai_response})
+                    
+                    return {
+                        "success": True,
+                        "response": ai_response,
+                        "model": self.model_name,
+                        "timestamp": datetime.now().isoformat(),
+                        "tts_enabled": TTS_AVAILABLE,
+                        "spoken": False,
+                        "orchestration_trigger": True,
+                        "orchestration_mode": mode,
+                    }
+                else:
+                    # User said something else - clear pending and continue conversation
+                    logger.info(f"[WARN] User response not a confirmation, clearing pending state")
+                    self.pending_orchestration = None
+
+            # PRIORITY 2: Try to interpret as a voice command (navigation, control)
             command_type, confidence = self.interpret_voice_command(user_message)
             if command_type and confidence > 0.7:  # High confidence command match
                 # Parse command parameters for document selector
@@ -1037,41 +1552,36 @@ class VoiceChatService:
                     "command_params": command_params,
                 }
 
-            # PRIORITY 2: Check for confirmation if we have pending orchestration
-            if self.pending_orchestration:
-                is_confirmation = False
-                if VOICE_PROMPT_AVAILABLE:
-                    is_confirmation = VoicePromptManager.is_confirmation(user_message)
-                else:
-                    confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye"]
-                    is_confirmation = any(
-                        user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words
-                    )
-                if is_confirmation:
-                    mode = self.pending_orchestration
-                    self.pending_orchestration = None  # Clear pending state
-                    
-                    ai_response = f"TRIGGER_ORCHESTRATION:{mode} Opening {mode} interface now!"
-                    logger.info(f"[OK] TRIGGERING ORCHESTRATION: {mode}")
-                    
-                    # Add to history
-                    self.conversation_history.append({"role": "user", "content": user_message})
-                    self.conversation_history.append({"role": "assistant", "content": ai_response})
-                    
-                    return {
-                        "success": True,
-                        "response": ai_response,
-                        "model": self.model_name,
-                        "timestamp": datetime.now().isoformat(),
-                        "tts_enabled": TTS_AVAILABLE,
-                        "spoken": False,
-                    }
-                else:
-                    # User said something else - clear pending and continue conversation
-                    logger.info(f"[WARN] User response not a confirmation, clearing pending state")
-                    self.pending_orchestration = None
+            # PRIORITY 2.5: Check for MULTIPLE settings in a single command
+            # e.g., "print in landscape with grayscale at 300 dpi"
+            multi_settings = self._parse_multi_settings_command(user_message)
+            if multi_settings.get("has_settings") and len(multi_settings.get("changes", [])) > 0:
+                settings = multi_settings["settings"]
+                response = multi_settings["response"]
+                tts_response = multi_settings.get("tts_response", response)
+                changes = multi_settings["changes"]
+                
+                logger.info(f"[MULTI-SETTINGS] Detected {len(changes)} settings changes")
+                
+                self.conversation_history.append({"role": "user", "content": user_message})
+                self.conversation_history.append({"role": "assistant", "content": response})
+                
+                return {
+                    "success": True,
+                    "response": response,
+                    "tts_response": tts_response,
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "tts_enabled": TTS_AVAILABLE,
+                    "spoken": False,
+                    "voice_command": "apply_settings",
+                    "command_params": settings,
+                    "settings_changes": changes,
+                    "multi_settings": True,
+                }
 
             # Add user message to history for general conversation
+
             self.conversation_history.append({"role": "user", "content": user_message})
 
             # Build messages for Ollama
@@ -1381,11 +1891,16 @@ class VoiceAIOrchestrator:
         def contains_any(phrases):
             return any(phrase in text for phrase in phrases)
 
-        # Color / mono detection
-        if contains_any(["full color", "color copy", "print in color", "color mode", "black and white", "black & white", "bw", "mono", "monochrome", "greyscale", "gray scale", "grey scale", "grayscale", "grey scale", "gray mode"]):
+        # Color / mono detection - check BW first since color is more generic
+        bw_keywords = ["black and white", "black & white", "bw", "mono", "monochrome", 
+                       "greyscale", "gray scale", "grey scale", "grayscale", "gray mode", "no color"]
+        color_keywords = ["full color", "color copy", "print in color", "in color", "with color"]
+        
+        if contains_any(bw_keywords):
+            params["colorMode"] = "bw"
+        elif contains_any(color_keywords) or "color" in text:
             params["colorMode"] = "color"
-        elif "color" in text:
-            params["colorMode"] = "color"
+
 
         # Layout detection
         if contains_any(["landscape", "horizontal", "wide"]):
@@ -1513,7 +2028,88 @@ class VoiceAIOrchestrator:
 
         return params
 
+    def _parse_multi_settings_command(self, user_message: str) -> Dict[str, Any]:
+        """
+        Parse multiple settings from a single voice input (e.g., "print in landscape with grayscale at 300 dpi")
+        and generate a consolidated response.
+        
+        Args:
+            user_message: User's voice input
+            
+        Returns:
+            Dict with detected settings and a combined response describing all changes
+        """
+        text_lower = user_message.lower().strip()
+        
+        # Extract all settings from the message
+        all_settings = self._extract_config_parameters(text_lower)
+        
+        if not all_settings:
+            return {"has_settings": False, "settings": {}, "response": None, "changes": []}
+        
+        # Also check for settings commands using _parse_command_parameters for each recognized command type
+        settings_command_types = [
+            "set_color_mode", "set_quality", "set_format", "set_resolution",
+            "set_layout", "set_paper_size", "set_copies", "set_duplex", "set_margins"
+        ]
+        
+        for cmd_type in settings_command_types:
+            cmd_params = self._parse_command_parameters(user_message, cmd_type)
+            if cmd_params:
+                all_settings.update(cmd_params)
+        
+        # Build a list of human-readable changes
+        changes = []
+        settings_map = {
+            "colorMode": ("Color mode", lambda v: "Black & White" if v == "bw" else "Color"),
+            "color_mode": ("Color mode", lambda v: "Black & White" if v == "bw" else "Color"),
+            "layout": ("Layout", lambda v: v.capitalize()),
+            "paperSize": ("Paper size", str),
+            "paper_size": ("Paper size", str),
+            "resolution": ("Resolution", lambda v: f"{v} DPI"),
+            "quality": ("Quality", lambda v: v.capitalize()),
+            "copies": ("Copies", str),
+            "duplex": ("Double-sided", lambda v: "On" if v else "Off"),
+            "margins": ("Margins", lambda v: v.capitalize()),
+            "format": ("Format", lambda v: v.upper()),
+            "scanTextMode": ("OCR", lambda v: "Enabled" if v else "Disabled"),
+            "scanMode": ("Scan mode", lambda v: "Multi-page" if v == "multi" else "Single page"),
+            "pages": ("Pages", lambda v: v.capitalize()),
+            "pagesPerSheet": ("Pages per sheet", str),
+            "scale": ("Scale", lambda v: f"{v}%"),
+        }
+        
+        for key, value in all_settings.items():
+            if key in settings_map:
+                label, formatter = settings_map[key]
+                changes.append(f"{label}: {formatter(value)}")
+            elif not key.endswith("Custom") and not key.endswith("Range"):
+                # Include other settings with basic formatting
+                changes.append(f"{key}: {value}")
+        
+        # Generate response
+        if len(changes) == 0:
+            return {"has_settings": False, "settings": all_settings, "response": None, "changes": []}
+        elif len(changes) == 1:
+            response = f"Done! {changes[0]}."
+        elif len(changes) == 2:
+            response = f"Done! {changes[0]} and {changes[1]}."
+        else:
+            response = f"Done! Updated {len(changes)} settings: " + ", ".join(changes[:-1]) + f", and {changes[-1]}."
+        
+        logger.info(f"[MULTI-SETTINGS] Parsed {len(changes)} settings from: '{user_message}'")
+        logger.info(f"[MULTI-SETTINGS] Changes: {changes}")
+        
+        return {
+            "has_settings": True,
+            "settings": all_settings,
+            "response": response,
+            "changes": changes,
+            "tts_response": f"Updated {len(changes)} settings." if len(changes) > 2 else response
+        }
+
     def end_session(self):
+
         """End voice AI session"""
         self.session_active = False
         self.chat_service.reset_conversation()

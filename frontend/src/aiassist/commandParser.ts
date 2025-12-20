@@ -7,21 +7,19 @@
 import {
   ParsedCommand,
   CommandAction,
-  CommandCategory,
   AppState,
   PrintWorkflowStep,
   ScanWorkflowStep,
   ScanDocumentSource,
 } from './types';
 import AIAssistConfig from './config';
-import { 
-  isCommandValidForState, 
+import {
+  isCommandValidForState,
   requiresSorryForSwitch,
   getModeSwitchRejectionMessage,
 } from './stateManager';
 import {
   parseDocumentSelectionCommand,
-  DocumentSelectionCommand,
 } from './documentSelectionParser';
 
 const config = AIAssistConfig;
@@ -37,13 +35,13 @@ export function extractNumber(text: string): number | null {
       return num;
     }
   }
-  
+
   // Then check for numeric digits
   const match = text.match(config.numberPatterns.cardinal);
   if (match) {
     return parseInt(match[1], 10);
   }
-  
+
   return null;
 }
 
@@ -75,20 +73,20 @@ function calculateConfidence(text: string, keywords: string[]): number {
   const lowerText = text.toLowerCase();
   let matchCount = 0;
   let totalKeywordLength = 0;
-  
+
   for (const kw of keywords) {
     if (lowerText.includes(kw.toLowerCase())) {
       matchCount++;
       totalKeywordLength += kw.length;
     }
   }
-  
+
   if (matchCount === 0) return 0;
-  
+
   // Higher confidence for longer keyword matches
   const lengthScore = Math.min(totalKeywordLength / text.length, 1);
   const matchScore = Math.min(matchCount / 2, 1);
-  
+
   return (lengthScore * 0.6 + matchScore * 0.4);
 }
 
@@ -111,22 +109,22 @@ function containsSorryKeyword(text: string): boolean {
 function parseModeCommand(text: string, currentState: AppState): ParsedCommand | null {
   const lowerText = text.toLowerCase();
   const hasSorry = containsSorryKeyword(text);
-  
+
   // Check for print mode
   const printKeywords = ['print', 'printing', 'open print', 'start print'];
   const isPrint = printKeywords.some(kw => lowerText.includes(kw));
-  
+
   // Check for scan mode
   const scanKeywords = ['scan', 'scanning', 'open scan', 'start scan'];
   const isScan = scanKeywords.some(kw => lowerText.includes(kw));
-  
+
   if (!isPrint && !isScan) {
     return null;
   }
-  
+
   const targetMode = isPrint ? 'print' : 'scan';
   const needsSorry = requiresSorryForSwitch(currentState, targetMode);
-  
+
   // If in dashboard, directly open mode
   if (currentState === 'DASHBOARD') {
     return {
@@ -137,14 +135,14 @@ function parseModeCommand(text: string, currentState: AppState): ParsedCommand |
       originalText: text,
     };
   }
-  
+
   // If switching modes, check for sorry keyword
   if (needsSorry) {
     return {
       action: 'REQUEST_MODE_SWITCH',
       category: 'workflow_action',
-      params: { 
-        targetMode, 
+      params: {
+        targetMode,
         hasSorry,
         needsSorry: true,
       },
@@ -156,7 +154,7 @@ function parseModeCommand(text: string, currentState: AppState): ParsedCommand |
       },
     };
   }
-  
+
   return {
     action: isPrint ? 'OPEN_PRINT_MODE' : 'OPEN_SCAN_MODE',
     category: 'workflow_action',
@@ -171,7 +169,7 @@ function parseModeCommand(text: string, currentState: AppState): ParsedCommand |
  */
 function parseScanSourceCommand(text: string): ParsedCommand | null {
   const lowerText = text.toLowerCase();
-  
+
   // Feed tray keywords
   const feedKeywords = ['feed', 'tray', 'feeder', 'automatic feed', 'document feeder', 'adf'];
   if (feedKeywords.some(kw => lowerText.includes(kw))) {
@@ -183,7 +181,7 @@ function parseScanSourceCommand(text: string): ParsedCommand | null {
       originalText: text,
     };
   }
-  
+
   // Select/upload keywords
   const selectKeywords = ['select document', 'upload', 'choose document', 'pick document', 'select file'];
   if (selectKeywords.some(kw => lowerText.includes(kw))) {
@@ -195,7 +193,7 @@ function parseScanSourceCommand(text: string): ParsedCommand | null {
       originalText: text,
     };
   }
-  
+
   return null;
 }
 
@@ -204,11 +202,11 @@ function parseScanSourceCommand(text: string): ParsedCommand | null {
  */
 function parseNaturalDocumentSelection(text: string, totalDocuments: number = 20): ParsedCommand | null {
   const selectionCommand = parseDocumentSelectionCommand(text, totalDocuments);
-  
+
   if (!selectionCommand) {
     return null;
   }
-  
+
   let action: CommandAction;
   switch (selectionCommand.type) {
     case 'select':
@@ -227,7 +225,7 @@ function parseNaturalDocumentSelection(text: string, totalDocuments: number = 20
     default:
       action = 'SELECT_DOCUMENT';
   }
-  
+
   return {
     action,
     category: 'document_selection',
@@ -246,7 +244,7 @@ function parseNaturalDocumentSelection(text: string, totalDocuments: number = 20
  */
 function parseDocumentCommand(text: string): ParsedCommand | null {
   const lowerText = text.toLowerCase();
-  
+
   // Check for section switch
   const sectionMatch = findMatchingKey(lowerText, config.documentCommands.switchSection);
   if (sectionMatch && containsKeyword(text, ['switch', 'show', 'go to', 'open'])) {
@@ -258,7 +256,7 @@ function parseDocumentCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Check for next/previous navigation
   if (containsKeyword(text, config.documentCommands.navigation.next)) {
     return {
@@ -268,7 +266,7 @@ function parseDocumentCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   if (containsKeyword(text, config.documentCommands.navigation.previous)) {
     return {
       action: 'PREV_DOCUMENT',
@@ -277,24 +275,24 @@ function parseDocumentCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Check for document selection with number
   if (containsKeyword(text, config.documentCommands.select)) {
     const docNum = extractNumber(text);
     const section = findMatchingKey(lowerText, config.documentCommands.switchSection) || 'current';
-    
+
     return {
       action: 'SELECT_DOCUMENT',
       category: 'document_selection',
-      params: { 
+      params: {
         documentNumber: docNum,
-        section: section 
+        section: section
       },
       confidence: docNum ? 0.9 : 0.7,
       originalText: text
     };
   }
-  
+
   // Check for upload
   if (containsKeyword(text, config.documentCommands.upload)) {
     return {
@@ -304,7 +302,7 @@ function parseDocumentCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   return null;
 }
 
@@ -313,7 +311,7 @@ function parseDocumentCommand(text: string): ParsedCommand | null {
  */
 function parsePrintSettingsCommand(text: string): ParsedCommand | null {
   const lowerText = text.toLowerCase();
-  
+
   // Layout
   const layoutMatch = findMatchingKey(lowerText, config.printCommands.layout);
   if (layoutMatch) {
@@ -325,7 +323,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Paper size
   const paperSizeMatch = findMatchingKey(lowerText, config.printCommands.paperSize);
   if (paperSizeMatch) {
@@ -337,7 +335,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Color mode
   const colorModeMatch = findMatchingKey(lowerText, config.printCommands.colorMode);
   if (colorModeMatch) {
@@ -349,7 +347,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Pages selection
   const pagesMatch = findMatchingKey(lowerText, config.printCommands.pages);
   if (pagesMatch) {
@@ -369,7 +367,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Margins
   const marginsMatch = findMatchingKey(lowerText, config.printCommands.margins);
   if (marginsMatch) {
@@ -381,7 +379,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Quality
   const qualityMatch = findMatchingKey(lowerText, config.printCommands.quality);
   if (qualityMatch) {
@@ -393,7 +391,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Duplex
   if (containsKeyword(text, config.printCommands.duplex.enable)) {
     return {
@@ -413,7 +411,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Copies
   if (containsKeyword(text, config.printCommands.copies)) {
     const num = extractNumber(text);
@@ -427,7 +425,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       };
     }
   }
-  
+
   // Scale
   if (containsKeyword(text, config.printCommands.scale)) {
     const num = extractNumber(text);
@@ -441,7 +439,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       };
     }
   }
-  
+
   // Resolution/DPI
   if (containsKeyword(text, config.printCommands.resolution)) {
     const num = extractNumber(text);
@@ -455,7 +453,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       };
     }
   }
-  
+
   // Pages per sheet
   if (containsKeyword(text, config.printCommands.pagesPerSheet)) {
     const num = extractNumber(text);
@@ -467,7 +465,7 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   return null;
 }
 
@@ -476,19 +474,62 @@ function parsePrintSettingsCommand(text: string): ParsedCommand | null {
  */
 function parseScanSettingsCommand(text: string): ParsedCommand | null {
   const lowerText = text.toLowerCase();
-  
+
+  // Format selection
+  const formatMatch = findMatchingKey(lowerText, config.scanCommands.format);
+  if (formatMatch) {
+    return {
+      action: 'SET_FORMAT',
+      category: 'settings_change',
+      params: { format: formatMatch },
+      confidence: 0.9,
+      originalText: text
+    };
+  }
+
+  // Resolution selection
+  const resolutionMatch = findMatchingKey(lowerText, config.scanCommands.resolution);
+  if (resolutionMatch) {
+    // Map resolution keywords to actual DPI values
+    const dpiValues: Record<string, string> = {
+      low: '150',
+      medium: '300',
+      high: '600',
+      ultra: '1200'
+    };
+    return {
+      action: 'SET_RESOLUTION',
+      category: 'settings_change',
+      params: { resolution: dpiValues[resolutionMatch] || '300' },
+      confidence: 0.9,
+      originalText: text
+    };
+  }
+
+  // Color mode for scan
+  const colorModeMatch = findMatchingKey(lowerText, config.printCommands.colorMode);
+  if (colorModeMatch) {
+    return {
+      action: 'SET_COLOR_MODE',
+      category: 'settings_change',
+      params: { colorMode: colorModeMatch },
+      confidence: 0.85,
+      originalText: text
+    };
+  }
+
   // Scan mode
   const modeMatch = findMatchingKey(lowerText, config.scanCommands.mode);
   if (modeMatch) {
     return {
-      action: 'SET_PAGES', // Reuse for scan mode
+      action: 'SET_SCAN_MODE',
       category: 'settings_change',
       params: { scanMode: modeMatch },
       confidence: 0.85,
       originalText: text
     };
   }
-  
+
   // OCR/Text mode
   if (containsKeyword(text, config.scanCommands.textMode.enable)) {
     return {
@@ -508,16 +549,17 @@ function parseScanSettingsCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   return null;
 }
+
 
 /**
  * Parse workflow commands (confirm, cancel, status, etc.)
  */
 function parseWorkflowCommand(text: string): ParsedCommand | null {
   const lowerText = text.toLowerCase();
-  
+
   // Confirm
   if (containsKeyword(text, config.workflowCommands.confirm)) {
     return {
@@ -527,7 +569,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Cancel
   if (containsKeyword(text, config.workflowCommands.cancel)) {
     return {
@@ -537,7 +579,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Status
   if (containsKeyword(text, config.workflowCommands.status)) {
     return {
@@ -547,7 +589,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Repeat settings
   if (containsKeyword(text, config.workflowCommands.repeatSettings)) {
     return {
@@ -557,7 +599,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Help
   if (containsKeyword(text, config.workflowCommands.help)) {
     return {
@@ -567,7 +609,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Stop recording
   if (containsKeyword(text, config.workflowCommands.stopRecording)) {
     return {
@@ -577,7 +619,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Feed documents
   if (containsKeyword(text, config.workflowCommands.feedDocuments)) {
     const num = extractNumber(text);
@@ -589,7 +631,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Scroll
   if (containsKeyword(text, config.workflowCommands.scroll.down)) {
     return {
@@ -607,7 +649,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Apply/Continue
   if (lowerText.includes('apply') || lowerText.includes('continue') || lowerText.includes('submit')) {
     return {
@@ -617,7 +659,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   // Go back
   if (lowerText.includes('back') || lowerText.includes('previous step')) {
     return {
@@ -627,7 +669,7 @@ function parseWorkflowCommand(text: string): ParsedCommand | null {
       originalText: text
     };
   }
-  
+
   return null;
 }
 
@@ -638,34 +680,34 @@ export function parseCommand(text: string): ParsedCommand | null {
   if (!text || text.trim().length === 0) {
     return null;
   }
-  
+
   // Try each parser in order of specificity
   let result: ParsedCommand | null = null;
-  
+
   // 1. Workflow commands (highest priority for confirm/cancel)
   result = parseWorkflowCommand(text);
   if (result && result.confidence >= config.thresholds.mediumConfidence) {
     return result;
   }
-  
+
   // 2. Document selection commands
   const docResult = parseDocumentCommand(text);
   if (docResult && (!result || docResult.confidence > result.confidence)) {
     result = docResult;
   }
-  
+
   // 3. Print settings commands
   const printResult = parsePrintSettingsCommand(text);
   if (printResult && (!result || printResult.confidence > result.confidence)) {
     result = printResult;
   }
-  
+
   // 4. Scan settings commands
   const scanResult = parseScanSettingsCommand(text);
   if (scanResult && (!result || scanResult.confidence > result.confidence)) {
     result = scanResult;
   }
-  
+
   return result;
 }
 
@@ -691,16 +733,16 @@ export function parseCommandWithState(
   if (!text || text.trim().length === 0) {
     return null;
   }
-  
+
   const { appState, printStep, scanStep, scanSource, totalDocuments } = context;
   let result: ParsedCommand | null = null;
-  
+
   // 1. Check for mode switching commands first (highest priority)
   const modeCommand = parseModeCommand(text, appState);
   if (modeCommand && modeCommand.confidence >= config.thresholds.mediumConfidence) {
     return modeCommand;
   }
-  
+
   // 2. Check for scan source selection (only in SCAN_WORKFLOW at SOURCE_SELECTION step)
   if (appState === 'SCAN_WORKFLOW' && scanStep === 'SOURCE_SELECTION') {
     const sourceCommand = parseScanSourceCommand(text);
@@ -708,32 +750,32 @@ export function parseCommandWithState(
       return sourceCommand;
     }
   }
-  
+
   // 3. Check for natural language document selection
   // (only in SELECT_DOCUMENT steps)
-  const isDocumentSelectionStep = 
+  const isDocumentSelectionStep =
     (appState === 'PRINT_WORKFLOW' && printStep === 'SELECT_DOCUMENT') ||
     (appState === 'SCAN_WORKFLOW' && scanStep === 'SELECT_DOCUMENT');
-  
+
   if (isDocumentSelectionStep) {
     const naturalDocResult = parseNaturalDocumentSelection(text, totalDocuments);
     if (naturalDocResult && naturalDocResult.confidence >= 0.7) {
       return naturalDocResult;
     }
   }
-  
+
   // 4. Workflow commands (confirm/cancel)
   const workflowResult = parseWorkflowCommand(text);
   if (workflowResult && workflowResult.confidence >= config.thresholds.mediumConfidence) {
     result = workflowResult;
   }
-  
+
   // 5. Document selection commands (basic)
   const docResult = parseDocumentCommand(text);
   if (docResult && (!result || docResult.confidence > result.confidence)) {
     result = docResult;
   }
-  
+
   // 6. Settings commands based on current workflow
   if (appState === 'PRINT_WORKFLOW') {
     const printResult = parsePrintSettingsCommand(text);
@@ -741,14 +783,14 @@ export function parseCommandWithState(
       result = printResult;
     }
   }
-  
+
   if (appState === 'SCAN_WORKFLOW') {
     const scanResult = parseScanSettingsCommand(text);
     if (scanResult && (!result || scanResult.confidence > result.confidence)) {
       result = scanResult;
     }
   }
-  
+
   // 7. Validate command against current state
   if (result) {
     const stateContext = {
@@ -761,11 +803,11 @@ export function parseCommandWithState(
       lastModeSwitchAttempt: null,
       selectedDocumentIndices: [],
     };
-    
+
     const validation = isCommandValidForState(stateContext, result.action);
     result.stateValidation = validation;
   }
-  
+
   return result;
 }
 
@@ -773,15 +815,15 @@ export function parseCommandWithState(
  * Parse and validate command with context (legacy support)
  */
 export function parseCommandWithContext(
-  text: string, 
+  text: string,
   mode: 'print' | 'scan' | null
 ): ParsedCommand | null {
   const command = parseCommand(text);
-  
+
   if (!command) {
     return null;
   }
-  
+
   // Boost confidence for mode-appropriate commands
   if (mode === 'print' && command.category === 'settings_change') {
     // Print-specific commands get a boost in print mode
@@ -790,7 +832,7 @@ export function parseCommandWithContext(
       command.confidence = Math.min(command.confidence + 0.1, 1.0);
     }
   }
-  
+
   if (mode === 'scan' && command.category === 'settings_change') {
     // Scan-specific commands get a boost in scan mode
     const scanKeywords = ['scan', 'ocr', 'text mode', 'format'];
@@ -798,7 +840,7 @@ export function parseCommandWithContext(
       command.confidence = Math.min(command.confidence + 0.1, 1.0);
     }
   }
-  
+
   return command;
 }
 

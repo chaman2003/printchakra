@@ -195,14 +195,19 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
           parseAndExecuteCommand(transcription, aiText);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Audio processing error:', error);
-      toast({
-        title: 'Processing Error',
-        description: 'Failed to process voice command',
-        status: 'error',
-        duration: 3000,
-      });
+      const _errMsg = error?.response?.data?.error || error?.message || String(error);
+      if (typeof _errMsg === 'string' && /decode/i.test(_errMsg)) {
+        console.warn('Audio decode failure suppressed (not shown to user):', _errMsg);
+      } else {
+        toast({
+          title: 'Processing Error',
+          description: 'Failed to process voice command',
+          status: 'error',
+          duration: 3000,
+        });
+      }
     } finally {
       setIsProcessing(false);
     }

@@ -30,7 +30,8 @@ import Iconify from '../common/Iconify';
 
 interface VoiceAIChatProps {
   isOpen: boolean;
-  onClose: () => void;
+  // onClose accepts an optional { force: boolean } parameter to allow force-closing
+  onClose?: (opts?: { force?: boolean }) => void;
   onOrchestrationTrigger?: (mode: 'print' | 'scan', config?: any) => void;
   isMinimized?: boolean;
   onToggleMinimize?: () => void;
@@ -66,8 +67,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
   const isSessionActiveRef = useRef(false);
   // When the user manually stops recording, prevent automatic restarts until they manually start again
   const userStoppedRef = useRef(false);
-  const activeToastIdsRef = useRef<Map<string, {timestamp: number; id: string | number}>>(new Map());
-  const toastTimeoutRef = useRef<{[key: string]: ReturnType<typeof setTimeout>}>({});
+  const activeToastIdsRef = useRef<Map<string, { timestamp: number; id: string | number }>>(new Map());
+  const toastTimeoutRef = useRef<{ [key: string]: ReturnType<typeof setTimeout> }>({});
 
   const toast = useToast();
 
@@ -119,6 +120,32 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     if (toastTimeoutRef.current[toastKey]) {
       clearTimeout(toastTimeoutRef.current[toastKey]);
       delete toastTimeoutRef.current[toastKey];
+    }
+
+    // Limit visible toasts to avoid overflowing the UI
+    const VISIBLE_TOAST_LIMIT = 4;
+    if (activeToastIdsRef.current.size >= VISIBLE_TOAST_LIMIT) {
+      // Find and remove the oldest toast
+      let oldestKey: string | null = null;
+      let oldestTimestamp = Infinity;
+      activeToastIdsRef.current.forEach((val, key) => {
+        if (val.timestamp < oldestTimestamp) {
+          oldestTimestamp = val.timestamp;
+          oldestKey = key;
+        }
+      });
+      if (oldestKey) {
+        const oldest = activeToastIdsRef.current.get(oldestKey);
+        if (oldest) {
+          try {
+            toast.close(oldest.id as any);
+          } catch (err) {
+            // Some Chakra versions do not expose close - ignore safely
+            console.warn('Could not close oldest toast programmatically', err);
+          }
+        }
+        activeToastIdsRef.current.delete(oldestKey);
+      }
     }
 
     // Show toast
@@ -273,7 +300,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
     // Clear a manual stop flag when user actively starts recording
     userStoppedRef.current = false;
-    
+
     if (!isSessionActiveRef.current) {
       console.warn('[startRecording] Voice session inactive');
       return;
@@ -376,12 +403,18 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           await processAudio(audioBlob);
         } catch (error: any) {
           console.error('Error in onstop handler:', error);
-          showToast({
-            title: 'Audio Processing Error',
-            description: error.message || 'Failed to process audio',
-            status: 'error',
-            duration: 5000,
-          });
+          const _errMsg = error?.response?.data?.error || error?.message || String(error);
+          // Suppress decode-related errors to avoid alarming users
+          if (typeof _errMsg === 'string' && /decode/i.test(_errMsg)) {
+            console.warn('Audio decode failure suppressed (not shown to user):', _errMsg);
+          } else {
+            showToast({
+              title: 'Audio Processing Error',
+              description: _errMsg,
+              status: 'error',
+              duration: 5000,
+            });
+          }
 
           scheduleRecordingStart(600);
         } finally {
@@ -560,7 +593,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       const errorMsg =
         error.response?.data?.error || error.message || 'Could not start voice AI session';
-      
+
       showToast({
         title: 'Session Start Failed',
         description: errorMsg,
@@ -603,9 +636,9 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       // Check for no speech detected (auto-retry)
       if (response.data.auto_retry && response.data.no_speech_detected) {
         console.log('No human speech detected - auto-retrying in 1 second');
-        
+
         addMessage('system', '⚠️ No human speech detected. Retrying...');
-        
+
         setSessionStatus('No speech detected, retrying...');
         setIsProcessing(false);
 
@@ -667,8 +700,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           const orchestrationPayload = frontendState
             ? frontendState
             : config_params
-            ? { mode: orchestration_mode, options: config_params }
-            : undefined;
+              ? { mode: orchestration_mode, options: config_params }
+              : undefined;
 
           console.log(
             `🎯 Orchestration triggered: ${orchestration_mode}`,
@@ -689,7 +722,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             setTimeout(() => {
               onOrchestrationTrigger(
                 orchestration_mode as 'print' | 'scan',
-                  orchestrationPayload || config_params || undefined
+                orchestrationPayload || config_params || undefined
               );
             }, 500);
           }
@@ -1018,7 +1051,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       // Clear messages and close
       setMessages([]);
       setSessionStatus('');
-      onClose();
+      // Force-close the chat on user request (if provided)
+      onClose?.({ force: true });
 
       showToast({
         title: 'Voice AI Closed',
@@ -1039,17 +1073,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
       }
 
-      onClose();
+      onClose?.();
     }
   };
 
   return (
     <VStack flex="1" spacing={0} align="stretch" h="100%" w="100%" bg={bgColor} position="relative" zIndex={2000} pointerEvents="auto">
       {/* Header */}
-      <Box 
-        borderBottomWidth="1px" 
+      <Box
+        borderBottomWidth="1px"
         borderColor={borderColor}
-        p={4} 
+        p={4}
         bg={bgColor}
       >
         <Flex align="center" gap={3} justify="space-between">
@@ -1118,72 +1152,72 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           }}>
             <VStack spacing={4} align="stretch">
               {messages.length === 0 && (
-              <Flex
-                direction="column"
-                align="center"
-                justify="center"
-                height="100%"
-                color="gray.500"
-                py={10}
-              >
-                <Box p={4} bg={userMessageBg} borderRadius="full" mb={4}>
-                  <Iconify icon={FiMic} boxSize={8} color="brand.500" />
-                </Box>
-                <Text fontWeight="600" textAlign="center">
-                  Start talking with PrintChakra AI
-                </Text>
-                <Text fontSize="sm" mt={2} textAlign="center" color="gray.400">
-                  Say "bye printchakra" to end
-                </Text>
-              </Flex>
-            )}
-
-            {messages.map(message => (
-              <Box
-                key={message.id}
-                alignSelf={message.type === 'user' ? 'flex-end' : 'flex-start'}
-                maxW="85%"
-              >
-                {message.type === 'system' ? (
-                  <Box bg={systemMessageBg} px={4} py={2} borderRadius="xl" textAlign="center" border="1px solid" borderColor="yellow.200">
-                    <Text fontSize="xs" fontStyle="italic" color="yellow.800">
-                      {message.text}
-                      {message.count && message.count > 1 && (
-                        <Badge ml={2} colorScheme="orange" variant="solid" borderRadius="full">
-                          ×{message.count}
-                        </Badge>
-                      )}
-                    </Text>
+                <Flex
+                  direction="column"
+                  align="center"
+                  justify="center"
+                  height="100%"
+                  color="gray.500"
+                  py={10}
+                >
+                  <Box p={4} bg={userMessageBg} borderRadius="full" mb={4}>
+                    <Iconify icon={FiMic} boxSize={8} color="brand.500" />
                   </Box>
-                ) : (
-                  <Flex
-                    direction={message.type === 'user' ? 'row-reverse' : 'row'}
-                    gap={3}
-                    align="flex-end"
-                  >
-                    <Avatar
-                      size="xs"
-                      name={message.type === 'user' ? 'You' : 'PrintChakra AI'}
-                      bg={message.type === 'user' ? 'brand.500' : 'green.500'}
-                    />
-                    <Box
-                      bg={message.type === 'user' ? userMessageBg : aiMessageBg}
-                      px={4}
-                      py={3}
-                      borderRadius="2xl"
-                      borderTopRightRadius={message.type === 'user' ? 'sm' : '2xl'}
-                      borderTopLeftRadius={message.type === 'user' ? '2xl' : 'sm'}
-                      boxShadow="sm"
-                    >
-                      <Text fontSize="sm" lineHeight="tall">{message.text}</Text>
-                      <Text fontSize="10px" color="gray.500" mt={1} textAlign={message.type === 'user' ? 'right' : 'left'}>
-                        {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  <Text fontWeight="600" textAlign="center">
+                    Start talking with PrintChakra AI
+                  </Text>
+                  <Text fontSize="sm" mt={2} textAlign="center" color="gray.400">
+                    Say "bye printchakra" to end
+                  </Text>
+                </Flex>
+              )}
+
+              {messages.map(message => (
+                <Box
+                  key={message.id}
+                  alignSelf={message.type === 'user' ? 'flex-end' : 'flex-start'}
+                  maxW="85%"
+                >
+                  {message.type === 'system' ? (
+                    <Box bg={systemMessageBg} px={4} py={2} borderRadius="xl" textAlign="center" border="1px solid" borderColor="yellow.200">
+                      <Text fontSize="xs" fontStyle="italic" color="yellow.800">
+                        {message.text}
+                        {message.count && message.count > 1 && (
+                          <Badge ml={2} colorScheme="orange" variant="solid" borderRadius="full">
+                            ×{message.count}
+                          </Badge>
+                        )}
                       </Text>
                     </Box>
-                  </Flex>
-                )}
-              </Box>
-            ))}
+                  ) : (
+                    <Flex
+                      direction={message.type === 'user' ? 'row-reverse' : 'row'}
+                      gap={3}
+                      align="flex-end"
+                    >
+                      <Avatar
+                        size="xs"
+                        name={message.type === 'user' ? 'You' : 'PrintChakra AI'}
+                        bg={message.type === 'user' ? 'brand.500' : 'green.500'}
+                      />
+                      <Box
+                        bg={message.type === 'user' ? userMessageBg : aiMessageBg}
+                        px={4}
+                        py={3}
+                        borderRadius="2xl"
+                        borderTopRightRadius={message.type === 'user' ? 'sm' : '2xl'}
+                        borderTopLeftRadius={message.type === 'user' ? '2xl' : 'sm'}
+                        boxShadow="sm"
+                      >
+                        <Text fontSize="sm" lineHeight="tall">{message.text}</Text>
+                        <Text fontSize="10px" color="gray.500" mt={1} textAlign={message.type === 'user' ? 'right' : 'left'}>
+                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </Box>
+                    </Flex>
+                  )}
+                </Box>
+              ))}
 
               <div ref={messagesEndRef} />
             </VStack>
@@ -1224,46 +1258,46 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           </Box>
 
           <Box borderTopWidth="1px" p={4}>
-          <Flex gap={2} justify="center">
-            {isSessionActive ? (
-              <>
+            <Flex gap={2} justify="center">
+              {isSessionActive ? (
+                <>
+                  <Button
+                    leftIcon={<Iconify icon={isRecording ? FiMicOff : FiMic} boxSize={5} />}
+                    colorScheme={isRecording ? 'red' : 'green'}
+                    onClick={isRecording ? stopRecording : startRecording}
+                    isDisabled={isProcessing || isTextSending || isSpeaking}
+                    flex={1}
+                  >
+                    {isRecording ? 'Stop Recording' : 'Start Recording'}
+                  </Button>
+                  <IconButton
+                    aria-label="End session"
+                    icon={<Iconify icon={FiX} boxSize={5} />}
+                    colorScheme="red"
+                    variant="outline"
+                    onClick={endSession}
+                  />
+                </>
+              ) : (
                 <Button
-                  leftIcon={<Iconify icon={isRecording ? FiMicOff : FiMic} boxSize={5} />}
-                  colorScheme={isRecording ? 'red' : 'green'}
-                  onClick={isRecording ? stopRecording : startRecording}
-                  isDisabled={isProcessing || isTextSending || isSpeaking}
+                  leftIcon={<Iconify icon={FiMic} boxSize={5} />}
+                  colorScheme="blue"
+                  onClick={startSession}
                   flex={1}
                 >
-                  {isRecording ? 'Stop Recording' : 'Start Recording'}
+                  Start Voice Session
                 </Button>
-                <IconButton
-                  aria-label="End session"
-                  icon={<Iconify icon={FiX} boxSize={5} />}
-                  colorScheme="red"
-                  variant="outline"
-                  onClick={endSession}
-                />
-              </>
-            ) : (
-              <Button
-                leftIcon={<Iconify icon={FiMic} boxSize={5} />}
-                colorScheme="blue"
-                onClick={startSession}
-                flex={1}
-              >
-                Start Voice Session
-              </Button>
-            )}
-          </Flex>
+              )}
+            </Flex>
 
-          <VStack spacing={1} mt={2}>
-            <Text fontSize="xs" color="gray.500" textAlign="center">
-              Powered by Whisper & Voice AI + English TTS
-            </Text>
-            <Text fontSize="xs" color="gray.500" textAlign="center">
-              Voice: Microsoft Ravi • Hands-free
-            </Text>
-          </VStack>
+            <VStack spacing={1} mt={2}>
+              <Text fontSize="xs" color="gray.500" textAlign="center">
+                Powered by Whisper & Voice AI + English TTS
+              </Text>
+              <Text fontSize="xs" color="gray.500" textAlign="center">
+                Voice: Microsoft Ravi • Hands-free
+              </Text>
+            </VStack>
           </Box>
         </>
       )}

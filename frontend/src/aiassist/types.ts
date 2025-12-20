@@ -4,18 +4,18 @@
  */
 
 // ==================== App State Types ====================
-export type AppState = 
+export type AppState =
   | 'DASHBOARD'           // Dashboard with AI chat, no active workflow
   | 'PRINT_WORKFLOW'      // Print workflow active
   | 'SCAN_WORKFLOW';      // Scan workflow active
 
-export type PrintWorkflowStep = 
+export type PrintWorkflowStep =
   | 'SELECT_DOCUMENT'     // Document selection screen
   | 'CONFIGURATION'       // Print configuration screen
   | 'REVIEW'              // Review settings screen
   | 'EXECUTING';          // Print in progress
 
-export type ScanWorkflowStep = 
+export type ScanWorkflowStep =
   | 'SOURCE_SELECTION'    // Choose: upload/select or feed tray
   | 'SELECT_DOCUMENT'     // Document selection (if not feed tray)
   | 'CONFIGURATION'       // Scan configuration screen
@@ -50,6 +50,8 @@ export type CommandAction =
   | 'SET_PAGES'
   | 'SET_PAGES_PER_SHEET'
   | 'SET_QUALITY'
+  | 'SET_FORMAT'
+  | 'SET_SCAN_MODE'
   | 'TOGGLE_OCR'
   | 'TOGGLE_TEXT_MODE'
   | 'SCROLL_DOWN'
@@ -73,6 +75,7 @@ export type CommandAction =
   | 'SELECT_MULTIPLE_DOCUMENTS'
   | 'DESELECT_DOCUMENT'
   | 'CLEAR_DOCUMENT_SELECTION';
+
 
 export interface ParsedCommand {
   action: CommandAction;

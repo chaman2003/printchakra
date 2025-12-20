@@ -37,7 +37,8 @@ const AIAssistConfig = {
       'A5': ['a5', 'a 5', 'a-5']
     },
     colorMode: {
-      color: ['color', 'colour', 'full color', 'color mode']
+      color: ['color', 'colour', 'full color', 'color mode', 'in color', 'with color'],
+      bw: ['black and white', 'black & white', 'bw', 'grayscale', 'greyscale', 'gray scale', 'grey scale', 'monochrome', 'mono', 'gray', 'grey', 'black white', 'no color']
     },
     pages: {
       all: ['all pages', 'all', 'everything', 'full document', 'entire document'],
@@ -51,19 +52,20 @@ const AIAssistConfig = {
       none: ['no margins', 'none', 'zero margins', 'borderless', 'full bleed']
     },
     quality: {
-      draft: ['draft', 'draft quality', 'quick', 'fast print'],
-      normal: ['normal', 'normal quality', 'standard', 'standard quality'],
-      high: ['high', 'high quality', 'fine', 'detailed'],
-      professional: ['professional', 'best', 'maximum quality', 'highest']
+      draft: ['draft', 'draft quality', 'quick', 'fast print', 'economy', 'eco mode', 'low quality', 'fast mode'],
+      normal: ['normal', 'normal quality', 'standard', 'standard quality', 'regular', 'default quality'],
+      high: ['high', 'high quality', 'fine', 'detailed', 'good quality', 'better quality'],
+      professional: ['professional', 'best', 'maximum quality', 'highest', 'photo quality', 'excellent', 'ultra', 'premium']
     },
     duplex: {
       enable: ['duplex', 'double sided', 'both sides', 'two sided', 'front and back'],
       disable: ['single sided', 'one side', 'no duplex', 'front only']
     },
-    copies: ['copies', 'copy', 'print copies', 'number of copies'],
-    scale: ['scale', 'zoom', 'size', 'print size', 'scaling', 'percent'],
-    resolution: ['dpi', 'resolution', 'quality dpi', 'print resolution'],
-    pagesPerSheet: ['pages per sheet', 'multiple pages', 'n-up', 'booklet', '2 per page', '4 per page']
+    copies: ['copies', 'copy', 'print copies', 'number of copies', 'make copies', 'print multiple'],
+    scale: ['scale', 'zoom', 'size', 'print size', 'scaling', 'percent', 'fit to page', 'shrink', 'enlarge'],
+    resolution: ['dpi', 'resolution', 'quality dpi', 'print resolution', '150 dpi', '300 dpi', '600 dpi', '1200 dpi'],
+    pagesPerSheet: ['pages per sheet', 'multiple pages', 'n-up', 'booklet', '2 per page', '4 per page', '2 up', '4 up', 'two per page', 'four per page'],
+    model: ['use printer', 'select printer', 'switch printer', 'change printer', 'printer model', 'use device', 'which printer']
   },
 
   // ==================== Scan Settings Commands ====================
@@ -77,10 +79,18 @@ const AIAssistConfig = {
       disable: ['disable ocr', 'no ocr', 'turn off ocr', 'image only']
     },
     format: {
-      pdf: ['pdf', 'pdf format', 'save as pdf'],
-      jpeg: ['jpeg', 'jpg', 'image', 'picture'],
-      png: ['png', 'png format', 'transparent']
-    }
+      pdf: ['pdf', 'pdf format', 'save as pdf', 'to pdf', 'as pdf', 'export pdf'],
+      jpeg: ['jpeg', 'jpg', 'image', 'picture', 'photo format', 'as jpeg', 'as jpg'],
+      png: ['png', 'png format', 'transparent', 'as png'],
+      tiff: ['tiff', 'tif', 'tiff format', 'as tiff']
+    },
+    resolution: {
+      low: ['150', '150 dpi', 'low resolution', 'low res', 'draft resolution'],
+      medium: ['300', '300 dpi', 'medium resolution', 'medium res', 'standard resolution'],
+      high: ['600', '600 dpi', 'high resolution', 'high res', 'fine resolution'],
+      ultra: ['1200', '1200 dpi', 'ultra resolution', 'ultra res', 'maximum resolution']
+    },
+    model: ['use scanner', 'select scanner', 'switch scanner', 'change scanner', 'scanner model', 'which scanner']
   },
 
   // ==================== Workflow Commands ====================

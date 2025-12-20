@@ -101,6 +101,7 @@ const BACKEND_TO_FRONTEND_COMMAND: Record<string, string> = {
   // Document commands
   'select_document': 'SELECT_DOCUMENT',
   'select_multiple_documents': 'SELECT_MULTIPLE_DOCUMENTS',
+  'select_documents_advanced': 'SELECT_DOCUMENTS_ADVANCED',
   'switch_section': 'SWITCH_SECTION',
   'next_document': 'NEXT_DOCUMENT',
   'previous_document': 'PREV_DOCUMENT',
@@ -284,6 +285,7 @@ export function useVoiceCommandBridge(
       case 'TOGGLE_AUTO_CAPTURE':
       case 'USE_FEED_TRAY':
       case 'SELECT_DOCUMENTS':
+      case 'SELECT_DOCUMENTS_ADVANCED':
       case 'CLOSE_PANEL':
         // These are handled directly by Dashboard's handleVoiceCommand
         return null;

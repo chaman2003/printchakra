@@ -9,8 +9,11 @@
  * - "Select the last 2 documents"
  * - "Select documents from 1 to 10"
  * - "Select documents between 3 and 8"
- * - "Deselect document 5"
+ * - "Select every second document"
  * - "Select all documents"
+ * - "Select all documents except 1 and 2"
+ * - "Select every document from 3 onward"
+ * - "Deselect document 5"
  * - "Clear selection"
  */
 
@@ -205,6 +208,26 @@ export function parseDocumentSelectionCommand(
   
   // Check for "select all"
   if (type === 'select' && containsKeyword(lowerText, ALL_KEYWORDS)) {
+    // Check for exceptions: "all documents except 1 and 2"
+    const exceptMatch = lowerText.match(/all\s+documents\s+except\s+(.+?)(?:\.|$)/i);
+    if (exceptMatch) {
+      const exceptStr = exceptMatch[1];
+      const allIndices = Array.from({ length: totalDocuments }, (_, i) => i);
+      const exceptNumbers = parseList(exceptStr);
+      const exceptIndices = exceptNumbers
+        .map(n => n - 1)
+        .filter(i => i >= 0 && i < totalDocuments);
+      
+      const indices = allIndices.filter(i => !exceptIndices.includes(i));
+      return {
+        type: 'select',
+        indices,
+        isRange: false,
+        originalText: text,
+        confidence: 0.95,
+      };
+    }
+
     return {
       type: 'select_all',
       indices: Array.from({ length: totalDocuments }, (_, i) => i),
@@ -213,7 +236,62 @@ export function parseDocumentSelectionCommand(
       confidence: 0.95,
     };
   }
-  
+
+  // Parse "every second/third/Nth document"
+  const everyNMatch = lowerText.match(/every\s+(?:second|2nd|third|3rd|(\d+)(?:st|nd|rd|th)?)\s+document/i);
+  if (everyNMatch) {
+    let step = 2; // default every second
+    if (everyNMatch[1]) {
+      step = parseInt(everyNMatch[1], 10);
+    } else if (lowerText.includes('third') || lowerText.includes('3rd')) {
+      step = 3;
+    }
+
+    // Check for range: "every second document from 1 to 10"
+    const rangeMatch = lowerText.match(/from\s+(\d+)\s+to\s+(\d+)/i);
+    let startIdx = 0;
+    let endIdx = totalDocuments - 1;
+    if (rangeMatch) {
+      startIdx = Math.max(0, parseInt(rangeMatch[1], 10) - 1);
+      endIdx = Math.min(totalDocuments - 1, parseInt(rangeMatch[2], 10) - 1);
+    }
+
+    const indices: number[] = [];
+    for (let i = startIdx; i <= endIdx; i += step) {
+      indices.push(i);
+    }
+
+    if (indices.length > 0) {
+      return {
+        type: 'select',
+        indices,
+        isRange: false,
+        originalText: text,
+        confidence: 0.9,
+      };
+    }
+  }
+
+  // Parse "every document from N onward"
+  const everyFromMatch = lowerText.match(/every\s+document\s+from\s+(\d+)\s+onward/i);
+  if (everyFromMatch) {
+    const startNum = parseInt(everyFromMatch[1], 10);
+    const startIdx = Math.max(0, startNum - 1);
+    const indices: number[] = [];
+    for (let i = startIdx; i < totalDocuments; i++) {
+      indices.push(i);
+    }
+    if (indices.length > 0) {
+      return {
+        type: 'select',
+        indices,
+        isRange: false,
+        originalText: text,
+        confidence: 0.9,
+      };
+    }
+  }
+
   // Try to parse "first N" or "last N"
   const firstLastIndices = parseFirstLast(text, totalDocuments);
   if (firstLastIndices && firstLastIndices.length > 0) {
@@ -225,7 +303,7 @@ export function parseDocumentSelectionCommand(
       confidence: 0.9,
     };
   }
-  
+
   // Try to parse range
   const range = parseRange(text);
   if (range) {
@@ -243,7 +321,7 @@ export function parseDocumentSelectionCommand(
       confidence: 0.9,
     };
   }
-  
+
   // Try to parse comma/and separated list
   const listNumbers = parseList(text);
   if (listNumbers.length > 0) {
@@ -262,7 +340,7 @@ export function parseDocumentSelectionCommand(
       };
     }
   }
-  
+
   // Try to extract any single number
   const numbers = extractNumbers(text);
   if (numbers.length > 0) {
@@ -281,7 +359,7 @@ export function parseDocumentSelectionCommand(
       };
     }
   }
-  
+
   // If we got here with select/deselect keywords but no numbers,
   // it might be "select the document" meaning current focus
   if (isSelect || isDeselect) {
@@ -293,7 +371,7 @@ export function parseDocumentSelectionCommand(
       confidence: 0.6,
     };
   }
-  
+
   return null;
 }
 
