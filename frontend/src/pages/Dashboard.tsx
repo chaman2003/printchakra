@@ -1791,15 +1791,23 @@ const Dashboard: React.FC = () => {
             break;
           }
 
-          // Use active section if no section specified
-          const activeSection = documentSelectorRef.current?.getActiveSection?.() || 'current';
-          const targetSection = (sectionParam as 'current' | 'converted') || (activeSection === 'upload' ? 'current' : activeSection as 'current' | 'converted');
+          // Open document selector first
           documentSelectorModal.onOpen();
-          documentSelectorRef.current?.focusSection(targetSection);
 
+          // Get active section from document selector or use specified section
+          // Only call focusSection if user explicitly specified a section
+          const activeSection = documentSelectorRef.current?.getActiveSection?.() || 'current';
+          const userSpecifiedSection = sectionParam && sectionParam !== 'current' ? sectionParam : null;
+          const targetSection = userSpecifiedSection || (activeSection === 'upload' ? 'current' : activeSection as 'current' | 'converted');
+
+          // Only switch sections if user explicitly specified one
+          if (userSpecifiedSection) {
+            documentSelectorRef.current?.focusSection(targetSection);
+          }
 
           if (parsedDocumentNumber) {
             await selectDocumentForVoice(targetSection, parsedDocumentNumber);
+
           } else {
             voiceDocumentSelectionRef.current = { section: targetSection, index: 1 };
             toast({
@@ -1813,17 +1821,23 @@ const Dashboard: React.FC = () => {
         }
 
         case 'select_multiple_documents': {
+          // Open document selector first
+          documentSelectorModal.onOpen();
+
           // Use active section if no section specified, fallback to current
           const activeSection = documentSelectorRef.current?.getActiveSection?.() || 'current';
-          const targetSection = (sectionParam as 'current' | 'converted') || (activeSection === 'upload' ? 'current' : activeSection as 'current' | 'converted');
+          const userSpecifiedSection = sectionParam && sectionParam !== 'current' ? sectionParam : null;
+          const targetSection = userSpecifiedSection || (activeSection === 'upload' ? 'current' : activeSection as 'current' | 'converted');
           const count = params?.count || 2;
 
           const selectionType = params?.selection_type || 'first_n';
           const documentNumbers = params?.document_numbers;
 
-          // Open document selector and focus on correct section
-          documentSelectorModal.onOpen();
-          documentSelectorRef.current?.focusSection(targetSection);
+          // Only switch sections if user explicitly specified one
+          if (userSpecifiedSection) {
+            documentSelectorRef.current?.focusSection(targetSection);
+          }
+
 
           // Get the right document list
           const docs = targetSection === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
@@ -1885,15 +1899,20 @@ const Dashboard: React.FC = () => {
 
         case 'select_document_range': {
           // Handle range selection (e.g., "select documents 1 to 5")
-          const activeSection = documentSelectorRef.current?.getActiveSection?.() || 'current';
-          const targetSection = (sectionParam as 'current' | 'converted') || (activeSection === 'upload' ? 'current' : activeSection as 'current' | 'converted');
-          const startIdx = (params?.start || 1) - 1; // Convert to 0-based
+          // Open document selector first
+          documentSelectorModal.onOpen();
 
+          const activeSection = documentSelectorRef.current?.getActiveSection?.() || 'current';
+          const userSpecifiedSection = sectionParam && sectionParam !== 'current' ? sectionParam : null;
+          const targetSection = userSpecifiedSection || (activeSection === 'upload' ? 'current' : activeSection as 'current' | 'converted');
+          const startIdx = (params?.start || 1) - 1; // Convert to 0-based
           const endIdx = (params?.end || 5) - 1;
 
-          // Open document selector and focus on correct section
-          documentSelectorModal.onOpen();
-          documentSelectorRef.current?.focusSection(targetSection);
+          // Only switch sections if user explicitly specified one
+          if (userSpecifiedSection) {
+            documentSelectorRef.current?.focusSection(targetSection);
+          }
+
 
           // Get the right document list
           const docs = targetSection === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
