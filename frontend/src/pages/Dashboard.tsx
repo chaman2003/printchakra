@@ -665,7 +665,7 @@ const Dashboard: React.FC = () => {
   >(null);
   const lastOrchestrationUpdateRef = React.useRef<string | null>(null);
   const documentSelectorRef = React.useRef<DocumentSelectorHandle | null>(null);
-  const voiceDocumentSelectionRef = React.useRef<{ section: 'current' | 'converted'; index: number }>(
+  const voiceDocumentSelectionRef = React.useRef<{ section: 'current' | 'converted' | 'upload'; index: number }>(
     {
       section: 'current',
       index: 1,
@@ -1336,9 +1336,38 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const selectDocumentForVoice = useCallback(
-    async (section: 'current' | 'converted', documentNumber?: number) => {
+    async (section: 'current' | 'converted' | 'upload', documentNumber?: number) => {
       if (!documentNumber || Number.isNaN(documentNumber) || documentNumber < 1) {
         return false;
+      }
+
+      // Handle uploads via the selector ref directly since uploaded files live inside the component
+      if (section === 'upload') {
+        documentSelectorModal.onOpen();
+        documentSelectorRef.current?.focusSection('upload');
+        const target = documentSelectorRef.current?.selectDocumentByIndex('upload', documentNumber);
+        if (!target) {
+          toast({
+            title: 'Document not found',
+            description: `Upload section does not have item #${documentNumber}.`,
+            status: 'warning',
+            duration: 3000,
+          });
+          return false;
+        }
+
+        voiceDocumentSelectionRef.current = { section, index: documentNumber };
+        const enhancedDocs = await enhanceDocumentsWithPages([target]);
+        setSelectedDocuments(enhancedDocs);
+        bumpPreviewFocus({ docIndex: 0, page: 1, source: 'voice' });
+
+        toast({
+          title: 'Document ready',
+          description: `${target.filename} selected via voice`,
+          status: 'success',
+          duration: 2500,
+        });
+        return true;
       }
 
       const docs = section === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
@@ -2232,6 +2261,12 @@ const Dashboard: React.FC = () => {
 
         case 'next_document': {
           const ctx = voiceDocumentSelectionRef.current;
+          if (ctx.section === 'upload') {
+            const nextIndex = ctx.index + 1;
+            await selectDocumentForVoice(ctx.section, nextIndex);
+            break;
+          }
+
           const docs = ctx.section === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
           if (docs.length === 0) {
             toast({
@@ -2249,6 +2284,12 @@ const Dashboard: React.FC = () => {
 
         case 'previous_document': {
           const ctx = voiceDocumentSelectionRef.current;
+          if (ctx.section === 'upload') {
+            const prevIndex = Math.max(1, ctx.index - 1);
+            await selectDocumentForVoice(ctx.section, prevIndex);
+            break;
+          }
+
           const docs = ctx.section === 'converted' ? convertedDocumentOptions : currentDocumentOptions;
           if (docs.length === 0) {
             toast({

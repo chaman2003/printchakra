@@ -61,10 +61,10 @@ export interface DocumentSelectorProps {
 
 export interface DocumentSelectorHandle {
   focusSection: (section: 'current' | 'converted' | 'upload') => void;
-  selectDocumentByIndex: (section: 'current' | 'converted', position: number) => Document | null;
-  selectMultipleDocuments: (section: 'current' | 'converted', indices: number[]) => void;
-  addDocumentsToSelection: (section: 'current' | 'converted', indices: number[]) => void;
-  removeDocumentsFromSelection: (section: 'current' | 'converted', indices: number[]) => void;
+  selectDocumentByIndex: (section: 'current' | 'converted' | 'upload', position: number) => Document | null;
+  selectMultipleDocuments: (section: 'current' | 'converted' | 'upload', indices: number[]) => void;
+  addDocumentsToSelection: (section: 'current' | 'converted' | 'upload', indices: number[]) => void;
+  removeDocumentsFromSelection: (section: 'current' | 'converted' | 'upload', indices: number[]) => void;
   undoLastSelection: () => void;
   clearSelections: () => void;
   getSelectionCount: () => number;
@@ -399,7 +399,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           }
         },
         selectDocumentByIndex: (section, position) => {
-          const docs = section === 'current' ? currentDocuments : convertedDocuments;
+          const docs = section === 'current' ? currentDocuments : section === 'converted' ? convertedDocuments : uploadedFiles;
           const target = docs[position - 1];
           if (!target) {
             return null;
@@ -416,7 +416,7 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
         },
         selectMultipleDocuments: (section, indices) => {
           saveToHistory();
-          const docs = section === 'current' ? currentDocuments : convertedDocuments;
+          const docs = section === 'current' ? currentDocuments : section === 'converted' ? convertedDocuments : uploadedFiles;
           let lastValidIndex: number | null = null;
 
           // ADDITIVE: Start with existing selection
@@ -437,9 +437,9 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           }
         },
         // NEW: Add specific documents to selection (additive)
-        addDocumentsToSelection: (section: 'current' | 'converted', indices: number[]) => {
+        addDocumentsToSelection: (section: 'current' | 'converted' | 'upload', indices: number[]) => {
           saveToHistory();
-          const docs = section === 'current' ? currentDocuments : convertedDocuments;
+          const docs = section === 'current' ? currentDocuments : section === 'converted' ? convertedDocuments : uploadedFiles;
           setSelectedDocs(prev => {
             const newSelected = new Set(prev);
             for (const idx of indices) {
@@ -452,9 +452,9 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           setActiveTab(TAB_INDEX[section]);
         },
         // NEW: Remove specific documents from selection
-        removeDocumentsFromSelection: (section: 'current' | 'converted', indices: number[]) => {
+        removeDocumentsFromSelection: (section: 'current' | 'converted' | 'upload', indices: number[]) => {
           saveToHistory();
-          const docs = section === 'current' ? currentDocuments : convertedDocuments;
+          const docs = section === 'current' ? currentDocuments : section === 'converted' ? convertedDocuments : uploadedFiles;
           setSelectedDocs(prev => {
             const newSelected = new Set(prev);
             for (const idx of indices) {
