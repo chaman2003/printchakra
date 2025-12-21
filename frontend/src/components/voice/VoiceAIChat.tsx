@@ -266,10 +266,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     setMessages(prev => addMessageWithDedup(prev, type, text));
   }, []);
 
-  const stopRecording = useCallback(() => {
-    // Mark that the user explicitly stopped recording so we don't auto-restart
-    userStoppedRef.current = true;
-
+  // Internal stop - used by silence detection, doesn't block auto-restart
+  const stopRecordingInternal = useCallback(() => {
     // Clear any pending restart timers
     if (recordingRestartTimeoutRef.current) {
       clearTimeout(recordingRestartTimeoutRef.current);
@@ -280,10 +278,17 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       try {
         mediaRecorderRef.current.stop();
       } catch (e) {
-        console.warn('[stopRecording] Error stopping media recorder:', e);
+        console.warn('[stopRecordingInternal] Error stopping media recorder:', e);
       }
       setIsRecording(false);
     }
+  }, []);
+
+  // User-facing stop - marks that user manually stopped, blocks auto-restart
+  const stopRecording = useCallback(() => {
+    // Mark that the user explicitly stopped recording so we don't auto-restart
+    userStoppedRef.current = true;
+    stopRecordingInternal();
 
     // Ensure we stop all media tracks to fully release microphone
     try {
@@ -293,7 +298,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     } catch (e) {
       console.warn('[stopRecording] Error stopping media tracks:', e);
     }
-  }, []);
+  }, [stopRecordingInternal]);
+
 
   const startRecording = useCallback(async () => {
     console.log('[startRecording] Starting... isSessionActive:', isSessionActiveRef.current);
@@ -487,8 +493,12 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           if (silenceStart === null) {
             silenceStart = Date.now();
           } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            console.log('Silence detected - stopping recording');
-            stopRecording();
+            console.log('Silence detected - stopping recording (auto-restart enabled)');
+            // Don't use stopRecording() - that sets userStoppedRef and blocks auto-restart
+            if (mediaRecorderRef.current?.state === 'recording') {
+              mediaRecorderRef.current.stop();
+            }
+            setIsRecording(false);
             closeAudioContext();
             return;
           }
@@ -501,8 +511,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
-          console.log('Max duration reached - stopping recording');
-          stopRecording();
+          console.log('Max duration reached - stopping recording (auto-restart enabled)');
+          // Don't use stopRecording() - that sets userStoppedRef and blocks auto-restart
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
           closeAudioContext();
         }
       }, 5000);
