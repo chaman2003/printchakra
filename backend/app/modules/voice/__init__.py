@@ -1858,18 +1858,30 @@ class VoiceAIOrchestrator:
             # Step 4: Extract configuration parameters from user text
             config_params = self._extract_config_parameters(user_text_lower)
 
+            # Build response that mirrors chat endpoint structure
+            # Forward ALL fields from generate_response to ensure voice and text paths behave identically
             return {
                 "success": True,
                 "user_text": user_text,
+                "full_text": transcription.get("text", user_text),  # Original transcription
                 "ai_response": ai_response,
+                "response": ai_response,  # Include 'response' field for compatibility
+                "tts_response": chat_response.get("tts_response", ai_response),  # Forward TTS response
                 "transcription_language": transcription.get("language"),
                 "model": chat_response.get("model"),
                 "session_ended": False,
                 "requires_keyword": False,
-                "orchestration_trigger": orchestration_trigger,
-                "orchestration_mode": orchestration_mode,
-                "config_params": config_params,
+                # Orchestration fields - prefer from chat_response if present, else use overrides
+                "orchestration_trigger": chat_response.get("orchestration_trigger") or orchestration_trigger,
+                "orchestration_mode": chat_response.get("orchestration_mode") or orchestration_mode,
+                "config_params": config_params or chat_response.get("config_params"),
+                # Voice command fields - forward from generate_response
+                "voice_command": chat_response.get("voice_command"),
+                "command_params": chat_response.get("command_params"),
+                # Frontend state for orchestration
+                "orchestration": chat_response.get("orchestration"),
             }
+
 
         except Exception as e:
             logger.error(f"[ERROR] Voice input processing error: {str(e)}")
