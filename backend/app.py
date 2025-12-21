@@ -5044,9 +5044,12 @@ def speak_text():
 @app.route("/voice/process", methods=["POST"])
 def process_voice_complete():
     """
-    Complete voice processing pipeline: Audio ? Transcription ? AI Response
+    Complete voice processing pipeline: Audio → Transcription → AI Response
     Expects: multipart/form-data with 'audio' field (WAV format)
     Returns: Transcription + AI response + session status
+    
+    SIMPLIFIED: Just transcribes audio and calls generate_response - SAME as text chat.
+    No extra orchestrator processing or response overrides.
     """
     try:
         from app.modules.voice import voice_ai_orchestrator
@@ -5077,204 +5080,22 @@ def process_voice_complete():
             f"Processing voice input: {len(audio_data)} bytes, filename: {audio_file.filename}"
         )
 
-        # Validate audio file
-        logger.info(f"Audio file first 20 bytes (hex): {audio_data[:20].hex()}")
-        logger.info(f"Audio file first 20 bytes (raw): {audio_data[:20]}")
-
-        # Check for RIFF header
-        if audio_data[:4] != b"RIFF":
-            logger.warning(f"[WARN] Audio file doesn't have RIFF header! Got: {audio_data[:4]}")
-            logger.warning(f"   This may cause FFmpeg errors during transcription")
-        else:
-            logger.info("[OK] Audio file has valid RIFF header")
-
-        # Process through complete pipeline
+        # Process through pipeline - this just transcribes and calls generate_response
+        # EXACTLY the same as text chat, no extra processing
         result = voice_ai_orchestrator.process_voice_input(audio_data)
 
         if result.get("success"):
             logger.info(f"[OK] Voice processing complete")
             logger.info(f"   User: {result.get('user_text')}")
-            logger.info(f"   AI: {result.get('ai_response')}")
+            logger.info(f"   AI: {result.get('ai_response', result.get('response', ''))[:100]}")
 
-            # FALLBACK: Check if orchestration trigger wasn't detected by LLM
-            # This ensures print/scan commands always work even if LLM missed them
-            if not result.get("orchestration_trigger"):
-                user_text_lower = result.get("user_text", "").lower()
-                
-                # Check for print intent
-                print_keywords = ["print", "printing", "printout", "print doc", "print file"]
-                switch_keywords = ["switch to", "open", "go to", "show me", "navigate to"]
-                is_switch_print = any(sk in user_text_lower for sk in switch_keywords) and "print" in user_text_lower
-                is_print_command = any(kw in user_text_lower for kw in print_keywords)
-                is_not_question = not any(w in user_text_lower for w in ["what", "can you", "how", "help", "tell me", "can i"])
-                
-                if (is_print_command or is_switch_print) and is_not_question:
-                    logger.info(f"[FALLBACK] Print command detected: '{result.get('user_text')}'")
-                    result["orchestration_trigger"] = True
-                    result["orchestration_mode"] = "print"
-                    result["ai_response"] = "Print mode activated. Which document would you like to print? You can say 'select document 1' or browse your files."
-                
-                # Check for scan intent
-                scan_keywords = ["scan", "scanning", "capture", "scan doc", "capture document"]
-                is_switch_scan = any(sk in user_text_lower for sk in switch_keywords) and "scan" in user_text_lower
-                is_scan_command = any(kw in user_text_lower for kw in scan_keywords)
-                
-                if (is_scan_command or is_switch_scan) and is_not_question:
-                    logger.info(f"[FALLBACK] Scan command detected: '{result.get('user_text')}'")
-                    result["orchestration_trigger"] = True
-                    result["orchestration_mode"] = "scan"
-                    result["ai_response"] = "Scan mode activated. Do you want to select or upload a document, or use the printer's feed tray?"
-
-            # Check if user text contains orchestration commands
-            user_text = result.get("user_text", "")
-            
-            # If orchestration was just triggered, set up orchestrator state
-            if result.get("orchestration_trigger") and ORCHESTRATION_AVAILABLE and orchestrator:
-                from app.modules.orchestration import IntentType
-                
-                mode = result.get("orchestration_mode")
-                if mode in ["print", "scan"]:
-                    logger.info(f"[ORCHESTRATOR] Setting up {mode} orchestration state")
-                    
-                    # Add voice_triggered flag to trigger CONFIGURING state
-                    intent_text = f"{mode} a document with voice control"
-                    intent, params = orchestrator.detect_intent(intent_text)
-                    
-                    if params is None:
-                        params = {}
-                    params["voice_triggered"] = True
-                    
-                    # Process command to set orchestrator state
-                    orchestration_result = orchestrator.process_command(
-                        intent_text,
-                        force_voice_triggered=True,
-                    )
-                    
-                    # Store orchestration result for later use
-                    result["orchestration_state_setup"] = True
-                    result["orchestration_workflow_state"] = orchestrator.current_state.value
-                    
-                    logger.info(f"[ORCHESTRATOR] State set to: {orchestrator.current_state.value}")
-            if ORCHESTRATION_AVAILABLE and orchestrator and user_text:
-                # Check current orchestration state
-                current_state = orchestrator.current_state.value
-
-                # If in CONFIGURING state, parse voice for configuration changes
-                if current_state == "configuring" and orchestrator.pending_action:
-                    action_type = orchestrator.pending_action.get("type")
-                    if action_type:
-                        logger.info(f"[VOICE] Parsing voice configuration for {action_type}")
-                        parsed_config = orchestrator.parse_voice_configuration(
-                            user_text, action_type
-                        )
-
-                        if parsed_config.get("no_changes"):
-                            # User indicated they're done with configuration
-                            result["orchestration"] = {
-                                "no_changes": True,
-                                "message": "Configuration complete. Ready to proceed.",
-                                "ready_to_confirm": True,
-                            }
-                            result["ai_response"] = (
-                                "Perfect! Your settings are ready. Shall we proceed?"
-                            )
-
-                            socketio.emit(
-                                "orchestration_update",
-                                {
-                                    "type": "configuration_complete",
-                                    "ready_to_confirm": True,
-                                    "timestamp": datetime.now().isoformat(),
-                                },
-                            )
-                        elif parsed_config:
-                            # Apply configuration updates
-                            update_result = orchestrator.update_configuration(
-                                action_type, parsed_config
-                            )
-                            result["orchestration"] = {
-                                "configuration_updated": True,
-                                "updates": parsed_config,
-                                "configuration": update_result.get("configuration"),
-                            }
-
-                            confirmation_message = _build_voice_confirmation(parsed_config)
-                            result["ai_response"] = confirmation_message
-
-                            socketio.emit(
-                                "orchestration_update",
-                                {
-                                    "type": "voice_configuration_updated",
-                                    "action_type": action_type,
-                                    "updates": parsed_config,
-                                    "configuration": update_result.get("configuration"),
-                                    "frontend_updates": update_result.get("frontend_updates"),
-                                    "frontend_state": update_result.get("frontend_state"),
-                                    "timestamp": datetime.now().isoformat(),
-                                },
-                            )
-                        else:
-                            # Only show this error if NO voice command or orchestration trigger was detected
-                            # If voice_command exists (like select_document) or orchestration_trigger (like print/scan), don't override
-                            if not result.get("voice_command") and not result.get("orchestration_trigger"):
-                                result["ai_response"] = (
-                                    "I didn't catch any configuration changes. Try saying things like 'landscape', '3 copies', or 'color mode'."
-                                )
-                else:
-                    # Try to detect orchestration intent
-                    from app.modules.orchestration import IntentType
-
-                    intent, params = orchestrator.detect_intent(user_text)
-
-                    # If valid orchestration intent detected, process it
-                    if intent in [IntentType.PRINT, IntentType.SCAN]:
-                        logger.info(f"[TRIGGER] Orchestration intent detected: {intent.value}")
-
-                        # Add voice_triggered flag to parameters
-                        if params is None:
-                            params = {}
-                        params["voice_triggered"] = True
-
-                        # Process command with voice_triggered flag
-                        orchestration_result = orchestrator.process_command(
-                            user_text,
-                            force_voice_triggered=True,
-                        )
-
-                        # Add orchestration result to response
-                        result["orchestration"] = orchestration_result
-                        result["orchestration_detected"] = True
-
-                        # Override AI response with orchestration message
-                        if orchestration_result.get("message"):
-                            result["ai_response"] = orchestration_result["message"]
-
-                        # Emit orchestration update
-                        try:
-                            socketio.emit(
-                                "orchestration_update",
-                                {
-                                    "type": "voice_command_detected",
-                                    "intent": intent.value,
-                                    "result": orchestration_result,
-                                    "timestamp": datetime.now().isoformat(),
-                                    "open_ui": orchestration_result.get("open_ui", False),
-                                    "skip_mode_selection": orchestration_result.get(
-                                        "skip_mode_selection", False
-                                    ),
-                                    "frontend_state": orchestration_result.get("frontend_state"),
-                                },
-                            )
-                        except Exception as socket_error:
-                            logger.warning(f"Orchestration socket emit failed: {socket_error}")
-
-            # Emit to frontend via Socket.IO
+            # Emit to frontend via Socket.IO (optional, for real-time updates)
             try:
                 socketio.emit(
                     "voice_message",
                     {
                         "user_text": result.get("user_text"),
-                        "ai_response": result.get("ai_response"),
+                        "ai_response": result.get("ai_response") or result.get("response"),
                         "orchestration": result.get("orchestration"),
                         "timestamp": datetime.now().isoformat(),
                         "session_ended": result.get("session_ended", False),
@@ -5286,7 +5107,6 @@ def process_voice_complete():
             return jsonify(result), 200
         else:
             logger.error(f"[ERROR] Voice processing failed: {result.get('error')}")
-            logger.error(f"   Error stage: {result.get('stage', 'unknown')}")
             return jsonify(result), 500
 
     except ImportError as ie:
