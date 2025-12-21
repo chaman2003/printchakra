@@ -1732,8 +1732,8 @@ class VoiceAIOrchestrator:
 
     def process_voice_input(self, audio_data: bytes) -> Dict[str, Any]:
         """
-        Process voice input through complete pipeline.
-        Simply transcribes audio and calls generate_response - SAME as text path.
+        Process voice input through complete pipeline
+        Requires "hey" wake word to trigger AI processing
 
         Args:
             audio_data: Audio bytes (WAV format)
@@ -1745,51 +1745,81 @@ class VoiceAIOrchestrator:
             return {"success": False, "error": "No active session. Start a session first."}
 
         try:
-            # Step 1: Transcribe audio using Whisper
+            # Step 1: Transcribe audio
             transcription = self.whisper_service.transcribe_audio(audio_data)
 
             if not transcription.get("success"):
-                # Check if it's a no-speech detection
-                if transcription.get("no_speech_detected"):
-                    return {
-                        "success": True,
-                        "auto_retry": True,
-                        "no_speech_detected": True,
-                        "user_text": "",
-                        "ai_response": "",
-                    }
                 return {
                     "success": False,
                     "error": f"Transcription failed: {transcription.get('error')}",
+                    "stage": "transcription",
+                    "requires_keyword": True,
                 }
 
             user_text = transcription.get("text", "").strip()
-            original_text = user_text  # Keep original for display
 
             if not user_text:
                 return {
-                    "success": True,
-                    "auto_retry": True,
-                    "no_speech_detected": True,
-                    "user_text": "",
-                    "ai_response": "",
+                    "success": False,
+                    "error": "No speech detected - please speak clearly",
+                    "stage": "transcription",
+                    "requires_keyword": True,
                 }
 
-            logger.info(f"[VOICE] Transcribed: '{user_text}'")
+            logger.info(f"[INFO] Transcribed text: {user_text}")
+
+            # Convert to lowercase for processing
+            user_text_lower = user_text.lower()
+
+            # Filter out filler speech / accidental triggers to prevent unwanted processing
+            filler_phrases = [
+                "thank you", "thanks", "thank", "okay", "alright", "all right",
+                "sure", "fine", "great", "cool", "nice", "good", "perfect",
+                "hmm", "umm", "uh", "huh", "yeah yeah", "yep yep",
+                "i see", "got it", "makes sense", "understood"
+            ]
+            
+            user_text_stripped = user_text_lower.strip().strip(".,!?")
+            
+            # Check if entire input is just filler speech
+            if user_text_stripped in filler_phrases or len(user_text_stripped) < 3:
+                logger.info(f"[SKIP] Filler speech detected, ignoring: '{user_text}'")
+                return {
+                    "success": True,
+                    "user_text": user_text,
+                    "ai_response": "You're welcome!" if "thank" in user_text_lower else "👍",
+                    "filler_speech_detected": True,
+                    "auto_retry": True,  # Signal frontend to continue listening
+                    "session_ended": False,
+                    "requires_keyword": False,
+                }
+
+            # Remove optional wake words from beginning (if present)
+            wake_words = ["hey", "hi", "hello", "okay"]
+
+            for wake_word in wake_words:
+                if user_text_lower.startswith(wake_word):
+                    # Remove wake word from beginning
+                    user_text = user_text[len(wake_word) :].strip()
+                    user_text_lower = user_text.lower()
+                    logger.info(f"[OK] Removed wake word, processing: {user_text}")
+                    break
+
+            # Process all speech input (no wake word required)
+            logger.info(f"[OK] Processing speech: {user_text}")
 
             # Check for exit keyword
-            if "bye printchakra" in user_text.lower() or "goodbye" in user_text.lower():
+            if "bye printchakra" in user_text_lower or "goodbye" in user_text_lower:
                 self.session_active = False
                 return {
                     "success": True,
                     "user_text": user_text,
-                    "full_text": original_text,
                     "ai_response": "Goodbye! Voice session ended.",
-                    "response": "Goodbye! Voice session ended.",
                     "session_ended": True,
+                    "requires_keyword": False,
                 }
 
-            # Step 2: Call generate_response - EXACTLY same as text chat path
+            # Step 2: Generate AI response (wake word validated)
             chat_response = self.chat_service.generate_response(user_text)
 
             if not chat_response.get("success"):
@@ -1797,31 +1827,53 @@ class VoiceAIOrchestrator:
                     "success": False,
                     "error": f"Chat generation failed: {chat_response.get('error')}",
                     "user_text": user_text,
+                    "stage": "chat",
+                    "requires_keyword": False,
                 }
 
-            # Step 3: Return chat_response with added transcription info
-            # This ensures voice path returns IDENTICAL structure to text path
-            result = dict(chat_response)  # Copy all fields from generate_response
-            result["user_text"] = user_text
-            result["full_text"] = original_text
-            result["ai_response"] = chat_response.get("response", "")  # Alias for compatibility
-            result["session_ended"] = False
+            ai_response = chat_response.get("response", "")
+
+            # Step 3: Check for orchestration triggers in AI response
+            orchestration_trigger = None
+            orchestration_mode = None
             
-            # Log key fields for debugging
-            logger.info(f"[VOICE] Response: '{result.get('response', '')[:100]}...'")
-            if result.get("orchestration_trigger"):
-                logger.info(f"[VOICE] ORCHESTRATION TRIGGER: mode={result.get('orchestration_mode')}")
-            if result.get("voice_command"):
-                logger.info(f"[VOICE] VOICE COMMAND: {result.get('voice_command')}")
+            if "TRIGGER_ORCHESTRATION:" in ai_response:
+                # Extract orchestration mode from trigger
+                trigger_start = ai_response.index("TRIGGER_ORCHESTRATION:")
+                trigger_end = ai_response.find(" ", trigger_start)
+                if trigger_end == -1:
+                    trigger_end = len(ai_response)
+                
+                trigger_text = ai_response[trigger_start:trigger_end]
+                if "print" in trigger_text.lower():
+                    orchestration_mode = "print"
+                    orchestration_trigger = True
+                elif "scan" in trigger_text.lower():
+                    orchestration_mode = "scan"
+                    orchestration_trigger = True
+                
+                # Remove trigger from response (clean display text)
+                ai_response = ai_response.replace(trigger_text, "").strip()
             
-            return result
+            # Step 4: Extract configuration parameters from user text
+            config_params = self._extract_config_parameters(user_text_lower)
+
+            return {
+                "success": True,
+                "user_text": user_text,
+                "ai_response": ai_response,
+                "transcription_language": transcription.get("language"),
+                "model": chat_response.get("model"),
+                "session_ended": False,
+                "requires_keyword": False,
+                "orchestration_trigger": orchestration_trigger,
+                "orchestration_mode": orchestration_mode,
+                "config_params": config_params,
+            }
 
         except Exception as e:
             logger.error(f"[ERROR] Voice input processing error: {str(e)}")
-            import traceback
-            logger.error(traceback.format_exc())
-            return {"success": False, "error": str(e)}
-
+            return {"success": False, "error": str(e), "stage": "unknown", "requires_keyword": True}
 
     def _extract_config_parameters(self, text: str) -> Dict[str, Any]:
         """

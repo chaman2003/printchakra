@@ -266,8 +266,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     setMessages(prev => addMessageWithDedup(prev, type, text));
   }, []);
 
-  // Internal stop - used by silence detection, doesn't block auto-restart
-  const stopRecordingInternal = useCallback(() => {
+  const stopRecording = useCallback(() => {
+    // Mark that the user explicitly stopped recording so we don't auto-restart
+    userStoppedRef.current = true;
+
     // Clear any pending restart timers
     if (recordingRestartTimeoutRef.current) {
       clearTimeout(recordingRestartTimeoutRef.current);
@@ -278,17 +280,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       try {
         mediaRecorderRef.current.stop();
       } catch (e) {
-        console.warn('[stopRecordingInternal] Error stopping media recorder:', e);
+        console.warn('[stopRecording] Error stopping media recorder:', e);
       }
       setIsRecording(false);
     }
-  }, []);
-
-  // User-facing stop - marks that user manually stopped, blocks auto-restart
-  const stopRecording = useCallback(() => {
-    // Mark that the user explicitly stopped recording so we don't auto-restart
-    userStoppedRef.current = true;
-    stopRecordingInternal();
 
     // Ensure we stop all media tracks to fully release microphone
     try {
@@ -298,8 +293,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     } catch (e) {
       console.warn('[stopRecording] Error stopping media tracks:', e);
     }
-  }, [stopRecordingInternal]);
-
+  }, []);
 
   const startRecording = useCallback(async () => {
     console.log('[startRecording] Starting... isSessionActive:', isSessionActiveRef.current);
@@ -493,12 +487,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           if (silenceStart === null) {
             silenceStart = Date.now();
           } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            console.log('Silence detected - stopping recording (auto-restart enabled)');
-            // Don't use stopRecording() - that sets userStoppedRef and blocks auto-restart
-            if (mediaRecorderRef.current?.state === 'recording') {
-              mediaRecorderRef.current.stop();
-            }
-            setIsRecording(false);
+            console.log('Silence detected - stopping recording');
+            stopRecording();
             closeAudioContext();
             return;
           }
@@ -511,10 +501,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
-          console.log('Max duration reached - stopping recording (auto-restart enabled)');
-          // Don't use stopRecording() - that sets userStoppedRef and blocks auto-restart
-          mediaRecorderRef.current.stop();
-          setIsRecording(false);
+          console.log('Max duration reached - stopping recording');
+          stopRecording();
           closeAudioContext();
         }
       }, 5000);
@@ -615,7 +603,67 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     }
   };
 
+  // Send text message to AI chat
+  const sendTextMessage = async (text: string) => {
+    if (!text.trim()) return;
+
+    try {
+      // Add user message
+      addMessage('user', text);
+      setChatInput('');
+
+      // Send to AI chat endpoint
+      const response = await apiClient.post('/voice/chat', {
+        message: text,
+      }, {
+        timeout: 60000,
+      });
+
+      if (response.data.success) {
+        const aiResponse = response.data.response || response.data.ai_response || '';
+        addMessage('ai', aiResponse);
+
+        // Check for orchestration triggers
+        if (response.data.orchestration_trigger && response.data.orchestration_mode) {
+          onOrchestrationTrigger?.(
+            response.data.orchestration_mode as 'print' | 'scan',
+            response.data.config_params || undefined
+          );
+        }
+
+        // Check for voice commands
+        if (response.data.voice_command) {
+          onVoiceCommand?.({
+            command: response.data.voice_command,
+            params: response.data.command_params || {},
+          });
+        }
+
+        // Play TTS if available
+        if (aiResponse) {
+          try {
+            setIsSpeaking(true);
+            await apiClient.post('/voice/speak', { text: aiResponse }, { timeout: 30000 });
+          } catch {
+            // TTS failure is not critical
+          } finally {
+            setIsSpeaking(false);
+          }
+        }
+
+        setSessionStatus('Ready - Speak now');
+      } else {
+        throw new Error(response.data.error || 'Chat failed');
+      }
+    } catch (error: any) {
+      console.error('Chat error:', error);
+      addMessage('ai', 'Sorry, I encountered an error. Please try again.');
+      setSessionStatus('Ready - Speak now');
+    }
+  };
+
   const processAudio = async (audioBlob: Blob) => {
+
     if (isSpeaking) {
       console.log('TTS is speaking - skipping audio processing');
       scheduleRecordingStart(150);
@@ -624,7 +672,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
     try {
       setIsProcessing(true);
-      setSessionStatus('Transcribing audio...');
+      setSessionStatus('Transcribing...');
 
       console.log(`Processing audio blob: ${audioBlob.size} bytes, type: ${audioBlob.type}`);
 
@@ -632,205 +680,74 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.wav');
 
-      console.log('Sending to backend...');
+      console.log('Sending to simple transcription endpoint...');
 
-      // Send to backend for processing (Whisper → Voice AI)
-      // Use longer timeout for voice processing (model loading can take time)
-      const response = await apiClient.post('/voice/process', formData, {
+      // Use the simplified transcription endpoint (no session required)
+      const response = await apiClient.post('/voice/transcribe-simple', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 120000, // 2 minutes for voice processing
+        timeout: 60000, // 1 minute timeout
       });
 
-      console.log('Backend response:', response.data);
+      console.log('Transcription response:', response.data);
 
-      // Check for no speech detected (auto-retry)
-      if (response.data.auto_retry && response.data.no_speech_detected) {
-        console.log('No human speech detected - auto-retrying in 1 second');
-
-        addMessage('system', '⚠️ No human speech detected. Retrying...');
-
-        setSessionStatus('No speech detected, retrying...');
+      // Check for no speech detected
+      if (response.data.no_speech || !response.data.text) {
+        console.log('No speech detected - restarting recording');
+        setSessionStatus('Ready - Speak now');
         setIsProcessing(false);
-
-        scheduleRecordingStart(600);
+        scheduleRecordingStart(300);
         return;
       }
 
-      if (response.data.success) {
-        const {
-          user_text,
-          full_text,
-          ai_response,
-          tts_response,
-          session_ended,
-          keyword_detected,
-          orchestration_trigger,
-          orchestration_mode,
-          config_params,
-          voice_command,
-          command_params,
-          orchestration,
-        } = response.data;
+      if (response.data.success && response.data.text) {
+        const transcribedText = response.data.text.trim();
 
-        // Add full transcription as system message
-        addMessage('system', `🎤 Heard: "${full_text || user_text}"`);
+        // Show what was heard
+        addMessage('system', `🎤 Heard: "${transcribedText}"`);
 
-        // Add user message (command part only)
-        addMessage('user', user_text);
-
-        // 1. Display AI response FIRST
-        addMessage('ai', ai_response);
-
+        // Put text in chat input and auto-send
+        setChatInput(transcribedText);
         setIsProcessing(false);
+        setSessionStatus('Sending to AI...');
 
-        // Handle voice commands (document selector control)
-        if (voice_command) {
-          const payload = {
-            command: voice_command,
-            params: command_params || {},
-          };
+        // Auto-send the transcribed text to AI chat
+        await sendTextMessage(transcribedText);
 
-          console.log(`Voice command detected: ${voice_command}`, payload.params);
-          onVoiceCommand?.(payload);
-
-          showToast({
-            title: `Voice Command: ${voice_command.replace('_', ' ').toUpperCase()}`,
-            description:
-              Object.keys(payload.params || {}).length > 0
-                ? `Executing: ${JSON.stringify(payload.params)}`
-                : 'Processing command...',
-            status: 'info',
-            duration: 2000,
-          });
-        }
-
-        // Check for orchestration trigger BEFORE TTS
-        if (orchestration_trigger && orchestration_mode) {
-          const frontendState = orchestration?.frontend_state;
-          const orchestrationPayload = frontendState
-            ? frontendState
-            : config_params
-              ? { mode: orchestration_mode, options: config_params }
-              : undefined;
-
-          console.log(
-            `🎯 Orchestration triggered: ${orchestration_mode}`,
-            orchestrationPayload || config_params || {}
-          );
-
-          // Show notification about orchestration
-          showToast({
-            title: `Opening ${orchestration_mode === 'print' ? 'Print' : 'Scan'} Interface`,
-            description: 'Orchestration system activated',
-            status: 'info',
-            duration: 3000,
-          });
-
-          // Trigger orchestration in parent component
-          if (onOrchestrationTrigger) {
-            // Delay slightly to allow TTS to start
-            setTimeout(() => {
-              onOrchestrationTrigger(
-                orchestration_mode as 'print' | 'scan',
-                orchestrationPayload || config_params || undefined
-              );
-            }, 500);
-          }
-        }
-        // 2. THEN play TTS (blocking - no input allowed)
-        setIsSpeaking(true);
-        setSessionStatus('Speaking response...');
-
-        try {
-          // Use shortened TTS response if available, otherwise use full response
-          const textToSpeak = tts_response || ai_response;
-          await apiClient.post(
-            '/voice/speak',
-            {
-              text: textToSpeak,
-            },
-            {
-              timeout: 60000,
-            }
-          );
-        } catch (ttsError) {
-          console.error('TTS error:', ttsError);
-          // Continue even if TTS fails
-        } finally {
-          setIsSpeaking(false);
-          setSessionStatus('Ready - Just speak naturally');
-          // Focus chat input after TTS completes
-          setTimeout(() => {
-            chatInputRef.current?.focus();
-          }, 100);
-        }
-
-        // Check if session should end
-        if (session_ended) {
-          setIsSessionActive(false);
-          addMessage('system', 'Voice session ended. Thank you!');
-
-          showToast({
-            title: 'Session Ended',
-            description: 'Goodbye!',
-            status: 'info',
-            duration: 3000,
-          });
-        } else {
-          scheduleRecordingStart(200);
-        }
+        // Continue listening
+        scheduleRecordingStart(500);
       } else {
-        throw new Error(response.data.error || 'Processing failed');
+        throw new Error(response.data.error || 'Transcription failed');
       }
     } catch (error: any) {
       console.error('Audio processing error:', error);
+      setIsProcessing(false);
 
-      // Provide detailed error information
       let errorMessage = error.message || 'Could not process audio';
       if (error.response?.data?.error) {
         errorMessage = error.response.data.error;
-        if (error.response.data.details) {
-          console.error('Backend details:', error.response.data.details);
-        }
       }
 
-      // Check if it's a keyword-related error
-      if (error.response?.data?.requires_keyword) {
-        // Silent retry for keyword errors - don't spam user
-        console.log(`Keyword detection error, retrying...`);
-        setSessionStatus('Ready - Just speak naturally');
-
-        scheduleRecordingStart(300);
+      // Don't show file access errors - just retry silently
+      if (errorMessage.includes('process cannot access') || errorMessage.includes('being used')) {
+        console.log('File access error, retrying...');
+        setSessionStatus('Ready - Speak now');
+        scheduleRecordingStart(500);
       } else {
-        // Only show non-retryable errors
-        console.error('Transcription error:', errorMessage);
-
-        // Don't show file access errors - just retry silently
-        if (errorMessage.includes('process cannot access') || errorMessage.includes('being used')) {
-          console.log('File access error, retrying...');
-          setSessionStatus('Ready - Just speak naturally');
-
-          scheduleRecordingStart(500);
-        } else {
-          // Show only critical errors
-          showToast({
-            title: 'Processing Error',
-            description: errorMessage,
-            status: 'error',
-            duration: 3000,
-          });
-
-          setSessionStatus('Ready - Just speak naturally');
-
-          scheduleRecordingStart(700);
-        }
+        // Show only critical errors
+        showToast({
+          title: 'Processing Error',
+          description: errorMessage,
+          status: 'error',
+          duration: 3000,
+        });
+        setSessionStatus('Ready - Speak now');
+        scheduleRecordingStart(700);
       }
-    } finally {
-      setIsProcessing(false);
     }
   };
+
 
   const endSession = async () => {
     try {
@@ -869,171 +786,13 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
     }
   };
 
-  const sendTextMessage = async (text: string) => {
-    if (!text.trim() || isSpeaking) return;
-
-    try {
-      setIsTextSending(true);
-      setChatInput('');
-
-      // STOP recording when text message is sent
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
-        setIsRecording(false);
-        if (recordingRestartTimeoutRef.current) {
-          clearTimeout(recordingRestartTimeoutRef.current);
-          recordingRestartTimeoutRef.current = null;
-        }
-      }
-
-      // Add user message to chat immediately
-      addMessage('user', text);
-
-      // Get AI response (text only, no TTS yet)
-      setIsProcessing(true);
-
-      const response = await apiClient.post(
-        '/voice/chat',
-        {
-          message: text,
-        },
-        {
-          timeout: 30000,
-        }
-      );
-
-      if (response.data.success) {
-        const aiResponse = response.data.response;
-        const ttsResponse = response.data.tts_response;
-        const orchestrationTrigger = response.data.orchestration_trigger;
-        const orchestrationMode = response.data.orchestration_mode;
-        const configParams = response.data.config_params;
-        const voiceCommand = response.data.voice_command;
-        const commandParams = response.data.command_params;
-
-        console.log('Backend response:', {
-          aiResponse,
-          ttsResponse,
-          orchestrationTrigger,
-          orchestrationMode,
-          configParams,
-        });
-
-        // 1. Display AI message FIRST
-        addMessage('ai', aiResponse);
-        setIsProcessing(false);
-
-        // Handle voice commands (document selector control)
-        if (voiceCommand) {
-          const payload = {
-            command: voiceCommand,
-            params: commandParams || {},
-          };
-
-          console.log(`Voice command detected (text): ${voiceCommand}`, payload.params);
-          onVoiceCommand?.(payload);
-
-          showToast({
-            title: `Voice Command: ${voiceCommand.replace('_', ' ').toUpperCase()}`,
-            description:
-              Object.keys(payload.params || {}).length > 0
-                ? `Executing: ${JSON.stringify(payload.params)}`
-                : 'Processing command...',
-            status: 'info',
-            duration: 2000,
-          });
-        }
-
-        // Check for orchestration trigger BEFORE TTS
-        if (orchestrationTrigger && orchestrationMode) {
-          console.log(`Orchestration triggered: ${orchestrationMode}`, configParams || {});
-
-          // Show notification
-          showToast({
-            title: `Opening ${orchestrationMode === 'print' ? 'Print' : 'Scan'} Interface`,
-            description: 'Orchestration system activated',
-            status: 'info',
-            duration: 3000,
-          });
-
-          // Trigger orchestration
-          if (onOrchestrationTrigger) {
-            setTimeout(() => {
-              onOrchestrationTrigger(orchestrationMode as 'print' | 'scan', configParams);
-            }, 500);
-          }
-        }
-
-        // 2. THEN play TTS (blocking - no input allowed until complete)
-        setIsSpeaking(true);
-        isSpeakingRef.current = true;
-        setSessionStatus('Speaking response...');
-
-        try {
-          // Use shortened TTS response if available, otherwise use full response
-          const textToSpeak = ttsResponse || aiResponse;
-          await apiClient.post(
-            '/voice/speak',
-            {
-              text: textToSpeak,
-            },
-            {
-              timeout: 60000, // TTS can take time for long responses
-            }
-          );
-        } catch (ttsError) {
-          console.error('TTS error:', ttsError);
-          // Don't show error to user, TTS failure is non-critical
-        } finally {
-          setIsSpeaking(false);
-          isSpeakingRef.current = false;
-          setSessionStatus('Ready - Just speak naturally');
-          // Focus chat input after TTS completes
-          setTimeout(() => {
-            chatInputRef.current?.focus();
-          }, 100);
-          // RESUME recording only after TTS completes
-          scheduleRecordingStart(200);
-        }
-      } else {
-        setIsProcessing(false);
-        const errorMsg = response.data.error || 'Unknown error occurred';
-        addMessage('system', `❌ Error: ${errorMsg}`);
-        showToast({
-          title: 'Message Error',
-          description: errorMsg,
-          status: 'error',
-          duration: 5000,
-        });
-        // Resume recording after error
-        scheduleRecordingStart(600);
-      }
-    } catch (error: any) {
-      console.error('Text message error:', error);
-      setIsProcessing(false);
-      setIsSpeaking(false);
-      isSpeakingRef.current = false;
-      const errorMsg = error.response?.data?.error || error.message || 'Failed to process message';
-      addMessage('system', `❌ Error: ${errorMsg}`);
-      showToast({
-        title: 'Message Error',
-        description: errorMsg,
-        status: 'error',
-        duration: 5000,
-      });
-      // Resume recording after error
-      scheduleRecordingStart(600);
-    } finally {
-      setIsTextSending(false);
-    }
-  };
-
   const handleChatInputKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendTextMessage(chatInput);
     }
   };
+
 
   const handleClose = async () => {
     try {
