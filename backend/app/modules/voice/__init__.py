@@ -1807,7 +1807,12 @@ class VoiceAIOrchestrator:
             result["ai_response"] = chat_response.get("response", "")  # Alias for compatibility
             result["session_ended"] = False
             
+            # Log key fields for debugging
             logger.info(f"[VOICE] Response: '{result.get('response', '')[:100]}...'")
+            if result.get("orchestration_trigger"):
+                logger.info(f"[VOICE] ORCHESTRATION TRIGGER: mode={result.get('orchestration_mode')}")
+            if result.get("voice_command"):
+                logger.info(f"[VOICE] VOICE COMMAND: {result.get('voice_command')}")
             
             return result
 
