@@ -718,6 +718,15 @@ try:
 except ImportError as e:
     print(f"[WARN] Could not import document API blueprint: {e}")
 
+# Import and register voice API blueprint
+try:
+    from app.features.voice.routes import voice_bp
+    app.register_blueprint(voice_bp, url_prefix='/voice')
+    print("[OK] Voice API blueprint registered at /voice")
+except ImportError as e:
+    print(f"[WARN] Could not import voice API blueprint: {e}")
+
+
 # ============================================================================
 # PRINTER QUEUE ROUTES (Module level - always available)
 # ============================================================================
