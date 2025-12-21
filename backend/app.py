@@ -5214,9 +5214,9 @@ def process_voice_complete():
                                 },
                             )
                         else:
-                            # Only show this error if NO voice command was already detected
-                            # If voice_command exists (like select_document), don't override the response
-                            if not result.get("voice_command"):
+                            # Only show this error if NO voice command or orchestration trigger was detected
+                            # If voice_command exists (like select_document) or orchestration_trigger (like print/scan), don't override
+                            if not result.get("voice_command") and not result.get("orchestration_trigger"):
                                 result["ai_response"] = (
                                     "I didn't catch any configuration changes. Try saying things like 'landscape', '3 copies', or 'color mode'."
                                 )
