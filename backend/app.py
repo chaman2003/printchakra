@@ -5214,9 +5214,12 @@ def process_voice_complete():
                                 },
                             )
                         else:
-                            result["ai_response"] = (
-                                "I didn't catch any configuration changes. Try saying things like 'landscape', '3 copies', or 'color mode'."
-                            )
+                            # Only show this error if NO voice command was already detected
+                            # If voice_command exists (like select_document), don't override the response
+                            if not result.get("voice_command"):
+                                result["ai_response"] = (
+                                    "I didn't catch any configuration changes. Try saying things like 'landscape', '3 copies', or 'color mode'."
+                                )
                 else:
                     # Try to detect orchestration intent
                     from app.modules.orchestration import IntentType
