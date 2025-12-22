@@ -3,7 +3,8 @@
  * Compact voice AI assistant embedded in the Orchestration Modal
  * Handles commands like "scroll down", "select document", "apply settings"
  * 
- * Integrates with AI Assist command parsing for consistent command recognition
+ * Uses the SAME flow as VoiceAIChat - relies on backend's voice_command/command_params
+ * for consistent behavior between text and voice inputs.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -28,7 +29,6 @@ import {
 import apiClient from '../../apiClient';
 import { convertToWAV, isValidAudioBlob, getAudioDuration } from '../../utils/audioUtils';
 import Iconify from '../common/Iconify';
-import { parseCommand } from '../../aiassist';
 
 interface OrchestrationVoiceControlProps {
   mode: 'print' | 'scan';
@@ -175,24 +175,36 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
 
       const response = await apiClient.post('/voice/process', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000, // 2 minutes for voice processing
       });
 
       if (response.data.success) {
-        const transcription = response.data.transcription;
-        setLastCommand(transcription);
+        const {
+          user_text,
+          full_text,
+          ai_response,
+          voice_command,
+          command_params,
+        } = response.data;
 
-        // Get AI response
-        const chatResponse = await apiClient.post('/voice/chat', {
-          message: transcription,
-          context: `orchestration-${mode}`,
-        });
+        // Set what user said
+        setLastCommand(full_text || user_text || response.data.transcription || '');
+        
+        // Set AI response
+        setAiResponse(ai_response || response.data.response || '');
 
-        if (chatResponse.data.success) {
-          const aiText = chatResponse.data.response;
-          setAiResponse(aiText);
-
-          // Parse command from AI response or transcription
-          parseAndExecuteCommand(transcription, aiText);
+        // Execute command from backend response (same as VoiceAIChat)
+        if (voice_command) {
+          console.log(`Voice command detected: ${voice_command}`, command_params);
+          executeCommand(voice_command, command_params || {});
+        } else {
+          // No command detected by backend
+          toast({
+            title: 'Command not recognized',
+            description: 'Try: "select document", "scroll down", "apply settings", "landscape", "color mode"',
+            status: 'info',
+            duration: 3000,
+          });
         }
       }
     } catch (error: any) {
@@ -213,169 +225,77 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
     }
   };
 
-  const parseAndExecuteCommand = (transcription: string, aiResponse: string) => {
-    const text = transcription.toLowerCase();
-
-    // Use AI Assist command parser for consistent recognition
-    const parsed = parseCommand(text);
+  /**
+   * Execute command from backend response
+   * This is the SAME logic used by VoiceAIChat - backend provides the command
+   */
+  const executeCommand = (voiceCommand: string, params: Record<string, any>) => {
+    // Normalize command name (backend uses snake_case, frontend uses SCREAMING_SNAKE_CASE)
+    const normalizedCommand = voiceCommand.toUpperCase().replace(/-/g, '_');
     
-    if (parsed && parsed.confidence > 0.6) {
-      // Map parsed action to command
-      const commandMap: Record<string, { cmd: string; params?: any }> = {
-        'SELECT_DOCUMENT': { cmd: 'SELECT_DOCUMENT' },
-        'SWITCH_SECTION': { cmd: 'SWITCH_SECTION', params: parsed.params },
-        'NEXT_DOCUMENT': { cmd: 'NEXT_DOCUMENT' },
-        'PREV_DOCUMENT': { cmd: 'PREV_DOCUMENT' },
-        'SCROLL_DOWN': { cmd: 'SCROLL_DOWN' },
-        'SCROLL_UP': { cmd: 'SCROLL_UP' },
-        'APPLY_SETTINGS': { cmd: 'APPLY_SETTINGS' },
-        'GO_BACK': { cmd: 'GO_BACK' },
-        'CANCEL': { cmd: 'CANCEL' },
-        'CONFIRM': { cmd: 'CONFIRM' },
-        'SET_LAYOUT': { cmd: 'SET_LAYOUT', params: parsed.params },
-        'SET_COLOR_MODE': { cmd: 'SET_COLOR_MODE', params: parsed.params },
-        'SET_PAPER_SIZE': { cmd: 'SET_PAPER_SIZE', params: parsed.params },
-        'SET_RESOLUTION': { cmd: 'SET_RESOLUTION', params: parsed.params },
-        'SET_COPIES': { cmd: 'SET_COPIES', params: parsed.params },
-        'SET_DUPLEX': { cmd: 'SET_DUPLEX', params: parsed.params },
-        'SET_QUALITY': { cmd: 'SET_QUALITY', params: parsed.params },
-        'TOGGLE_OCR': { cmd: 'TOGGLE_OCR', params: { enabled: true } },
-        'TOGGLE_TEXT_MODE': { cmd: 'TOGGLE_TEXT_MODE', params: parsed.params },
-        'HELP': { cmd: 'HELP' },
-        'STATUS': { cmd: 'STATUS' },
-      };
+    // Map backend command to orchestration command
+    const commandMap: Record<string, string> = {
+      // Document selection
+      'SELECT_DOCUMENT': 'SELECT_DOCUMENT',
+      'DESELECT_DOCUMENT': 'DESELECT_DOCUMENT',
+      'SELECT_MULTIPLE_DOCUMENTS': 'SELECT_DOCUMENT',
+      'SELECT_DOCUMENT_RANGE': 'SELECT_DOCUMENT',
+      'SELECT_SPECIFIC_DOCUMENTS': 'SELECT_DOCUMENT',
+      'SWITCH_SECTION': 'SWITCH_SECTION',
+      'NEXT_DOCUMENT': 'NEXT_DOCUMENT',
+      'PREV_DOCUMENT': 'PREV_DOCUMENT',
+      // Navigation
+      'SCROLL_DOWN': 'SCROLL_DOWN',
+      'SCROLL_UP': 'SCROLL_UP',
+      'PROCEED_ACTION': 'APPLY_SETTINGS',
+      'APPLY_SETTINGS': 'APPLY_SETTINGS',
+      'GO_BACK': 'GO_BACK',
+      'UNDO_ACTION': 'GO_BACK',
+      'CANCEL': 'CANCEL',
+      'CONFIRM': 'CONFIRM',
+      // Print/Scan settings
+      'SET_LAYOUT': 'SET_LAYOUT',
+      'SET_COLOR_MODE': 'SET_COLOR_MODE',
+      'SET_PAPER_SIZE': 'SET_PAPER_SIZE',
+      'SET_RESOLUTION': 'SET_RESOLUTION',
+      'SET_COPIES': 'SET_COPIES',
+      'SET_DUPLEX': 'SET_DUPLEX',
+      'SET_QUALITY': 'SET_QUALITY',
+      'SET_PAGES': 'SET_PAGES',
+      'SET_FEED_COUNT': 'FEED_DOCUMENTS',
+      'TOGGLE_OCR': 'TOGGLE_OCR',
+      'TOGGLE_TEXT_MODE': 'TOGGLE_TEXT_MODE',
+      // System
+      'HELP': 'HELP',
+      'STATUS': 'STATUS',
+      'FEED_DOCUMENTS': 'FEED_DOCUMENTS',
+      'CLEAR_PRINT_QUEUE': 'CLEAR_PRINT_QUEUE',
+    };
 
-      const mapping = commandMap[parsed.action];
-      if (mapping) {
-        onCommand(mapping.cmd, mapping.params);
-        return;
-      }
-    }
+    const mappedCommand = commandMap[normalizedCommand] || normalizedCommand;
+    
+    // Execute the command
+    onCommand(mappedCommand, params);
 
-    // Fallback: Direct text matching for common commands
-    // Document selection commands
-    if (text.includes('select') && (text.includes('document') || text.includes('file'))) {
-      onCommand('SELECT_DOCUMENT');
-      return;
-    }
-
-    // Scrolling commands
-    if (text.includes('scroll down') || text.includes('scroll to bottom') || text.includes('go down')) {
-      onCommand('SCROLL_DOWN');
-      return;
-    }
-    if (text.includes('scroll up') || text.includes('scroll to top') || text.includes('go up')) {
-      onCommand('SCROLL_UP');
-      return;
-    }
-
-    // Apply/Submit commands
-    if (text.includes('apply') || text.includes('submit') || text.includes('continue') || text.includes('next')) {
-      onCommand('APPLY_SETTINGS');
+    // Handle step changes for specific commands
+    if (normalizedCommand === 'APPLY_SETTINGS' || normalizedCommand === 'PROCEED_ACTION' || normalizedCommand === 'CONTINUE') {
       if (onStepChange && currentStep < 3) {
         onStepChange(currentStep + 1);
       }
-      return;
-    }
-
-    // Back/Previous commands
-    if (text.includes('back') || text.includes('previous') || text.includes('go back')) {
-      onCommand('GO_BACK');
+    } else if (normalizedCommand === 'GO_BACK' || normalizedCommand === 'UNDO_ACTION') {
       if (onStepChange && currentStep > 1) {
         onStepChange(currentStep - 1);
       }
-      return;
     }
 
-    // Cancel commands
-    if (text.includes('cancel') || text.includes('close') || text.includes('exit')) {
-      onCommand('CANCEL');
-      return;
-    }
-
-    // Confirm commands
-    if (text.includes('confirm') || text.includes('execute') || text.includes('start print') || text.includes('start scan')) {
-      onCommand('CONFIRM');
-      return;
-    }
-
-    // Color mode commands
-    if (text.includes('grayscale') || text.includes('grey') || text.includes('gray')) {
-      onCommand('SET_COLOR_MODE', { colorMode: 'grayscale' });
-      return;
-    }
-    if (text.includes('black and white') || text.includes('black & white') || text.includes('monochrome')) {
-      onCommand('SET_COLOR_MODE', { colorMode: 'bw' });
-      return;
-    }
-    if (text.includes('full color') || (text.includes('color') && !text.includes('grayscale'))) {
-      onCommand('SET_COLOR_MODE', { colorMode: 'color' });
-      return;
-    }
-
-    // Layout commands
-    if (text.includes('portrait') || text.includes('vertical')) {
-      onCommand('SET_LAYOUT', { layout: 'portrait' });
-      return;
-    }
-    if (text.includes('landscape') || text.includes('horizontal')) {
-      onCommand('SET_LAYOUT', { layout: 'landscape' });
-      return;
-    }
-
-    // Resolution/Quality commands
-    if (text.includes('high') && (text.includes('quality') || text.includes('resolution') || text.includes('dpi'))) {
-      onCommand('SET_RESOLUTION', { resolution: 600 });
-      onCommand('SET_QUALITY', { quality: 'high' });
-      return;
-    }
-    if (text.includes('low') && (text.includes('quality') || text.includes('resolution') || text.includes('dpi'))) {
-      onCommand('SET_RESOLUTION', { resolution: 150 });
-      onCommand('SET_QUALITY', { quality: 'draft' });
-      return;
-    }
-    if (text.includes('300') && text.includes('dpi')) {
-      onCommand('SET_RESOLUTION', { resolution: 300 });
-      return;
-    }
-    if (text.includes('600') && text.includes('dpi')) {
-      onCommand('SET_RESOLUTION', { resolution: 600 });
-      return;
-    }
-
-    // OCR toggle commands
-    if ((text.includes('enable') || text.includes('turn on')) && (text.includes('ocr') || text.includes('text'))) {
-      onCommand('TOGGLE_OCR', { enabled: true });
-      return;
-    }
-    if ((text.includes('disable') || text.includes('turn off')) && (text.includes('ocr') || text.includes('text'))) {
-      onCommand('TOGGLE_OCR', { enabled: false });
-      return;
-    }
-
-    // Copies command
-    const copiesMatch = text.match(/(\d+)\s*(copies|copy)/);
-    if (copiesMatch) {
-      onCommand('SET_COPIES', { copies: parseInt(copiesMatch[1], 10) });
-      return;
-    }
-
-    // Duplex command
-    if (text.includes('double sided') || text.includes('duplex') || text.includes('both sides')) {
-      onCommand('SET_DUPLEX', { duplex: true });
-      return;
-    }
-    if (text.includes('single sided') || text.includes('one side')) {
-      onCommand('SET_DUPLEX', { duplex: false });
-      return;
-    }
-
-    // If no command matched, show info toast
+    // Show feedback
     toast({
-      title: 'Command not recognized',
-      description: 'Try: "select document", "scroll down", "apply settings", "landscape", "color mode"',
+      title: `Command: ${voiceCommand.replace(/_/g, ' ')}`,
+      description: Object.keys(params).length > 0
+        ? `Parameters: ${JSON.stringify(params)}`
+        : 'Executing...',
       status: 'info',
-      duration: 3000,
+      duration: 2000,
     });
   };
 
@@ -401,18 +321,35 @@ const OrchestrationVoiceControl: React.FC<OrchestrationVoiceControlProps> = ({
     setLastCommand(textInput);
 
     try {
-      // Send text directly to chat endpoint
-      const chatResponse = await apiClient.post('/voice/chat', {
+      // Send text directly to chat endpoint (same as VoiceAIChat.sendTextMessage)
+      const response = await apiClient.post('/voice/chat', {
         message: textInput,
         context: `orchestration-${mode}`,
+      }, {
+        timeout: 30000,
       });
 
-      if (chatResponse.data.success) {
-        const aiText = chatResponse.data.response;
-        setAiResponse(aiText);
+      if (response.data.success) {
+        const aiResponse = response.data.response;
+        const voiceCommand = response.data.voice_command;
+        const commandParams = response.data.command_params;
 
-        // Parse and execute command
-        parseAndExecuteCommand(textInput, aiText);
+        // Set AI response
+        setAiResponse(aiResponse);
+
+        // Execute command from backend response (same as VoiceAIChat)
+        if (voiceCommand) {
+          console.log(`Text command detected: ${voiceCommand}`, commandParams);
+          executeCommand(voiceCommand, commandParams || {});
+        } else {
+          // No command detected by backend
+          toast({
+            title: 'Command not recognized',
+            description: 'Try: "select document", "scroll down", "apply settings", "landscape", "color mode"',
+            status: 'info',
+            duration: 3000,
+          });
+        }
       }
     } catch (error) {
       console.error('Text command error:', error);

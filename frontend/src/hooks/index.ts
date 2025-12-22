@@ -10,3 +10,10 @@ export type {
   UseVoiceCommandBridgeOptions,
   UseVoiceCommandBridgeReturn,
 } from './useVoiceCommandBridge';
+
+// Unified voice input hook - RECOMMENDED for new implementations
+export { useUnifiedVoiceInput } from './useUnifiedVoiceInput';
+export type {
+  UnifiedVoiceInputOptions,
+  UnifiedVoiceInputReturn,
+} from './useUnifiedVoiceInput';

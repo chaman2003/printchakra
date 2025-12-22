@@ -12,34 +12,35 @@ export interface VoiceMessage {
 }
 
 /**
- * Sanitize text for chat display - removes code, symbols, and special characters
- * Only allows English letters, numbers, basic punctuation, and spaces
+ * Sanitize text for chat display - removes code blocks and cleans up formatting
+ * Preserves meaningful text while removing potentially problematic content
  */
 export const sanitizeChatText = (text: string): string => {
   if (!text) return '';
   
+  let sanitized = text;
+  
   // Remove code blocks
-  let sanitized = text.replace(/```[\s\S]*?```/g, '');
+  sanitized = sanitized.replace(/```[\s\S]*?```/g, '');
   sanitized = sanitized.replace(/`[^`]*`/g, '');
   
   // Remove URLs
   sanitized = sanitized.replace(/https?:\/\/\S+/g, '');
   
-  // Remove emoji patterns
-  sanitized = sanitized.replace(/[\u{1F600}-\u{1F64F}]/gu, '');
-  sanitized = sanitized.replace(/[\u{1F300}-\u{1F5FF}]/gu, '');
-  sanitized = sanitized.replace(/[\u{1F680}-\u{1F6FF}]/gu, '');
-  sanitized = sanitized.replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '');
-  sanitized = sanitized.replace(/[\u{2702}-\u{27B0}]/gu, '');
-  sanitized = sanitized.replace(/[\u{1F900}-\u{1F9FF}]/gu, '');
+  // Remove control characters but keep normal unicode (letters, punctuation)
+  sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   
-  // Only allow: English letters, numbers, basic punctuation, and spaces
-  sanitized = sanitized.replace(/[^a-zA-Z0-9\s.,!?'\-:;]/g, '');
+  // Normalize unicode quotes and dashes to ASCII
+  sanitized = sanitized.replace(/[\u2018\u2019]/g, "'"); // Smart quotes
+  sanitized = sanitized.replace(/[\u201C\u201D]/g, '"'); // Smart double quotes
+  sanitized = sanitized.replace(/[\u2013\u2014]/g, '-'); // En/em dashes
+  sanitized = sanitized.replace(/\u2026/g, '...'); // Ellipsis
   
-  // Clean up multiple spaces
+  // Clean up multiple spaces and trim
   sanitized = sanitized.replace(/\s+/g, ' ').trim();
   
-  return sanitized || 'Message received';
+  // Return the text as-is if it has content, otherwise provide fallback
+  return sanitized || text || 'Message received';
 };
 
 /**

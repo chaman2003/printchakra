@@ -148,58 +148,6 @@ def transcribe_voice():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@voice_bp.route("/transcribe-simple", methods=["POST", "OPTIONS"])
-def transcribe_simple():
-    """
-    Simple transcription - no session required.
-    Just transcribes audio and returns text.
-    
-    Expects: multipart/form-data with 'audio' field (WAV format)
-    Returns: JSON with 'success' and 'text' fields
-    """
-    if request.method == "OPTIONS":
-        return create_options_response()
-    
-    try:
-        from app.modules.voice.transcribe_send import transcribe_audio, preload_model
-        
-        # Ensure model is loaded
-        preload_model()
-        
-        # Get audio file
-        audio_file = request.files.get("audio")
-        if not audio_file:
-            return jsonify({"success": False, "error": "No audio file provided"}), 400
-        
-        # Read audio bytes
-        audio_data = audio_file.read()
-        
-        logger.info(f"[Simple Transcribe] Received audio: {len(audio_data)} bytes")
-        
-        # Transcribe (simple - just returns text)
-        result = transcribe_audio(audio_data)
-        
-        if result.get("success"):
-            text = result.get("text", "")
-            logger.info(f"[Simple Transcribe] Result: {text}")
-            return jsonify({
-                "success": True,
-                "text": text,
-                "no_speech": result.get("no_speech", False),
-            }), 200
-        else:
-            logger.error(f"[Simple Transcribe] Failed: {result.get('error')}")
-            return jsonify(result), 500
-    
-    except ImportError as e:
-        logger.error(f"Import error: {e}")
-        return jsonify({"success": False, "error": "Transcription module not available"}), 503
-    
-    except Exception as e:
-        logger.error(f"Simple transcription error: {str(e)}")
-        return jsonify({"success": False, "error": str(e)}), 500
-
-
 # =============================================================================
 # AI CHAT
 # =============================================================================
