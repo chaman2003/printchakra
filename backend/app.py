@@ -4838,6 +4838,11 @@ def chat_with_ai():
 
         if response.get("success"):
             ai_response = response.get("response", "")
+            # Ensure tts_response matches for voice/text sync
+            if "tts_response" not in response:
+                response["tts_response"] = ai_response
+            if "ai_response" not in response:
+                response["ai_response"] = ai_response
             logger.info(f"[ORCHESTRATOR] AI response (raw): {ai_response}")
             
             # Check for orchestration triggers - FIRST check if response already has them
