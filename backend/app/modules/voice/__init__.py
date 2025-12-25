@@ -481,6 +481,209 @@ class WhisperTranscriptionService:
             return {"success": False, "error": str(e), "text": ""}
 
 
+# Configuration constants for Voice Chat
+OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
+OLLAMA_TAGS_URL = "http://localhost:11434/api/tags"
+OLLAMA_API_TIMEOUT = 60
+DEFAULT_VOICE_MODEL = "smollm2:135m"
+OLLAMA_VERIFY_SSL = False
+VOICE_PROMPT_AVAILABLE = False
+
+try:
+    from app.config.settings import CONNECTION_CONFIG, AI_PROMPT_CONFIG
+    # Get from connection config if available
+    if CONNECTION_CONFIG.get("ollama"):
+        OLLAMA_CHAT_URL = CONNECTION_CONFIG["ollama"].get("base_url", OLLAMA_CHAT_URL) + "/api/chat"
+        OLLAMA_TAGS_URL = CONNECTION_CONFIG["ollama"].get("base_url", OLLAMA_TAGS_URL) + "/api/tags"
+        OLLAMA_API_TIMEOUT = CONNECTION_CONFIG["ollama"].get("timeout", OLLAMA_API_TIMEOUT)
+        OLLAMA_VERIFY_SSL = CONNECTION_CONFIG["ollama"].get("verify_ssl", OLLAMA_VERIFY_SSL)
+    # Get model from AI config if available
+    if AI_PROMPT_CONFIG.get("default_model"):
+        DEFAULT_VOICE_MODEL = AI_PROMPT_CONFIG.get("default_model")
+except:
+    pass
+
+try:
+    from .voice_prompt_manager import VoicePromptManager
+    VOICE_PROMPT_AVAILABLE = True
+except:
+    VoicePromptManager = None
+    VOICE_PROMPT_AVAILABLE = False
+
+
+class VoiceChatService:
+    """
+    Service for AI chat responses using Voice AI via Ollama
+    Fast, efficient local inference with intelligent voice command interpretation
+    """
+
+    def __init__(self, model_name: Optional[str] = None):
+        """
+        Initialize Voice AI chat service with full orchestration awareness
+
+        Args:
+            model_name: Ollama model to use
+        """
+        self.model_name = model_name or DEFAULT_VOICE_MODEL
+        self.conversation_history = []
+        self.pending_orchestration = None  # Track if waiting for confirmation (print/scan)
+        self.ollama_chat_url = OLLAMA_CHAT_URL
+        self.ollama_tags_url = OLLAMA_TAGS_URL
+        self.api_timeout = max(1, OLLAMA_TIMEOUT) if OLLAMA_TIMEOUT else OLLAMA_API_TIMEOUT
+        self.verify_ssl = OLLAMA_VERIFY_SSL
+        
+        # Import command mappings from centralized module
+        if VOICE_PROMPT_AVAILABLE and VoicePromptManager:
+            self.command_mappings = VoicePromptManager.get_command_mappings()
+            self.system_prompt = VoicePromptManager.get_system_prompt()
+        else:
+            # Fallback if prompt manager not available
+            self.command_mappings = {}
+            self.system_prompt = ""
+
+    def check_ollama_available(self) -> bool:
+        """Check if Ollama is running and model is available"""
+        try:
+            import requests
+
+            timeout = min(5, self.api_timeout or OLLAMA_API_TIMEOUT)
+            response = requests.get(
+                self.ollama_tags_url,
+                timeout=timeout,
+                verify=self.verify_ssl,
+            )
+            if response.status_code == 200:
+                models = response.json().get("models", [])
+                model_names = [m.get("name", "") for m in models]
+                target_fragment = (self.model_name or "").split(":")[0].lower()
+                has_model = True
+                if target_fragment:
+                    has_model = any(target_fragment in (name or "").lower() for name in model_names)
+                # Only log once at startup
+                if not hasattr(self, "_logged_ollama_check"):
+                    logger.info(f"Ollama available via {self.ollama_tags_url}: {has_model}")
+                    logger.info(f"Available models: {model_names}")
+                    self._logged_ollama_check = True
+                return has_model
+            return False
+        except Exception as e:
+            if not hasattr(self, "_logged_ollama_error"):
+                logger.error(f"Ollama check failed: {str(e)}")
+                self._logged_ollama_error = True
+            return False
+
+    def is_available(self) -> bool:
+        """Alias for check_ollama_available for compatibility"""
+        return self.check_ollama_available()
+
+    def generate_response(self, user_message: str) -> Dict[str, Any]:
+        """
+        Generate AI response to user message
+        
+        Args:
+            user_message: User's text input
+
+        Returns:
+            Dict with AI response and metadata
+        """
+        try:
+            import requests
+            
+            user_lower = user_message.lower().strip()
+            
+            logger.info(f"[CHAT] Processing message: '{user_message}'")
+
+            # Add user message to history
+            self.conversation_history.append({"role": "user", "content": user_message})
+
+            # Build messages for Ollama
+            messages = [
+                {"role": "system", "content": self.system_prompt}
+            ] + self.conversation_history
+
+            # Call Ollama API
+            query = {
+                "model": self.model_name,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,
+                    "top_p": 0.9,
+                    "top_k": 40,
+                    "num_predict": 30,
+                    "num_ctx": 1024,
+                    "repeat_penalty": 1.2,
+                    "stop": ["\n\n", "User:", "Assistant:"],
+                },
+            }
+            
+            response = requests.post(
+                self.ollama_chat_url,
+                json=query,
+                timeout=self.api_timeout or OLLAMA_API_TIMEOUT,
+                verify=self.verify_ssl,
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                ai_response = result.get("message", {}).get("content", "").strip()
+
+                # Format response
+                if VOICE_PROMPT_AVAILABLE and VoicePromptManager:
+                    ai_response = VoicePromptManager.format_response(ai_response)
+                    tts_response = VoicePromptManager.format_response_for_tts(ai_response)
+                else:
+                    # Fallback formatting if prompt manager not available
+                    ai_response = ai_response.replace("**", "").replace("*", "")
+                    # Clean up multiple spaces
+                    import re
+                    ai_response = re.sub(r'\s+', ' ', ai_response).strip()
+                    if ai_response and ai_response[-1] not in ".!?":
+                        ai_response += "."
+                    # Create shortened version for TTS
+                    words = ai_response.split()
+                    if len(words) > 15:
+                        tts_response = " ".join(words[:15])
+                        if tts_response[-1] not in ".!?":
+                            tts_response += "."
+                    else:
+                        tts_response = ai_response
+
+                # Add assistant response to history
+                self.conversation_history.append({"role": "assistant", "content": ai_response})
+
+                # Keep only last 8 exchanges (16 messages) for context
+                if len(self.conversation_history) > 16:
+                    self.conversation_history = self.conversation_history[-16:]
+
+                return {
+                    "success": True,
+                    "response": ai_response,
+                    "tts_response": tts_response,
+                    "model": self.model_name,
+                    "timestamp": datetime.now().isoformat(),
+                    "tts_enabled": TTS_AVAILABLE,
+                    "spoken": False,
+                }
+            else:
+                logger.error(f"Ollama API error: {response.status_code}")
+                return {
+                    "success": False,
+                    "error": f"Ollama API error: {response.status_code}",
+                    "response": "",
+                }
+
+        except Exception as e:
+            logger.error(f"[ERROR] Chat generation error: {str(e)}")
+            return {"success": False, "error": str(e), "response": ""}
+
+    def reset_conversation(self):
+        """Clear conversation history and pending orchestration"""
+        self.conversation_history = []
+        self.pending_orchestration = None
+        logger.info("Conversation history cleared")
+
+
 class VoiceAIOrchestrator:
     """
     Orchestrates voice AI workflow: Audio → Whisper STT → Text
@@ -491,6 +694,7 @@ class VoiceAIOrchestrator:
     def __init__(self):
         """Initialize voice AI orchestrator"""
         self.whisper_service = WhisperTranscriptionService()
+        self.chat_service = VoiceChatService()
         self.session_active = False
         _init_tts_engine()
 
