@@ -570,7 +570,7 @@ Respond in JSON format only:
             return self._fallback_structure(raw_results)
             
         except Exception as e:
-            logger.debug(f"[DEBUG] Ollama structuring unavailable (Ollama not running?): {type(e).__name__}, using fallback)"}
+            logger.debug(f"[DEBUG] Ollama structuring unavailable (Ollama not running?): {type(e).__name__}, using fallback")
             return self._fallback_structure(raw_results)
     
     def _fallback_structure(self, raw_results: List[Dict]) -> List[Dict]:
