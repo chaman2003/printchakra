@@ -1,5 +1,6 @@
 ﻿import logging
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -1730,6 +1731,13 @@ def process_document_image(input_path, output_path, filename=None):
                     
                     # Rename the processed image
                     os.rename(output_path, new_output_path)
+                    # Keep a compatibility copy under the original name so downstream OCR requests still work
+                    legacy_path = os.path.join(output_dir, old_basename)
+                    if not os.path.exists(legacy_path):
+                        try:
+                            shutil.copy2(new_output_path, legacy_path)
+                        except Exception as copy_error:
+                            print(f"  [WARN] Could not create legacy copy: {copy_error}")
                     output_path = new_output_path
                     ocr_filename = new_filename
                     
