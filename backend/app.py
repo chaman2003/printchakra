@@ -1268,23 +1268,11 @@ def enhance_document_quality(gray_image, mode='document'):
     else:
         background = bg_small
     
-    # Normalize illumination
+    # Normalize illumination (shadow removal)
     result = np.zeros_like(gray_image, dtype=np.float32)
     mask = background > 10
     result[mask] = (gray_image[mask].astype(np.float32) / background[mask].astype(np.float32)) * 255
     result = np.clip(result, 0, 255).astype(np.uint8)
-    
-    # Step 2: Make background white
-    p95 = np.percentile(result, 95)
-    if p95 > 0 and p95 < 250:
-        result = np.clip(result.astype(np.float32) * (255.0 / p95), 0, 255).astype(np.uint8)
-    
-    # Step 3: Gentle contrast boost with gamma
-    gamma = 0.9  # Slightly darken text
-    table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in range(256)]).astype("uint8")
-    result = cv2.LUT(result, table)
-    
-    return result
     
     return result
 
@@ -1587,7 +1575,7 @@ def process_document_image(input_path, output_path, filename=None):
             progress_data = {
                 "filename": filename,
                 "step": step,
-                "total_steps": 5,
+                "total_steps": 12,
                 "stage_name": stage_name,
                 "message": message,
             }
@@ -1596,19 +1584,29 @@ def process_document_image(input_path, output_path, filename=None):
                 update_processing_status(filename, step, 5, stage_name)
 
         # STEP 1: Load
-        print(f"\n[1/5] Loading image...")
-        emit_progress(1, "Load", "Loading image...")
+        print(f"\n[1/12] Loading image...")
+        emit_progress(1, "Load", "Loading original image...")
         
         image = cv2.imread(input_path, cv2.IMREAD_COLOR)
         if image is None:
             raise ValueError(f"Could not read image from {input_path}")
         print(f"  ✓ Loaded: {image.shape[1]}x{image.shape[0]}")
 
-        # STEP 2: Detect & crop document
-        print(f"[2/5] Detecting document...")
-        emit_progress(2, "Detect", "Finding document edges...")
+        # STEPS 2-6: Detection Stages (Grouped for speed but reported as progress)
+        print(f"[2/12] Downscaling for detection...")
+        emit_progress(2, "Detect", "Downscaling for detection...")
+        
+        # We can just process but emit messages to simulate the steps for the user
+        emit_progress(3, "Detect", "Converting to grayscale...")
+        emit_progress(4, "Detect", "Applying Gaussian blur...")
+        emit_progress(5, "Detect", "Running Canny edge detection...")
+        emit_progress(6, "Detect", "Finding document contours...")
         
         doc_contour = find_document_contour(image)
+        
+        # STEP 7: Warp
+        print(f"[7/12] Perspective transform...")
+        emit_progress(7, "Transform", "Applying perspective correction...")
         if doc_contour is not None:
             warped = four_point_transform(image, doc_contour)
             print(f"  ✓ Document cropped: {warped.shape[1]}x{warped.shape[0]}")
@@ -1616,22 +1614,27 @@ def process_document_image(input_path, output_path, filename=None):
             warped = image
             print(f"  ✓ Using full image")
 
-        # STEP 3: Convert to grayscale
-        print(f"[3/5] Processing...")
-        emit_progress(3, "Process", "Enhancing document...")
-        
+        # STEP 8: Grayscale
+        print(f"[8/12] Grayscale conversion...")
+        emit_progress(8, "Process", "Converting cropped document to grayscale...")
         gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 
-        # STEP 4: Enhance (shadow removal + white background)
-        print(f"[4/5] Enhancing...")
-        emit_progress(4, "Enhance", "Removing shadows, whitening background...")
+        # STEPS 9-11: Background Estimation
+        print(f"[9/12] Background estimation...")
+        emit_progress(9, "Enhance", "Downscaling for background analysis...")
+        emit_progress(10, "Enhance", "Estimating background illumination...")
+        emit_progress(11, "Enhance", "Smoothing background model...")
+        
+        # STEP 12: Shadow Removal
+        print(f"[12/12] Shadow removal...")
+        emit_progress(12, "Enhance", "Removing shadows and normalizing...")
         
         enhanced = enhance_document_quality(gray)
         print(f"  ✓ Enhanced")
 
-        # STEP 5: Save
-        print(f"[5/5] Saving...")
-        emit_progress(5, "Save", "Saving processed image...")
+        # Save result
+        print(f"[SA] Saving...")
+        # emit_progress(13, "Save", "Saving processed image...") # Optional extra step
         
         cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
         print(f"  ✓ Saved: {output_path}")
@@ -1697,14 +1700,12 @@ def process_document_image(input_path, output_path, filename=None):
                     
                     # Rename the processed image
                     os.rename(output_path, new_output_path)
-                    # Keep a compatibility copy under the original name so downstream OCR requests still work
-                    legacy_path = os.path.join(output_dir, old_basename)
-                    if not os.path.exists(legacy_path):
-                        try:
-                            shutil.copy2(new_output_path, legacy_path)
-                        except Exception as copy_error:
-                            print(f"  [WARN] Could not create legacy copy: {copy_error}")
+                    
+                    # We no longer create a legacy copy to prevent duplicates
+                    # The frontend will handle the rename via the processing_complete event
+                    
                     output_path = new_output_path
+                    ocr_filename = new_filename
                     ocr_filename = new_filename
                     
                     # Also rename the text file if it exists
@@ -2307,11 +2308,21 @@ def upload_file():
                 processed_path = os.path.join(PROCESSED_DIR, processed_filename)
 
                 # Process image with progress tracking
-                success, text_or_error = process_document_image(
+                # Expects 3 return values
+                file_result = process_document_image(
                     upload_path,
                     processed_path,
                     processed_filename,  # Pass filename for status tracking
                 )
+                
+                # Handle return value safely (2 or 3 values)
+                new_filename = None
+                if len(file_result) == 3:
+                     success, text_or_error, new_filename = file_result
+                else:
+                     success, text_or_error = file_result
+
+                final_filename = new_filename if new_filename else processed_filename
 
                 if not success:
                     update_processing_status(
@@ -2323,26 +2334,28 @@ def upload_file():
                     return
 
                 # Save extracted text
-                text_filename = f"{os.path.splitext(processed_filename)[0]}.txt"
+                text_filename = f"{os.path.splitext(final_filename)[0]}.txt"
                 text_path = os.path.join(TEXT_DIR, text_filename)
 
                 try:
                     with open(text_path, "w", encoding="utf-8") as f:
                         f.write(text_or_error)
-                    print(f"  ? Text saved: {text_path}")
+                    print(f"  ✓ Text saved: {text_path}")
                 except Exception as text_error:
                     print(f"  [WARN] Warning: Failed to save text file: {str(text_error)}")
 
-                # Mark as complete
+                # Mark as complete (on the original filename to clear that progress bar)
                 update_processing_status(processed_filename, 12, 12, "Complete", is_complete=True)
 
-                # Notify completion
+                # Notify completion with rename info
                 socketio.emit(
                     "processing_complete",
                     {
-                        "filename": processed_filename,
+                        "filename": final_filename,                # New name
+                        "original_filename": processed_filename,   # Old name (to find item)
                         "has_text": len(text_or_error) > 0,
                         "text_length": len(text_or_error),
+                        "renamed": new_filename is not None
                     },
                 )
 
@@ -4862,7 +4875,29 @@ def chat_with_ai():
                 current_state = orchestrator.current_state.value
                 
                 # If in CONFIGURING state, parse and apply configuration changes
-                if current_state == "configuring" and orchestrator.pending_action:
+                # BUT skip if a voice command like proceed_action was already detected
+                voice_command = response.get("voice_command")
+                skip_config_parsing = voice_command in [
+                    "proceed_action", "select_document", "select_document_range",
+                    "select_multiple_documents", "deselect_document", "switch_section",
+                    "next_document", "previous_document", "confirm", "cancel"
+                ]
+                
+                # ALSO skip config parsing if this is a print/scan intent - handle it as new orchestration
+                user_message_lower = user_message.lower().strip()
+                is_print_intent = user_message_lower in ["print", "print.", "i want to print", "print document", "print documents"]
+                is_scan_intent = user_message_lower in ["scan", "scan.", "i want to scan", "scan document", "scan documents"]
+                
+                if is_print_intent or is_scan_intent:
+                    skip_config_parsing = True
+                    mode = "print" if is_print_intent else "scan"
+                    logger.info(f"[CHAT] Detected {mode} intent in configuring state, treating as new orchestration")
+                    response["orchestration_trigger"] = True
+                    response["orchestration_mode"] = mode
+                    ai_response = f"Would you like me to open the {mode} configuration? Say 'yes' to proceed."
+                    response["response"] = ai_response
+                
+                if current_state == "configuring" and orchestrator.pending_action and not skip_config_parsing:
                     action_type = orchestrator.pending_action.get("type")
                     if action_type:
                         logger.info(f"[CHAT] Parsing configuration for {action_type} from chat message")
@@ -5086,7 +5121,8 @@ def process_voice_complete():
 
             # FALLBACK: Check if orchestration trigger wasn't detected by LLM
             # This ensures print/scan commands always work even if LLM missed them
-            if not result.get("orchestration_trigger"):
+            # BUT skip if awaiting_confirmation is set (voice module already handled it properly)
+            if not result.get("orchestration_trigger") and not result.get("awaiting_confirmation"):
                 user_text_lower = result.get("user_text", "").lower()
                 
                 # Check for print intent
@@ -5148,7 +5184,34 @@ def process_voice_complete():
                 current_state = orchestrator.current_state.value
 
                 # If in CONFIGURING state, parse voice for configuration changes
-                if current_state == "configuring" and orchestrator.pending_action:
+                # BUT skip if a voice command like proceed_action was already detected
+                voice_command = result.get("voice_command")
+                skip_config_parsing = voice_command in [
+                    "proceed_action", "select_document", "select_document_range",
+                    "select_multiple_documents", "deselect_document", "switch_section",
+                    "next_document", "previous_document", "confirm", "cancel"
+                ]
+                
+                # ALSO skip config parsing if this is a print/scan intent - handle it as new orchestration
+                user_text_lower = user_text.lower().strip()
+                is_print_intent = user_text_lower in ["print", "print.", "i want to print", "print document", "print documents"]
+                is_scan_intent = user_text_lower in ["scan", "scan.", "i want to scan", "scan document", "scan documents"]
+                
+                if is_print_intent or is_scan_intent:
+                    skip_config_parsing = True
+                    # Force detection as orchestration intent
+                    from app.modules.orchestration import IntentType
+                    intent = IntentType.PRINT if is_print_intent else IntentType.SCAN
+                    mode = "print" if is_print_intent else "scan"
+                    
+                    logger.info(f"[VOICE] Detected {mode} intent in configuring state, treating as new orchestration")
+                    
+                    # Set result flags for frontend
+                    result["orchestration_trigger"] = True
+                    result["orchestration_mode"] = mode
+                    result["ai_response"] = f"Would you like me to open the {mode} configuration? Say 'yes' to proceed."
+                
+                if current_state == "configuring" and orchestrator.pending_action and not skip_config_parsing:
                     action_type = orchestrator.pending_action.get("type")
                     if action_type:
                         logger.info(f"[VOICE] Parsing voice configuration for {action_type}")

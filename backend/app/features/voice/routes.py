@@ -79,8 +79,8 @@ def get_voice_status():
         return jsonify({
             "success": True,
             "session_active": voice_ai_orchestrator.session_active,
-            "whisper_loaded": voice_ai_orchestrator.whisper_service.is_loaded() if voice_ai_orchestrator.whisper_service else False,
-            "ollama_available": voice_ai_orchestrator.chat_service.is_available() if voice_ai_orchestrator.chat_service else False,
+            "whisper_loaded": voice_ai_orchestrator.whisper_service.is_loaded if voice_ai_orchestrator.whisper_service else False,
+            "ollama_available": voice_ai_orchestrator.chat_service.check_ollama_available() if voice_ai_orchestrator.chat_service else False,
         })
     
     except ImportError:
@@ -227,8 +227,8 @@ def speak_text():
         if not text:
             return jsonify({"success": False, "error": "No text provided"}), 400
         
-        # Generate speech
-        result = voice_ai_orchestrator.tts_service.speak(text)
+        # Generate speech using orchestrator's speak_text_response method
+        result = voice_ai_orchestrator.speak_text_response(text)
         
         return jsonify(result)
     

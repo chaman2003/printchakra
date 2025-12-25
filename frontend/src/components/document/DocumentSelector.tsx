@@ -69,6 +69,7 @@ export interface DocumentSelectorHandle {
   clearSelections: () => void;
   getSelectionCount: () => number;
   getActiveSection: () => 'current' | 'converted' | 'upload';
+  getSelectedDocuments: () => Document[];
 }
 
 
@@ -486,9 +487,14 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           const sections: ('current' | 'converted' | 'upload')[] = ['current', 'converted', 'upload'];
           return sections[activeTab] || 'current';
         },
+        // NEW: Get all currently selected documents
+        getSelectedDocuments: () => {
+          const allDocs = [...currentDocuments, ...convertedDocuments, ...uploadedFiles];
+          return allDocs.filter(doc => selectedDocs.has(doc.filename));
+        },
       }),
 
-      [currentDocuments, convertedDocuments, selectedDocs, historyStack, saveToHistory, activeTab]
+      [currentDocuments, convertedDocuments, uploadedFiles, selectedDocs, historyStack, saveToHistory, activeTab]
     );
 
 

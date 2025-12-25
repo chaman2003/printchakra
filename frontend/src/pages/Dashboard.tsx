@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
 import {
@@ -594,6 +594,18 @@ const Dashboard: React.FC = () => {
   const orchestrateModal = useDisclosure();
   const documentSelectorModal = useDisclosure(); // Document selector modal
   const deviceInfoModal = useDisclosure(); // Device info modal
+  const justConfirmedSelectionRef = useRef(false);
+  const confirmationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markSelectionConfirmed = useCallback(() => {
+    justConfirmedSelectionRef.current = true;
+    if (confirmationTimerRef.current) {
+      clearTimeout(confirmationTimerRef.current);
+    }
+    confirmationTimerRef.current = setTimeout(() => {
+      justConfirmedSelectionRef.current = false;
+      confirmationTimerRef.current = null;
+    }, 800);
+  }, []);
 
   // Socket connection for real-time updates
   const { socket, connected: socketConnected, reconnect: socketReconnect } = useSocket();
@@ -1074,6 +1086,18 @@ const Dashboard: React.FC = () => {
           break;
         }
         case 'configuration_complete': {
+          // Only advance to step 3 if we're actually at step 2 configuration
+          // AND we haven't just confirmed document selection
+          if (justConfirmedSelectionRef.current) {
+            console.log('[configuration_complete] Ignoring - just confirmed document selection');
+            // Don't advance, user is just confirming documents not configuration
+            break;
+          }
+          if (orchestrateStep !== 2) {
+            console.log('[configuration_complete] Ignoring - not at step 2, current step:', orchestrateStep);
+            break;
+          }
+          console.log('[configuration_complete] Advancing to step 3 review');
           setOrchestrateStep(3);
           if (!orchestrateModal.isOpen) {
             orchestrateModal.onOpen();
@@ -1130,6 +1154,14 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (confirmationTimerRef.current) {
+        clearTimeout(confirmationTimerRef.current);
+      }
+    };
+  }, []);
+
   // Auto-open document selector when entering Print Step 2 with no documents selected
   // Only auto-open once, not if user manually closed it
   useEffect(() => {
@@ -1139,7 +1171,8 @@ const Dashboard: React.FC = () => {
       selectedDocuments.length === 0 &&
       orchestrateModal.isOpen &&
       !userClosedDocSelector &&
-      !documentSelectorModal.isOpen
+      !documentSelectorModal.isOpen &&
+      !justConfirmedSelectionRef.current
     ) {
       // Small delay to allow the modal body to render
       const timer = setTimeout(() => {
@@ -2089,45 +2122,111 @@ const Dashboard: React.FC = () => {
 
         case 'proceed_action': {
           // Context-aware navigation - proceed to next step based on current state
+          console.log('[PROCEED_ACTION] State check:', {
+            documentSelectorModalOpen: documentSelectorModal.isOpen,
+            orchestrateModalOpen: orchestrateModal.isOpen,
+            orchestrateMode,
+            orchestrateStep,
+            selectedDocumentsCount: selectedDocuments.length,
+          });
 
-          // If document selector is open, confirm selection and proceed
+          // Priority 1: If document selector is open, confirm selection and show config
           if (documentSelectorModal.isOpen) {
+            console.log('[PROCEED_ACTION] Document selector open - confirming selection');
+            
+            // Get the currently selected documents from the DocumentSelector component
+            const internallySelectedDocs = documentSelectorRef.current?.getSelectedDocuments?.() || [];
+            console.log('[PROCEED_ACTION] Internally selected docs:', internallySelectedDocs);
+            
+            // Close the selector first
             documentSelectorModal.onClose();
-            if (orchestrateMode) {
-              setOrchestrateStep(2);
+            
+            if (orchestrateMode && internallySelectedDocs.length > 0) {
+              // Update selectedDocuments with what was internally selected
+              const enhancedDocs = await enhanceDocumentsWithPages(internallySelectedDocs);
+              console.log('[PROCEED_ACTION] Setting selected documents:', enhancedDocs);
+              setSelectedDocuments(enhancedDocs);
+              
+              // Ensure we're at step 2 (configuration)
+              if (orchestrateStep !== 2) {
+                setOrchestrateStep(2);
+              }
+              
+              // Open orchestration modal if not already open to show configuration
+              if (!orchestrateModal.isOpen) {
+                orchestrateModal.onOpen();
+              }
+              
+              markSelectionConfirmed();
+              
               toast({
                 title: 'Selection Confirmed',
-                description: 'Proceeding to configuration',
+                description: `${enhancedDocs.length} document(s) selected. Configure settings below.`,
                 status: 'success',
                 duration: 2000,
               });
+            } else if (!orchestrateMode) {
+              toast({
+                title: 'Select Mode First',
+                description: 'Please say "print" or "scan" to continue',
+                status: 'info',
+                duration: 2000,
+              });
+            } else {
+              toast({
+                title: 'Select Documents',
+                description: 'Please select at least one document',
+                status: 'info',
+                duration: 2000,
+              });
             }
+            break;
           }
-          // Step 1: Mode selection - need to select print or scan first
-          else if (orchestrateStep === 1) {
+
+          // Priority 2: At step 1 with documents selected → move to step 2 (configuration)
+          if (orchestrateStep === 1 && selectedDocuments.length > 0 && orchestrateMode) {
+            console.log('[PROCEED_ACTION] Step 1 with documents → moving to step 2');
+            setOrchestrateStep(2);
+            if (!orchestrateModal.isOpen) {
+              orchestrateModal.onOpen();
+            }
+            markSelectionConfirmed();
+            toast({
+              title: 'Configuration Page',
+              description: 'Adjust your print settings, then say "proceed" to review.',
+              status: 'info',
+              duration: 2000,
+            });
+            break;
+          }
+
+          // Priority 3: At step 1 without documents → prompt for mode/documents
+          if (orchestrateStep === 1) {
             toast({
               title: 'Select Mode',
               description: 'Please say "print" or "scan" to continue',
               status: 'info',
               duration: 3000,
             });
+            break;
           }
-          // Step 2: Print config → Review Settings
-          else if (orchestrateStep === 2 && orchestrateMode === 'print') {
+
+          // Priority 4: At step 2 (configuration page) with print mode → move to review (step 3)
+          if (orchestrateStep === 2 && orchestrateMode === 'print' && selectedDocuments.length > 0 && !justConfirmedSelectionRef.current) {
+            console.log('[PROCEED_ACTION] Step 2 configuration → moving to step 3 review');
             setOrchestrateStep(3);
             toast({
-              title: 'Configuration Complete',
-              description: 'Proceeding to review settings',
-              status: 'success',
+              title: 'Review & Confirm',
+              description: 'Review your settings. Say "proceed" to start printing.',
+              status: 'info',
               duration: 2000,
             });
+            break;
           }
-          // Step 3: Print Review → Start printing
-          else if (orchestrateStep === 3 && orchestrateMode === 'print') {
-            executePrintJob();
-          }
-          // Step 2: Scan config → Feed and Scan directly
-          else if (orchestrateStep === 2 && orchestrateMode === 'scan') {
+
+          // Priority 5: At step 2 (configuration page) with scan mode → start scanning
+          if (orchestrateStep === 2 && orchestrateMode === 'scan' && selectedDocuments.length > 0) {
+            console.log('[PROCEED_ACTION] Step 2 scan → starting feed and scan');
             feedDocumentsThroughPrinter();
             toast({
               title: 'Starting Feed & Scan',
@@ -2135,18 +2234,25 @@ const Dashboard: React.FC = () => {
               status: 'info',
               duration: 2000,
             });
+            break;
           }
-          // Default fallback
-          else {
-            toast({
-              title: 'Proceed',
-              description: 'Ready to continue',
-              status: 'info',
-              duration: 2000,
-            });
-          }
-          break;
 
+          // Priority 6: At step 3 with print mode → execute print job
+          if (orchestrateStep === 3 && orchestrateMode === 'print') {
+            console.log('[PROCEED_ACTION] Step 3 review → starting print job');
+            executePrintJob();
+            break;
+          }
+
+          // Default fallback
+          console.log('[PROCEED_ACTION] No matching condition, showing default message');
+          toast({
+            title: 'Proceed',
+            description: 'Ready to continue',
+            status: 'info',
+            duration: 2000,
+          });
+          break;
         }
 
         case 'set_feed_count': {
@@ -2771,6 +2877,7 @@ const Dashboard: React.FC = () => {
       orchestrateModal,
       orchestrateStep,
       selectDocumentForVoice,
+      selectedDocuments,
       selectedFiles.length,
       selectionMode,
       setOrchestrateOptions,

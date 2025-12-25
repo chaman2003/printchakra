@@ -8,20 +8,22 @@ import logging
 import os
 import re
 from datetime import datetime
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
-import cv2
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 # Optional: AWS S3 support
 try:
-    import boto3
+    import boto3  # type: ignore
 
-    BOTO3_AVAILABLE = True
+    _boto3_available = True
 except ImportError:
-    BOTO3_AVAILABLE = False
+    boto3 = None  # type: ignore
+    _boto3_available = False
+
+BOTO3_AVAILABLE = _boto3_available
 
 
 class StorageModule:
@@ -29,7 +31,7 @@ class StorageModule:
     Handles file storage, naming, and compression
     """
 
-    def __init__(self, base_dir: str, aws_config: Optional[Dict] = None):
+    def __init__(self, base_dir: str, aws_config: Optional[Dict[str, Any]] = None):
         """
         Initialize storage module
 
@@ -48,15 +50,20 @@ class StorageModule:
         if aws_config:
             self._init_s3()
 
-    def _init_s3(self):
+    def _init_s3(self) -> None:
         """Initialize AWS S3 client"""
-        if not BOTO3_AVAILABLE:
+        if not BOTO3_AVAILABLE or boto3 is None:
             logger.warning("boto3 not available - S3 storage disabled")
             self.s3_client = None
             return
 
+        if self.aws_config is None:
+            logger.warning("No AWS config provided - S3 storage disabled")
+            self.s3_client = None
+            return
+
         try:
-            self.s3_client = boto3.client(
+            self.s3_client = boto3.client(  # type: ignore
                 "s3",
                 aws_access_key_id=self.aws_config.get("access_key"),
                 aws_secret_access_key=self.aws_config.get("secret_key"),
@@ -163,7 +170,7 @@ class StorageModule:
 
         return f"{name}{ext}"
 
-    def compress_image(self, image_path: str, quality: int = 85) -> Tuple[str, Dict]:
+    def compress_image(self, image_path: str, quality: int = 85) -> Tuple[str, Dict[str, Any]]:
         """
         Compress image using JPEG compression
 
@@ -231,7 +238,7 @@ class StorageModule:
 
         return dest_path
 
-    def upload_to_s3(self, file_path: str, bucket_name: str, s3_key: Optional[str] = None) -> Dict:
+    def upload_to_s3(self, file_path: str, bucket_name: str, s3_key: Optional[str] = None) -> Dict[str, Any]:
         """
         Upload file to AWS S3
 
@@ -259,7 +266,7 @@ class StorageModule:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def upload_to_firebase(self, file_path: str, storage_path: str) -> Dict:
+    def upload_to_firebase(self, file_path: str, storage_path: str) -> Dict[str, Any]:
         """
         Upload file to Firebase Storage (placeholder)
 
@@ -297,7 +304,7 @@ class StorageModule:
 
         return thumb_path
 
-    def get_file_metadata(self, file_path: str) -> Dict:
+    def get_file_metadata(self, file_path: str) -> Dict[str, Any]:
         """
         Get comprehensive file metadata
 

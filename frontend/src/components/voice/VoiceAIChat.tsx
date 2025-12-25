@@ -679,7 +679,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         setIsProcessing(false);
 
         // Handle voice commands (document selector control)
-        if (voice_command) {
+        if (voice_command && voice_command.trim()) {
           const payload = {
             command: voice_command,
             params: command_params || {},
@@ -732,8 +732,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
             }, 500);
           }
         }
-        // 2. THEN play TTS (blocking - no input allowed)
+        // 2. STOP RECORDING before TTS begins (mutually exclusive states)
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          stopRecording(false);
+        }
+
+        // 3. THEN play TTS (blocking - no input allowed)
         setIsSpeaking(true);
+        setIsRecording(false); // Ensure recording badge is off
         setSessionStatus('Speaking response...');
 
         try {
@@ -753,26 +759,28 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           // Continue even if TTS fails
         } finally {
           setIsSpeaking(false);
+          setIsRecording(false); // Ensure recording is fully stopped
           setSessionStatus('Ready - Just speak naturally');
           // Focus chat input after TTS completes
           setTimeout(() => {
             chatInputRef.current?.focus();
           }, 100);
-        }
 
-        // Check if session should end
-        if (session_ended) {
-          setIsSessionActive(false);
-          addMessage('system', 'Voice session ended. Thank you!');
+          // Check if session should end
+          if (session_ended) {
+            setIsSessionActive(false);
+            addMessage('system', 'Voice session ended. Thank you!');
 
-          showToast({
-            title: 'Session Ended',
-            description: 'Goodbye!',
-            status: 'info',
-            duration: 3000,
-          });
-        } else {
-          scheduleRecordingStart(200);
+            showToast({
+              title: 'Session Ended',
+              description: 'Goodbye!',
+              status: 'info',
+              duration: 3000,
+            });
+          } else {
+            // Resume recording ONLY after TTS completes
+            scheduleRecordingStart(200);
+          }
         }
       } else {
         throw new Error(response.data.error || 'Processing failed');
@@ -917,7 +925,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         setIsProcessing(false);
 
         // Handle voice commands (document selector control)
-        if (voiceCommand) {
+        if (voiceCommand && voiceCommand.trim()) {
           const payload = {
             command: voiceCommand,
             params: commandParams || {},
@@ -1100,7 +1108,22 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                   <Heading size="sm" fontWeight="700">PrintChakra AI</Heading>
                   <HStack spacing={2} mt={1} flexWrap="wrap">
                     <Badge colorScheme={isSessionActive ? 'green' : 'gray'} fontSize="xs" variant="subtle" borderRadius="full" px={2}>{sessionStatus}</Badge>
-                    {isRecording && (
+                    {/* Mutually exclusive state badges - only show one at a time */}
+                    {isSpeaking ? (
+                      <Badge colorScheme="purple" fontSize="xs" variant="subtle" borderRadius="full" px={2}>
+                        <HStack spacing={1}>
+                          <Spinner size="xs" />
+                          <Text>Speaking</Text>
+                        </HStack>
+                      </Badge>
+                    ) : isProcessing ? (
+                      <Badge colorScheme="blue" fontSize="xs" variant="subtle" borderRadius="full" px={2}>
+                        <HStack spacing={1}>
+                          <Spinner size="xs" />
+                          <Text>Processing</Text>
+                        </HStack>
+                      </Badge>
+                    ) : isRecording ? (
                       <Badge colorScheme="red" variant="solid" fontSize="xs" borderRadius="full" px={2}>
                         <HStack spacing={1}>
                           <Box
@@ -1110,26 +1133,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
                             bg="white"
                             animation="pulse 1.5s infinite"
                           />
-                          <Text>Recording</Text>
+                          <Text>RECORDING</Text>
                         </HStack>
                       </Badge>
-                    )}
-                    {isProcessing && (
-                      <Badge colorScheme="blue" fontSize="xs" variant="subtle" borderRadius="full" px={2}>
-                        <HStack spacing={1}>
-                          <Spinner size="xs" />
-                          <Text>Processing</Text>
-                        </HStack>
-                      </Badge>
-                    )}
-                    {isSpeaking && (
-                      <Badge colorScheme="purple" fontSize="xs" variant="subtle" borderRadius="full" px={2}>
-                        <HStack spacing={1}>
-                          <Spinner size="xs" />
-                          <Text>Speaking</Text>
-                        </HStack>
-                      </Badge>
-                    )}
+                    ) : null}
                   </HStack>
                 </Box>
               </>

@@ -1,0 +1,25 @@
+{
+  "include": ["app", "*.py"],
+  "exclude": [
+    "test",
+    "test/**",
+    "**/test_outputs",
+    "**/__pycache__",
+    "**/node_modules",
+    "public"
+  ],
+  "ignore": [
+    "test/**/*.py",
+    "test/**/*.ipynb"
+  ],
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownParameterType": "none",
+  "reportPartiallyUnknownType": "none",
+  "reportGeneralTypeIssues": "warning",
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "basic"
+}
