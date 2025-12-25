@@ -1281,8 +1281,8 @@ def enhance_document_quality(gray_image, mode='document'):
         p2, p98 = np.percentile(gray_image, (2, 98))
         stretched = np.clip((gray_image - p2) * (255.0 / max(p98 - p2, 1)), 0, 255).astype(np.uint8)
         
-        # Adaptive threshold with large block size for clean result
-        block_size = max(h, w) // 25
+        # Adaptive threshold - larger block & higher C for thinner text
+        block_size = max(h, w) // 20  # Larger block = smoother
         block_size = block_size if block_size % 2 == 1 else block_size + 1
         block_size = max(block_size, 51)
         block_size = min(block_size, 251)
@@ -1291,13 +1291,12 @@ def enhance_document_quality(gray_image, mode='document'):
             stretched, 255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY,
-            block_size, 15  # Higher C = more white background
+            block_size, 25  # Higher C (25) = thinner text
         )
         
-        # Morphological cleanup
+        # Only OPEN to remove noise - NO CLOSE (close makes text thicker!)
         kernel_small = np.ones((2, 2), np.uint8)
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_small)  # Close small holes
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel_small)   # Remove small specks
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small)
         
         # Remove small connected components (noise specks)
         inverted = cv2.bitwise_not(cleaned)

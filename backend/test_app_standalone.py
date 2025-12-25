@@ -151,21 +151,22 @@ def enhance_document_quality(gray_image, mode='document'):
         p2, p98 = np.percentile(gray_image, (2, 98))
         stretched = np.clip((gray_image - p2) * (255.0 / max(p98 - p2, 1)), 0, 255).astype(np.uint8)
         
-        block_size = max(h, w) // 25
+        block_size = max(h, w) // 20
         block_size = block_size if block_size % 2 == 1 else block_size + 1
         block_size = max(block_size, 51)
         block_size = min(block_size, 251)
         
+        # Higher C (25) = thinner text
         binary = cv2.adaptiveThreshold(
             stretched, 255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY,
-            block_size, 15
+            block_size, 25
         )
         
+        # Only OPEN - no CLOSE (close makes text fat)
         kernel_small = np.ones((2, 2), np.uint8)
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_small)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel_small)
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel_small)
         
         # Remove small noise components
         inverted = cv2.bitwise_not(cleaned)
