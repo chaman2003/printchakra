@@ -529,7 +529,7 @@ class VoiceChatService:
         self.pending_orchestration = None  # Track if waiting for confirmation (print/scan)
         self.ollama_chat_url = OLLAMA_CHAT_URL
         self.ollama_tags_url = OLLAMA_TAGS_URL
-        self.api_timeout = max(1, OLLAMA_TIMEOUT) if OLLAMA_TIMEOUT else OLLAMA_API_TIMEOUT
+        self.api_timeout = OLLAMA_API_TIMEOUT
         self.verify_ssl = OLLAMA_VERIFY_SSL
         
         # Import command mappings from centralized module

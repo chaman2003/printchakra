@@ -1172,125 +1172,149 @@ def auto_crop_borders(image, threshold=30, min_crop_percent=0.02):
     return image
 
 
+def estimate_background_fast(gray_image, kernel_ratio=8):
+    """
+    Fast background estimation using downscaling for large images.
+    Essential for shadow removal.
+    """
+    h, w = gray_image.shape
+    
+    # Downscale for faster morphological operations
+    max_dim = 800
+    scale = min(max_dim / max(h, w), 1.0)
+    
+    if scale < 1.0:
+        small = cv2.resize(gray_image, (int(w * scale), int(h * scale)))
+    else:
+        small = gray_image
+    
+    sh, sw = small.shape
+    
+    # Kernel size relative to small image
+    k_size = max(sh, sw) // kernel_ratio
+    k_size = k_size if k_size % 2 == 1 else k_size + 1
+    k_size = max(k_size, 31)
+    k_size = min(k_size, 151)
+    
+    # Morphological closing to estimate background
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k_size, k_size))
+    background_small = cv2.morphologyEx(small, cv2.MORPH_CLOSE, kernel)
+    
+    # Smooth
+    background_small = cv2.GaussianBlur(background_small, (k_size, k_size), 0)
+    
+    # Upscale back
+    if scale < 1.0:
+        background = cv2.resize(background_small, (w, h), interpolation=cv2.INTER_LINEAR)
+        # Extra smoothing to hide upscaling artifacts
+        background = cv2.GaussianBlur(background, (51, 51), 0)
+    else:
+        background = background_small
+    
+    return background
+
+
 def remove_shadows(image):
     """
     Remove shadows from document image using illumination normalization.
-    This is key for CamScanner-quality results.
+    Uses fast downscaling approach for large images.
     """
     if len(image.shape) == 3:
-        # Convert to LAB color space for better shadow handling
-        lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-        l_channel, a_channel, b_channel = cv2.split(lab)
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     else:
-        l_channel = image.copy()
-        a_channel = None
-        b_channel = None
+        gray = image.copy()
     
-    # Estimate background illumination using large morphological closing
-    # This creates a "light map" of the document
-    kernel_size = max(l_channel.shape[0], l_channel.shape[1]) // 10
-    kernel_size = kernel_size if kernel_size % 2 == 1 else kernel_size + 1
-    kernel_size = max(kernel_size, 51)  # Minimum kernel size
+    # Estimate background illumination
+    background = estimate_background_fast(gray, kernel_ratio=6)
     
-    # Use morphological closing to estimate background
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-    background = cv2.morphologyEx(l_channel, cv2.MORPH_CLOSE, kernel)
+    # Normalize: divide by background
+    shadow_free = np.zeros_like(gray, dtype=np.float32)
+    mask = background > 10  # Avoid division by zero
+    shadow_free[mask] = (gray[mask].astype(np.float32) / background[mask].astype(np.float32)) * 255
+    shadow_free = np.clip(shadow_free, 0, 255).astype(np.uint8)
     
-    # Apply Gaussian blur to smooth the background estimation
-    background = cv2.GaussianBlur(background, (kernel_size, kernel_size), 0)
-    
-    # Normalize: divide original by background and scale
-    # This removes uneven illumination (shadows)
-    normalized = cv2.divide(l_channel, background, scale=255)
-    
-    # Clip values to valid range
-    normalized = np.clip(normalized, 0, 255).astype(np.uint8)
-    
-    if a_channel is not None:
-        # Reconstruct color image
-        lab_normalized = cv2.merge([normalized, a_channel, b_channel])
-        result = cv2.cvtColor(lab_normalized, cv2.COLOR_LAB2BGR)
-        return result
-    else:
-        return normalized
+    return shadow_free
 
 
 def enhance_document_quality(gray_image, mode='document'):
     """
-    CamScanner-style document enhancement.
-    Produces clean, high-contrast document with white background.
+    CamScanner-quality document enhancement.
+    Produces clean black text on white background with NO NOISE.
     
     Args:
-        gray_image: Grayscale input image
-        mode: 'document' for black text on white, 'photo' for preserving details
+        gray_image: Grayscale input image (should already have shadows removed)
+        mode: 'document' for clean B/W, 'grayscale' for natural look
     
     Returns:
-        Enhanced grayscale image
+        Enhanced image
     """
     h, w = gray_image.shape[:2]
     
-    # Step 1: Shadow removal using morphological background estimation
-    # Large kernel to estimate page background
-    bg_kernel_size = max(h, w) // 15
-    bg_kernel_size = bg_kernel_size if bg_kernel_size % 2 == 1 else bg_kernel_size + 1
-    bg_kernel_size = max(bg_kernel_size, 31)
-    
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (bg_kernel_size, bg_kernel_size))
-    background = cv2.morphologyEx(gray_image, cv2.MORPH_CLOSE, kernel)
-    background = cv2.GaussianBlur(background, (bg_kernel_size, bg_kernel_size), 0)
-    
-    # Normalize to remove shadows
-    shadow_removed = cv2.divide(gray_image, background, scale=255)
-    shadow_removed = np.clip(shadow_removed, 0, 255).astype(np.uint8)
-    
-    # Step 2: Contrast enhancement using CLAHE
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    contrast_enhanced = clahe.apply(shadow_removed)
-    
-    # Step 3: Adaptive thresholding for document mode
-    if mode == 'document':
-        # Use adaptive threshold to create clean black/white text
-        # Block size should be relative to image size
-        block_size = max(h, w) // 40
-        block_size = block_size if block_size % 2 == 1 else block_size + 1
-        block_size = max(block_size, 11)
+    if mode == 'grayscale':
+        # ===== GRAYSCALE MODE: Natural look with enhanced contrast =====
         
-        # Adaptive threshold - Gaussian weighted
-        adaptive = cv2.adaptiveThreshold(
-            contrast_enhanced, 255,
+        # CLAHE for local contrast
+        clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray_image)
+        
+        # Brighten background to white
+        p95 = np.percentile(enhanced, 95)
+        if p95 > 0 and p95 < 250:
+            brightened = np.clip(enhanced.astype(np.float32) * (255.0 / p95), 0, 255).astype(np.uint8)
+        else:
+            brightened = enhanced
+        
+        # Gamma correction to darken text
+        gamma = 0.85
+        table = np.array([((i / 255.0) ** (1.0 / gamma)) * 255 for i in range(256)]).astype("uint8")
+        result = cv2.LUT(brightened, table)
+        
+        # Sharpen
+        gaussian = cv2.GaussianBlur(result, (0, 0), 1.5)
+        sharpened = cv2.addWeighted(result, 1.4, gaussian, -0.4, 0)
+        result = np.clip(sharpened, 0, 255).astype(np.uint8)
+        
+    else:
+        # ===== DOCUMENT MODE: Clean black/white like CamScanner Magic Color =====
+        
+        # Contrast stretching
+        p2, p98 = np.percentile(gray_image, (2, 98))
+        stretched = np.clip((gray_image - p2) * (255.0 / max(p98 - p2, 1)), 0, 255).astype(np.uint8)
+        
+        # Adaptive threshold with large block size for clean result
+        block_size = max(h, w) // 25
+        block_size = block_size if block_size % 2 == 1 else block_size + 1
+        block_size = max(block_size, 51)
+        block_size = min(block_size, 251)
+        
+        binary = cv2.adaptiveThreshold(
+            stretched, 255,
             cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
             cv2.THRESH_BINARY,
-            block_size, 10
+            block_size, 15  # Higher C = more white background
         )
         
-        # Blend adaptive with contrast-enhanced for better appearance
-        # This keeps some gray tones while making text crisp
-        result = cv2.addWeighted(contrast_enhanced, 0.3, adaptive, 0.7, 0)
-    else:
-        result = contrast_enhanced
+        # Morphological cleanup
+        kernel_small = np.ones((2, 2), np.uint8)
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel_small)  # Close small holes
+        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel_small)   # Remove small specks
+        
+        # Remove small connected components (noise specks)
+        inverted = cv2.bitwise_not(cleaned)
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(inverted, connectivity=8)
+        
+        # Minimum area threshold (scales with image size)
+        min_area = max(25, (h * w) // 100000)
+        
+        # Build clean output
+        result = np.ones_like(cleaned) * 255
+        
+        for i in range(1, num_labels):
+            area = stats[i, cv2.CC_STAT_AREA]
+            if area >= min_area:
+                result[labels == i] = 0  # Keep as black text
     
-    # Step 4: Final brightness adjustment - ensure white background
-    # Calculate histogram and adjust to make background truly white
-    hist = cv2.calcHist([result], [0], None, [256], [0, 256])
-    cumsum = np.cumsum(hist)
-    total_pixels = h * w
-    
-    # Find the value at 95th percentile (background level)
-    percentile_95 = np.searchsorted(cumsum, total_pixels * 0.95)
-    
-    # Scale so that background becomes white (255)
-    if percentile_95 > 0 and percentile_95 < 255:
-        scale = 255.0 / percentile_95
-        result = np.clip(result * scale, 0, 255).astype(np.uint8)
-    
-    # Step 5: Slight sharpening to make text crisp
-    sharpen_kernel = np.array([
-        [0, -0.5, 0],
-        [-0.5, 3, -0.5],
-        [0, -0.5, 0]
-    ])
-    result = cv2.filter2D(result, -1, sharpen_kernel)
-    result = np.clip(result, 0, 255).astype(np.uint8)
+    return result
     
     return result
 
@@ -1585,11 +1609,9 @@ def process_document_image(input_path, output_path, filename=None):
     
     Key features:
     - Robust document edge detection with perspective correction
-    - Shadow and uneven lighting removal
-    - High-contrast text enhancement
-    - Clean white background
-    - High resolution output (A4 @ 200 DPI)
-    - No quality loss from over-processing
+    - Shadow and uneven lighting removal  
+    - Clean black text on white background (NO NOISE)
+    - High resolution output
     """
     try:
         # Helper function to emit progress
@@ -1597,18 +1619,18 @@ def process_document_image(input_path, output_path, filename=None):
             progress_data = {
                 "filename": filename,
                 "step": step,
-                "total_steps": 12,
+                "total_steps": 8,
                 "stage_name": stage_name,
                 "message": message,
             }
             socketio.emit("processing_progress", progress_data)
             if filename:
-                update_processing_status(filename, step, 12, stage_name)
+                update_processing_status(filename, step, 8, stage_name)
 
         # ============================================================
-        # STEP 1: Load Image at Full Resolution
+        # STEP 1: Load Image
         # ============================================================
-        print(f"\n[STEP 1/12] Load Image")
+        print(f"\n[STEP 1/8] Load Image")
         emit_progress(1, "Load Image", "Loading image from disk...")
 
         original_image = cv2.imread(input_path, cv2.IMREAD_COLOR)
@@ -1621,179 +1643,79 @@ def process_document_image(input_path, output_path, filename=None):
         # ============================================================
         # STEP 2: Document Detection & Perspective Correction
         # ============================================================
-        print(f"[STEP 2/12] Document Detection & Perspective Transform")
+        print(f"[STEP 2/8] Document Detection")
         emit_progress(2, "Document Detection", "Detecting document boundaries...")
 
         doc_contour = find_document_contour(original_image)
         
         if doc_contour is not None:
             warped = four_point_transform(original_image, doc_contour)
-            print(f"  ✓ Document detected and perspective corrected: {warped.shape[1]}x{warped.shape[0]}")
+            print(f"  ✓ Document detected: {warped.shape[1]}x{warped.shape[0]}")
         else:
-            # Fallback: use original but try to auto-crop borders
-            print(f"  [INFO] No document edges found, using full image with auto-crop")
+            print(f"  [INFO] No document edges found, using full image")
             warped = original_image.copy()
 
         # ============================================================
-        # STEP 3: Shadow Removal (Critical for CamScanner quality)
+        # STEP 3: Grayscale Conversion
         # ============================================================
-        print(f"[STEP 3/12] Shadow Removal")
-        emit_progress(3, "Shadow Removal", "Removing shadows and uneven lighting...")
+        print(f"[STEP 3/8] Grayscale Conversion")
+        emit_progress(3, "Grayscale", "Converting to grayscale...")
 
-        shadow_free = remove_shadows(warped)
-        print(f"  ✓ Shadows and uneven lighting removed")
-
-        # ============================================================
-        # STEP 4: Convert to Grayscale (preserving luminance)
-        # ============================================================
-        print(f"[STEP 4/12] Grayscale Conversion")
-        emit_progress(4, "Grayscale Conversion", "Converting to optimized grayscale...")
-
-        if len(shadow_free.shape) == 3:
-            # Use LAB L-channel for best text contrast
-            lab = cv2.cvtColor(shadow_free, cv2.COLOR_BGR2LAB)
-            gray = lab[:, :, 0]
-        else:
-            gray = shadow_free
-        
-        print(f"  ✓ Converted to grayscale: {gray.shape[1]}x{gray.shape[0]}")
+        gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
+        print(f"  ✓ Converted to grayscale")
 
         # ============================================================
-        # STEP 5: Document Enhancement (CamScanner-style)
+        # STEP 4: Denoising (Before shadow removal)
         # ============================================================
-        print(f"[STEP 5/12] Document Enhancement")
-        emit_progress(5, "Document Enhancement", "Applying CamScanner-style enhancement...")
+        print(f"[STEP 4/8] Denoising")
+        emit_progress(4, "Denoising", "Removing noise...")
 
-        enhanced = enhance_document_quality(gray, mode='document')
-        print(f"  ✓ Document enhanced with clean white background")
-
-        # ============================================================
-        # STEP 6: Noise Reduction (Gentle - preserve text sharpness)
-        # ============================================================
-        print(f"[STEP 6/12] Noise Reduction")
-        emit_progress(6, "Noise Reduction", "Removing noise while preserving text...")
-
-        # Light bilateral filter - preserves edges while smoothing
-        denoised = cv2.bilateralFilter(enhanced, d=5, sigmaColor=30, sigmaSpace=30)
-        
-        # Very light median blur only if there's visible noise
-        # Check for salt-and-pepper noise
-        noise_check = cv2.Laplacian(denoised, cv2.CV_64F).var()
-        if noise_check > 500:  # High variance indicates noise
-            denoised = cv2.medianBlur(denoised, 3)
-            print(f"  ✓ Noise reduced (median filter applied)")
-        else:
-            print(f"  ✓ Noise minimal, preserved sharpness")
+        # Strong bilateral filtering - smooths while keeping edges sharp
+        denoised = cv2.bilateralFilter(gray, d=9, sigmaColor=75, sigmaSpace=75)
+        denoised = cv2.bilateralFilter(denoised, d=7, sigmaColor=50, sigmaSpace=50)
+        print(f"  ✓ Noise reduced")
 
         # ============================================================
-        # STEP 7: Edge Enhancement
+        # STEP 5: Shadow Removal
         # ============================================================
-        print(f"[STEP 7/12] Edge Enhancement")
-        emit_progress(7, "Edge Enhancement", "Sharpening text edges...")
+        print(f"[STEP 5/8] Shadow Removal")
+        emit_progress(5, "Shadow Removal", "Removing shadows and uneven lighting...")
 
-        # Unsharp mask for crisp text
-        gaussian = cv2.GaussianBlur(denoised, (0, 0), 2.0)
-        sharpened = cv2.addWeighted(denoised, 1.5, gaussian, -0.5, 0)
-        sharpened = np.clip(sharpened, 0, 255).astype(np.uint8)
-        print(f"  ✓ Text edges sharpened")
+        shadow_free = remove_shadows(denoised)
+        print(f"  ✓ Shadows removed")
 
         # ============================================================
-        # STEP 8: Auto-Crop Borders
+        # STEP 6: Document Enhancement (CamScanner Magic Color)
         # ============================================================
-        print(f"[STEP 8/12] Auto-Crop Borders")
-        emit_progress(8, "Auto-Crop", "Removing any remaining borders...")
+        print(f"[STEP 6/8] Document Enhancement")
+        emit_progress(6, "Enhancement", "Creating clean black/white output...")
 
-        cropped = auto_crop_borders(sharpened, threshold=50)
-        print(f"  ✓ Borders cleaned: {cropped.shape[1]}x{cropped.shape[0]}")
-
-        # ============================================================
-        # STEP 9: Resolution Optimization (A4 @ 200 DPI)
-        # ============================================================
-        print(f"[STEP 9/12] Resolution Optimization")
-        emit_progress(9, "Resolution", "Optimizing resolution for clarity...")
-
-        # A4 at 200 DPI = 1654 x 2339 pixels (portrait)
-        # A4 at 150 DPI = 1240 x 1754 pixels (portrait)
-        TARGET_DPI = 200
-        A4_WIDTH_200DPI = 1654
-        A4_HEIGHT_200DPI = 2339
-        
-        crop_h, crop_w = cropped.shape[:2]
-        
-        # Determine orientation
-        if crop_h > crop_w:  # Portrait
-            target_w, target_h = A4_WIDTH_200DPI, A4_HEIGHT_200DPI
-        else:  # Landscape
-            target_w, target_h = A4_HEIGHT_200DPI, A4_WIDTH_200DPI
-        
-        # Only resize if significantly different from target
-        # Use LANCZOS for high-quality upscaling, AREA for downscaling
-        current_pixels = crop_h * crop_w
-        target_pixels = target_w * target_h
-        
-        if current_pixels < target_pixels * 0.5:  # Need to upscale
-            resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_LANCZOS4)
-            print(f"  ✓ Upscaled to A4 @ 200 DPI: {target_w}x{target_h}")
-        elif current_pixels > target_pixels * 1.5:  # Need to downscale
-            resized = cv2.resize(cropped, (target_w, target_h), interpolation=cv2.INTER_AREA)
-            print(f"  ✓ Optimized to A4 @ 200 DPI: {target_w}x{target_h}")
-        else:
-            # Keep original resolution if close to target
-            resized = cropped
-            print(f"  ✓ Resolution preserved: {crop_w}x{crop_h}")
+        # This creates clean black text on white background with noise removal
+        enhanced = enhance_document_quality(shadow_free, mode='document')
+        print(f"  ✓ Enhanced with clean background")
 
         # ============================================================
-        # STEP 10: Final Quality Adjustments
+        # STEP 7: OCR Processing
         # ============================================================
-        print(f"[STEP 10/12] Final Quality Adjustments")
-        emit_progress(10, "Quality Adjustment", "Final brightness and contrast tuning...")
-
-        # Ensure white background is truly white (255)
-        # Find the mode of the histogram (most common value = background)
-        hist = cv2.calcHist([resized], [0], None, [256], [0, 256])
-        background_value = np.argmax(hist[200:]) + 200  # Look in bright region
-        
-        if background_value < 250:
-            # Brighten to make background white
-            brightness_adjustment = 255 - background_value
-            final = cv2.convertScaleAbs(resized, alpha=1.0, beta=brightness_adjustment * 0.5)
-        else:
-            final = resized
-        
-        # Ensure good contrast for text
-        min_val, max_val = np.percentile(final, [2, 98])
-        if max_val - min_val < 200:
-            # Low contrast - stretch it
-            final = np.clip((final - min_val) * (255.0 / (max_val - min_val)), 0, 255).astype(np.uint8)
-            print(f"  ✓ Contrast enhanced")
-        else:
-            print(f"  ✓ Contrast already optimal")
-
-        enhanced = final
-
-        # ============================================================
-        # STEP 11: OCR Processing
-        # ============================================================
-        print(f"[STEP 11/12] Advanced OCR")
-        emit_progress(11, "OCR Processing", "Extracting text...")
+        print(f"[STEP 7/8] OCR Processing")
+        emit_progress(7, "OCR Processing", "Extracting text...")
 
         text = ""
         try:
-            # PSM 3: Fully automatic page segmentation (best for documents)
             custom_config = r"--oem 3 --psm 3 -c preserve_interword_spaces=1"
             text = pytesseract.image_to_string(enhanced, lang="eng", config=custom_config)
-            print(f"  ✓ OCR complete: {len(text.strip())} characters extracted")
+            print(f"  ✓ OCR complete: {len(text.strip())} characters")
         except Exception as ocr_error:
             print(f"  [WARN] OCR failed: {ocr_error}")
             text = ""
 
         # ============================================================
-        # STEP 12: Save High-Quality Output
+        # STEP 8: Save Output
         # ============================================================
-        print(f"[STEP 12/12] Save Output")
-        emit_progress(12, "Save Output", "Saving processed image...")
+        print(f"[STEP 8/8] Save Output")
+        emit_progress(8, "Save Output", "Saving processed image...")
 
-        # Save with maximum JPEG quality (95) for sharp text
+        # Save with high quality
         cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
         print(f"  ✓ Image saved: {output_path}")
         print(f"    Final dimensions: {enhanced.shape[1]}x{enhanced.shape[0]}")
@@ -1810,14 +1732,14 @@ def process_document_image(input_path, output_path, filename=None):
             print(f"  ✓ Text saved: {text_output_path}")
 
         # ============================================================================
-        # STEP 13 (BONUS): PaddleOCR + Ollama Filename Generation
+        # BONUS: PaddleOCR + Ollama Filename Generation
         # ============================================================================
         ocr_filename = None
         try:
             from app.modules.ocr.paddle_ocr import get_ocr_processor, OCRResult
             
-            print(f"\n[STEP 13] PaddleOCR + Ollama Filename Generation")
-            emit_progress(12, "OCR Analysis", "Running advanced OCR for filename generation...")
+            print(f"\n[BONUS] PaddleOCR + Ollama Filename Generation")
+            emit_progress(8, "OCR Analysis", "Running advanced OCR for filename generation...")
             
             # Initialize OCR processor
             ocr_data_dir = os.path.join(os.path.dirname(output_path), '..', 'ocr_results')
@@ -1904,7 +1826,7 @@ def process_document_image(input_path, output_path, filename=None):
         error_data = {"error": str(e), "message": "Processing failed"}
         socketio.emit("processing_error", error_data)
         if filename:
-            update_processing_status(filename, 12, 12, "Error", is_complete=True, error=str(e))
+            update_processing_status(filename, 8, 8, "Error", is_complete=True, error=str(e))
         return False, str(e), None
 
 
