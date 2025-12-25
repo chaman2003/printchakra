@@ -42,7 +42,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
 
     // Check if socket already exists globally (from previous mount)
     const existingSocket = (globalThis as any).__PRINTCHAKRA_SOCKET as Socket | null;
-    
+
     // If socket exists and is still connected, reuse it
     if (existingSocket && existingSocket.connected) {
       console.log('[Socket] Reusing existing Socket.IO connection');
@@ -50,34 +50,42 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
       setConnected(true);
       return;
     }
-    
-    // Disconnect existing socket if it exists but isn't connected
-    if (existingSocket) {
+
+    // If a socket instance exists but is not connected, try to reuse it instead of creating a new one
+    if (existingSocket && !existingSocket.connected) {
+      console.log('[Socket] Reusing existing Socket.IO instance and attempting to connect');
+      socketRef.current = existingSocket;
+      initializingRef.current = true;
       try {
-        existingSocket.disconnect();
+        existingSocket.connect();
       } catch (e) {
-        // Ignore
+        console.warn('[Socket] Failed to connect existing socket:', e);
+        // fall through to create a fresh socket
       }
+      return;
     }
-    
+
     // Prevent multiple simultaneous initialization attempts (React StrictMode safety)
     if (initializingRef.current) {
       console.log('[Socket] Connection attempt already in progress');
       return;
     }
-    
+
     initializingRef.current = true;
     console.log('[Socket] Initializing Socket.IO connection');
     console.log(`[Socket] Environment: ${ENVIRONMENT}`);
     console.log(`[Socket] Backend URL: ${API_BASE_URL}`);
 
     try {
+      // Use websocket transport only to avoid HTTP polling/OPTIONS preflights on refresh
       const newSocket = io(API_BASE_URL, {
         ...SOCKET_CONFIG,
+        transports: ['websocket'],
+        upgrade: false,
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        reconnectionAttempts: maxRetries,
+        reconnectionAttempts: 3, // keep retries small to avoid storming
         timeout: 20000,
       });
 
