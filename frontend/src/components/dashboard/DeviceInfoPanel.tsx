@@ -6,6 +6,7 @@ import {
   Flex,
   HStack,
   IconButton,
+  Input,
   Link,
   Modal,
   ModalBody,
@@ -13,10 +14,19 @@ import {
   ModalContent,
   ModalHeader,
   ModalOverlay,
+  NumberDecrementStepper,
+  NumberIncrementStepper,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
   Progress,
   Radio,
   RadioGroup,
   SimpleGrid,
+  Slider,
+  SliderFilledTrack,
+  SliderThumb,
+  SliderTrack,
   Spinner,
   Stack,
   Tag,
@@ -27,10 +37,11 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
+import { FiClock, FiCpu, FiDownload, FiMonitor, FiPlay, FiPrinter, FiRefreshCw, FiSettings, FiTrash2 } from 'react-icons/fi';
 import { Iconify } from '../common';
 import apiClient from '../../apiClient';
 import { API_ENDPOINTS } from '../../config';
+import { useCalibration } from '../../context/CalibrationContext';
 
 interface PrinterInfo {
   name: string;
@@ -135,6 +146,26 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
   const [queueError, setQueueError] = useState<string | null>(null);
   const [terminatingJobId, setTerminatingJobId] = useState<string | null>(null);
   const toast = useToast();
+
+  // Calibration state
+  const {
+    initialDelay,
+    setInitialDelay,
+    isCalibrated,
+    startDelayCountdown,
+    countdownValue,
+    isCountingDown,
+    cancelCountdown,
+    resetCalibration,
+  } = useCalibration();
+  const [showCalibrationOptions, setShowCalibrationOptions] = useState(false);
+  const [tempDelay, setTempDelay] = useState<number>(initialDelay);
+  const [isTestingDelay, setIsTestingDelay] = useState(false);
+
+  // Sync tempDelay with initialDelay when it changes externally
+  useEffect(() => {
+    setTempDelay(initialDelay);
+  }, [initialDelay]);
 
   // Consistent styling with SurfaceCard
   const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
@@ -333,7 +364,7 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
             <HStack spacing={3}>
               <Iconify icon={FiMonitor} boxSize={6} color="brand.400" />
               <Text fontWeight="700" fontSize="lg">
-                System Status
+                System Status & Calibration
               </Text>
               {systemInfo?.printers?.available && (
                 <Tag size="lg" colorScheme="green" variant="subtle" borderRadius="full">
@@ -386,7 +417,7 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
               </Text>
             ) : systemInfo ? (
               <VStack align="stretch" spacing={6} w="100%">
-                {/* Printers Section - Top Priority */}
+                {/* Printers Section */}
                 <Box
                   bg={useColorModeValue('gray.50', 'rgba(121, 95, 238, 0.05)')}
                   borderRadius="xl"
@@ -430,7 +461,7 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
 
                   {systemInfo.printers.available ? (
                     <RadioGroup value={defaultPrinter} onChange={(value) => handleSetDefaultPrinter(value)}>
-                      <VStack align="stretch" spacing={3}>
+                      <VStack align="stretch" spacing={3} maxH="300px" overflowY="auto">
                         {systemInfo.printers.list.map((printer, idx) => {
                           const queue = queueByPrinter.get(printer.name);
                           const jobCount = queue?.jobs?.length || 0;
@@ -467,82 +498,82 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
                                   {defaultPrinter === printer.name && (
                                     <Tag size="sm" colorScheme="brand" variant="solid" fontSize="11px">
                                       ACTIVE
-                                    </Tag>
-                                  )}
-                                </HStack>
-                              </Flex>
-
-                              <Box mt={3} pl={6}>
-                                {queuesLoading && !queue ? (
-                                  <HStack spacing={2} color={textMuted}>
-                                    <Spinner size="xs" />
-                                    <Text fontSize="xs">Loading queue…</Text>
-                                  </HStack>
-                                ) : jobCount === 0 ? (
-                                  <Text fontSize="xs" color={textMuted} fontStyle="italic">
-                                    No pending jobs.
-                                  </Text>
-                                ) : (
-                                  <Stack spacing={2}>
-                                    {queue?.jobs?.map((job) => {
-                                      const terminateKey = `${printer.name}_${job.id}`;
-                                      const submittedLabel = job.submitted
-                                        ? Number.isNaN(Date.parse(job.submitted))
-                                          ? job.submitted
-                                          : new Date(job.submitted).toLocaleString()
-                                        : null;
-                                      return (
-                                        <Flex
-                                          key={terminateKey}
-                                          justify="space-between"
-                                          align={{ base: 'flex-start', md: 'center' }}
-                                          gap={3}
-                                          direction={{ base: 'column', md: 'row' }}
-                                          p={2}
-                                          border="1px solid"
-                                          borderColor={borderColor}
-                                          borderRadius="md"
-                                          bg={useColorModeValue('gray.50', 'rgba(255,255,255,0.04)')}
-                                        >
-                                          <Box flex={1}>
-                                            <Text fontSize="sm" fontWeight="600">
-                                              {job.document || `Job #${job.id}`}
-                                            </Text>
-                                            <Text fontSize="xs" color={textMuted}>
-                                              {job.owner} • {job.status || 'pending'}
-                                            </Text>
-                                            {submittedLabel && (
-                                              <Text fontSize="xs" color={textMuted}>
-                                                {submittedLabel}
-                                              </Text>
-                                            )}
-                                          </Box>
-                                          <Button
-                                            size="xs"
-                                            colorScheme="red"
-                                            variant="ghost"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleTerminateJob(printer.name, String(job.id));
-                                            }}
-                                            isLoading={terminatingJobId === terminateKey}
-                                          >
-                                            Terminate
-                                          </Button>
-                                        </Flex>
-                                      );
-                                    })}
-                                  </Stack>
+                                  </Tag>
                                 )}
-                              </Box>
+                              </HStack>
+                            </Flex>
+
+                            <Box mt={3} pl={6}>
+                              {queuesLoading && !queue ? (
+                                <HStack spacing={2} color={textMuted}>
+                                  <Spinner size="xs" />
+                                  <Text fontSize="xs">Loading queue…</Text>
+                                </HStack>
+                              ) : jobCount === 0 ? (
+                                <Text fontSize="xs" color={textMuted} fontStyle="italic">
+                                  No pending jobs.
+                                </Text>
+                              ) : (
+                                <Stack spacing={2}>
+                                  {queue?.jobs?.map((job) => {
+                                    const terminateKey = `${printer.name}_${job.id}`;
+                                    const submittedLabel = job.submitted
+                                      ? Number.isNaN(Date.parse(job.submitted))
+                                        ? job.submitted
+                                        : new Date(job.submitted).toLocaleString()
+                                      : null;
+                                    return (
+                                      <Flex
+                                        key={terminateKey}
+                                        justify="space-between"
+                                        align={{ base: 'flex-start', md: 'center' }}
+                                        gap={3}
+                                        direction={{ base: 'column', md: 'row' }}
+                                        p={2}
+                                        border="1px solid"
+                                        borderColor={borderColor}
+                                        borderRadius="md"
+                                        bg={useColorModeValue('gray.50', 'rgba(255,255,255,0.04)')}
+                                      >
+                                        <Box flex={1}>
+                                          <Text fontSize="sm" fontWeight="600">
+                                            {job.document || `Job #${job.id}`}
+                                          </Text>
+                                          <Text fontSize="xs" color={textMuted}>
+                                            {job.owner} • {job.status || 'pending'}
+                                          </Text>
+                                          {submittedLabel && (
+                                            <Text fontSize="xs" color={textMuted}>
+                                              {submittedLabel}
+                                            </Text>
+                                          )}
+                                        </Box>
+                                        <Button
+                                          size="xs"
+                                          colorScheme="red"
+                                          variant="ghost"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleTerminateJob(printer.name, String(job.id));
+                                          }}
+                                          isLoading={terminatingJobId === terminateKey}
+                                        >
+                                          Terminate
+                                        </Button>
+                                      </Flex>
+                                    );
+                                  })}
+                                </Stack>
+                              )}
                             </Box>
-                          );
-                        })}
-                        {queueError && (
-                          <Text fontSize="xs" color="red.400">
-                            {queueError}
-                          </Text>
-                        )}
+                          </Box>
+                        );
+                      })}
+                      {queueError && (
+                        <Text fontSize="xs" color="red.400">
+                          {queueError}
+                        </Text>
+                      )}
                       </VStack>
                     </RadioGroup>
                   ) : (

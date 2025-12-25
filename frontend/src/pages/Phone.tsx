@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
+import { useCalibration } from '../context/CalibrationContext';
 import {
   Alert,
   AlertDescription,
@@ -97,15 +98,20 @@ const Phone: React.FC = () => {
   const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
   const [cameraOrientation, setCameraOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [detectedQuad, setDetectedQuad] = useState<DetectedQuad | null>(null);
-  
+
   // Countdown state for auto-capture from dashboard
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Sync state - tracks if auto-capture was triggered remotely (from dashboard)
   const [autoCaptureSource, setAutoCaptureSource] = useState<'local' | 'dashboard' | null>(null);
   const [pendingDocumentCount, setPendingDocumentCount] = useState<number>(0);
-  
+
+  // Calibration delay - applies before first document capture
+  const { initialDelay, startDelayCountdown, countdownValue, isCountingDown, cancelCountdown } = useCalibration();
+  const [isWaitingForInitialDelay, setIsWaitingForInitialDelay] = useState(false);
+  const hasAppliedInitialDelayRef = useRef(false);
+
   // Upload Queue State
   const [uploadQueue, setUploadQueue] = useState<Array<{
     id: string;
@@ -116,10 +122,10 @@ const Phone: React.FC = () => {
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
   const toast = useToast();
-  
+
   // Use shared Socket from context instead of creating new connections
   const { socket, connected: socketConnected } = useSocket();
-  
+
   // Frame comparison based auto-capture (no API calls for detection)
   const lastCapturedImageDataRef = useRef<ImageData | null>(null);
   const lastFrameImageDataRef = useRef<ImageData | null>(null);
@@ -185,31 +191,31 @@ const Phone: React.FC = () => {
       console.warn(`Frame size mismatch: ${frame1.width}x${frame1.height} vs ${frame2.width}x${frame2.height}`);
       return 100; // Different sizes = completely different
     }
-    
+
     if (frame1.data.length === 0 || frame2.data.length === 0) {
       console.warn('Empty frame data detected');
       return 100; // Empty = treat as different
     }
-    
+
     const data1 = frame1.data;
     const data2 = frame2.data;
     let diffCount = 0;
     const pixelCount = data1.length / 4;
-    
+
     // Sample every 4th pixel for performance (still accurate enough)
     for (let i = 0; i < data1.length; i += 16) {
       const r1 = data1[i], g1 = data1[i + 1], b1 = data1[i + 2];
       const r2 = data2[i], g2 = data2[i + 1], b2 = data2[i + 2];
-      
+
       // Calculate color distance
       const diff = Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2);
-      
+
       // Threshold for considering a pixel as "different"
       if (diff > 60) {
         diffCount++;
       }
     }
-    
+
     // Return percentage of different pixels
     return (diffCount / (pixelCount / 4)) * 100;
   };
@@ -219,55 +225,55 @@ const Phone: React.FC = () => {
   const isBlankImage = (imageData: ImageData): boolean => {
     const data = imageData.data;
     const pixelCount = data.length / 4;
-    
+
     if (pixelCount === 0) return true;
-    
+
     // Calculate mean and variance of grayscale values
     let sum = 0;
     let sumSq = 0;
     let minVal = 255;
     let maxVal = 0;
-    
+
     // Sample pixels for performance
     const step = 16;
     let sampledCount = 0;
-    
+
     for (let i = 0; i < data.length; i += step * 4) {
       const r = data[i];
       const g = data[i + 1];
       const b = data[i + 2];
-      
+
       // Convert to grayscale
       const gray = (r + g + b) / 3;
-      
+
       sum += gray;
       sumSq += gray * gray;
       sampledCount++;
-      
+
       if (gray < minVal) minVal = gray;
       if (gray > maxVal) maxVal = gray;
     }
-    
+
     const mean = sum / sampledCount;
     const variance = (sumSq / sampledCount) - (mean * mean);
     const stdDev = Math.sqrt(variance);
     const range = maxVal - minVal;
-    
+
     // Log for debugging
     console.log(`Image analysis: mean=${mean.toFixed(1)}, stdDev=${stdDev.toFixed(1)}, range=${range}`);
-    
+
     // Image is considered blank if:
     // 1. Very low variance (uniform color) - stdDev < 15
     // 2. Narrow color range - range < 50
     // 3. OR if it's mostly gray (mean between 80-180) with low contrast
     const isLowContrast = stdDev < 15 && range < 50;
     const isUniformGray = mean > 80 && mean < 180 && stdDev < 20 && range < 60;
-    
+
     if (isLowContrast || isUniformGray) {
       console.log('⚠️ Blank/uniform image detected - will be rejected');
       return true;
     }
-    
+
     return false;
   };
 
@@ -275,11 +281,11 @@ const Phone: React.FC = () => {
   const getCurrentFrameData = (): ImageData | null => {
     try {
       if (!videoRef.current || !comparisonCanvasRef.current) return null;
-      
+
       const video = videoRef.current;
       const canvas = comparisonCanvasRef.current;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      
+
       if (!ctx || !video.videoWidth || video.paused || video.ended) {
         if (video.paused) {
           console.warn('Video paused - attempting resume...');
@@ -287,26 +293,26 @@ const Phone: React.FC = () => {
         }
         return null;
       }
-      
+
       // Use small size for fast comparison (160x120)
       canvas.width = 160;
       canvas.height = 120;
-      
+
       try {
         ctx.drawImage(video, 0, 0, 160, 120);
       } catch (drawError) {
         console.warn('Frame draw error:', drawError);
         return null;
       }
-      
+
       const imageData = ctx.getImageData(0, 0, 160, 120);
-      
+
       // Validate frame data
       if (!imageData || !imageData.data || imageData.data.length === 0) {
         console.warn('Invalid frame data');
         return null;
       }
-      
+
       return imageData;
     } catch (error) {
       console.error('getCurrentFrameData error:', error);
@@ -322,11 +328,11 @@ const Phone: React.FC = () => {
     if (autoCaptureIntervalRef.current) {
       clearInterval(autoCaptureIntervalRef.current);
     }
-    
+
     autoCaptureIntervalRef.current = setInterval(() => {
       try {
         if (isCapturingRef.current || captureCooldownRef.current || !videoRef.current) return;
-        
+
         // Check if video stream is still active
         const video = videoRef.current;
         if (!video.videoWidth || video.videoWidth === 0 || video.paused || video.ended) {
@@ -336,21 +342,21 @@ const Phone: React.FC = () => {
           }
           return;
         }
-        
+
         const currentFrame = getCurrentFrameData();
         if (!currentFrame) return;
-        
+
         // First capture: no previous frame to compare
         if (!lastCapturedImageDataRef.current) {
           // Wait for document to be stable for 3 consecutive frames
           if (lastFrameImageDataRef.current) {
             const frameDiff = compareFrames(currentFrame, lastFrameImageDataRef.current);
-            
+
             if (frameDiff < 5) {
               // Frame is stable (< 5% change)
               stableFrameCountRef.current++;
               setFrameChangeStatus('detecting');
-              
+
               if (stableFrameCountRef.current >= 2) {
                 // Stable for 1 second - capture first document
                 console.log('📷 First document stable - capturing...');
@@ -366,19 +372,19 @@ const Phone: React.FC = () => {
               setFrameChangeStatus('waiting');
             }
           }
-          
+
           lastFrameImageDataRef.current = currentFrame;
           return;
         }
-        
+
         // Compare current frame with last CAPTURED frame
         const diffFromCaptured = compareFrames(currentFrame, lastCapturedImageDataRef.current);
-        
+
         // Also compare with previous frame to detect stability
-        const diffFromLastFrame = lastFrameImageDataRef.current 
-          ? compareFrames(currentFrame, lastFrameImageDataRef.current) 
+        const diffFromLastFrame = lastFrameImageDataRef.current
+          ? compareFrames(currentFrame, lastFrameImageDataRef.current)
           : 100;
-        
+
         // Document changed significantly from captured (> 25% difference)
         // AND current frame is stable (< 5% change from previous frame)
         if (diffFromCaptured > 25) {
@@ -387,7 +393,7 @@ const Phone: React.FC = () => {
             // And it's stable
             stableFrameCountRef.current++;
             setFrameChangeStatus('ready');
-            
+
             if (stableFrameCountRef.current >= 2) {
               // New stable document - capture it!
               console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
@@ -407,9 +413,9 @@ const Phone: React.FC = () => {
           stableFrameCountRef.current = 0;
           setFrameChangeStatus('waiting');
         }
-        
+
         lastFrameImageDataRef.current = currentFrame;
-        
+
       } catch (error) {
         console.error('Frame comparison loop error:', error);
         // Continue loop even on error - don't stop the interval
@@ -418,7 +424,38 @@ const Phone: React.FC = () => {
   }, []);
 
   // Start continuous auto-capture mode with frame comparison
-  const startAutoCapture = useCallback((source: 'local' | 'dashboard' = 'local', documentCount?: number) => {
+  // Applies initial calibration delay before first document capture when triggered from dashboard
+  const startAutoCapture = useCallback(async (source: 'local' | 'dashboard' = 'local', documentCount?: number) => {
+    // Reset the initial delay flag when starting a new capture session
+    hasAppliedInitialDelayRef.current = false;
+    
+    // If triggered from dashboard, apply the calibration delay first
+    if (source === 'dashboard' && initialDelay > 0) {
+      setIsWaitingForInitialDelay(true);
+      toast({
+        title: '⏳ Waiting for Printer...',
+        description: `Starting capture in ${initialDelay} seconds (printer warmup delay)`,
+        status: 'info',
+        duration: initialDelay * 1000,
+      });
+      
+      try {
+        await startDelayCountdown();
+        hasAppliedInitialDelayRef.current = true;
+      } catch (e) {
+        // Countdown was cancelled
+        setIsWaitingForInitialDelay(false);
+        toast({
+          title: 'Capture Cancelled',
+          description: 'Initial delay was cancelled',
+          status: 'warning',
+          duration: 2000,
+        });
+        return;
+      }
+      setIsWaitingForInitialDelay(false);
+    }
+    
     setAutoCapture(true);
     setAutoCaptureCount(0);
     autoCaptureCountRef.current = 0;
@@ -428,24 +465,24 @@ const Phone: React.FC = () => {
     setFrameChangeStatus('waiting');
     setAutoCaptureSource(source);
     if (documentCount) setPendingDocumentCount(documentCount);
-    
+
     // Start frame comparison loop
     startFrameComparisonLoop();
-    
+
     // Notify dashboard if started locally
     if (source === 'local' && socket) {
       socket.emit('auto_capture_state_changed', { enabled: true, source: 'phone' });
     }
-    
+
     toast({
       title: source === 'dashboard' ? '📱 Auto-Capture Started!' : 'Auto-Capture Enabled',
-      description: source === 'dashboard' 
+      description: source === 'dashboard'
         ? `Ready to capture ${documentCount || 'multiple'} document(s). Place documents one by one.`
         : 'Place documents one by one. Each new document will be captured automatically.',
       status: 'success',
       duration: 3000,
     });
-  }, [socket, toast, startFrameComparisonLoop]);
+  }, [socket, toast, startFrameComparisonLoop, initialDelay, startDelayCountdown]);
 
   // Stop continuous auto-capture mode
   const stopAutoCapture = useCallback(() => {
@@ -458,22 +495,27 @@ const Phone: React.FC = () => {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
     }
+    // Cancel calibration countdown if running
+    cancelCountdown();
+    setIsWaitingForInitialDelay(false);
+    hasAppliedInitialDelayRef.current = false;
+    
     setCountdown(null);
     setAutoCapture(false);
     setFrameChangeStatus('waiting');
     lastCapturedImageDataRef.current = null;
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
-    
+
     // Notify dashboard that auto-capture stopped
     if (socket) {
       socket.emit('auto_capture_state_changed', { enabled: false, source: 'phone', capturedCount: autoCaptureCountRef.current });
     }
-    
+
     const wasRemote = autoCaptureSource === 'dashboard';
     setAutoCaptureSource(null);
     setPendingDocumentCount(0);
-    
+
     if (autoCaptureCountRef.current > 0) {
       toast({
         title: 'Auto-Capture Stopped',
@@ -488,10 +530,10 @@ const Phone: React.FC = () => {
   useEffect(() => {
     const processQueue = async () => {
       if (isProcessingQueue || uploadQueue.length === 0) return;
-      
+
       setIsProcessingQueue(true);
       const item = uploadQueue[0];
-      
+
       try {
         const formData = new FormData();
         formData.append('file', item.blob, item.filename);
@@ -502,7 +544,7 @@ const Phone: React.FC = () => {
         await apiClient.post(API_ENDPOINTS.upload, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        
+
         toast({
           title: 'Upload complete',
           description: `${item.filename} processed`,
@@ -525,13 +567,13 @@ const Phone: React.FC = () => {
         setIsProcessingQueue(false);
       }
     };
-    
+
     processQueue();
   }, [uploadQueue, isProcessingQueue, toast]);
 
   // Ref to hold latest captureInBackground function to avoid stale closures in interval
   const captureInBackgroundRef = useRef<(() => Promise<void>) | null>(null);
-  
+
   const startAsyncUpload = useCallback((blob: Blob, filename: string, optionsSnapshot: typeof processingOptions) => {
     // Add to queue instead of immediate upload
     setUploadQueue(prev => [...prev, {
@@ -554,31 +596,31 @@ const Phone: React.FC = () => {
   // Background capture without freezing camera
   const captureInBackground = useCallback(async () => {
     if (isCapturingRef.current || !videoRef.current || !canvasRef.current) return;
-    
+
     isCapturingRef.current = true;
     setFrameChangeStatus('captured');
-    
+
     try {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       const context = canvas.getContext('2d', { willReadFrequently: true });
-      
+
       if (!context || !video.videoWidth || video.videoWidth === 0) {
         console.warn('Video not ready for capture, skipping...');
         setFrameChangeStatus('waiting');
         return;
       }
-      
+
       // Capture full resolution frame
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       context.drawImage(video, 0, 0);
-      
+
       // Store the captured frame for comparison
       const capturedFrame = getCurrentFrameData();
       if (capturedFrame) {
         lastCapturedImageDataRef.current = capturedFrame;
-        
+
         // Check if the image is blank/uniform (gray, no document content)
         if (isBlankImage(capturedFrame)) {
           console.log('⚠️ Blank image detected - skipping upload');
@@ -596,7 +638,7 @@ const Phone: React.FC = () => {
           return;
         }
       }
-      
+
       // Convert to blob
       const blob = await new Promise<Blob | null>((resolve) => {
         canvas.toBlob(
@@ -605,7 +647,7 @@ const Phone: React.FC = () => {
           0.9
         );
       });
-      
+
       if (!blob) {
         console.warn('Failed to create blob from canvas');
         setFrameChangeStatus('waiting');
@@ -617,12 +659,12 @@ const Phone: React.FC = () => {
 
       // Kick off upload without blocking future captures
       startAsyncUpload(blob, filename, optionsSnapshot);
-      
+
       // Reset frame tracking so next document can be detected immediately
       stableFrameCountRef.current = 0;
       lastFrameImageDataRef.current = null;
       setFrameChangeStatus('waiting');
-      
+
     } catch (err) {
       console.error('Background capture error:', err);
       lastCapturedImageDataRef.current = null;
@@ -642,8 +684,8 @@ const Phone: React.FC = () => {
     const video = videoRef.current;
     if (!video || video.readyState < 2 || !video.videoWidth) return null;
 
-    // Use offscreen canvas for detection
-    const targetWidth = 160;
+    // Use offscreen canvas for detection - slightly higher res for better accuracy
+    const targetWidth = 200;
     const aspectRatio = video.videoHeight / video.videoWidth;
     const targetHeight = Math.round(targetWidth * aspectRatio);
 
@@ -658,7 +700,7 @@ const Phone: React.FC = () => {
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     const { data, width, height } = imageData;
 
-    // Convert to grayscale
+    // Convert to grayscale with edge-aware enhancement
     const gray: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
@@ -667,69 +709,136 @@ const Phone: React.FC = () => {
       }
     }
 
-    // Apply Gaussian blur (3x3)
+    // Apply Gaussian blur (5x5 for better noise reduction)
     const blurred: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
-    const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
-    const kernelSum = 16;
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
+    const kernel5x5 = [
+      1, 4, 6, 4, 1,
+      4, 16, 24, 16, 4,
+      6, 24, 36, 24, 6,
+      4, 16, 24, 16, 4,
+      1, 4, 6, 4, 1
+    ];
+    const kernel5x5Sum = 256;
+
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
         let sum = 0;
         let k = 0;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            sum += gray[y + dy][x + dx] * kernel[k++];
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            sum += gray[y + dy][x + dx] * kernel5x5[k++];
           }
         }
-        blurred[y][x] = sum / kernelSum;
+        blurred[y][x] = sum / kernel5x5Sum;
       }
     }
 
-    // Compute gradients using Sobel operator
+    // Compute gradients using Sobel operator with direction
     const gradMag: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const gx = -blurred[y-1][x-1] + blurred[y-1][x+1]
-                 - 2*blurred[y][x-1] + 2*blurred[y][x+1]
-                 - blurred[y+1][x-1] + blurred[y+1][x+1];
-        const gy = -blurred[y-1][x-1] - 2*blurred[y-1][x] - blurred[y-1][x+1]
-                 + blurred[y+1][x-1] + 2*blurred[y+1][x] + blurred[y+1][x+1];
+    const gradDir: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        const gx = -blurred[y - 1][x - 1] + blurred[y - 1][x + 1]
+          - 2 * blurred[y][x - 1] + 2 * blurred[y][x + 1]
+          - blurred[y + 1][x - 1] + blurred[y + 1][x + 1];
+        const gy = -blurred[y - 1][x - 1] - 2 * blurred[y - 1][x] - blurred[y - 1][x + 1]
+          + blurred[y + 1][x - 1] + 2 * blurred[y + 1][x] + blurred[y + 1][x + 1];
         gradMag[y][x] = Math.sqrt(gx * gx + gy * gy);
+        gradDir[y][x] = Math.atan2(gy, gx);
       }
     }
 
-    // Find edge threshold using Otsu's method
+    // Non-maximum suppression for thinner, more precise edges
+    const suppressed: number[][] = Array(height).fill(null).map(() => Array(width).fill(0));
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        const angle = gradDir[y][x];
+        const mag = gradMag[y][x];
+
+        // Quantize angle to nearest 45 degrees
+        let dx1 = 0, dy1 = 0, dx2 = 0, dy2 = 0;
+        const angleNorm = ((angle * 180 / Math.PI) + 180) % 180;
+
+        if (angleNorm < 22.5 || angleNorm >= 157.5) {
+          dx1 = 1; dy1 = 0; dx2 = -1; dy2 = 0;
+        } else if (angleNorm < 67.5) {
+          dx1 = 1; dy1 = 1; dx2 = -1; dy2 = -1;
+        } else if (angleNorm < 112.5) {
+          dx1 = 0; dy1 = 1; dx2 = 0; dy2 = -1;
+        } else {
+          dx1 = -1; dy1 = 1; dx2 = 1; dy2 = -1;
+        }
+
+        const n1 = gradMag[y + dy1]?.[x + dx1] ?? 0;
+        const n2 = gradMag[y + dy2]?.[x + dx2] ?? 0;
+
+        // Keep only local maxima
+        if (mag >= n1 && mag >= n2) {
+          suppressed[y][x] = mag;
+        }
+      }
+    }
+
+    // Adaptive dual threshold (Canny-style hysteresis)
     const histogram = new Array(256).fill(0);
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const bin = Math.min(255, Math.floor(gradMag[y][x]));
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        const bin = Math.min(255, Math.floor(suppressed[y][x]));
         histogram[bin]++;
       }
     }
-    const totalPixels = (width - 2) * (height - 2);
-    let sumTotal = 0;
-    for (let i = 0; i < 256; i++) sumTotal += i * histogram[i];
-    
-    let sumBack = 0, wBack = 0, maxVar = 0, threshold = 50;
-    for (let t = 0; t < 256; t++) {
-      wBack += histogram[t];
-      if (wBack === 0) continue;
-      const wFore = totalPixels - wBack;
-      if (wFore === 0) break;
-      sumBack += t * histogram[t];
-      const meanBack = sumBack / wBack;
-      const meanFore = (sumTotal - sumBack) / wFore;
-      const varBetween = wBack * wFore * (meanBack - meanFore) * (meanBack - meanFore);
-      if (varBetween > maxVar) {
-        maxVar = varBetween;
-        threshold = t;
+
+    // Find thresholds using percentiles for adaptive behavior
+    const totalPixels = (width - 4) * (height - 4);
+    let cumulative = 0;
+    let lowThreshold = 20, highThreshold = 50;
+
+    for (let i = 0; i < 256; i++) {
+      cumulative += histogram[i];
+      if (cumulative > totalPixels * 0.7 && lowThreshold === 20) {
+        lowThreshold = Math.max(15, i);
+      }
+      if (cumulative > totalPixels * 0.9) {
+        highThreshold = Math.max(lowThreshold * 2, i);
+        break;
       }
     }
 
-    // Create binary edge map
+    // Apply hysteresis thresholding
     const edges: boolean[][] = Array(height).fill(null).map(() => Array(width).fill(false));
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        edges[y][x] = gradMag[y][x] > threshold;
+    const strong: boolean[][] = Array(height).fill(null).map(() => Array(width).fill(false));
+
+    // Mark strong edges
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
+        if (suppressed[y][x] >= highThreshold) {
+          strong[y][x] = true;
+          edges[y][x] = true;
+        }
+      }
+    }
+
+    // Connect weak edges to strong edges
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (let y = 2; y < height - 2; y++) {
+        for (let x = 2; x < width - 2; x++) {
+          if (!edges[y][x] && suppressed[y][x] >= lowThreshold) {
+            // Check if connected to strong edge
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (edges[y + dy]?.[x + dx]) {
+                  edges[y][x] = true;
+                  changed = true;
+                  break;
+                }
+              }
+              if (edges[y][x]) break;
+            }
+          }
+        }
       }
     }
 
@@ -743,22 +852,21 @@ const Phone: React.FC = () => {
         { dx: 1, dy: 0 }, { dx: 1, dy: 1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 1 },
         { dx: -1, dy: 0 }, { dx: -1, dy: -1 }, { dx: 0, dy: -1 }, { dx: 1, dy: -1 }
       ];
-      
+
       let x = startX, y = startY;
       let dir = 0;
-      
+
       do {
         contour.push({ x, y });
         visited[y][x] = true;
-        
-        // Search for next edge pixel
+
         let found = false;
         for (let i = 0; i < 8; i++) {
-          const checkDir = (dir + 6 + i) % 8; // Start from dir-2 (CCW)
+          const checkDir = (dir + 6 + i) % 8;
           const nx = x + directions[checkDir].dx;
           const ny = y + directions[checkDir].dy;
-          
-          if (nx >= 0 && nx < width && ny >= 0 && ny < height && edges[ny][nx]) {
+
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height && edges[ny][nx] && !visited[ny][nx]) {
             x = nx;
             y = ny;
             dir = checkDir;
@@ -766,19 +874,19 @@ const Phone: React.FC = () => {
             break;
           }
         }
-        
+
         if (!found) break;
       } while (!(x === startX && y === startY) && contour.length < 5000);
-      
+
       return contour;
     };
 
-    // Find all contours
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
+    // Find all contours (minimum length increased for better filtering)
+    for (let y = 2; y < height - 2; y++) {
+      for (let x = 2; x < width - 2; x++) {
         if (edges[y][x] && !visited[y][x]) {
           const contour = traceContour(x, y);
-          if (contour.length > 50) {
+          if (contour.length > 80) {
             contours.push(contour);
           }
         }
@@ -787,103 +895,193 @@ const Phone: React.FC = () => {
 
     if (contours.length === 0) return null;
 
-    // Douglas-Peucker simplification to approximate polygon
+    // Douglas-Peucker simplification
     const simplifyContour = (points: { x: number; y: number }[], epsilon: number): { x: number; y: number }[] => {
       if (points.length < 3) return points;
-      
+
       let maxDist = 0;
       let maxIdx = 0;
       const first = points[0];
       const last = points[points.length - 1];
-      
+
       for (let i = 1; i < points.length - 1; i++) {
         const p = points[i];
-        // Distance from point to line
         const num = Math.abs((last.y - first.y) * p.x - (last.x - first.x) * p.y + last.x * first.y - last.y * first.x);
         const den = Math.sqrt((last.y - first.y) ** 2 + (last.x - first.x) ** 2);
         const dist = den > 0 ? num / den : 0;
-        
+
         if (dist > maxDist) {
           maxDist = dist;
           maxIdx = i;
         }
       }
-      
+
       if (maxDist > epsilon) {
         const left = simplifyContour(points.slice(0, maxIdx + 1), epsilon);
         const right = simplifyContour(points.slice(maxIdx), epsilon);
         return [...left.slice(0, -1), ...right];
       }
-      
+
       return [first, last];
+    };
+
+    // Helper: check if quadrilateral is convex
+    const isConvex = (pts: { x: number; y: number }[]): boolean => {
+      if (pts.length !== 4) return false;
+      let sign = 0;
+      for (let i = 0; i < 4; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % 4];
+        const p3 = pts[(i + 2) % 4];
+        const cross = (p2.x - p1.x) * (p3.y - p2.y) - (p2.y - p1.y) * (p3.x - p2.x);
+        if (cross !== 0) {
+          if (sign === 0) sign = cross > 0 ? 1 : -1;
+          else if ((cross > 0 ? 1 : -1) !== sign) return false;
+        }
+      }
+      return true;
+    };
+
+    // Helper: calculate angle at corner (in degrees)
+    const cornerAngle = (p1: { x: number, y: number }, p2: { x: number, y: number }, p3: { x: number, y: number }): number => {
+      const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+      const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+      const dot = v1.x * v2.x + v1.y * v2.y;
+      const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+      const mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+      if (mag1 === 0 || mag2 === 0) return 0;
+      return Math.acos(Math.max(-1, Math.min(1, dot / (mag1 * mag2)))) * 180 / Math.PI;
     };
 
     // Find the best quadrilateral
     let bestQuad: { x: number; y: number }[] | null = null;
-    let bestArea = 0;
+    let bestScore = 0;
 
     for (const contour of contours) {
-      // Simplify to find approximate polygon
-      const simplified = simplifyContour(contour, 5);
-      
-      // If we got close to 4 vertices, try to extract quad
-      if (simplified.length >= 4 && simplified.length <= 8) {
-        // Find 4 most extreme corners
-        let tl = simplified[0], tr = simplified[0], bl = simplified[0], br = simplified[0];
-        
-        for (const p of simplified) {
-          if (p.x + p.y < tl.x + tl.y) tl = p;
-          if (p.x - p.y > tr.x - tr.y) tr = p;
-          if (p.x - p.y < bl.x - bl.y) bl = p;
-          if (p.x + p.y > br.x + br.y) br = p;
+      const simplified = simplifyContour(contour, 4);
+
+      if (simplified.length >= 4 && simplified.length <= 10) {
+        // Find 4 corners using distance from centroid + angle
+        const cx = simplified.reduce((s, p) => s + p.x, 0) / simplified.length;
+        const cy = simplified.reduce((s, p) => s + p.y, 0) / simplified.length;
+
+        // Score each point by distance from center
+        const scored = simplified.map(p => ({
+          ...p,
+          dist: Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2),
+          angle: Math.atan2(p.y - cy, p.x - cx)
+        }));
+
+        // Sort by angle and pick 4 points from 4 quadrants
+        scored.sort((a, b) => a.angle - b.angle);
+
+        // Find points in each quadrant (TL, TR, BR, BL)
+        const quadrants: { x: number; y: number; dist: number }[] = [
+          { x: 0, y: 0, dist: 0 }, // TL: angle ~135 to 180 or -180 to -90
+          { x: 0, y: 0, dist: 0 }, // TR: angle -90 to 0
+          { x: 0, y: 0, dist: 0 }, // BR: angle 0 to 90
+          { x: 0, y: 0, dist: 0 }, // BL: angle 90 to 135
+        ];
+
+        for (const p of scored) {
+          const deg = p.angle * 180 / Math.PI;
+          let qi = -1;
+          if (deg >= -180 && deg < -90) qi = 0; // TL
+          else if (deg >= -90 && deg < 0) qi = 1; // TR
+          else if (deg >= 0 && deg < 90) qi = 2; // BR
+          else qi = 3; // BL
+
+          if (p.dist > quadrants[qi].dist) {
+            quadrants[qi] = { x: p.x, y: p.y, dist: p.dist };
+          }
         }
-        
-        // Calculate area using shoelace formula
-        const area = 0.5 * Math.abs(
-          (tl.x * tr.y - tr.x * tl.y) +
-          (tr.x * br.y - br.x * tr.y) +
-          (br.x * bl.y - bl.x * br.y) +
-          (bl.x * tl.y - tl.x * bl.y)
-        );
-        
-        // Must cover significant portion of frame
-        if (area > width * height * 0.1 && area > bestArea) {
-          bestArea = area;
-          bestQuad = [tl, tr, br, bl];
+
+        // Check if all quadrants have valid points
+        if (quadrants.every(q => q.dist > 0)) {
+          const quad = quadrants.map(q => ({ x: q.x, y: q.y }));
+
+          // Validate convexity
+          if (!isConvex(quad)) continue;
+
+          // Check corner angles (should be 60-150 degrees for reasonable documents)
+          const angles = [
+            cornerAngle(quad[3], quad[0], quad[1]),
+            cornerAngle(quad[0], quad[1], quad[2]),
+            cornerAngle(quad[1], quad[2], quad[3]),
+            cornerAngle(quad[2], quad[3], quad[0]),
+          ];
+          if (angles.some(a => a < 45 || a > 160)) continue;
+
+          // Calculate area
+          const area = 0.5 * Math.abs(
+            (quad[0].x * quad[1].y - quad[1].x * quad[0].y) +
+            (quad[1].x * quad[2].y - quad[2].x * quad[1].y) +
+            (quad[2].x * quad[3].y - quad[3].x * quad[2].y) +
+            (quad[3].x * quad[0].y - quad[0].x * quad[3].y)
+          );
+
+          // Score by area and angle regularity
+          const angleVariance = angles.reduce((s, a) => s + (a - 90) ** 2, 0) / 4;
+          const score = area * (1 - angleVariance / 10000);
+
+          if (area > width * height * 0.08 && score > bestScore) {
+            bestScore = score;
+            bestQuad = quad;
+          }
         }
       }
     }
 
-    // If no good quad found from contours, try convex hull on all edge points
+    // Fallback: use edge point extremes if no good quad from contours
     if (!bestQuad) {
       const allEdgePoints: { x: number; y: number }[] = [];
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
+      for (let y = 2; y < height - 2; y++) {
+        for (let x = 2; x < width - 2; x++) {
           if (edges[y][x]) allEdgePoints.push({ x, y });
         }
       }
-      
-      if (allEdgePoints.length < 100) return null;
-      
-      // Find extreme points for quad corners
-      let tl = allEdgePoints[0], tr = allEdgePoints[0], bl = allEdgePoints[0], br = allEdgePoints[0];
-      
+
+      if (allEdgePoints.length < 150) return null;
+
+      // Use centroid-based quadrant selection
+      const cx = allEdgePoints.reduce((s, p) => s + p.x, 0) / allEdgePoints.length;
+      const cy = allEdgePoints.reduce((s, p) => s + p.y, 0) / allEdgePoints.length;
+
+      const quadrants: { x: number; y: number; dist: number }[] = [
+        { x: 0, y: 0, dist: 0 },
+        { x: 0, y: 0, dist: 0 },
+        { x: 0, y: 0, dist: 0 },
+        { x: 0, y: 0, dist: 0 },
+      ];
+
       for (const p of allEdgePoints) {
-        if (p.x + p.y < tl.x + tl.y) tl = p;
-        if (p.x - p.y > tr.x - tr.y) tr = p;
-        if (p.x - p.y < bl.x - bl.y) bl = p;
-        if (p.x + p.y > br.x + br.y) br = p;
+        const angle = Math.atan2(p.y - cy, p.x - cx) * 180 / Math.PI;
+        const dist = Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2);
+
+        let qi = -1;
+        if (angle >= -180 && angle < -90) qi = 0;
+        else if (angle >= -90 && angle < 0) qi = 1;
+        else if (angle >= 0 && angle < 90) qi = 2;
+        else qi = 3;
+
+        if (dist > quadrants[qi].dist) {
+          quadrants[qi] = { x: p.x, y: p.y, dist };
+        }
       }
-      
-      const area = 0.5 * Math.abs(
-        (tl.x * tr.y - tr.x * tl.y) +
-        (tr.x * br.y - br.x * tr.y) +
-        (br.x * bl.y - bl.x * br.y) +
-        (bl.x * tl.y - tl.x * bl.y)
-      );
-      
-      if (area > width * height * 0.1) {
-        bestQuad = [tl, tr, br, bl];
+
+      if (quadrants.every(q => q.dist > 0)) {
+        const quad = quadrants.map(q => ({ x: q.x, y: q.y }));
+
+        const area = 0.5 * Math.abs(
+          (quad[0].x * quad[1].y - quad[1].x * quad[0].y) +
+          (quad[1].x * quad[2].y - quad[2].x * quad[1].y) +
+          (quad[2].x * quad[3].y - quad[3].x * quad[2].y) +
+          (quad[3].x * quad[0].y - quad[0].x * quad[3].y)
+        );
+
+        if (area > width * height * 0.08) {
+          bestQuad = quad;
+        }
       }
     }
 
@@ -908,13 +1106,42 @@ const Phone: React.FC = () => {
     }
 
     let lastQuad: DetectedQuad | null = null;
-    const smoothingFactor = 0.3; // Lower = smoother transitions
+    let frameCount = 0;
+    let stableCount = 0; // Track how many stable frames
+    let noDetectionCount = 0; // Track frames without detection
+
+    // Adaptive smoothing - smoother when stable, more responsive when changing
+    const getSmoothing = () => stableCount > 5 ? 0.15 : 0.35;
 
     const tick = () => {
+      frameCount++;
+
+      // Skip every other frame to reduce CPU load
+      if (frameCount % 2 !== 0) {
+        detectionRafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       const quad = detectDocumentQuad();
+
       if (quad) {
-        // Smooth the quad transitions to reduce jitter
+        noDetectionCount = 0;
+
         if (lastQuad) {
+          // Calculate movement from last frame
+          const movement = Math.abs(quad.topLeft.x - lastQuad.topLeft.x) +
+            Math.abs(quad.topLeft.y - lastQuad.topLeft.y) +
+            Math.abs(quad.bottomRight.x - lastQuad.bottomRight.x) +
+            Math.abs(quad.bottomRight.y - lastQuad.bottomRight.y);
+
+          // If very stable, increase stability counter
+          if (movement < 0.02) {
+            stableCount = Math.min(stableCount + 1, 20);
+          } else {
+            stableCount = Math.max(0, stableCount - 2);
+          }
+
+          const smoothingFactor = getSmoothing();
           const smoothed: DetectedQuad = {
             topLeft: {
               x: lastQuad.topLeft.x + (quad.topLeft.x - lastQuad.topLeft.x) * smoothingFactor,
@@ -939,7 +1166,16 @@ const Phone: React.FC = () => {
           lastQuad = quad;
           setDetectedQuad(quad);
         }
+      } else {
+        // Hysteresis: require multiple no-detection frames before hiding
+        noDetectionCount++;
+        if (noDetectionCount > 5) {
+          lastQuad = null;
+          stableCount = 0;
+          setDetectedQuad(null);
+        }
       }
+
       detectionRafRef.current = requestAnimationFrame(tick);
     };
 
@@ -968,16 +1204,16 @@ const Phone: React.FC = () => {
           height: { ideal: 1080 },
         },
       });
-      
+
       setStream(mediaStream);
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
           const v = videoRef.current;
           if (!v) return;
           v.play().catch(e => console.error("Video play failed:", e));
-          
+
           // Sync orientation based on actual stream dimensions
           if (v.videoWidth && v.videoHeight) {
             const isActualPortrait = v.videoHeight > v.videoWidth;
@@ -1096,7 +1332,7 @@ const Phone: React.FC = () => {
         status: 'success',
         duration: 2000,
       });
-      
+
       // Show additional message about checking dashboard
       // Removed queue length check to avoid dependency on uploadQueue.length
       setTimeout(() => {
@@ -1222,7 +1458,7 @@ const Phone: React.FC = () => {
     socket.on('start_auto_capture', (data: any) => {
       console.log('Received auto-capture command from Dashboard:', data);
       const documentCount = data?.documentCount || 1;
-      
+
       // Show immediate visual feedback toast
       toast({
         title: '📱 Auto-Capture Incoming!',
@@ -1232,41 +1468,41 @@ const Phone: React.FC = () => {
         isClosable: true,
         position: 'top',
       });
-      
+
       // Ensure camera mode is active
       if (captureMode !== 'camera' || !stream) {
         showMessage('💡 Switching to Camera mode...');
         handleCaptureMode('camera');
       }
-      
+
       // Start 5-second countdown
       setCountdown(5);
       setPendingDocumentCount(documentCount);
-      
+
       // Clear any existing countdown
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
       }
-      
+
       countdownIntervalRef.current = setInterval(() => {
         setCountdown(prev => {
           if (prev === null || prev <= 1) {
             // Countdown finished - start auto-capture
             clearInterval(countdownIntervalRef.current!);
             countdownIntervalRef.current = null;
-            
+
             // Start auto-capture after short delay to ensure camera is ready
             setTimeout(() => {
               startAutoCapture('dashboard', documentCount);
             }, 100);
-            
+
             return null;
           }
           return prev - 1;
         });
       }, 1000);
     });
-    
+
     // Handle stop auto-capture from dashboard
     socket.on('stop_auto_capture', () => {
       console.log('Received stop auto-capture from Dashboard');
@@ -1278,13 +1514,13 @@ const Phone: React.FC = () => {
         duration: 2000,
       });
     });
-    
+
     // Handle sync request from dashboard
     socket.on('request_auto_capture_state', () => {
-      socket.emit('auto_capture_state_changed', { 
-        enabled: autoCapture, 
+      socket.emit('auto_capture_state_changed', {
+        enabled: autoCapture,
         source: 'phone',
-        capturedCount: autoCaptureCountRef.current 
+        capturedCount: autoCaptureCountRef.current
       });
     });
 
@@ -1356,7 +1592,7 @@ const Phone: React.FC = () => {
             {connected ? 'Connected to processing hub' : 'Link offline'}
           </Text>
         </Flex>
-        
+
         {/* Queue Indicator */}
         {(uploadQueue.length > 0 || isProcessingQueue) && (
           <Flex
@@ -1661,7 +1897,7 @@ const Phone: React.FC = () => {
                           )}
                         </mask>
                       </defs>
-                      
+
                       {/* Darkened area outside document */}
                       <rect
                         x="0" y="0" width="100" height="100"
@@ -1685,13 +1921,13 @@ const Phone: React.FC = () => {
                             strokeWidth="0.5"
                             strokeLinejoin="round"
                           />
-                          
+
                           {/* Corner circles with glow effect */}
                           <circle cx={detectedQuad.topLeft.x * 100} cy={detectedQuad.topLeft.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
                           <circle cx={detectedQuad.topRight.x * 100} cy={detectedQuad.topRight.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
                           <circle cx={detectedQuad.bottomRight.x * 100} cy={detectedQuad.bottomRight.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
                           <circle cx={detectedQuad.bottomLeft.x * 100} cy={detectedQuad.bottomLeft.y * 100} r="2" fill="#22c55e" filter="url(#glow)" />
-                          
+
                           {/* Corner L-brackets */}
                           {/* Top-left bracket */}
                           <path
@@ -1733,14 +1969,14 @@ const Phone: React.FC = () => {
                             strokeWidth="1"
                             strokeLinecap="round"
                           />
-                          
+
                           {/* Glow filter */}
                           <defs>
                             <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                              <feGaussianBlur stdDeviation="0.5" result="coloredBlur"/>
+                              <feGaussianBlur stdDeviation="0.5" result="coloredBlur" />
                               <feMerge>
-                                <feMergeNode in="coloredBlur"/>
-                                <feMergeNode in="SourceGraphic"/>
+                                <feMergeNode in="coloredBlur" />
+                                <feMergeNode in="SourceGraphic" />
                               </feMerge>
                             </filter>
                           </defs>
@@ -1858,6 +2094,60 @@ const Phone: React.FC = () => {
                     </Flex>
                   )}
 
+                  {/* Calibration Delay Overlay - Shows when waiting for printer warmup */}
+                  {isWaitingForInitialDelay && isCountingDown && (
+                    <Flex
+                      position="absolute"
+                      top={0}
+                      left={0}
+                      right={0}
+                      bottom={0}
+                      align="center"
+                      justify="center"
+                      bg="rgba(121, 95, 238, 0.9)"
+                      zIndex={25}
+                      flexDirection="column"
+                    >
+                      <Box
+                        w={32}
+                        h={32}
+                        borderRadius="full"
+                        border="4px solid"
+                        borderColor="white"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
+                        mb={4}
+                      >
+                        <Text
+                          fontSize="6xl"
+                          fontWeight="bold"
+                          color="white"
+                        >
+                          {countdownValue}
+                        </Text>
+                      </Box>
+                      <Text fontSize="xl" color="white" fontWeight="bold">
+                        ⏳ Printer Warmup Delay
+                      </Text>
+                      <Text fontSize="md" color="whiteAlpha.800" mt={2} textAlign="center" maxW="80%">
+                        Waiting for printer to initialize before capturing documents...
+                      </Text>
+                      <Button
+                        mt={6}
+                        colorScheme="red"
+                        variant="solid"
+                        size="md"
+                        onClick={() => {
+                          cancelCountdown();
+                          setIsWaitingForInitialDelay(false);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </Flex>
+                  )}
+
                   {/* Auto-capture Status */}
                   {autoCapture && (
                     <Box
@@ -1866,9 +2156,9 @@ const Phone: React.FC = () => {
                       left={3}
                       bg={
                         frameChangeStatus === 'captured' ? 'green.500' :
-                        frameChangeStatus === 'ready' ? 'green.400' :
-                        frameChangeStatus === 'detecting' ? 'orange.400' :
-                        'blue.500'
+                          frameChangeStatus === 'ready' ? 'green.400' :
+                            frameChangeStatus === 'detecting' ? 'orange.400' :
+                              'blue.500'
                       }
                       color="white"
                       px={3}
@@ -1882,9 +2172,9 @@ const Phone: React.FC = () => {
                     >
                       <Box w={2} h={2} borderRadius="full" bg="white" animation="pulse 1s infinite" />
                       {frameChangeStatus === 'captured' ? '✓ Captured!' :
-                       frameChangeStatus === 'ready' ? '📸 Ready...' :
-                       frameChangeStatus === 'detecting' ? '👀 Detecting...' :
-                       `📷 ${autoCaptureCount} captured`}
+                        frameChangeStatus === 'ready' ? '📸 Ready...' :
+                          frameChangeStatus === 'detecting' ? '👀 Detecting...' :
+                            `📷 ${autoCaptureCount} captured`}
                       {autoCaptureSource === 'dashboard' && (
                         <Tag size="sm" colorScheme="blue" ml={1}>Dashboard</Tag>
                       )}
@@ -1975,9 +2265,9 @@ const Phone: React.FC = () => {
                     <Stack spacing={0}>
                       <Text fontWeight="600" fontSize="sm">
                         {frameChangeStatus === 'ready' ? '📸 New document detected - capturing...' :
-                         frameChangeStatus === 'detecting' ? '👀 Waiting for stable document...' :
-                         frameChangeStatus === 'captured' ? '✓ Captured! Place next document.' :
-                         `📷 Captured ${autoCaptureCount} documents`}
+                          frameChangeStatus === 'detecting' ? '👀 Waiting for stable document...' :
+                            frameChangeStatus === 'captured' ? '✓ Captured! Place next document.' :
+                              `📷 Captured ${autoCaptureCount} documents`}
                       </Text>
                       <Text fontSize="xs" color={muted}>
                         Place each document in view • Auto-captures when stable

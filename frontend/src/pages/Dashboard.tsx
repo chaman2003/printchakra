@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
+import { useCalibration } from '../context/CalibrationContext';
 import {
   Badge,
   Box,
@@ -477,6 +478,9 @@ const Dashboard: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
+
+  // Calibration delay for first document capture
+  const { initialDelay, isCalibrated } = useCalibration();
 
   // PaddleOCR state - initialize from localStorage for persistence across page reloads
   const [ocrResults, setOcrResults] = useState<Record<string, OCRResult>>(() => {
@@ -5902,6 +5906,26 @@ const Dashboard: React.FC = () => {
                                     </HStack>
                                   </>
                                 )}
+                                {/* Calibration Delay Indicator */}
+                                <Tooltip
+                                  label={`Phone will wait ${initialDelay}s before capturing first document (calibrated for printer warmup)`}
+                                  placement="top"
+                                  hasArrow
+                                >
+                                  <Badge
+                                    colorScheme={isCalibrated ? 'green' : 'orange'}
+                                    fontSize="xs"
+                                    px={2}
+                                    py={1}
+                                    borderRadius="md"
+                                    display="flex"
+                                    alignItems="center"
+                                    gap={1}
+                                  >
+                                    <Iconify icon="solar:clock-circle-bold" width={12} height={12} />
+                                    {initialDelay}s delay
+                                  </Badge>
+                                </Tooltip>
                               </HStack>
                               <HStack>
                                 <Button
@@ -6373,6 +6397,26 @@ const Dashboard: React.FC = () => {
                                 </HStack>
                               </>
                             )}
+                            {/* Calibration Delay Indicator */}
+                            <Tooltip
+                              label={`Phone will wait ${initialDelay}s before capturing first document (calibrated for printer warmup)`}
+                              placement="top"
+                              hasArrow
+                            >
+                              <Badge
+                                colorScheme={isCalibrated ? 'green' : 'orange'}
+                                fontSize="xs"
+                                px={2}
+                                py={1}
+                                borderRadius="md"
+                                display="flex"
+                                alignItems="center"
+                                gap={1}
+                              >
+                                <Iconify icon="solar:clock-circle-bold" width={12} height={12} />
+                                {initialDelay}s delay
+                              </Badge>
+                            </Tooltip>
                           </HStack>
                           <HStack>
                             <Button
@@ -6888,7 +6932,7 @@ const Dashboard: React.FC = () => {
         </MotionModalContent>
       </Modal>
 
-      {/* Device Info Modal */}
+      {/* Device Info Modal - Updated for Calibration */}
       <DeviceInfoPanel
         isOpen={deviceInfoModal.isOpen}
         onClose={deviceInfoModal.onClose}

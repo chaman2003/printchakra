@@ -16,6 +16,7 @@ import Dashboard from './pages/Dashboard';
 import Phone from './pages/Phone';
 import { Iconify, AnimatedBackground } from './components/common';
 import { SocketProvider } from './context/SocketContext';
+import { CalibrationProvider } from './context/CalibrationContext';
 
 function App() {
   const { colorMode, toggleColorMode } = useColorMode();
@@ -28,17 +29,18 @@ function App() {
 
   return (
     <SocketProvider>
-      <Router>
-        <Box minH="100vh" bg="transparent" position="relative">
-          <AnimatedBackground />
-          <Box
-            position="sticky"
-            top={0}
-            zIndex={999}
-            bg={navBg}
-            borderBottom={`1px solid ${navBorder}`}
-            boxShadow={navShadow}
-          >
+      <CalibrationProvider>
+        <Router>
+          <Box minH="100vh" bg="transparent" position="relative">
+            <AnimatedBackground />
+            <Box
+              position="sticky"
+              top={0}
+              zIndex={999}
+              bg={navBg}
+              borderBottom={`1px solid ${navBorder}`}
+              boxShadow={navShadow}
+            >
             <Container maxW="7xl" py={4}>
               <Flex align="center" justify="space-between">
                 <HStack spacing={3}>
@@ -108,7 +110,8 @@ function App() {
           </Box>
         </Box>
       </Router>
-    </SocketProvider>
+    </CalibrationProvider>
+  </SocketProvider>
   );
 }
 

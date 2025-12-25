@@ -6290,7 +6290,31 @@ if __name__ == "__main__":
     print(f"Text directory: {TEXT_DIR}")
     print("=" * 60)
 
+    # Configure SSL context if certificates are provided
+    import ssl
+    ssl_context = None
+    ssl_cert = os.environ.get('SSL_CERT')
+    ssl_key = os.environ.get('SSL_KEY')
+    
+    if ssl_cert and ssl_key and os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+        try:
+            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            ssl_context.load_cert_chain(ssl_cert, ssl_key)
+            print(f"[HTTPS] SSL enabled")
+            print(f"[HTTPS] Certificate: {ssl_cert}")
+            print(f"[HTTPS] Private Key: {ssl_key}")
+            local_ip = os.environ.get('LOCAL_IP', 'localhost')
+            print(f"[HTTPS] Access URL: https://{local_ip}:5000")
+        except Exception as e:
+            print(f"[HTTPS] Warning: Could not load SSL certificates: {e}")
+            print("[HTTPS] Falling back to HTTP")
+            ssl_context = None
+    else:
+        print("[HTTP] Running without SSL (use https-local.ps1 for HTTPS)")
+
+    print("=" * 60)
+
     # Run with Socket.IO
     socketio.run(
-        app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True  # Debug disabled for production
+        app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True, ssl_context=ssl_context
     )

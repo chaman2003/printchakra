@@ -1,0 +1,6 @@
+# Exclude generated SSL certificates
+*.pem
+*.key
+*.crt
+*.pfx
+*.p12

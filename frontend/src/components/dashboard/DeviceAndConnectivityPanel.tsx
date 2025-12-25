@@ -28,10 +28,11 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiTrash2, FiWifiOff } from 'react-icons/fi';
+import { FiCpu, FiDownload, FiMonitor, FiPrinter, FiRefreshCw, FiSettings, FiTrash2, FiWifiOff } from 'react-icons/fi';
 import { Iconify } from '../common';
 import apiClient from '../../apiClient';
 import { API_ENDPOINTS } from '../../config';
+import CalibrationModal from './CalibrationModal';
 
 interface PrintJobInfo {
   id: string | number;
@@ -110,6 +111,7 @@ interface DeviceAndConnectivityPanelProps {
 export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProps> = ({ onCheckConnectivity }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const printQueueModal = useDisclosure();
+  const calibrationModal = useDisclosure();
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -321,7 +323,20 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
         >
           Print Queue
         </Button>
+
+        <Button
+          colorScheme="purple"
+          variant="ghost"
+          onClick={calibrationModal.onOpen}
+          leftIcon={<Iconify icon={FiSettings} boxSize={3} />}
+          _hover={{ bg: 'rgba(128, 90, 213, 0.15)' }}
+          transition="all 0.3s"
+        >
+          Calibrate
+        </Button>
       </ButtonGroup>
+
+      <CalibrationModal isOpen={calibrationModal.isOpen} onClose={calibrationModal.onClose} />
 
       <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered scrollBehavior="inside">
         <ModalOverlay bg="blackAlpha.600" />
