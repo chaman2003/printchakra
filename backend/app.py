@@ -17,6 +17,7 @@ os.environ['HUB_HOME'] = os.path.expanduser('~/.paddlex')
 os.environ['FLAGS_check_nan_inf'] = '0'
 os.environ['GLOG_v'] = '0'
 os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'
+os.environ['GLOG_vmodule'] = 'gpu_resources=5'  # Suppress Paddle CUDNN version warnings
 
 import cv2
 import numpy as np
