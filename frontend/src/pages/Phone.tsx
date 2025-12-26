@@ -107,10 +107,23 @@ const Phone: React.FC = () => {
   const [autoCaptureSource, setAutoCaptureSource] = useState<'local' | 'dashboard' | null>(null);
   const [pendingDocumentCount, setPendingDocumentCount] = useState<number>(0);
 
-  // Calibration delay - applies before first document capture
-  const { initialDelay, startDelayCountdown, countdownValue, isCountingDown, cancelCountdown } = useCalibration();
+  // Auto-capture delays from calibration
+  const { initialDelay, interCaptureDelay, startDelayCountdown, countdownValue, isCountingDown, cancelCountdown } = useCalibration();
   const [isWaitingForInitialDelay, setIsWaitingForInitialDelay] = useState(false);
   const hasAppliedInitialDelayRef = useRef(false);
+
+  // Track last capture time for inter-capture delay
+  const lastCaptureTimeRef = useRef<number>(0);
+  // Ref to access current interCaptureDelay value in callbacks without stale closure
+  const interCaptureDelayRef = useRef<number>(interCaptureDelay);
+
+  // Keep ref in sync with current value
+  useEffect(() => {
+    interCaptureDelayRef.current = interCaptureDelay;
+  }, [interCaptureDelay]);
+
+  // Test capture mode (for calibration testing from Dashboard)
+  const [isTestCaptureMode, setIsTestCaptureMode] = useState(false);
 
   // Upload Queue State
   const [uploadQueue, setUploadQueue] = useState<Array<{
@@ -118,6 +131,7 @@ const Phone: React.FC = () => {
     blob: Blob;
     filename: string;
     options: typeof processingOptions;
+    isTestCapture?: boolean;  // Flag to route to test-capture endpoint
   }>>([]);
   const [isProcessingQueue, setIsProcessingQueue] = useState(false);
 
@@ -398,10 +412,12 @@ const Phone: React.FC = () => {
               // New stable document - capture it!
               console.log(`📷 New document detected (${diffFromCaptured.toFixed(1)}% different) - capturing...`);
               captureInBackgroundRef.current?.();
-              // Reset stability counter and start cooldown
+              // Reset stability counter and start cooldown using inter-capture delay
               stableFrameCountRef.current = 0;
               captureCooldownRef.current = true;
-              setTimeout(() => { captureCooldownRef.current = false; }, 1500);
+              // Use configured inter-capture delay via ref (to avoid stale closure)
+              const cooldownMs = Math.max(500, (interCaptureDelayRef.current || 2) * 1000);
+              setTimeout(() => { captureCooldownRef.current = false; }, cooldownMs);
             }
           } else {
             // Document still moving
@@ -424,38 +440,11 @@ const Phone: React.FC = () => {
   }, []);
 
   // Start continuous auto-capture mode with frame comparison
-  // Applies initial calibration delay before first document capture when triggered from dashboard
+  // NOTE: Delay is now applied in socket.on('start_auto_capture') handler, not here
   const startAutoCapture = useCallback(async (source: 'local' | 'dashboard' = 'local', documentCount?: number) => {
     // Reset the initial delay flag when starting a new capture session
     hasAppliedInitialDelayRef.current = false;
-    
-    // If triggered from dashboard, apply the calibration delay first
-    if (source === 'dashboard' && initialDelay > 0) {
-      setIsWaitingForInitialDelay(true);
-      toast({
-        title: '⏳ Waiting for Printer...',
-        description: `Starting capture in ${initialDelay} seconds (printer warmup delay)`,
-        status: 'info',
-        duration: initialDelay * 1000,
-      });
-      
-      try {
-        await startDelayCountdown();
-        hasAppliedInitialDelayRef.current = true;
-      } catch (e) {
-        // Countdown was cancelled
-        setIsWaitingForInitialDelay(false);
-        toast({
-          title: 'Capture Cancelled',
-          description: 'Initial delay was cancelled',
-          status: 'warning',
-          duration: 2000,
-        });
-        return;
-      }
-      setIsWaitingForInitialDelay(false);
-    }
-    
+
     setAutoCapture(true);
     setAutoCaptureCount(0);
     autoCaptureCountRef.current = 0;
@@ -482,7 +471,7 @@ const Phone: React.FC = () => {
       status: 'success',
       duration: 3000,
     });
-  }, [socket, toast, startFrameComparisonLoop, initialDelay, startDelayCountdown]);
+  }, [socket, toast, startFrameComparisonLoop]);
 
   // Stop continuous auto-capture mode
   const stopAutoCapture = useCallback(() => {
@@ -495,11 +484,11 @@ const Phone: React.FC = () => {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
     }
-    // Cancel calibration countdown if running
+    // Cancel startup delay countdown if running
     cancelCountdown();
     setIsWaitingForInitialDelay(false);
     hasAppliedInitialDelayRef.current = false;
-    
+
     setCountdown(null);
     setAutoCapture(false);
     setFrameChangeStatus('waiting');
@@ -537,22 +526,38 @@ const Phone: React.FC = () => {
       try {
         const formData = new FormData();
         formData.append('file', item.blob, item.filename);
-        formData.append('auto_crop', item.options.autoCrop.toString());
-        formData.append('ai_enhance', item.options.aiEnhance.toString());
-        formData.append('strict_quality', item.options.strictQuality.toString());
 
-        await apiClient.post(API_ENDPOINTS.upload, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        // Route to test-capture endpoint if in test mode
+        if (item.isTestCapture) {
+          await apiClient.post('/test-capture', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          toast({
+            title: '🧪 Test Capture Uploaded',
+            description: 'Check calibration settings to see preview',
+            status: 'info',
+            duration: 2000,
+            isClosable: true,
+            position: 'top-right',
+          });
+        } else {
+          // Normal upload with processing options
+          formData.append('auto_crop', item.options.autoCrop.toString());
+          formData.append('ai_enhance', item.options.aiEnhance.toString());
+          formData.append('strict_quality', item.options.strictQuality.toString());
 
-        toast({
-          title: 'Upload complete',
-          description: `${item.filename} processed`,
-          status: 'success',
-          duration: 2000,
-          isClosable: true,
-          position: 'top-right',
-        });
+          await apiClient.post(API_ENDPOINTS.upload, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          toast({
+            title: 'Upload complete',
+            description: `${item.filename} processed`,
+            status: 'success',
+            duration: 2000,
+            isClosable: true,
+            position: 'top-right',
+          });
+        }
       } catch (err) {
         console.error('Queue upload failed:', err);
         toast({
@@ -574,23 +579,27 @@ const Phone: React.FC = () => {
   // Ref to hold latest captureInBackground function to avoid stale closures in interval
   const captureInBackgroundRef = useRef<(() => Promise<void>) | null>(null);
 
-  const startAsyncUpload = useCallback((blob: Blob, filename: string, optionsSnapshot: typeof processingOptions) => {
+  const startAsyncUpload = useCallback((blob: Blob, filename: string, optionsSnapshot: typeof processingOptions, isTestCapture: boolean = false) => {
     // Add to queue instead of immediate upload
     setUploadQueue(prev => [...prev, {
       id: Date.now().toString() + Math.random(),
       blob,
       filename,
-      options: optionsSnapshot
+      options: optionsSnapshot,
+      isTestCapture,  // Pass test capture flag
     }]);
 
-    setAutoCaptureCount(prev => {
-      const newCount = prev + 1;
-      autoCaptureCountRef.current = newCount;
-      return newCount;
-    });
+    // Only increment capture count for non-test captures
+    if (!isTestCapture) {
+      setAutoCaptureCount(prev => {
+        const newCount = prev + 1;
+        autoCaptureCountRef.current = newCount;
+        return newCount;
+      });
+    }
 
     // Toast removed to prevent re-renders during rapid capture
-    console.log(`📸 Queued: ${filename}`);
+    console.log(`📸 Queued: ${filename}${isTestCapture ? ' (TEST)' : ''}`);
   }, []);
 
   // Background capture without freezing camera
@@ -658,7 +667,8 @@ const Phone: React.FC = () => {
       const optionsSnapshot = { ...processingOptions };
 
       // Kick off upload without blocking future captures
-      startAsyncUpload(blob, filename, optionsSnapshot);
+      // Pass isTestCaptureMode to route to test endpoint if in calibration test mode
+      startAsyncUpload(blob, filename, optionsSnapshot, isTestCaptureMode);
 
       // Reset frame tracking so next document can be detected immediately
       stableFrameCountRef.current = 0;
@@ -673,7 +683,7 @@ const Phone: React.FC = () => {
       // Allow next capture immediately (uploads continue async)
       isCapturingRef.current = false;
     }
-  }, [processingOptions, startAsyncUpload, toast]);
+  }, [processingOptions, startAsyncUpload, isTestCaptureMode, toast]);
 
   // Keep ref updated with latest captureInBackground
   useEffect(() => {
@@ -1318,34 +1328,46 @@ const Phone: React.FC = () => {
   const uploadImage = useCallback(
     async (file: Blob, filename: string) => {
       // Add to queue instead of blocking upload
+      // Pass isTestCaptureMode to route to test endpoint if in calibration test mode
       setUploadQueue(prev => [...prev, {
         id: Date.now().toString() + Math.random(),
         blob: file,
         filename,
-        options: { ...processingOptions }
+        options: { ...processingOptions },
+        isTestCapture: isTestCaptureMode,  // Route to test endpoint in test mode
       }]);
 
-      showMessage(`✅ Added to processing queue`);
-      toast({
-        title: 'Queued for processing',
-        description: 'You can continue capturing.',
-        status: 'success',
-        duration: 2000,
-      });
+      if (isTestCaptureMode) {
+        showMessage(`🧪 Test capture added`);
+        toast({
+          title: '🧪 Test Capture',
+          description: 'Image will appear in calibration settings',
+          status: 'info',
+          duration: 2000,
+        });
+      } else {
+        showMessage(`✅ Added to processing queue`);
+        toast({
+          title: 'Queued for processing',
+          description: 'You can continue capturing.',
+          status: 'success',
+          duration: 2000,
+        });
 
-      // Show additional message about checking dashboard
-      // Removed queue length check to avoid dependency on uploadQueue.length
-      setTimeout(() => {
-        showMessage(
-          '📊 Processing in background... Check Dashboard for results.'
-        );
-      }, 1500);
+        // Show additional message about checking dashboard
+        setTimeout(() => {
+          showMessage(
+            '📊 Processing in background... Check Dashboard for results.'
+          );
+        }, 1500);
+      }
 
       // Clear quality check
       setQualityCheck(null);
     },
     [
       processingOptions,
+      isTestCaptureMode,
       showMessage,
       toast
     ]
@@ -1454,29 +1476,51 @@ const Phone: React.FC = () => {
       }, 500);
     });
 
-    // Handle auto-capture start with 5-second countdown
+
+
+    // Handle auto-capture start - Phone applies the delay
+    // This centralizes ALL delay logic in the phone view
     socket.on('start_auto_capture', (data: any) => {
       console.log('Received auto-capture command from Dashboard:', data);
       const documentCount = data?.documentCount || 1;
+      // Use delay from Dashboard if provided, otherwise use local initialDelay
+      const delaySeconds = data?.delaySeconds ?? initialDelay ?? 10;
+      const delayMs = delaySeconds * 1000;
 
-      // Show immediate visual feedback toast
-      toast({
-        title: '📱 Auto-Capture Incoming!',
-        description: `Starting 5-second countdown for ${documentCount} document${documentCount !== 1 ? 's' : ''}...`,
-        status: 'info',
-        duration: 2000,
-        isClosable: true,
-        position: 'top',
-      });
+      console.log(`[AUTO-CAPTURE] delaySeconds from data: ${data?.delaySeconds}, initialDelay: ${initialDelay}, final: ${delaySeconds}`);
 
-      // Ensure camera mode is active
+      // Ensure camera mode is active FIRST
       if (captureMode !== 'camera' || !stream) {
         showMessage('💡 Switching to Camera mode...');
         handleCaptureMode('camera');
       }
 
-      // Start 5-second countdown
-      setCountdown(5);
+      // If delay is 0 or less, start immediately
+      if (delaySeconds <= 0) {
+        toast({
+          title: '📱 Auto-Capture Enabled!',
+          description: `Ready to capture ${documentCount} document${documentCount !== 1 ? 's' : ''}`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top',
+        });
+        setTimeout(() => startAutoCapture('dashboard', documentCount), 100);
+        return;
+      }
+
+      // Show countdown toast
+      toast({
+        title: '📱 Auto-Capture Starting...',
+        description: `Will enable in ${delaySeconds} seconds`,
+        status: 'info',
+        duration: delaySeconds * 1000,
+        isClosable: true,
+        position: 'top',
+      });
+
+      // Start countdown display
+      setCountdown(delaySeconds);
       setPendingDocumentCount(documentCount);
 
       // Clear any existing countdown
@@ -1484,23 +1528,40 @@ const Phone: React.FC = () => {
         clearInterval(countdownIntervalRef.current);
       }
 
+      // Countdown interval for visual feedback
       countdownIntervalRef.current = setInterval(() => {
         setCountdown(prev => {
           if (prev === null || prev <= 1) {
-            // Countdown finished - start auto-capture
             clearInterval(countdownIntervalRef.current!);
             countdownIntervalRef.current = null;
-
-            // Start auto-capture after short delay to ensure camera is ready
-            setTimeout(() => {
-              startAutoCapture('dashboard', documentCount);
-            }, 100);
-
             return null;
           }
           return prev - 1;
         });
       }, 1000);
+
+      // After delay, start auto-capture
+      setTimeout(() => {
+        // Clear countdown display
+        setCountdown(null);
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+
+        // Show success toast
+        toast({
+          title: '📱 Auto-Capture Enabled!',
+          description: `Ready to capture ${documentCount} document${documentCount !== 1 ? 's' : ''}`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+          position: 'top',
+        });
+
+        // Start auto-capture
+        startAutoCapture('dashboard', documentCount);
+      }, delayMs);
     });
 
     // Handle stop auto-capture from dashboard
@@ -1524,11 +1585,39 @@ const Phone: React.FC = () => {
       });
     });
 
+    // Handle calibration test mode from dashboard
+    socket.on('calibration_test_mode', (data: { enabled: boolean }) => {
+      console.log('[Phone] Calibration test mode:', data.enabled);
+      setIsTestCaptureMode(data.enabled);
+      if (data.enabled) {
+        toast({
+          title: '🧪 Test Mode Active',
+          description: 'Captures will be used for calibration testing',
+          status: 'info',
+          duration: 3000,
+        });
+      }
+    });
+
+    // Handle test capture start from dashboard
+    socket.on('start_test_capture', (data: { delay: number }) => {
+      console.log('[Phone] Starting test capture countdown:', data.delay);
+      setIsTestCaptureMode(true);
+      toast({
+        title: '📸 Test Capture Mode',
+        description: `Capture any document now to test ${data.delay}s delay`,
+        status: 'success',
+        duration: 3000,
+      });
+    });
+
     return () => {
       socket.off('capture_now');
       socket.off('start_auto_capture');
       socket.off('stop_auto_capture');
       socket.off('request_auto_capture_state');
+      socket.off('calibration_test_mode');
+      socket.off('start_test_capture');
     };
   }, [
     socket,
@@ -1541,6 +1630,7 @@ const Phone: React.FC = () => {
     stream,
     toast,
     autoCapture,
+    initialDelay,  // Added to ensure delay value is current
   ]);
 
   // Cleanup camera on unmount
@@ -2002,10 +2092,69 @@ const Phone: React.FC = () => {
                     </svg>
                   )}
 
-                  {/* Detection Status Badge */}
+                  {/* PROMINENT AUTO-CAPTURE ACTIVE BANNER - Always visible when auto-capture is ON */}
+                  {autoCapture && (
+                    <Flex
+                      position="absolute"
+                      top={0}
+                      left={0}
+                      right={0}
+                      bg="linear-gradient(90deg, rgba(34, 197, 94, 0.95) 0%, rgba(22, 163, 74, 0.95) 100%)"
+                      color="white"
+                      px={4}
+                      py={3}
+                      alignItems="center"
+                      justifyContent="space-between"
+                      zIndex={30}
+                      boxShadow="0 4px 20px rgba(34, 197, 94, 0.4)"
+                    >
+                      <Flex alignItems="center" gap={3}>
+                        <Box
+                          w={4}
+                          h={4}
+                          borderRadius="full"
+                          bg="white"
+                          animation="pulse 1s infinite"
+                          boxShadow="0 0 10px rgba(255,255,255,0.8)"
+                        />
+                        <Box>
+                          <Text fontSize="sm" fontWeight="bold" lineHeight="1.2">
+                            🎯 AUTO-CAPTURE ACTIVE
+                          </Text>
+                          <Text fontSize="xs" opacity={0.9}>
+                            {autoCaptureSource === 'dashboard' ? '📡 From Dashboard • ' : ''}
+                            Place documents - they capture automatically
+                          </Text>
+                        </Box>
+                      </Flex>
+                      <Flex alignItems="center" gap={2}>
+                        <Box
+                          bg="whiteAlpha.300"
+                          px={3}
+                          py={1}
+                          borderRadius="full"
+                          fontSize="sm"
+                          fontWeight="bold"
+                        >
+                          📷 {autoCaptureCount}
+                        </Box>
+                        <Button
+                          size="sm"
+                          colorScheme="red"
+                          variant="solid"
+                          onClick={stopAutoCapture}
+                          leftIcon={<Text>⏹</Text>}
+                        >
+                          Stop
+                        </Button>
+                      </Flex>
+                    </Flex>
+                  )}
+
+                  {/* Detection Status Badge - Moved down when auto-capture banner is showing */}
                   <Box
                     position="absolute"
-                    top={3}
+                    top={autoCapture ? 16 : 3}
                     left={3}
                     bg={detectedQuad ? "green.500" : "gray.600"}
                     color="white"
@@ -2033,7 +2182,7 @@ const Phone: React.FC = () => {
                   <Tooltip label={showControls ? 'Hide controls' : 'Show controls'} hasArrow placement="left">
                     <Button
                       position="absolute"
-                      top={3}
+                      top={autoCapture ? 16 : 3}
                       right={3}
                       size="sm"
                       colorScheme="brand"
@@ -2094,7 +2243,7 @@ const Phone: React.FC = () => {
                     </Flex>
                   )}
 
-                  {/* Calibration Delay Overlay - Shows when waiting for printer warmup */}
+                  {/* Auto-Capture Startup Delay Overlay - Shows when waiting for phone's auto-capture to turn on */}
                   {isWaitingForInitialDelay && isCountingDown && (
                     <Flex
                       position="absolute"
@@ -2128,10 +2277,10 @@ const Phone: React.FC = () => {
                         </Text>
                       </Box>
                       <Text fontSize="xl" color="white" fontWeight="bold">
-                        ⏳ Printer Warmup Delay
+                        ⏳ Auto-Capture Starting...
                       </Text>
                       <Text fontSize="md" color="whiteAlpha.800" mt={2} textAlign="center" maxW="80%">
-                        Waiting for printer to initialize before capturing documents...
+                        Waiting for your phone's auto-capture feature to fully turn on...
                       </Text>
                       <Button
                         mt={6}
@@ -2193,7 +2342,7 @@ const Phone: React.FC = () => {
                     >
                       <Flex gap={2}>
                         <Button
-                          colorScheme={autoCapture ? 'green' : 'brand'}
+                          colorScheme={autoCapture ? 'red' : 'brand'}
                           size="lg"
                           onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
                           isDisabled={!stream || uploading}
@@ -2231,7 +2380,7 @@ const Phone: React.FC = () => {
                     </Button>
                     <Button
                       variant={autoCapture ? 'solid' : 'outline'}
-                      colorScheme={autoCapture ? 'green' : 'orange'}
+                      colorScheme={autoCapture ? 'red' : 'orange'}
                       onClick={() => autoCapture ? stopAutoCapture() : startAutoCapture('local')}
                       isDisabled={!stream || uploading}
                       leftIcon={<Iconify icon={FiAperture} boxSize={5} />}

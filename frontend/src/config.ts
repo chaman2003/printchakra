@@ -23,7 +23,7 @@ const getApiBaseUrl = () => {
   const hostname = window.location.hostname;
   const port = window.location.port ? `:${window.location.port}` : '';
   const sameHostUrl = `${protocol}//${hostname}${port}`;
-  
+
   console.log('[Config] Detected deployed environment, using same host:', sameHostUrl);
   return sameHostUrl;
 };
@@ -84,6 +84,15 @@ export const getImageUrl = (endpoint: string, filename: string) => {
 };
 
 // Socket.IO specific configuration - handles both local and deployed
+// NOTE: For self-signed SSL certificates (local HTTPS), we need rejectUnauthorized: false
+const isSecure = API_BASE_URL.startsWith('https');
+const isLocalNetwork = (() => {
+  const hostname = window.location.hostname;
+  // Check if IP address (local network) vs domain name
+  const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  return ipPattern.test(hostname) && hostname !== '127.0.0.1';
+})();
+
 export const SOCKET_CONFIG = {
   reconnection: true,
   reconnectionDelay: 1000,
@@ -95,15 +104,16 @@ export const SOCKET_CONFIG = {
   forceNew: false,
   path: '/socket.io/',
   withCredentials: true, // Needed for deployed environments
-  secure: API_BASE_URL.startsWith('https'),
-  rejectUnauthorized: false,
+  secure: isSecure,
+  // CRITICAL: For self-signed SSL certs on local network, don't reject unauthorized
+  rejectUnauthorized: isLocalNetwork && isSecure ? false : true,
   autoConnect: true,
   ...(isUsingTunnel()
     ? {
-        extraHeaders: {
-          'ngrok-skip-browser-warning': 'true',
-        },
-      }
+      extraHeaders: {
+        'ngrok-skip-browser-warning': 'true',
+      },
+    }
     : {}),
 };
 

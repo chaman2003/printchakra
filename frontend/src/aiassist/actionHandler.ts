@@ -26,8 +26,30 @@ import {
   describeSelectionAction,
   DocumentSelectionCommand,
 } from './documentSelectionParser';
+import { enforceWordLimit } from './wordLimiter';
 
 const responses = AIAssistConfig.responses;
+
+/**
+ * Helper function to create AI responses with enforced 20-word limit
+ */
+function createAIResponse(
+  text: string,
+  action?: string,
+  params?: Record<string, any>,
+  shouldSpeak: boolean = true,
+  feedbackType: 'success' | 'info' | 'warning' | 'error' = 'info',
+  stateUpdate?: AIResponse['stateUpdate']
+): AIResponse {
+  return {
+    text: enforceWordLimit(text, `[${action || 'AI_RESPONSE'}]`),
+    action: action as any,
+    params,
+    shouldSpeak,
+    feedbackType,
+    stateUpdate,
+  };
+}
 
 /**
  * Handle document selection commands
@@ -682,24 +704,33 @@ export function handleCommandWithState(
   if (appState === 'DASHBOARD') {
     const allowedActions = ['OPEN_PRINT_MODE', 'OPEN_SCAN_MODE', 'HELP', 'STATUS'];
     if (!allowedActions.includes(command.action)) {
-      return {
-        text: 'I\'m ready to help you print or scan. Say "print" to start printing or "scan" to start scanning.',
-        shouldSpeak: true,
-        feedbackType: 'info',
-      };
+      return createAIResponse(
+        'I\'m ready to help you print or scan. Say "print" to start printing or "scan" to start scanning.',
+        'DASHBOARD_GUIDANCE',
+        undefined,
+        true,
+        'info'
+      );
     }
   }
 
   // Validate command for current state
   if (command.stateValidation && !command.stateValidation.valid) {
-    return {
-      text: command.stateValidation.reason || 'This action is not available right now.',
-      shouldSpeak: true,
-      feedbackType: 'warning',
-    };
+    return createAIResponse(
+      command.stateValidation.reason || 'This action is not available right now.',
+      'STATE_VALIDATION_ERROR',
+      undefined,
+      true,
+      'warning'
+    );
   }
 
-  return handleCommand(command, context, callbacks);
+  // Call handleCommand and wrap response with word limit enforcement
+  const response = handleCommand(command, context, callbacks);
+  return {
+    ...response,
+    text: enforceWordLimit(response.text, `[${command.action}]`),
+  };
 }
 
 export default {

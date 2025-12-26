@@ -39,6 +39,7 @@ import {
   updateScanSource,
   updateSelectedDocumentIndices,
 } from './contextManager';
+import { enforceWordLimit } from './wordLimiter';
 
 export interface UseAIAssistOptions {
   initialMode?: WorkflowMode | null;
@@ -157,15 +158,17 @@ export function useAIAssist(options: UseAIAssistOptions = {}): UseAIAssistReturn
     if (!command) {
       // In dashboard state, provide helpful guidance
       if (context.appState === 'DASHBOARD') {
-        return {
-          text: 'Print or scan?',
+        const response: AIResponse = {
+          text: enforceWordLimit('Print or scan?'),
           shouldSpeak: true,
           feedbackType: 'info',
         };
+        setLastResponse(response);
+        return response;
       }
       
       const fallbackResponse: AIResponse = {
-        text: "Didn't catch that. Say help.",
+        text: enforceWordLimit("Didn't catch that. Say help."),
         shouldSpeak: true,
         feedbackType: 'info',
       };
@@ -211,7 +214,7 @@ export function useAIAssist(options: UseAIAssistOptions = {}): UseAIAssistReturn
     
     if (!command) {
       const fallbackResponse: AIResponse = {
-        text: "I didn't understand that. Try saying 'help' for available commands.",
+        text: enforceWordLimit("I didn't understand that. Try saying 'help' for available commands."),
         shouldSpeak: true,
         feedbackType: 'info',
       };

@@ -24,35 +24,36 @@ logger = logging.getLogger(__name__)
 DEFAULT_SYSTEM_PROMPT = """You are PrintChakra AI - a concise voice assistant for document printing and scanning.
 
 CRITICAL RULES:
-1. NEVER say more than 15 words.
-2. Be direct and action-focused.
-3. Use simple confirmations like "Got it", "Done", "Ready".
-4. Print/scan intents are handled automatically - don't repeat them.
+1. Keep responses to 20 words MAXIMUM - write complete sentences naturally within this limit.
+2. NO truncation - responses should be full, coherent sentences (not cut off mid-way).
+3. Be direct and action-focused.
+4. Use simple confirmations like "Got it", "Done", "Ready".
+5. Do NOT add unnecessary pleasantries or filler words.
 
 RESPONSE STYLE:
-- "Got it, printing." NOT "I'll start the printing process for you now."
-- "Landscape." NOT "I've changed the layout to landscape orientation."
-- "3 copies." NOT "I've set the number of copies to 3."
-- "Ready?" NOT "Are you ready to proceed with the operation?"
+- "Starting print." (2 words) NOT long explanations
+- "Landscape mode set." (3 words) NOT detailed descriptions
+- "3 copies ready." (3 words) NOT verbose confirmations
 
-DOCUMENT CONTROL (per-section 1-based numbering):
-- select document 2 -> "Got it, document 2."
-- switch to converted -> "Converted."
-- next document -> "Next."
+DOCUMENT CONTROL:
+- "Document 2 selected." (3 words)
+- "Switched to converted." (3 words)
+- "Next document." (2 words)
 
 SETTINGS (confirm briefly):
-- grayscale -> "Grayscale."
-- 300 DPI -> "300 DPI."
-- landscape -> "Landscape."
-- 2 copies -> "2 copies."
+- "Grayscale." (1 word)
+- "300 DPI." (2 words)
+- "Landscape." (1 word)
+- "2 copies." (2 words)
 
 GLOBAL:
-- confirm -> "Done!"
-- cancel -> "Cancelled."
-- help -> "Say: print, scan, select document, or settings."
-- status -> "Print mode." or "Ready."
+- "Done!" (1 word)
+- "Cancelled." (1 word)
+- "Say: print, scan, select document." (5 words)
+- "Ready." (1 word)
+- "Welcome!" (1 word)
 
-Keep responses under 10 words when possible."""
+Write COMPLETE sentences that naturally fit in 20 words. Do NOT write long responses and expect them to be cut off. Example of GOOD response: "Print mode ready. Select documents or browse files." (8 words - complete)."""
 
 
 DEFAULT_COMMAND_CONFIG = {
@@ -196,9 +197,9 @@ DEFAULT_COMMAND_CONFIG = {
     },
 
     "friendly_responses": {
-        "select_document": "Got it, document {document_number}.",
+        "select_document": "Document {document_number} selected.",
         "select_multiple_documents": "{count} documents selected.",
-        "select_document_range": "Got it! Documents {start} to {end} selected.",
+        "select_document_range": "Documents {start} to {end} selected.",
         "switch_section": "{section}.",
         "next_document": "Next.",
         "previous_document": "Previous.",
@@ -208,7 +209,7 @@ DEFAULT_COMMAND_CONFIG = {
         "status": "Ready.",
         "repeat_settings": "Settings...",
         "help": "Say: print, scan, or select document.",
-        "stop_recording": "Stopping.",
+        "stop_recording": "Goodbye!",
         "greeting": "Hi! Print or scan?",
         "proceed_action": "Proceeding!",
         "undo_action": "Undone.",
@@ -224,15 +225,22 @@ DEFAULT_COMMAND_CONFIG = {
     },
     "confirmation_words": [
         "yes", "proceed", "go ahead", "okay", "ok",
-        "sure", "yep", "yeah", "ye"
+        "sure", "yep", "yeah", "ye", "confirm", "do it",
+        "yup", "yas", "yass", "alright", "affirmative"
     ],
     "print_keywords": [
-        "print", "printing", "printout",
-        "print doc", "print file", "print paper", "print document", "i want to print", "need to print"
+        "print", "printing", "printout", "printer",
+        "print doc", "print file", "print paper", "print document", 
+        "i want to print", "need to print", "let's print", "please print",
+        # Common Whisper mishearings for "print"
+        "prince", "praying", "prints", "printed", "pring", "prink"
     ],
     "scan_keywords": [
-        "scan", "scanning", "capture",
-        "scan doc", "scan file", "capture doc", "capture document", "scan document"
+        "scan", "scanning", "capture", "scanner",
+        "scan doc", "scan file", "capture doc", "capture document", "scan document",
+        "i want to scan", "need to scan", "let's scan", "please scan",
+        # Common Whisper mishearings for "scan"
+        "scam", "stand", "span", "skin", "scan it"
     ],
     "question_words": [
         "what", "can you", "how do", "help", "how to",
@@ -452,14 +460,14 @@ class VoicePromptManager:
         
         Transforms:
         - Remove markdown formatting
-        - Limit to 1 sentence, max 15 words
+        - Limit to complete sentences, max 20 words
         - Keep only essential information
         
         Args:
             ai_response: Raw response from the model
             
         Returns:
-            Short, voice-friendly response for TTS
+            Short, voice-friendly response for TTS (no truncation, complete sentences)
         """
         import re
         
@@ -472,10 +480,10 @@ class VoicePromptManager:
         if ai_response and ai_response[-1] not in ".!?":
             ai_response += "."
         
-        # Strict word limit (max 15 words for concise speech)
+        # Strict word limit (max 20 words for concise speech)
         words = ai_response.split()
-        if len(words) > 15:
-            ai_response = " ".join(words[:15])
+        if len(words) > 20:
+            ai_response = " ".join(words[:20])
             if ai_response[-1] not in ".!?":
                 ai_response += "."
         

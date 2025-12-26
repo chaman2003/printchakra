@@ -388,22 +388,28 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           const duration = await getAudioDuration(audioBlob);
           console.log(`Audio duration: ${duration.toFixed(2)}s`);
 
-          const { hasVoiceActivity, hasHighPitchSound } = await import('../../utils/audioUtils');
-          const hasVoice = await hasVoiceActivity(audioBlob, 0.008);
-
-          if (!hasVoice) {
-            console.log('No voice detected in audio - skipping processing');
-            scheduleRecordingStart(150);
+          // Skip only extremely short audio (less than 0.3 seconds)
+          if (duration < 0.3) {
+            console.log('Audio too short (< 0.3s) - skipping processing');
+            scheduleRecordingStart(300);
             return;
           }
 
-          const hasHighPitch = await hasHighPitchSound(audioBlob, 0.08);
-          if (!hasHighPitch) {
-            console.log('No high-pitch speech detected - sounds like background noise only');
-            scheduleRecordingStart(150);
-            return;
+          // For very short audio (0.3-1 second), do basic voice detection
+          // Longer audio goes straight to Whisper
+          if (duration < 1.0) {
+            const { hasVoiceActivity } = await import('../../utils/audioUtils');
+            // Very lenient threshold for detecting ANY speech
+            const hasVoice = await hasVoiceActivity(audioBlob, 0.003);
+
+            if (!hasVoice) {
+              console.log('No voice detected in short audio - skipping processing');
+              scheduleRecordingStart(300);
+              return;
+            }
           }
 
+          // Process audio - let Whisper decide what it hears
           await processAudio(audioBlob);
         } catch (error: any) {
           console.error('Error in onstop handler:', error);
@@ -454,8 +460,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
       let silenceStart: number | null = null;
       let speechDetected = false;
       let audioContextClosed = false;
-      const SILENCE_THRESHOLD = 15;
-      const SILENCE_DURATION = 500;
+      // Increased threshold to detect speech better (was 8, now 20 - more robust)
+      const SILENCE_THRESHOLD = 20;
+      // Reduced silence duration for faster response (was 1500ms, now 800ms)
+      const SILENCE_DURATION = 800;
 
       const closeAudioContext = () => {
         if (!audioContextClosed && audioContext.state !== 'closed') {
@@ -491,7 +499,7 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           if (silenceStart === null) {
             silenceStart = Date.now();
           } else if (Date.now() - silenceStart > SILENCE_DURATION) {
-            console.log('Silence detected - stopping recording');
+            console.log('Silence detected after speech - stopping recording');
             stopRecording(false);
             closeAudioContext();
             return;
@@ -503,13 +511,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       checkAudioLevel();
 
+      // Increased max recording duration (was 15 seconds, now 20 seconds for safety)
       setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
           console.log('Max duration reached - stopping recording');
           stopRecording(false);
           closeAudioContext();
         }
-      }, 5000);
+      }, 20000);
 
     } catch (error: any) {
       console.error('Recording error:', error);
@@ -638,6 +647,14 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
 
       console.log('Backend response:', response.data);
 
+      // Debug: Log exactly what Whisper heard vs what AI processed
+      if (response.data.user_text) {
+        console.log(`🎤 Whisper transcribed: "${response.data.user_text}"`);
+        console.log(`🤖 AI response: "${response.data.ai_response}"`);
+        console.log(`📋 Voice command: ${response.data.voice_command || 'none'}`);
+        console.log(`🎯 Orchestration: ${response.data.orchestration_trigger ? response.data.orchestration_mode : 'none'}`);
+      }
+
       // Check for no speech detected (auto-retry)
       if (response.data.auto_retry && response.data.no_speech_detected) {
         console.log('No human speech detected - auto-retrying in 1 second');
@@ -667,13 +684,10 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           orchestration,
         } = response.data;
 
-        // Add full transcription as system message
-        addMessage('system', `🎤 Heard: "${full_text || user_text}"`);
-
-        // Add user message (command part only)
+        // Add user message only (no duplicate "heard" message)
         addMessage('user', user_text);
 
-        // 1. Display AI response FIRST
+        // AI response should already be complete and under 20 words (no truncation needed)
         addMessage('ai', ai_response);
 
         setIsProcessing(false);
@@ -778,8 +792,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
               duration: 3000,
             });
           } else {
-            // Resume recording ONLY after TTS completes
-            scheduleRecordingStart(200);
+            // Auto-restart recording with 1 second delay after TTS completes
+            scheduleRecordingStart(1000);
           }
         }
       } else {
@@ -988,13 +1002,13 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
         } finally {
           setIsSpeaking(false);
           isSpeakingRef.current = false;
-          setSessionStatus('Ready - Just speak naturally');
+          setSessionStatus('Ready - Speak naturally');
           // Focus chat input after TTS completes
           setTimeout(() => {
             chatInputRef.current?.focus();
           }, 100);
-          // RESUME recording only after TTS completes
-          scheduleRecordingStart(200);
+          // Auto-restart recording with 1 second delay
+          scheduleRecordingStart(1000);
         }
       } else {
         setIsProcessing(false);
@@ -1006,8 +1020,8 @@ const VoiceAIChat: React.FC<VoiceAIChatProps> = ({
           status: 'error',
           duration: 5000,
         });
-        // Resume recording after error
-        scheduleRecordingStart(600);
+        // Auto-restart recording with 1 second delay after error
+        scheduleRecordingStart(1000);
       }
     } catch (error: any) {
       console.error('Text message error:', error);

@@ -1,16 +1,21 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 
-const CALIBRATION_STORAGE_KEY = 'printchakra_calibration_delay';
+const CALIBRATION_STORAGE_KEY = 'printchakra_autocapture_delay';
 const DEFAULT_DELAY_SECONDS = 10;
+const DEFAULT_INTER_CAPTURE_DELAY = 2; // Default 2 seconds between captures
 
 interface CalibrationContextType {
-  /** Initial delay in seconds before first document capture */
+  /** Delay in seconds to wait for smartphone auto-capture to fully initialize */
   initialDelay: number;
-  /** Update the calibration delay */
+  /** Update the auto-capture initialization delay */
   setInitialDelay: (seconds: number) => void;
-  /** Whether calibration has been set by user */
+  /** Delay in seconds between consecutive document captures */
+  interCaptureDelay: number;
+  /** Update the inter-capture delay */
+  setInterCaptureDelay: (seconds: number) => void;
+  /** Whether delay has been configured by user */
   isCalibrated: boolean;
-  /** Mark as calibrated */
+  /** Mark as configured */
   markCalibrated: () => void;
   /** Reset to default */
   resetCalibration: () => void;
@@ -26,14 +31,16 @@ interface CalibrationContextType {
 
 const CalibrationContext = createContext<CalibrationContextType>({
   initialDelay: DEFAULT_DELAY_SECONDS,
-  setInitialDelay: () => {},
+  setInitialDelay: () => { },
+  interCaptureDelay: DEFAULT_INTER_CAPTURE_DELAY,
+  setInterCaptureDelay: () => { },
   isCalibrated: false,
-  markCalibrated: () => {},
-  resetCalibration: () => {},
-  startDelayCountdown: async () => {},
+  markCalibrated: () => { },
+  resetCalibration: () => { },
+  startDelayCountdown: async () => { },
   countdownValue: null,
   isCountingDown: false,
-  cancelCountdown: () => {},
+  cancelCountdown: () => { },
 });
 
 export const useCalibration = () => {
@@ -62,6 +69,19 @@ export const CalibrationProvider: React.FC<CalibrationProviderProps> = ({ childr
     return DEFAULT_DELAY_SECONDS;
   });
 
+  const [interCaptureDelay, setInterCaptureDelayState] = useState<number>(() => {
+    try {
+      const stored = localStorage.getItem(CALIBRATION_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return typeof parsed.interCaptureDelay === 'number' ? parsed.interCaptureDelay : DEFAULT_INTER_CAPTURE_DELAY;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return DEFAULT_INTER_CAPTURE_DELAY;
+  });
+
   const [isCalibrated, setIsCalibrated] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(CALIBRATION_STORAGE_KEY);
@@ -86,16 +106,26 @@ export const CalibrationProvider: React.FC<CalibrationProviderProps> = ({ childr
     try {
       localStorage.setItem(
         CALIBRATION_STORAGE_KEY,
-        JSON.stringify({ delay: initialDelay, calibrated: isCalibrated })
+        JSON.stringify({
+          delay: initialDelay,
+          interCaptureDelay: interCaptureDelay,
+          calibrated: isCalibrated
+        })
       );
     } catch (e) {
-      console.warn('[Calibration] Failed to save calibration:', e);
+      console.warn('[AutoCapture] Failed to save settings:', e);
     }
-  }, [initialDelay, isCalibrated]);
+  }, [initialDelay, interCaptureDelay, isCalibrated]);
 
   const setInitialDelay = useCallback((seconds: number) => {
     const clamped = Math.max(0, Math.min(60, seconds)); // Clamp between 0 and 60 seconds
     setInitialDelayState(clamped);
+    setIsCalibrated(true);
+  }, []);
+
+  const setInterCaptureDelay = useCallback((seconds: number) => {
+    const clamped = Math.max(0, Math.min(30, seconds)); // Clamp between 0 and 30 seconds
+    setInterCaptureDelayState(clamped);
     setIsCalibrated(true);
   }, []);
 
@@ -105,6 +135,7 @@ export const CalibrationProvider: React.FC<CalibrationProviderProps> = ({ childr
 
   const resetCalibration = useCallback(() => {
     setInitialDelayState(DEFAULT_DELAY_SECONDS);
+    setInterCaptureDelayState(DEFAULT_INTER_CAPTURE_DELAY);
     setIsCalibrated(false);
   }, []);
 
@@ -172,6 +203,8 @@ export const CalibrationProvider: React.FC<CalibrationProviderProps> = ({ childr
   const value: CalibrationContextType = {
     initialDelay,
     setInitialDelay,
+    interCaptureDelay,
+    setInterCaptureDelay,
     isCalibrated,
     markCalibrated,
     resetCalibration,

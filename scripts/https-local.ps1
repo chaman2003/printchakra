@@ -1,5 +1,5 @@
 # PrintChakra HTTPS Local Network Setup
-# Starts backend and frontend servers in separate PowerShell windows
+# Backend runs in THIS terminal, Frontend opens in a new window
 # Usage: .\https-local.ps1
 
 $ErrorActionPreference = "Stop"
@@ -11,37 +11,46 @@ $certPath = "c:\Users\chama\OneDrive\Desktop\printchakra\backend\certs\cert.pem"
 $keyPath = "c:\Users\chama\OneDrive\Desktop\printchakra\backend\certs\key.pem"
 $apiUrl = "https://10.116.132.88:5000"
 
-# Create backend script
-$backendScript = @"
-cd $backendPath
-`$env:SSL_CERT = "$certPath"
-`$env:SSL_KEY = "$keyPath"
-python app.py
-"@
-
-# Create frontend script
+# Create frontend script (runs in separate window)
 $frontendScript = @"
 cd $frontendPath
 `$env:REACT_APP_API_URL = "$apiUrl"
 `$env:HTTPS = "true"
 `$env:SSL_CRT_FILE = "$certPath"
 `$env:SSL_KEY_FILE = "$keyPath"
+Write-Host "Frontend starting..." -ForegroundColor Cyan
 npm start
 "@
 
-# Save temporary scripts
-$backendScriptPath = Join-Path $env:TEMP "printchakra_backend.ps1"
+# Save frontend script to temp
 $frontendScriptPath = Join-Path $env:TEMP "printchakra_frontend.ps1"
-
-$backendScript | Out-File -FilePath $backendScriptPath -Encoding UTF8
 $frontendScript | Out-File -FilePath $frontendScriptPath -Encoding UTF8
 
-# Start both servers in separate windows
-Write-Host "Starting PrintChakra Backend..." -ForegroundColor Green
-Start-Process powershell -ArgumentList "-NoExit", "-File", $backendScriptPath -WindowStyle Normal
+Write-Host ""
+Write-Host "=" * 60 -ForegroundColor Cyan
+Write-Host "  PrintChakra HTTPS Local Network Setup" -ForegroundColor Green
+Write-Host "=" * 60 -ForegroundColor Cyan
+Write-Host ""
 
-Write-Host "Starting PrintChakra Frontend..." -ForegroundColor Green
+# Start frontend in a NEW window (background)
+Write-Host "Starting Frontend in separate window..." -ForegroundColor Yellow
 Start-Process powershell -ArgumentList "-NoExit", "-File", $frontendScriptPath -WindowStyle Normal
 
+Write-Host "Frontend window opened!" -ForegroundColor Green
 Write-Host ""
-Write-Host "Both servers are starting in separate windows." -ForegroundColor Cyan
+Write-Host "=" * 60 -ForegroundColor Cyan
+Write-Host "  Backend starting in THIS terminal" -ForegroundColor Yellow
+Write-Host "  Press Ctrl+C to stop" -ForegroundColor Yellow
+Write-Host "=" * 60 -ForegroundColor Cyan
+Write-Host ""
+
+# Set environment and run backend in CURRENT terminal
+cd $backendPath
+$env:SSL_CERT = $certPath
+$env:SSL_KEY = $keyPath
+
+Write-Host "Backend starting (Whisper model pre-loading in background)..." -ForegroundColor Cyan
+Write-Host ""
+
+# Run backend - this blocks and runs in current terminal
+python app.py

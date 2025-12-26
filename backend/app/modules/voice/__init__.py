@@ -107,7 +107,7 @@ def truncate_to_word_count(text: str, max_words: int = 20) -> str:
         max_words: Maximum number of words to keep (default 20)
         
     Returns:
-        Truncated text with ellipsis if truncated
+        Text truncated to max_words if needed (no ellipsis added)
     """
     if not text or not text.strip():
         return text
@@ -116,8 +116,8 @@ def truncate_to_word_count(text: str, max_words: int = 20) -> str:
     if len(words) <= max_words:
         return text
     
-    # Return first max_words with ellipsis
-    return " ".join(words[:max_words]) + "..."
+    # Return first max_words (no ellipsis - response should be complete naturally)
+    return " ".join(words[:max_words])
 
 
 def _init_tts_engine():
@@ -493,8 +493,8 @@ class WhisperTranscriptionService:
                         "best_of": 1,  # FAST: Single candidate (5→1 = no extra sampling)
                         "temperature": 0.0,  # FAST: Deterministic, no fallback
                         "compression_ratio_threshold": 2.4,
-                        "no_speech_threshold": 0.75,
-                        "logprob_threshold": -0.5,
+                        "no_speech_threshold": 0.6,  # Lowered from 0.75 to accept short greetings
+                        "logprob_threshold": -1.0,  # Lowered from -0.5 to accept uncertain short speech
                         "condition_on_previous_text": False,  # FAST: Each chunk independent
                         "verbose": False,
                     }
@@ -575,6 +575,22 @@ class WhisperTranscriptionService:
                     
                     # Level 3: Check if transcribed text is too short or gibberish (RELAXED)
                     if text:
+                        # Filter garbage transcriptions (punctuation-only, digits-only)
+                        # Whisper sometimes outputs just "?" or "." or "..." when uncertain
+                        import re
+                        cleaned_text = re.sub(r'[^\w\s]', '', text).strip()  # Remove all punctuation
+                        
+                        if not cleaned_text or len(cleaned_text) < 1:
+                            logger.warning(f"[WARN] Garbage transcription detected: '{text}' - likely noise, not speech")
+                            os.unlink(temp_audio_path)
+                            return {
+                                "success": False,
+                                "error": "Unclear audio. Please speak louder and try again.",
+                                "text": "",
+                                "no_speech_detected": True,
+                                "auto_retry": True
+                            }
+                        
                         word_count = len(text.split())
                         # RELAXED: Accept even single words (e.g., "print", "scan", "yes", "no")
                         # Only reject completely empty or very suspicious results
@@ -1400,12 +1416,17 @@ class VoiceChatService:
 
     def generate_response(self, user_message: str) -> Dict[str, Any]:
         """
-        Generate AI response to user message with intelligent command interpretation
-        First tries to match voice commands, then handles print/scan, then general chat
-
+        Generate AI response to user message with workflow orchestration.
+        
+        WORKFLOW:
+        1. Greeting → Fixed introduction
+        2. "print"/"scan" → Ask for confirmation ("say yes to proceed")
+        3. "yes" with pending → Trigger orchestration
+        4. Anything else → Ask Ollama AI
+        
         Args:
             user_message: User's text input
-
+            
         Returns:
             Dict with AI response and metadata
         """
@@ -1414,59 +1435,41 @@ class VoiceChatService:
 
             user_lower = user_message.lower().strip()
             
-            logger.info(f"[SEARCH] Processing message: '{user_message}' | Pending orchestration: {self.pending_orchestration}")
+            logger.info(f"[AI] Processing: '{user_message}' | Pending: {self.pending_orchestration}")
 
-            # PRIORITY -1: Check for GREETINGS - Respond with friendly introduction
-            is_greeting = False
-            if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
-                is_greeting = VoicePromptManager.is_greeting(user_message)  # type: ignore
-            else:
-                greeting_words = ["hello", "hi", "hey", "greetings", "howdy", "good morning", "good afternoon", "good evening"]
-                is_greeting = any(word in user_lower for word in greeting_words)
+            # ===== STEP 1: GREETING =====
+            # Check if this is a greeting and respond with introduction
+            greeting_words = ["hello", "hi", "hey", "greetings", "howdy", "good morning", "good afternoon", "good evening", "hola"]
+            is_greeting = any(word in user_lower for word in greeting_words) or user_lower in greeting_words
             
-            if is_greeting:
-                # Greeting detected - Return friendly concise introduction
-                greeting_response = "Hey there, I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. What would you like to do?"
+            if is_greeting and not self.pending_orchestration:
+                greeting_response = "Hi there! I am PrintChakra AI, your voice-controlled document assistant. I can help you print or scan documents. Just say 'print' or 'scan' to get started."
                 logger.info(f"[GREETING] Recognized greeting: '{user_message}'")
-                logger.info(f"[GREETING] Responding with introduction: {greeting_response}")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": greeting_response})
                 
-                # Keep only last 8 exchanges (16 messages) for context
-                if len(self.conversation_history) > 16:
-                    self.conversation_history = self.conversation_history[-16:]
-                
                 return {
                     "success": True,
                     "response": greeting_response,
+                    "tts_response": greeting_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
                 }
 
-            # PRIORITY 0: Check for DIRECT print/scan commands FIRST - HIGHEST PRIORITY
-            # These should ask for confirmation before triggering
-            is_print_command = False
-            is_scan_command = False
+            # ===== STEP 2: PRINT/SCAN COMMAND → ASK CONFIRMATION =====
+            print_keywords = ["print", "printing", "i want to print", "print document", "print documents"]
+            scan_keywords = ["scan", "scanning", "i want to scan", "scan document", "scan documents"]
             
-            if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
-                is_print_command = VoicePromptManager.is_print_command(user_message)  # type: ignore
-                is_scan_command = VoicePromptManager.is_scan_command(user_message)  # type: ignore
-            else:
-                print_keywords = ["print", "printing", "printout", "print doc", "print file", "print paper", "print document", "i want to print", "need to print"]
-                scan_keywords = ["scan", "scanning", "capture", "scan doc", "scan file", "capture doc", "capture document", "scan document"]
-                question_words = ["what", "can you", "how do", "help", "how to", "tell me", "can i", "what is", "can print", "help me", "show me"]
-                is_question = any(word in user_lower for word in question_words)
-                is_print_command = any(keyword in user_lower for keyword in print_keywords) and not is_question
-                is_scan_command = any(keyword in user_lower for keyword in scan_keywords) and not is_question
+            is_print_command = any(keyword in user_lower for keyword in print_keywords) and "?" not in user_message
+            is_scan_command = any(keyword in user_lower for keyword in scan_keywords) and "?" not in user_message
             
-            if is_print_command:
-                # Direct print command detected - ASK FOR CONFIRMATION
+            if is_print_command and not self.pending_orchestration:
                 self.pending_orchestration = "print"
-                ai_response = "Would you like me to open the print configuration? Say 'yes' to proceed."
-                logger.info(f"[PRINT] Print command detected - asking for confirmation | Message: '{user_message}'")
+                ai_response = "Do you want to print? Say yes to proceed."
+                logger.info(f"[PRINT] Print command detected - asking for confirmation")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -1474,6 +1477,7 @@ class VoiceChatService:
                 return {
                     "success": True,
                     "response": ai_response,
+                    "tts_response": ai_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
@@ -1482,11 +1486,10 @@ class VoiceChatService:
                     "pending_mode": "print",
                 }
             
-            if is_scan_command:
-                # Direct scan command detected - ASK FOR CONFIRMATION
+            if is_scan_command and not self.pending_orchestration:
                 self.pending_orchestration = "scan"
-                ai_response = "Would you like me to open the scan configuration? Say 'yes' to proceed."
-                logger.info(f"[SCAN] Scan command detected - asking for confirmation | Message: '{user_message}'")
+                ai_response = "Do you want to scan? Say yes to proceed."
+                logger.info(f"[SCAN] Scan command detected - asking for confirmation")
                 
                 self.conversation_history.append({"role": "user", "content": user_message})
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -1494,6 +1497,7 @@ class VoiceChatService:
                 return {
                     "success": True,
                     "response": ai_response,
+                    "tts_response": ai_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
@@ -1502,38 +1506,25 @@ class VoiceChatService:
                     "pending_mode": "scan",
                 }
 
-            # PRIORITY 1: Check for confirmation if we have PENDING ORCHESTRATION
-            # This MUST come before voice command interpretation so "yes" triggers orchestration
+            # ===== STEP 3: CONFIRMATION → TRIGGER ORCHESTRATION =====
             if self.pending_orchestration:
-                is_confirmation = False
-                if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
-                    is_confirmation = VoicePromptManager.is_confirmation(user_message)  # type: ignore
-                else:
-                    confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye", "confirm"]
-                    is_confirmation = any(
-                        user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words
-                    )
+                confirmation_words = ["yes", "proceed", "go ahead", "okay", "ok", "sure", "yep", "yeah", "ye", "confirm", "do it"]
+                is_confirmation = any(user_lower == word or user_lower.startswith(word + " ") for word in confirmation_words)
+                
                 if is_confirmation:
                     mode = self.pending_orchestration
                     self.pending_orchestration = None  # Clear pending state
                     
-                    # Use template system with the action/mode filled in
-                    if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
-                        ai_response = VoicePromptManager.get_friendly_command_response(
-                            "confirm",
-                            {"action": mode}
-                        )
-                    else:
-                        ai_response = f"Opening {mode} interface now!"
+                    ai_response = f"Opening {mode} interface now!"
                     logger.info(f"[OK] CONFIRMATION RECEIVED - TRIGGERING ORCHESTRATION: {mode}")
                     
-                    # Add to history
                     self.conversation_history.append({"role": "user", "content": user_message})
                     self.conversation_history.append({"role": "assistant", "content": ai_response})
                     
                     return {
                         "success": True,
                         "response": ai_response,
+                        "tts_response": ai_response,
                         "model": self.model_name,
                         "timestamp": datetime.now().isoformat(),
                         "tts_enabled": TTS_AVAILABLE,
@@ -1542,81 +1533,11 @@ class VoiceChatService:
                         "orchestration_mode": mode,
                     }
                 else:
-                    # User said something else - clear pending and continue conversation
-                    logger.info(f"[WARN] User response not a confirmation, clearing pending state")
+                    # User said something else - clear pending and continue
+                    logger.info(f"[WARN] User said '{user_message}' instead of confirmation, clearing pending")
                     self.pending_orchestration = None
 
-            # PRIORITY 2: Try to interpret as a voice command (navigation, control)
-            command_type, confidence = self.interpret_voice_command(user_message)
-            if command_type and confidence > 0.7:  # High confidence command match
-                # Parse command parameters for document selector
-                command_params = self._parse_command_parameters(user_message, command_type)
-                if command_type == "select_document":
-                    command_params.setdefault("section", "current")
-                    command_params.setdefault("document_number", 1)
-                elif command_type == "switch_section":
-                    command_params.setdefault("section", "current")
-                
-                ai_response = f"VOICE_COMMAND:{command_type} Executing {command_type}!"
-                logger.info(f"[OK] VOICE COMMAND DETECTED: {command_type} (confidence: {confidence:.2f}, params: {command_params})")
-                
-                # Add to history
-                self.conversation_history.append({"role": "user", "content": user_message})
-                self.conversation_history.append({"role": "assistant", "content": ai_response})
-                
-                if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
-                    friendly_response = VoicePromptManager.get_friendly_command_response(  # type: ignore
-                        command_type,
-                        command_params,
-                    )
-                else:
-                    friendly_response = f"Got it! {command_type.replace('_', ' ').title()}."
-
-                return {
-                    "success": True,
-                    "response": friendly_response,
-                    "model": self.model_name,
-                    "timestamp": datetime.now().isoformat(),
-                    "tts_enabled": TTS_AVAILABLE,
-                    "spoken": False,
-                    "voice_command": command_type,
-                    "command_confidence": confidence,
-                    "command_params": command_params,
-                }
-
-            # PRIORITY 2.5: Check for MULTIPLE settings in a single command
-            # e.g., "print in landscape with grayscale at 300 dpi"
-            multi_settings = self._parse_multi_settings_command(user_message)
-            if multi_settings.get("has_settings") and len(multi_settings.get("changes", [])) > 0:
-                settings = multi_settings["settings"]
-                response = multi_settings["response"]
-                tts_response = truncate_to_word_count(
-                    multi_settings.get("tts_response", response),
-                    max_words=20
-                )
-                changes = multi_settings["changes"]
-                
-                logger.info(f"[MULTI-SETTINGS] Detected {len(changes)} settings changes")
-                
-                self.conversation_history.append({"role": "user", "content": user_message})
-                self.conversation_history.append({"role": "assistant", "content": response})
-                
-                return {
-                    "success": True,
-                    "response": response,
-                    "tts_response": tts_response,
-                    "model": self.model_name,
-                    "timestamp": datetime.now().isoformat(),
-                    "tts_enabled": TTS_AVAILABLE,
-                    "spoken": False,
-                    "voice_command": "apply_settings",
-                    "command_params": settings,
-                    "settings_changes": changes,
-                    "multi_settings": True,
-                }
-
-            # Add user message to history for general conversation
-
+            # ===== STEP 4: GENERAL CONVERSATION → ASK OLLAMA =====
             self.conversation_history.append({"role": "user", "content": user_message})
 
             # Build messages for Ollama
@@ -1624,11 +1545,10 @@ class VoiceChatService:
                 {"role": "system", "content": self.system_prompt}
             ] + self.conversation_history
 
-            # Call Ollama API with speed optimizations using centralized query builder
+            # Call Ollama API
             if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
                 query = VoicePromptManager.build_ollama_query(self.model_name, messages)  # type: ignore
             else:
-                # Fallback query if prompt manager not available
                 query = {
                     "model": self.model_name,
                     "messages": messages,
@@ -1637,7 +1557,7 @@ class VoiceChatService:
                         "temperature": 0.7,
                         "top_p": 0.9,
                         "top_k": 40,
-                        "num_predict": 30,
+                        "num_predict": 50,
                         "num_ctx": 1024,
                         "repeat_penalty": 1.2,
                         "stop": ["\n\n", "User:", "Assistant:"],
@@ -1655,22 +1575,16 @@ class VoiceChatService:
                 result = response.json()
                 ai_response = result.get("message", {}).get("content", "").strip()
 
-                # Format response using centralized prompt manager
+                # Format response if prompt manager available
                 if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
-                    # Use full response for chat display AND TTS
                     ai_response = VoicePromptManager.format_response(ai_response)  # type: ignore
-                    # Truncate for TTS to 20 words max
-                    tts_response = truncate_to_word_count(ai_response, max_words=20)
                 else:
-                    # Fallback formatting if prompt manager not available
+                    # Basic cleanup
                     ai_response = ai_response.replace("**", "").replace("*", "")
-                    # Clean up multiple spaces
                     import re
                     ai_response = re.sub(r'\s+', ' ', ai_response).strip()
                     if ai_response and ai_response[-1] not in ".!?":
                         ai_response += "."
-                    # Truncate for TTS to 20 words max
-                    tts_response = truncate_to_word_count(ai_response, max_words=20)
 
                 # Add assistant response to history
                 self.conversation_history.append({"role": "assistant", "content": ai_response})
@@ -1679,18 +1593,16 @@ class VoiceChatService:
                 if len(self.conversation_history) > 16:
                     self.conversation_history = self.conversation_history[-16:]
 
-                # logger.info(f"[OK] AI Response: {ai_response}")
+                logger.info(f"[AI] Response: {ai_response[:100]}...")
 
-                # Return response FIRST (so frontend displays it immediately)
-                # TTS will be triggered separately by frontend
                 return {
                     "success": True,
                     "response": ai_response,
-                    "tts_response": tts_response,  # Full response for TTS
+                    "tts_response": ai_response,
                     "model": self.model_name,
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
-                    "spoken": False,  # Will be spoken by separate endpoint
+                    "spoken": False,
                 }
             else:
                 logger.error(f"Ollama API error: {response.status_code}")
@@ -1956,8 +1868,15 @@ class VoiceAIOrchestrator:
         self.chat_service = VoiceChatService()
         self.session_active = False
 
-        # Initialize TTS
-        _init_tts_engine()
+        # Initialize TTS in background thread (non-blocking to prevent COM hang)
+        def init_tts_bg():
+            try:
+                _init_tts_engine()
+            except Exception as e:
+                logger.debug(f"[DEBUG] TTS background init: {e}")
+        
+        tts_thread = threading.Thread(target=init_tts_bg, daemon=True)
+        tts_thread.start()
 
     def start_session(self) -> Dict[str, Any]:
         """Start a new voice AI session"""
@@ -2116,6 +2035,10 @@ class VoiceAIOrchestrator:
             )
             voice_command = chat_response.get("voice_command")
             command_params = chat_response.get("command_params", {})
+            
+            # IMPORTANT: Forward awaiting_confirmation and pending_mode from chat service
+            awaiting_confirmation = chat_response.get("awaiting_confirmation", False)
+            pending_mode = chat_response.get("pending_mode")
 
             # Step 3: Check for orchestration triggers in AI response
             orchestration_trigger = chat_response.get("orchestration_trigger")
@@ -2138,9 +2061,16 @@ class VoiceAIOrchestrator:
                 
                 # Remove trigger from response (clean display text)
                 ai_response = ai_response.replace(trigger_text, "").strip()
+                # IMPORTANT: Keep tts_response in sync with ai_response
+                tts_response = truncate_to_word_count(ai_response, max_words=20)
             
             # Step 4: Extract configuration parameters from user text
             config_params = self._extract_config_parameters(user_text_lower)
+
+            # FINAL SYNC: Ensure tts_response is always based on ai_response
+            # This catches any modifications made to ai_response after initial assignment
+            if tts_response != truncate_to_word_count(ai_response, max_words=20):
+                tts_response = truncate_to_word_count(ai_response, max_words=20)
 
             return {
                 "success": True,
@@ -2157,6 +2087,8 @@ class VoiceAIOrchestrator:
                 "orchestration_trigger": orchestration_trigger,
                 "orchestration_mode": orchestration_mode,
                 "config_params": config_params,
+                "awaiting_confirmation": awaiting_confirmation,  # Forward confirmation state
+                "pending_mode": pending_mode,  # Forward pending mode for confirmation
             }
 
         except Exception as e:

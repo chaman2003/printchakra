@@ -47,6 +47,9 @@ export * from './stateManager';
 // Document selection parsing
 export * from './documentSelectionParser';
 
+// Word limiter utility
+export * from './wordLimiter';
+
 // Configuration
 export { default as AIAssistConfig } from './config';
 

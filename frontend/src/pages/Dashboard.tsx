@@ -479,8 +479,8 @@ const Dashboard: React.FC = () => {
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
 
-  // Calibration delay for first document capture
-  const { initialDelay, isCalibrated } = useCalibration();
+  // Auto-capture delays from calibration
+  const { initialDelay, interCaptureDelay, isCalibrated } = useCalibration();
 
   // PaddleOCR state - initialize from localStorage for persistence across page reloads
   const [ocrResults, setOcrResults] = useState<Record<string, OCRResult>>(() => {
@@ -2137,32 +2137,32 @@ const Dashboard: React.FC = () => {
           // Priority 1: If document selector is open, confirm selection and show config
           if (documentSelectorModal.isOpen) {
             console.log('[PROCEED_ACTION] Document selector open - confirming selection');
-            
+
             // Get the currently selected documents from the DocumentSelector component
             const internallySelectedDocs = documentSelectorRef.current?.getSelectedDocuments?.() || [];
             console.log('[PROCEED_ACTION] Internally selected docs:', internallySelectedDocs);
-            
+
             // Close the selector first
             documentSelectorModal.onClose();
-            
+
             if (orchestrateMode && internallySelectedDocs.length > 0) {
               // Update selectedDocuments with what was internally selected
               const enhancedDocs = await enhanceDocumentsWithPages(internallySelectedDocs);
               console.log('[PROCEED_ACTION] Setting selected documents:', enhancedDocs);
               setSelectedDocuments(enhancedDocs);
-              
+
               // Ensure we're at step 2 (configuration)
               if (orchestrateStep !== 2) {
                 setOrchestrateStep(2);
               }
-              
+
               // Open orchestration modal if not already open to show configuration
               if (!orchestrateModal.isOpen) {
                 orchestrateModal.onOpen();
               }
-              
+
               markSelectionConfirmed();
-              
+
               toast({
                 title: 'Selection Confirmed',
                 description: `${enhancedDocs.length} document(s) selected. Configure settings below.`,
@@ -3592,29 +3592,22 @@ const Dashboard: React.FC = () => {
       // Close modal immediately
       orchestrateModal.onClose();
 
-      // Schedule auto-capture to enable AFTER 12 seconds (non-blocking)
+      // Emit auto-capture start IMMEDIATELY - Phone handles the delay
+      // This centralizes ALL delay logic in the phone view
       if (socket && !autoCaptureEnabled) {
+        console.log(`[DASHBOARD] Sending start_auto_capture with delaySeconds=${initialDelay}`);
+        socket.emit('start_auto_capture', {
+          documentCount: documentsToprint.length,
+          delaySeconds: initialDelay,  // Tell phone what delay to use
+          timestamp: Date.now(),
+        });
+        setAutoCaptureEnabled(true);
         toast({
-          title: '📱 Auto-Capture Scheduled',
-          description: 'Phone auto-capture will enable in 12 seconds...',
+          title: '📱 Auto-Capture Sent to Phone',
+          description: `Phone will enable auto-capture in ${initialDelay}s`,
           status: 'info',
           duration: 3000,
         });
-
-        // Enable auto-capture after 12 seconds (doesn't block printing)
-        setTimeout(() => {
-          socket.emit('start_auto_capture', {
-            documentCount: documentsToprint.length,
-            timestamp: Date.now(),
-          });
-          setAutoCaptureEnabled(true);
-          toast({
-            title: '📱 Auto-Capture Enabled',
-            description: 'Phone is now capturing documents!',
-            status: 'success',
-            duration: 2000,
-          });
-        }, 12000);
       }
 
       // Print ALL documents INSTANTLY (no delays)
@@ -3734,29 +3727,22 @@ const Dashboard: React.FC = () => {
     let successCount = 0;
     let failCount = 0;
 
-    // Schedule auto-capture to enable AFTER 12 seconds (non-blocking)
+    // Emit auto-capture start IMMEDIATELY - Phone handles the delay
+    // This centralizes ALL delay logic in the phone view
     if (socket && !autoCaptureEnabled) {
+      console.log(`[DASHBOARD] Sending start_auto_capture with delaySeconds=${initialDelay}`);
+      socket.emit('start_auto_capture', {
+        documentCount: documentsToFeed,
+        delaySeconds: initialDelay,  // Tell phone what delay to use
+        timestamp: Date.now(),
+      });
+      setAutoCaptureEnabled(true);
       toast({
-        title: '📱 Auto-Capture Scheduled',
-        description: 'Phone auto-capture will enable in 12 seconds...',
+        title: '📱 Auto-Capture Sent to Phone',
+        description: `Phone will enable auto-capture in ${initialDelay}s`,
         status: 'info',
         duration: 3000,
       });
-
-      // Enable auto-capture after 12 seconds (doesn't block feeding)
-      setTimeout(() => {
-        socket.emit('start_auto_capture', {
-          documentCount: documentsToFeed,
-          timestamp: Date.now(),
-        });
-        setAutoCaptureEnabled(true);
-        toast({
-          title: '📱 Auto-Capture Enabled',
-          description: 'Phone is now capturing documents!',
-          status: 'success',
-          duration: 2000,
-        });
-      }, 12000);
     }
 
     // Feed documents INSTANTLY (no waiting)
@@ -3774,28 +3760,17 @@ const Dashboard: React.FC = () => {
           // Use the /print endpoint with type: "blank" - this triggers the printer to feed paper
           const response = await apiClient.post('/print', { type: 'blank' });
 
+
           if (response.data.status === 'success') {
             successCount++;
             setFeedCount(prev => prev + 1);
             console.log(`[FEED] Document ${i + 1} fed successfully`);
-          } else if (response.data.message?.includes('not found')) {
-            // If blank.pdf doesn't exist, try to create it first (only on first failure)
-            if (i === 0) {
-              await apiClient.post('/print', { type: 'test' });
-              const retryResponse = await apiClient.post('/print', { type: 'blank' });
-              if (retryResponse.data.status === 'success') {
-                successCount++;
-                setFeedCount(prev => prev + 1);
-              } else {
-                failCount++;
-              }
-            } else {
-              failCount++;
-            }
           } else {
+            console.error(`[FEED] Document ${i + 1} failed: ${response.data.message}`);
             failCount++;
           }
         } catch (innerErr) {
+          console.error(`[FEED] Error feeding document ${i + 1}:`, innerErr);
           failCount++;
         }
       }

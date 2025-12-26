@@ -160,8 +160,45 @@ def register_handlers(socketio):
                 "timestamp": datetime.now().isoformat()
             }, broadcast=True)
         
+
         except Exception as e:
             logger.error(f"Progress broadcast error: {e}")
+
+    @socketio.on("start_auto_capture")
+    def handle_start_auto_capture(data):
+        """
+        Handle auto-capture start command from Dashboard.
+        Relays the command to all clients (specifically the Phone).
+        """
+        from flask_socketio import emit
+        try:
+            logger.info(f"Received start_auto_capture: {data}")
+            emit("start_auto_capture", data, broadcast=True)
+        except Exception as e:
+            logger.error(f"Error in start_auto_capture handler: {e}")
+
+    @socketio.on("stop_auto_capture")
+    def handle_stop_auto_capture():
+        """
+        Handle auto-capture stop command from Dashboard.
+        """
+        from flask_socketio import emit
+        try:
+            logger.info("Received stop_auto_capture")
+            emit("stop_auto_capture", broadcast=True)
+        except Exception as e:
+            logger.error(f"Error in stop_auto_capture handler: {e}")
+    
+    @socketio.on("auto_capture_state_changed")
+    def handle_auto_capture_state(data):
+        """
+        Handle state change updates (enabled/disabled) to sync Dashboard and Phone.
+        """
+        from flask_socketio import emit
+        try:
+            emit("auto_capture_state_changed", data, broadcast=True, include_self=False)
+        except Exception as e:
+            logger.error(f"Error in auto_capture_state_changed handler: {e}")
 
 
 def emit_event(event: str, data: dict, broadcast: bool = True):

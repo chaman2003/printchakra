@@ -44,6 +44,20 @@ logger = logging.getLogger(__name__)
 # Suppress verbose werkzeug logging (Flask request logs)
 logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
+# Custom filter to suppress SSL connection errors (common with self-signed certs)
+class SSLErrorFilter(logging.Filter):
+    """Filter to suppress harmless SSL connection errors"""
+    def filter(self, record):
+        # Suppress SSLEOFError which happens when browser disconnects during handshake
+        if "SSLEOFError" in str(record.getMessage()):
+            return False
+        if "EOF occurred in violation of protocol" in str(record.getMessage()):
+            return False
+        return True
+
+# Apply SSL error filter to werkzeug logger
+logging.getLogger("werkzeug").addFilter(SSLErrorFilter())
+
 # Suppress Socket.IO logging
 logging.getLogger("socketio").setLevel(logging.WARNING)
 logging.getLogger("engineio").setLevel(logging.WARNING)
@@ -613,9 +627,10 @@ PDF_DIR = os.path.join(DATA_DIR, "pdfs")
 CONVERTED_DIR = os.path.join(DATA_DIR, "converted")
 STATIC_DIR = os.path.join(PUBLIC_DIR, "static")
 PRINT_DIR = os.path.join(BASE_DIR, "app", "print_scripts")
+TEST_CAPTURES_DIR = os.path.join(DATA_DIR, "test_captures")  # Temporary test captures for calibration
 
 # Create directories if they don't exist
-for directory in [PUBLIC_DIR, DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR, CONVERTED_DIR, STATIC_DIR]:
+for directory in [PUBLIC_DIR, DATA_DIR, UPLOAD_DIR, PROCESSED_DIR, TEXT_DIR, PRINT_DIR, PDF_DIR, CONVERTED_DIR, STATIC_DIR, TEST_CAPTURES_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 # Processing status tracking (in-memory)
@@ -1569,9 +1584,19 @@ def process_document_image(input_path, output_path, filename=None):
     3. Remove shadows
     4. White background + contrast
     That's it. No over-processing.
+    
+    PIPELINE STAGES (12 total):
+    1. Load - Load original image
+    2-6. Detect - Document detection (grayscale, blur, edge, contours)
+    7. Transform - Perspective correction
+    8. Process - Grayscale conversion
+    9-10. Enhance - Background estimation and shadow removal
+    11. OCR - Text extraction and filename generation
+    12. Save - Final save and completion
     """
     try:
         def emit_progress(step, stage_name, message):
+            """Emit progress update - step should always increase, never decrease"""
             progress_data = {
                 "filename": filename,
                 "step": step,
@@ -1581,7 +1606,7 @@ def process_document_image(input_path, output_path, filename=None):
             }
             socketio.emit("processing_progress", progress_data)
             if filename:
-                update_processing_status(filename, step, 5, stage_name)
+                update_processing_status(filename, step, 12, stage_name)
 
         # STEP 1: Load
         print(f"\n[1/12] Loading image...")
@@ -1596,7 +1621,7 @@ def process_document_image(input_path, output_path, filename=None):
         print(f"[2/12] Downscaling for detection...")
         emit_progress(2, "Detect", "Downscaling for detection...")
         
-        # We can just process but emit messages to simulate the steps for the user
+        # We process but emit messages to show progress to the user
         emit_progress(3, "Detect", "Converting to grayscale...")
         emit_progress(4, "Detect", "Applying Gaussian blur...")
         emit_progress(5, "Detect", "Running Canny edge detection...")
@@ -1604,7 +1629,7 @@ def process_document_image(input_path, output_path, filename=None):
         
         doc_contour = find_document_contour(image)
         
-        # STEP 7: Warp
+        # STEP 7: Warp/Transform
         print(f"[7/12] Perspective transform...")
         emit_progress(7, "Transform", "Applying perspective correction...")
         if doc_contour is not None:
@@ -1614,121 +1639,132 @@ def process_document_image(input_path, output_path, filename=None):
             warped = image
             print(f"  ✓ Using full image")
 
-        # STEP 8: Grayscale
+        # STEP 8: Process - Grayscale conversion
         print(f"[8/12] Grayscale conversion...")
         emit_progress(8, "Process", "Converting cropped document to grayscale...")
         gray = cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY)
 
-        # STEPS 9-11: Background Estimation
+        # STEPS 9-10: Enhance - Background Estimation and Shadow Removal
         print(f"[9/12] Background estimation...")
-        emit_progress(9, "Enhance", "Downscaling for background analysis...")
-        emit_progress(10, "Enhance", "Estimating background illumination...")
-        emit_progress(11, "Enhance", "Smoothing background model...")
+        emit_progress(9, "Enhance", "Estimating background illumination...")
         
-        # STEP 12: Shadow Removal
-        print(f"[12/12] Shadow removal...")
-        emit_progress(12, "Enhance", "Removing shadows and normalizing...")
+        print(f"[10/12] Shadow removal...")
+        emit_progress(10, "Enhance", "Removing shadows and normalizing...")
         
         enhanced = enhance_document_quality(gray)
         print(f"  ✓ Enhanced")
 
-        # Save result
-        print(f"[SA] Saving...")
-        # emit_progress(13, "Save", "Saving processed image...") # Optional extra step
+        # STEP 11: OCR - Text extraction and filename generation
+        print(f"[11/12] OCR and filename generation...")
+        emit_progress(11, "OCR", "Running OCR for text extraction...")
         
-        cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
-        print(f"  ✓ Saved: {output_path}")
-
-        # OCR (optional)
+        # Basic OCR (Tesseract)
         text = ""
         try:
             text = pytesseract.image_to_string(enhanced, lang="eng", config="--oem 3 --psm 3")
         except:
             pass
 
-        # Save text
+        # PaddleOCR + Ollama Filename Generation (part of OCR step)
+        ocr_filename = None
+        text_output_path = None
+        
+        # Save text first
         if text.strip():
             text_path = output_path.replace(".jpg", ".txt").replace(".png", ".txt").replace(".jpeg", ".txt")
             text_path = text_path.replace("/processed/", "/processed_text/")
             os.makedirs(os.path.dirname(text_path), exist_ok=True)
             with open(text_path, "w", encoding="utf-8") as f:
                 f.write(text)
+            text_output_path = text_path
 
-        # ============================================================================
-        # BONUS: PaddleOCR + Ollama Filename Generation
-        # ============================================================================
-        ocr_filename = None
         try:
             from app.modules.ocr.paddle_ocr import get_ocr_processor, OCRResult
             
-            print(f"\n[BONUS] PaddleOCR + Ollama Filename Generation")
-            emit_progress(8, "OCR Analysis", "Running advanced OCR for filename generation...")
+            ocr_result = None
+            ocr_processor = None
             
-            # Initialize OCR processor
-            ocr_data_dir = os.path.join(os.path.dirname(output_path), '..', 'ocr_results')
-            ocr_processor = get_ocr_processor(ocr_data_dir)
-            
-            # Run PaddleOCR on the processed image
-            ocr_result = ocr_processor.process_image(output_path)
-            
-            if ocr_result and ocr_result.word_count > 0:
-                # Get timestamp from filename if available
-                timestamp = None
-                if filename:
-                    import re
-                    match = re.search(r'_(\d{8}_\d{6})_', filename)
-                    if match:
-                        timestamp = match.group(1)
-                
-                # Generate filename using Ollama
-                suggested_filename = ocr_processor.generate_filename_from_ocr(ocr_result, timestamp)
-                
-                if suggested_filename and suggested_filename != "untitled":
-                    # Rename the file
-                    output_dir = os.path.dirname(output_path)
-                    ext = os.path.splitext(output_path)[1]
-                    new_filename = f"{suggested_filename}{ext}"
-                    new_output_path = os.path.join(output_dir, new_filename)
-                    old_basename = os.path.basename(output_path)
-                    
-                    # Avoid overwriting existing files
-                    counter = 1
-                    while os.path.exists(new_output_path):
-                        new_filename = f"{suggested_filename}_{counter}{ext}"
-                        new_output_path = os.path.join(output_dir, new_filename)
-                        counter += 1
-                    
-                    # Rename the processed image
-                    os.rename(output_path, new_output_path)
-                    
-                    # We no longer create a legacy copy to prevent duplicates
-                    # The frontend will handle the rename via the processing_complete event
-                    
-                    output_path = new_output_path
-                    ocr_filename = new_filename
-                    ocr_filename = new_filename
-                    
-                    # Also rename the text file if it exists
-                    if text_output_path and os.path.exists(text_output_path):
-                        new_text_filename = f"{suggested_filename}.txt"
-                        new_text_path = os.path.join(os.path.dirname(text_output_path), new_text_filename)
-                        if not os.path.exists(new_text_path):
-                            os.rename(text_output_path, new_text_path)
-                            text_output_path = new_text_path
-                    
-                    print(f"  ✓ File renamed based on OCR content: {new_filename}")
-                    print(f"    Derived title: {ocr_result.derived_title}")
-                
-                # Save OCR result with the correct filename (new or original)
-                ocr_result_filename = os.path.basename(output_path)
-                ocr_processor.save_result(ocr_result_filename, ocr_result)
-                print(f"  ✓ OCR result saved ({ocr_result.word_count} words, {len(ocr_result.raw_results)} regions)")
+            # Skip OCR for very small images (likely corrupt, thumbnails, or test images)
+            img_height, img_width = enhanced.shape[:2]
+            if img_width < 200 or img_height < 200:
+                print(f"  ⚠ Skipping OCR: Image too small ({img_width}x{img_height}), likely corrupt or test image")
+                # Just save the image
+                cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
             else:
-                print(f"  ? No text detected by PaddleOCR, keeping original filename")
+                print(f"  Running PaddleOCR for intelligent filename...")
+                
+                # Initialize OCR processor
+                ocr_data_dir = os.path.join(os.path.dirname(output_path), '..', 'ocr_results')
+                ocr_processor = get_ocr_processor(ocr_data_dir)
+                
+                # Run PaddleOCR on the enhanced image (save it first temporarily)
+                cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                ocr_result = ocr_processor.process_image(output_path)
+                
+                if ocr_result and ocr_result.word_count > 0:
+                    # Get timestamp from filename if available
+                    timestamp = None
+                    if filename:
+                        import re
+                        match = re.search(r'_(\d{8}_\d{6})_', filename)
+                        if match:
+                            timestamp = match.group(1)
+                    
+                    # Generate filename using Ollama
+                    suggested_filename = ocr_processor.generate_filename_from_ocr(ocr_result, timestamp)
+                    
+                    if suggested_filename and suggested_filename != "untitled":
+                        # Rename the file
+                        output_dir = os.path.dirname(output_path)
+                        ext = os.path.splitext(output_path)[1]
+                        new_filename = f"{suggested_filename}{ext}"
+                        new_output_path = os.path.join(output_dir, new_filename)
+                        old_basename = os.path.basename(output_path)
+                        
+                        # Avoid overwriting existing files
+                        counter = 1
+                        while os.path.exists(new_output_path):
+                            new_filename = f"{suggested_filename}_{counter}{ext}"
+                            new_output_path = os.path.join(output_dir, new_filename)
+                            counter += 1
+                        
+                        # Rename the processed image
+                        os.rename(output_path, new_output_path)
+                        
+                        output_path = new_output_path
+                        ocr_filename = new_filename
+                        
+                        # Also rename the text file if it exists
+                        if text_output_path and os.path.exists(text_output_path):
+                            new_text_filename = f"{suggested_filename}.txt"
+                            new_text_path = os.path.join(os.path.dirname(text_output_path), new_text_filename)
+                            if not os.path.exists(new_text_path):
+                                os.rename(text_output_path, new_text_path)
+                                text_output_path = new_text_path
+                        
+                        print(f"  ✓ File renamed based on OCR content: {new_filename}")
+                    
+                    # Save OCR result with the correct filename
+                    ocr_result_filename = os.path.basename(output_path)
+                    ocr_processor.save_result(ocr_result_filename, ocr_result)
+                    print(f"  ✓ OCR result saved ({ocr_result.word_count} words)")
+                else:
+                    print(f"  ⚠ No text detected by PaddleOCR, keeping original filename")
                 
         except Exception as paddle_ocr_error:
             print(f"  [WARN] PaddleOCR/Ollama step failed: {paddle_ocr_error}")
-            # Continue without renaming - not critical
+            # Save image if not already saved
+            if not os.path.exists(output_path):
+                cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
+
+        # STEP 12: Save - Final completion
+        print(f"[12/12] Finalizing...")
+        emit_progress(12, "Save", "Saving processed document...")
+        
+        # Ensure image is saved (if PaddleOCR didn't save it)
+        if not os.path.exists(output_path):
+            cv2.imwrite(output_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        print(f"  ✓ Saved: {output_path}")
 
         print(f"\n{'='*60}")
         print(f"[OK] PROCESSING COMPLETE!")
@@ -1747,7 +1783,7 @@ def process_document_image(input_path, output_path, filename=None):
         error_data = {"error": str(e), "message": "Processing failed"}
         socketio.emit("processing_error", error_data)
         if filename:
-            update_processing_status(filename, 5, 5, "Error", is_complete=True, error=str(e))
+            update_processing_status(filename, 12, 12, "Error", is_complete=True, error=str(e))
         return False, str(e), None
 
 
@@ -1916,6 +1952,152 @@ def serve_public_static(filename):
         return response
     except Exception as e:
         logger.error(f"Error serving static file {filename}: {e}")
+        return jsonify({"error": "File not found"}), 404
+
+
+# ============================================================================
+# TEST CAPTURE ENDPOINTS (for calibration testing)
+# ============================================================================
+
+@app.route("/test-capture", methods=["POST", "OPTIONS"])
+def upload_test_capture():
+    """
+    Upload a test capture during calibration testing.
+    These images are temporary and will be deleted when testing ends.
+    """
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        return response, 200
+    
+    try:
+        if "file" not in request.files:
+            return jsonify({"success": False, "error": "No file provided"}), 400
+        
+        file = request.files["file"]
+        if file.filename == "":
+            return jsonify({"success": False, "error": "No file selected"}), 400
+        
+        # Generate unique filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        ext = os.path.splitext(file.filename)[1] or ".jpg"
+        filename = f"test_capture_{timestamp}{ext}"
+        filepath = os.path.join(TEST_CAPTURES_DIR, filename)
+        
+        # Save file
+        file.save(filepath)
+        logger.info(f"[TEST_CAPTURE] Saved test capture: {filename}")
+        
+        # Get file size for response
+        file_size = os.path.getsize(filepath)
+        
+        # Emit Socket.IO event to notify frontend of new test capture
+        socketio.emit("test_capture_received", {
+            "filename": filename,
+            "url": f"/public/test_captures/{filename}",
+            "size": file_size,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return jsonify({
+            "success": True,
+            "filename": filename,
+            "url": f"/public/test_captures/{filename}",
+            "size": file_size,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"[TEST_CAPTURE] Upload error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/test-captures", methods=["GET"])
+def list_test_captures():
+    """List all test captures"""
+    try:
+        captures = []
+        if os.path.exists(TEST_CAPTURES_DIR):
+            for filename in os.listdir(TEST_CAPTURES_DIR):
+                filepath = os.path.join(TEST_CAPTURES_DIR, filename)
+                if os.path.isfile(filepath):
+                    captures.append({
+                        "filename": filename,
+                        "url": f"/public/test_captures/{filename}",
+                        "size": os.path.getsize(filepath),
+                        "modified": datetime.fromtimestamp(os.path.getmtime(filepath)).isoformat()
+                    })
+        
+        # Sort by modified time descending
+        captures.sort(key=lambda x: x["modified"], reverse=True)
+        
+        return jsonify({
+            "success": True,
+            "count": len(captures),
+            "captures": captures
+        })
+        
+    except Exception as e:
+        logger.error(f"[TEST_CAPTURE] List error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/test-captures/clear", methods=["POST", "DELETE"])
+def clear_test_captures():
+    """Delete all test captures"""
+    try:
+        deleted_count = 0
+        if os.path.exists(TEST_CAPTURES_DIR):
+            for filename in os.listdir(TEST_CAPTURES_DIR):
+                filepath = os.path.join(TEST_CAPTURES_DIR, filename)
+                if os.path.isfile(filepath):
+                    os.remove(filepath)
+                    deleted_count += 1
+        
+        logger.info(f"[TEST_CAPTURE] Cleared {deleted_count} test captures")
+        
+        # Emit Socket.IO event to notify frontend
+        socketio.emit("test_captures_cleared", {
+            "deleted_count": deleted_count,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return jsonify({
+            "success": True,
+            "deleted_count": deleted_count,
+            "message": f"Deleted {deleted_count} test capture(s)"
+        })
+        
+    except Exception as e:
+        logger.error(f"[TEST_CAPTURE] Clear error: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/public/test_captures/<path:filename>", methods=["GET", "OPTIONS"])
+def serve_test_captures(filename):
+    """Serve test capture files"""
+    origin = request.headers.get('Origin', 'http://localhost:3000')
+    
+    if request.method == "OPTIONS":
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response, 200
+    
+    try:
+        response = send_from_directory(TEST_CAPTURES_DIR, filename)
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        return response
+    except Exception as e:
+        logger.error(f"Error serving test capture {filename}: {e}")
         return jsonify({"error": "File not found"}), 404
 
 
@@ -4806,8 +4988,12 @@ def transcribe_voice():
 @app.route("/voice/chat", methods=["POST"])
 def chat_with_ai():
     """
-    Send text to the configured voice AI model and get a response
+    Send text to the AI and get a response.
+    UNIFIED: This endpoint now behaves identically to text input.
+    Voice-specific logic has been removed - all processing is done by generate_response().
+    
     Expects: JSON with 'message' field
+    Returns: AI response with all standard fields
     """
     try:
         from app.modules.voice import voice_ai_orchestrator
@@ -4829,199 +5015,19 @@ def chat_with_ai():
 
         logger.info(f"💬 User message: {user_message}")
 
-        # Generate response (text only, no TTS)
+        # Generate response - NO extra processing, same as text input
         response = voice_ai_orchestrator.chat_service.generate_response(user_message)
 
         if response.get("success"):
             ai_response = response.get("response", "")
-            # Ensure tts_response matches for voice/text sync
+            
+            # Ensure response fields are consistent for frontend
             if "tts_response" not in response:
                 response["tts_response"] = ai_response
             if "ai_response" not in response:
                 response["ai_response"] = ai_response
-            logger.info(f"[ORCHESTRATOR] AI response (raw): {ai_response}")
             
-            # Check for orchestration triggers - FIRST check if response already has them
-            orchestration_trigger = response.get("orchestration_trigger")
-            orchestration_mode = response.get("orchestration_mode")
-            
-            # If not already set, try to parse from response text
-            if not orchestration_trigger:
-                if "TRIGGER_ORCHESTRATION:" in ai_response:
-                    # Extract orchestration mode from trigger
-                    trigger_start = ai_response.index("TRIGGER_ORCHESTRATION:")
-                    trigger_end = ai_response.find(" ", trigger_start)
-                    if trigger_end == -1:
-                        trigger_end = len(ai_response)
-                    
-                    trigger_text = ai_response[trigger_start:trigger_end]
-                    if "print" in trigger_text.lower():
-                        orchestration_mode = "print"
-                        orchestration_trigger = True
-                    elif "scan" in trigger_text.lower():
-                        orchestration_mode = "scan"
-                        orchestration_trigger = True
-                    
-                    # Remove trigger from response (clean display text)
-                    ai_response = ai_response.replace(trigger_text, "").strip()
-                    response["response"] = ai_response
-                    logger.info(f"[TRIGGER] ORCHESTRATION DETECTED! Mode: {orchestration_mode}, Trigger removed from response")
-            
-            # Extract configuration parameters from user text
-            config_params = voice_ai_orchestrator._extract_config_parameters(user_message.lower())
-            
-            # Check orchestration state and handle configuration changes (like /voice/process does)
-            if ORCHESTRATION_AVAILABLE and orchestrator:
-                current_state = orchestrator.current_state.value
-                
-                # If in CONFIGURING state, parse and apply configuration changes
-                # BUT skip if a voice command like proceed_action was already detected
-                voice_command = response.get("voice_command")
-                skip_config_parsing = voice_command in [
-                    "proceed_action", "select_document", "select_document_range",
-                    "select_multiple_documents", "deselect_document", "switch_section",
-                    "next_document", "previous_document", "confirm", "cancel"
-                ]
-                
-                # ALSO skip config parsing if this is a print/scan intent - handle it as new orchestration
-                user_message_lower = user_message.lower().strip()
-                is_print_intent = user_message_lower in ["print", "print.", "i want to print", "print document", "print documents"]
-                is_scan_intent = user_message_lower in ["scan", "scan.", "i want to scan", "scan document", "scan documents"]
-                
-                if is_print_intent or is_scan_intent:
-                    skip_config_parsing = True
-                    mode = "print" if is_print_intent else "scan"
-                    logger.info(f"[CHAT] Detected {mode} intent in configuring state, treating as new orchestration")
-                    response["orchestration_trigger"] = True
-                    response["orchestration_mode"] = mode
-                    ai_response = f"Would you like me to open the {mode} configuration? Say 'yes' to proceed."
-                    response["response"] = ai_response
-                
-                if current_state == "configuring" and orchestrator.pending_action and not skip_config_parsing:
-                    action_type = orchestrator.pending_action.get("type")
-                    if action_type:
-                        logger.info(f"[CHAT] Parsing configuration for {action_type} from chat message")
-                        parsed_config = orchestrator.parse_voice_configuration(
-                            user_message, action_type
-                        )
-                        
-                        if parsed_config.get("no_changes"):
-                            # User indicated they're done with configuration
-                            response["orchestration"] = {
-                                "no_changes": True,
-                                "message": "Configuration complete. Ready to proceed.",
-                                "ready_to_confirm": True,
-                            }
-                            
-                            try:
-                                socketio.emit(
-                                    "orchestration_update",
-                                    {
-                                        "type": "configuration_complete",
-                                        "ready_to_confirm": True,
-                                        "timestamp": datetime.now().isoformat(),
-                                    },
-                                )
-                            except Exception as socket_error:
-                                logger.warning(f"Socket.IO emit failed: {socket_error}")
-                        elif parsed_config:
-                            # Apply configuration updates
-                            update_result = orchestrator.update_configuration(
-                                action_type, parsed_config
-                            )
-                            response["orchestration"] = {
-                                "configuration_updated": True,
-                                "updates": parsed_config,
-                                "configuration": update_result.get("configuration"),
-                            }
-                            
-                            # Build confirmation message
-                            confirmation_message = _build_voice_confirmation(parsed_config)
-                            if confirmation_message:
-                                response["response"] = confirmation_message
-                                ai_response = confirmation_message
-                            
-                            # Emit socket event for frontend to update UI
-                            try:
-                                socketio.emit(
-                                    "orchestration_update",
-                                    {
-                                        "type": "voice_configuration_updated",
-                                        "action_type": action_type,
-                                        "updates": parsed_config,
-                                        "configuration": update_result.get("configuration"),
-                                        "frontend_updates": update_result.get("frontend_updates"),
-                                        "frontend_state": update_result.get("frontend_state"),
-                                        "timestamp": datetime.now().isoformat(),
-                                    },
-                                )
-                                logger.info(f"[CHAT] Emitted configuration update: {parsed_config}")
-                            except Exception as socket_error:
-                                logger.warning(f"Socket.IO emit failed: {socket_error}")
-                
-                # If orchestration trigger detected, set up orchestrator state
-                elif orchestration_trigger and orchestration_mode:
-                    from app.modules.orchestration import IntentType
-                    
-                    logger.info(f"[CHAT] Setting up {orchestration_mode} orchestration state")
-                    
-                    # Add voice_triggered flag to trigger CONFIGURING state
-                    intent_text = f"{orchestration_mode} a document with voice control"
-                    intent, params = orchestrator.detect_intent(intent_text)
-                    
-                    if params is None:
-                        params = {}
-                    params["voice_triggered"] = True
-                    
-                    # Process command to set orchestrator state
-                    orchestration_result = orchestrator.process_command(
-                        intent_text,
-                        force_voice_triggered=True,
-                    )
-                    
-                    response["orchestration_state_setup"] = True
-                    response["orchestration_workflow_state"] = orchestrator.current_state.value
-                    
-                    # Emit orchestration trigger event
-                    try:
-                        socketio.emit(
-                            "orchestration_update",
-                            {
-                                "type": "voice_command_detected",
-                                "intent": orchestration_mode,
-                                "result": orchestration_result,
-                                "timestamp": datetime.now().isoformat(),
-                                "open_ui": orchestration_result.get("open_ui", False),
-                                "skip_mode_selection": orchestration_result.get("skip_mode_selection", False),
-                                "frontend_state": orchestration_result.get("frontend_state"),
-                            },
-                        )
-                    except Exception as socket_error:
-                        logger.warning(f"Socket.IO emit failed: {socket_error}")
-                    
-                    logger.info(f"[CHAT] Orchestrator state set to: {orchestrator.current_state.value}")
-            
-            # Add orchestration data to response
-            response["orchestration_trigger"] = orchestration_trigger
-            response["orchestration_mode"] = orchestration_mode
-            response["config_params"] = config_params
-            
-            # Add follow-up question based on orchestration mode
-            if orchestration_trigger and orchestration_mode:
-                if orchestration_mode == "print":
-                    # For print, ask which document to print
-                    ai_response = "Print mode activated. Which document would you like to print? You can say 'select document 1' or browse your files."
-                elif orchestration_mode == "scan":
-                    # For scan, ask about document source
-                    ai_response = "Scan mode activated. Do you want to select or upload a document, or use the printer's feed tray?"
-                response["response"] = ai_response
-            
-            logger.info(f"[OK] Final AI response: {ai_response}")
-            if orchestration_trigger:
-                logger.info(f"[TRIGGER] Orchestration will trigger: {orchestration_mode} with params: {config_params}")
-            else:
-                logger.info(f"[INFO] No orchestration trigger in this response")
-            
+            logger.info(f"[OK] AI response: {ai_response[:100]}...")
             return jsonify(response), 200
         else:
             logger.error(f"[ERROR] Chat failed: {response.get('error')}")
@@ -5134,9 +5140,10 @@ def process_voice_complete():
                 
                 if (is_print_command or is_switch_print) and is_not_question:
                     logger.info(f"[FALLBACK] Print command detected: '{result.get('user_text')}'")
-                    result["orchestration_trigger"] = True
-                    result["orchestration_mode"] = "print"
-                    result["ai_response"] = "Print mode activated. Which document would you like to print? You can say 'select document 1' or browse your files."
+                    # ASK FOR CONFIRMATION instead of directly triggering
+                    result["awaiting_confirmation"] = True
+                    result["pending_mode"] = "print"
+                    result["ai_response"] = "Do you want to print? Say yes to proceed."
                 
                 # Check for scan intent
                 scan_keywords = ["scan", "scanning", "capture", "scan doc", "capture document"]
@@ -5145,9 +5152,10 @@ def process_voice_complete():
                 
                 if (is_scan_command or is_switch_scan) and is_not_question:
                     logger.info(f"[FALLBACK] Scan command detected: '{result.get('user_text')}'")
-                    result["orchestration_trigger"] = True
-                    result["orchestration_mode"] = "scan"
-                    result["ai_response"] = "Scan mode activated. Do you want to select or upload a document, or use the printer's feed tray?"
+                    # ASK FOR CONFIRMATION instead of directly triggering
+                    result["awaiting_confirmation"] = True
+                    result["pending_mode"] = "scan"
+                    result["ai_response"] = "Do you want to scan? Say yes to proceed."
 
             # Check if user text contains orchestration commands
             user_text = result.get("user_text", "")
@@ -6289,6 +6297,32 @@ if __name__ == "__main__":
     print(f"Processed directory: {PROCESSED_DIR}")
     print(f"Text directory: {TEXT_DIR}")
     print("=" * 60)
+
+    # Pre-load Whisper model on startup (runs in background)
+    def preload_voice_models():
+        """Pre-load voice AI models on startup to avoid first-request delay"""
+        try:
+            logger.info("[STARTUP] Pre-loading Whisper AI model in background...")
+            print("[STARTUP] Pre-loading Whisper AI model...")
+            from app.modules.voice import voice_ai_orchestrator
+            import threading
+            
+            def load_models():
+                try:
+                    voice_ai_orchestrator.whisper_service.load_model()
+                    logger.info("[OK] Whisper model pre-loaded successfully")
+                    print("[OK] Whisper model pre-loaded")
+                except Exception as e:
+                    logger.warning(f"[WARN] Could not pre-load Whisper model: {e}")
+                    print(f"[WARN] Could not pre-load Whisper model: {e}")
+            
+            # Load in background thread so startup isn't blocked
+            thread = threading.Thread(target=load_models, daemon=True)
+            thread.start()
+        except Exception as e:
+            logger.warning(f"[WARN] Voice model pre-loading skipped: {e}")
+
+    preload_voice_models()
 
     # Configure SSL context if certificates are provided
     import ssl

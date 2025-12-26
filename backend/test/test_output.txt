@@ -1,0 +1,66 @@
+﻿[OK] OCR module loaded (improved multi-config)
+[OK] Enhancement module loaded (improved)
+[OK] Document detection module loaded (improved v3)
+[OK] Utility module loaded
+[OK] Pipeline loaded (improved with notebook logic)
+Initializing VoiceChatService...
+
+============================================================
+VOICE COMMAND PARITY TESTS
+python : Traceback (most 
+recent call last):
+At line:1 char:1
++ python 
+test/test_voice_commands.py 
+2>&1 | Out-File -FilePath 
+test/tes ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~
+    + CategoryInfo          : 
+    NotSpecified: (Traceback  
+   (most recent call last):   
+ :String) [], RemoteExcept    
+ion
+    + FullyQualifiedErrorId : 
+    NativeCommandError
+ 
+  File "C:\Users\chama\OneDriv
+e\Desktop\printchakra\backend\
+test\test_voice_commands.py", 
+line 116, in <module>
+============================================================
+
+============================================================
+Testing: 'hello'
+============================================================
+  Response: Hey there, I am PrintChakra AI, your voice-controlled document assistant. You can print or scan. Wha
+  success: True
+  orchestration_trigger: None
+  orchestration_mode: None
+  awaiting_confirmation: None
+  voice_command: None
+  command_params: None
+    main()
+  File "C:\Users\chama\OneDriv
+e\Desktop\printchakra\backend\
+test\test_voice_commands.py", 
+line 49, in main
+    test_command(svc, 
+"hello", {
+  File "C:\Users\chama\OneDriv
+e\Desktop\printchakra\backend\
+test\test_voice_commands.py", 
+line 35, in test_command
+    print(f"  {status} {key}: 
+expected={expected_value}, 
+actual={actual}")
+  File "C:\Program Files\Pytho
+n310\lib\encodings\cp1252.py",
+ line 19, in encode
+    return codecs.charmap_enco
+de(input,self.errors,encoding_
+table)[0]
+UnicodeEncodeError: 'charmap' 
+codec can't encode character 
+'\u2713' in position 2: 
+character maps to <undefined>
