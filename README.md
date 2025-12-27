@@ -9,9 +9,11 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**AI-Powered Document Processing & Intelligent Print Automation**
+**🚀 AI-Powered Document Processing & Intelligent Print Automation**
 
-*Transform how you handle documents with voice-controlled, AI-assisted printing and scanning workflows*
+*Enterprise-grade document handling with voice control, OCR, and AI-assisted workflows*
+
+Transform how you handle documents with voice-controlled, AI-assisted printing and scanning workflows. PrintChakra combines computer vision, OCR, and LLM-powered intelligence for seamless document management.
 
 </div>
 
