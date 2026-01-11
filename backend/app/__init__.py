@@ -1,2 +1,7 @@
-# PrintChakra Backend App Package
-# This makes the app folder a Python package
+"""
+PrintChakra Backend - Application Package
+
+This package contains all backend modules for the PrintChakra document processing platform.
+"""
+
+__version__ = "1.0.0"

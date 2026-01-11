@@ -108,6 +108,97 @@ interface DeviceAndConnectivityPanelProps {
   onCheckConnectivity?: () => void;
 }
 
+const createDefaultSystemInfo = (): SystemInfo => ({
+  os: {
+    name: 'Unknown',
+    version: 'Unknown',
+    release: 'Unknown',
+    architecture: 'Unknown',
+    processor: 'Unknown',
+  },
+  python: {
+    version: 'Unknown',
+    implementation: 'Python',
+  },
+  memory: {
+    total_gb: 0,
+    available_gb: 0,
+    used_percent: 0,
+  },
+  cpu: {
+    cores_physical: 0,
+    cores_logical: 0,
+    usage_percent: 0,
+  },
+  gpu: {
+    available: false,
+  },
+  printers: {
+    available: false,
+    default: '',
+    count: 0,
+    list: [],
+  },
+  driver_suggestions: [],
+});
+
+const normalizeSystemInfo = (payload: any): SystemInfo => {
+  const fallback = createDefaultSystemInfo();
+  const raw = payload?.system ?? payload ?? {};
+  const printerList = Array.isArray(raw.printers)
+    ? raw.printers
+    : Array.isArray(raw.printers?.list)
+      ? raw.printers.list
+      : [];
+  const defaultPrinter = raw.default_printer || raw.printers?.default || '';
+
+  return {
+    os: {
+      name: raw.os?.name || raw.platform || fallback.os.name,
+      version: raw.os?.version || raw.platform_version || fallback.os.version,
+      release: raw.os?.release || raw.platform_release || fallback.os.release,
+      architecture: raw.os?.architecture || raw.architecture || fallback.os.architecture,
+      processor: raw.os?.processor || raw.processor || fallback.os.processor,
+    },
+    python: {
+      version: raw.python?.version || raw.python_version || fallback.python.version,
+      implementation: raw.python?.implementation || fallback.python.implementation,
+    },
+    memory: {
+      total_gb: Number(raw.memory?.total_gb ?? fallback.memory.total_gb),
+      available_gb: Number(raw.memory?.available_gb ?? fallback.memory.available_gb),
+      used_percent: Number(raw.memory?.used_percent ?? fallback.memory.used_percent),
+    },
+    cpu: {
+      cores_physical: Number(raw.cpu?.cores_physical ?? fallback.cpu.cores_physical),
+      cores_logical: Number(raw.cpu?.cores_logical ?? fallback.cpu.cores_logical),
+      usage_percent: Number(raw.cpu?.usage_percent ?? fallback.cpu.usage_percent),
+    },
+    gpu: {
+      available: Boolean(raw.gpu?.available),
+      name: raw.gpu?.name,
+      cuda_version: raw.gpu?.cuda_version,
+      device_count: raw.gpu?.device_count,
+      total_memory_gb: raw.gpu?.total_memory_gb,
+      error: raw.gpu?.error,
+    },
+    printers: {
+      available: printerList.length > 0 || Boolean(raw.printers?.available),
+      default: defaultPrinter,
+      count: Number(raw.printers?.count ?? printerList.length),
+      list: printerList.map((printer: any) => ({
+        name: printer?.name || 'Unknown printer',
+        is_default: Boolean(printer?.is_default) || printer?.name === defaultPrinter,
+        driver: printer?.driver || printer?.driver_name || 'Unknown driver',
+        port: printer?.port || printer?.port_name || 'Unknown port',
+        status: printer?.status || 'unknown',
+      })),
+      error: raw.printers?.error,
+    },
+    driver_suggestions: Array.isArray(raw.driver_suggestions) ? raw.driver_suggestions : [],
+  };
+};
+
 export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProps> = ({ onCheckConnectivity }) => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const printQueueModal = useDisclosure();
@@ -141,8 +232,9 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
     setError(null);
     try {
       const response = await apiClient.get('/system/info');
-      setSystemInfo(response.data);
-      setDefaultPrinter(response.data.printers?.default || '');
+      const normalizedInfo = normalizeSystemInfo(response.data);
+      setSystemInfo(normalizedInfo);
+      setDefaultPrinter(normalizedInfo.printers.default || '');
     } catch (err: any) {
       setError(err.message || 'Failed to fetch system info');
     } finally {

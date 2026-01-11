@@ -76,6 +76,26 @@ except (TypeError, ValueError):
 OLLAMA_VERIFY_SSL = bool(_ollama_settings.get("verify_ssl", False))
 DEFAULT_VOICE_MODEL = AI_PROMPT_CONFIG.get("default_model", "smollm2:135m")
 
+_groq_settings = CONNECTION_CONFIG.get("groq", {})
+GROQ_BASE_URL = (_groq_settings.get("base_url") or "https://api.groq.com/openai/v1").rstrip("/")
+GROQ_API_KEY = (_groq_settings.get("api_key") or "").strip()
+GROQ_LLM_MODEL = (_groq_settings.get("llm_model") or "llama-3.1-8b-instant").strip()
+GROQ_STT_MODEL = (_groq_settings.get("stt_model") or "whisper-large-v3-turbo").strip()
+GROQ_TTS_MODEL = (_groq_settings.get("tts_model") or "canopylabs/orpheus-v1-english").strip()
+GROQ_TTS_ENDPOINT = (_groq_settings.get("tts_endpoint") or f"{GROQ_BASE_URL}/audio/speech").strip()
+GROQ_TIMEOUT = int(_groq_settings.get("timeout") or 30)
+GROQ_VERIFY_SSL = bool(_groq_settings.get("verify_ssl", True))
+
+
+def _is_groq_configured() -> bool:
+    return bool(GROQ_API_KEY)
+
+
+def _groq_headers() -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+    }
+
 # Import GPU optimization modules
 try:
     from .gpu_optimization import (
@@ -426,6 +446,53 @@ class WhisperTranscriptionService:
             self.is_loaded = False
             return False
 
+    def can_use_groq_fallback(self) -> bool:
+        """Return True when Groq API fallback for STT is configured."""
+        return _is_groq_configured()
+
+    def _transcribe_with_groq(self, audio_data: bytes, language: str = "en") -> Dict[str, Any]:
+        """Fallback STT using Groq Whisper API."""
+        if not self.can_use_groq_fallback():
+            return {"success": False, "error": "Groq fallback is not configured", "text": ""}
+
+        try:
+            import requests
+
+            files = {
+                "file": ("audio.wav", audio_data, "audio/wav"),
+            }
+            data = {
+                "model": GROQ_STT_MODEL,
+                "language": language,
+            }
+
+            response = requests.post(
+                f"{GROQ_BASE_URL}/audio/transcriptions",
+                headers=_groq_headers(),
+                files=files,
+                data=data,
+                timeout=GROQ_TIMEOUT,
+                verify=GROQ_VERIFY_SSL,
+            )
+
+            if response.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"Groq STT error: {response.status_code}",
+                    "text": "",
+                }
+
+            payload = response.json()
+            text = (payload.get("text") or "").strip()
+            return {
+                "success": bool(text),
+                "text": text,
+                "language": language,
+                "provider": "groq",
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Groq STT exception: {e}", "text": ""}
+
     def transcribe_audio(self, audio_data: bytes, language: str = "en") -> Dict[str, Any]:
         """
         Transcribe audio bytes to text
@@ -439,7 +506,11 @@ class WhisperTranscriptionService:
         """
         if not self.is_loaded:
             if not self.load_model():
-                return {"success": False, "error": "Whisper model not loaded", "text": ""}
+                groq_result = self._transcribe_with_groq(audio_data, language)
+                if groq_result.get("success"):
+                    logger.info("[FALLBACK] Using Groq STT because local Whisper is unavailable")
+                    return groq_result
+                return {"success": False, "error": "Whisper model not loaded and Groq fallback failed", "text": ""}
 
         try:
             # Validate audio data
@@ -735,7 +806,12 @@ class WhisperTranscriptionService:
             if GPU_OPTIMIZATION_AVAILABLE:
                 from .gpu_optimization import clear_gpu_cache
                 clear_gpu_cache()
-            
+
+            groq_result = self._transcribe_with_groq(audio_data, language)
+            if groq_result.get("success"):
+                logger.info("[FALLBACK] Using Groq STT after local transcription error")
+                return groq_result
+
             return {"success": False, "error": str(e), "text": ""}
 
 
@@ -759,6 +835,8 @@ class VoiceChatService:
         self.ollama_tags_url = OLLAMA_TAGS_URL
         self.api_timeout = max(1, OLLAMA_TIMEOUT) if OLLAMA_TIMEOUT else OLLAMA_API_TIMEOUT
         self.verify_ssl = OLLAMA_VERIFY_SSL
+        self.groq_enabled = _is_groq_configured()
+        self.groq_model = GROQ_LLM_MODEL
         
         # Import command mappings from centralized module
         if VOICE_PROMPT_AVAILABLE and VoicePromptManager is not None:
@@ -768,6 +846,72 @@ class VoiceChatService:
             # Fallback if prompt manager not available
             self.command_mappings = {}
             self.system_prompt = ""
+
+    def can_use_groq_fallback(self) -> bool:
+        """Return True when Groq chat fallback is configured."""
+        return self.groq_enabled
+
+    def _generate_with_groq(self, user_message: str) -> Dict[str, Any]:
+        """Generate chat response using Groq OpenAI-compatible endpoint."""
+        if not self.can_use_groq_fallback():
+            return {"success": False, "error": "Groq fallback is not configured", "response": ""}
+
+        try:
+            import requests
+
+            messages = [{"role": "system", "content": self.system_prompt}] + self.conversation_history
+            payload = {
+                "model": self.groq_model,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 300,
+            }
+
+            response = requests.post(
+                f"{GROQ_BASE_URL}/chat/completions",
+                headers={
+                    **_groq_headers(),
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=GROQ_TIMEOUT,
+                verify=GROQ_VERIFY_SSL,
+            )
+
+            if response.status_code != 200:
+                return {
+                    "success": False,
+                    "error": f"Groq chat error: {response.status_code}",
+                    "response": "",
+                }
+
+            result = response.json()
+            ai_response = (
+                result.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+                .strip()
+            )
+
+            if not ai_response:
+                return {"success": False, "error": "Groq returned empty response", "response": ""}
+
+            self.conversation_history.append({"role": "assistant", "content": ai_response})
+            if len(self.conversation_history) > 16:
+                self.conversation_history = self.conversation_history[-16:]
+
+            return {
+                "success": True,
+                "response": ai_response,
+                "tts_response": ai_response,
+                "model": self.groq_model,
+                "provider": "groq",
+                "timestamp": datetime.now().isoformat(),
+                "tts_enabled": TTS_AVAILABLE,
+                "spoken": False,
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Groq chat exception: {e}", "response": ""}
 
     def check_ollama_available(self) -> bool:
         """Check if Ollama is running and model is available"""
@@ -1924,12 +2068,17 @@ class VoiceChatService:
                     "response": ai_response,
                     "tts_response": ai_response,
                     "model": self.model_name,
+                    "provider": "ollama",
                     "timestamp": datetime.now().isoformat(),
                     "tts_enabled": TTS_AVAILABLE,
                     "spoken": False,
                 }
             else:
                 logger.error(f"Ollama API error: {response.status_code}")
+                fallback = self._generate_with_groq(user_message)
+                if fallback.get("success"):
+                    logger.info("[FALLBACK] Using Groq LLM because Ollama request failed")
+                    return fallback
                 return {
                     "success": False,
                     "error": f"Ollama API error: {response.status_code}",
@@ -1938,6 +2087,10 @@ class VoiceChatService:
 
         except Exception as e:
             logger.error(f"[ERROR] Chat generation error: {str(e)}")
+            fallback = self._generate_with_groq(user_message)
+            if fallback.get("success"):
+                logger.info("[FALLBACK] Using Groq LLM after local chat exception")
+                return fallback
             return {"success": False, "error": str(e), "response": ""}
 
     def _parse_multi_settings_command(self, user_message: str) -> Dict[str, Any]:
@@ -2217,17 +2370,24 @@ class VoiceAIOrchestrator:
         """Start a new voice AI session"""
         try:
             # Load Whisper model
+            whisper_loaded = self.whisper_service.is_loaded
             if not self.whisper_service.is_loaded:
                 whisper_loaded = self.whisper_service.load_model()
-                if not whisper_loaded:
-                    return {"success": False, "error": "Failed to load Whisper model"}
+
+            stt_fallback_available = self.whisper_service.can_use_groq_fallback()
+            if not whisper_loaded and not stt_fallback_available:
+                return {
+                    "success": False,
+                    "error": "Failed to load Whisper model and Groq STT fallback is not configured",
+                }
 
             # Check Ollama
             ollama_available = self.chat_service.check_ollama_available()
-            if not ollama_available:
+            llm_fallback_available = self.chat_service.can_use_groq_fallback()
+            if not ollama_available and not llm_fallback_available:
                 return {
                     "success": False,
-                    "error": "Ollama not available or smollm2:135m model not found",
+                    "error": "Ollama not available and Groq LLM fallback is not configured",
                 }
 
             # Reset conversation
@@ -2243,8 +2403,10 @@ class VoiceAIOrchestrator:
             return {
                 "success": True,
                 "message": "Voice AI session started",
-                "whisper_loaded": True,
-                "ollama_available": True,
+                "whisper_loaded": whisper_loaded,
+                "ollama_available": ollama_available,
+                "groq_stt_fallback": stt_fallback_available,
+                "groq_llm_fallback": llm_fallback_available,
             }
 
         except Exception as e:
@@ -2679,14 +2841,66 @@ class VoiceAIOrchestrator:
         """
         try:
             if not TTS_AVAILABLE:
-                return {"success": False, "error": "TTS not available"}
+                if not _is_groq_configured():
+                    return {"success": False, "error": "TTS not available"}
+
+                # Cloud fallback: generate speech using Groq TTS endpoint
+                import requests
+
+                payload = {
+                    "model": GROQ_TTS_MODEL,
+                    "input": text,
+                    "voice": "tara",
+                    "response_format": "wav",
+                }
+
+                response = requests.post(
+                    GROQ_TTS_ENDPOINT,
+                    headers={
+                        **_groq_headers(),
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=GROQ_TIMEOUT,
+                    verify=GROQ_VERIFY_SSL,
+                )
+
+                if response.status_code == 200:
+                    # Play returned WAV so fallback behaves like local blocking TTS.
+                    import tempfile
+                    import winsound
+
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+                        tmp_wav.write(response.content)
+                        tmp_wav_path = tmp_wav.name
+
+                    try:
+                        winsound.PlaySound(tmp_wav_path, winsound.SND_FILENAME)
+                    finally:
+                        try:
+                            os.unlink(tmp_wav_path)
+                        except Exception:
+                            pass
+
+                    return {
+                        "success": True,
+                        "spoken": True,
+                        "audio_generated": True,
+                        "provider": "groq",
+                        "bytes": len(response.content or b""),
+                    }
+
+                return {
+                    "success": False,
+                    "error": f"Groq TTS error: {response.status_code}",
+                }
 
             # logger.info("🔊 Starting TTS (blocking)...")
             speak_success = speak_text(text)
 
             if speak_success:
                 # logger.info("[OK] TTS completed successfully")
-                return {"success": True, "spoken": True}
+                return {"success": True, "spoken": True, "provider": "local"}
             else:
                 logger.warning("[WARN] TTS returned False")
                 return {"success": False, "error": "TTS failed to speak"}

@@ -19,7 +19,13 @@ export interface FileInfo {
   processing_progress?: number;
   processing_error?: string;
   thumbnail?: string;
-  thumbnailUrl?: string; // Keep for compatibility if needed
+  thumbnailUrl?: string;
+  folder?: string | null;
+}
+
+export interface FolderInfo {
+  name: string;
+  file_count: number;
 }
 
 export interface DocumentPage {

@@ -92,6 +92,12 @@ def upload_file():
             print("[ERROR] Upload error: Empty filename")
             return jsonify({"error": "Empty filename", "success": False}), 400
 
+        # Get target folder (for folder-aware storage)
+        target_folder = request.form.get("folder") or request.args.get("folder") or ""
+        if target_folder:
+            from werkzeug.utils import secure_filename as sf
+            target_folder = sf(target_folder)
+
         # Generate unique filename
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         unique_id = str(uuid.uuid4())[:8]
@@ -104,6 +110,8 @@ def upload_file():
         print(f"\n{'='*70}")
         print(f"[UPLOAD] UPLOAD INITIATED")
         print(f"  Filename: {filename}")
+        if target_folder:
+            print(f"  Target folder: {target_folder}")
         print(f"  Size: {len(file.read())} bytes")
         file.seek(0)  # Reset file pointer
         print(f"{'='*70}")
@@ -137,6 +145,7 @@ def upload_file():
             "original": file.filename,
             "timestamp": timestamp,
             "processing": True,
+            "folder": target_folder or None,
         }
 
         # Emit Socket.IO event for instant display
@@ -150,6 +159,7 @@ def upload_file():
                         "timestamp": timestamp,
                         "processing": True,
                         "has_text": False,
+                        "folder": target_folder or None,
                     },
                 )
                 print(f"  ✓ Socket.IO notification sent for instant display")
@@ -159,7 +169,13 @@ def upload_file():
         # Start background processing
         def background_process():
             try:
-                processed_path = os.path.join(PROCESSED_DIR, processed_filename)
+                # If folder specified, save into subfolder
+                if target_folder:
+                    dest_dir = os.path.join(PROCESSED_DIR, target_folder)
+                    os.makedirs(dest_dir, exist_ok=True)
+                else:
+                    dest_dir = PROCESSED_DIR
+                processed_path = os.path.join(dest_dir, processed_filename)
 
                 # Process image with progress tracking
                 # Returns: (success, text, new_filename_or_none)

@@ -7,8 +7,10 @@ Document file management endpoints.
 import os
 import logging
 from flask import jsonify, request, send_file
+from flask import send_from_directory
 from werkzeug.utils import secure_filename
 from app.features.document.routes import document_bp
+from app.core.config import get_data_dirs
 from app.core.middleware.cors import create_options_response
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,30 @@ ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "doc", "docx", "txt", 
 def allowed_file(filename):
     """Check if file extension is allowed."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@document_bp.route("/processed/<path:filename>", methods=["GET", "OPTIONS"])
+def serve_processed_file(filename):
+    """Serve a processed file (image/PDF) from the processed directory."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    # Security: reject path traversal
+    if ".." in filename or filename.startswith("/"):
+        return jsonify({"error": "Invalid filename"}), 400
+
+    dirs = get_data_dirs()
+    processed_dir = dirs['PROCESSED_DIR']
+    file_path = os.path.join(processed_dir, filename)
+
+    if not os.path.isfile(file_path):
+        logger.warning(f"Processed file not found: {file_path}")
+        return jsonify({"error": "File not found"}), 404
+
+    response = send_from_directory(processed_dir, filename)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
 
 
 @document_bp.route("/files", methods=["GET", "OPTIONS"])
@@ -128,11 +154,18 @@ def delete_document(doc_id):
     
     try:
         filename = secure_filename(doc_id)
-        
-        # Search and delete document
-        for folder in ["uploads", "pdfs", "processed"]:
-            filepath = os.path.join(DATA_DIR, folder, filename)
-            if os.path.exists(filepath):
+
+        # Use active configured directories (backend/public/data/*)
+        dirs = get_data_dirs()
+        candidate_paths = [
+            os.path.join(dirs['UPLOAD_DIR'], filename),
+            os.path.join(dirs['PDF_DIR'], filename),
+            os.path.join(dirs['PROCESSED_DIR'], filename),
+            os.path.join(dirs['CONVERTED_DIR'], filename),
+        ]
+
+        for filepath in candidate_paths:
+            if os.path.isfile(filepath):
                 os.remove(filepath)
                 logger.info(f"[OK] Document deleted: {filename}")
                 return jsonify({"success": True, "message": "Document deleted"})

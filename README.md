@@ -1,877 +1,448 @@
-# PrintChakra
-
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](https://github.com/chaman2003/printchakra)
-[![Python](https://img.shields.io/badge/Python-3.8+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=black)](https://reactjs.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<img src="https://capsule-render.vercel.app/api?type=waving&height=220&color=0:0f172a,30:1d4ed8,65:7c3aed,100:06b6d4&text=PrintChakra&fontColor=ffffff&fontAlignY=38&desc=AI-Powered%20Document%20Processing%20%7C%20OCR%20%7C%20Voice%20%7C%20Print%20Automation&descAlignY=58&animation=fadeIn" alt="PrintChakra banner" />
 
-**🚀 AI-Powered Document Processing & Intelligent Print Automation**
+<img src="https://readme-typing-svg.herokuapp.com?font=Space+Grotesk&weight=700&size=22&duration=3200&pause=900&color=38BDF8&center=true&vCenter=true&width=900&lines=Windows-first+document+workflow+platform;OCR+%2B+print+management+%2B+phone+capture;Voice+conversation+with+local+and+Groq+fallback" alt="Typing intro" />
 
-*Enterprise-grade document handling with voice control, OCR, and AI-assisted workflows*
+<br />
+<br />
 
-Transform how you handle documents with voice-controlled, AI-assisted printing and scanning workflows. PrintChakra combines computer vision, OCR, and LLM-powered intelligence for seamless document management.
+<img src="https://img.shields.io/badge/Backend-Flask%203.0-111827?style=for-the-badge&logo=flask&logoColor=white" alt="Flask badge" />
+<img src="https://img.shields.io/badge/Frontend-React%2019-0f172a?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React badge" />
+<img src="https://img.shields.io/badge/Language-TypeScript-1e293b?style=for-the-badge&logo=typescript&logoColor=3178C6" alt="TypeScript badge" />
+<img src="https://img.shields.io/badge/OCR-PaddleOCR-111827?style=for-the-badge&logoColor=white" alt="PaddleOCR badge" />
+<img src="https://img.shields.io/badge/Realtime-Socket.IO-0f172a?style=for-the-badge&logo=socketdotio&logoColor=white" alt="Socket.IO badge" />
+<img src="https://img.shields.io/badge/Platform-Windows-1e3a8a?style=for-the-badge&logo=windows&logoColor=white" alt="Windows badge" />
+
+<br />
+
+<img src="https://img.shields.io/badge/Python-3.10%20Recommended-2563eb?style=flat-square&logo=python&logoColor=white" alt="Python version" />
+<img src="https://img.shields.io/badge/Node.js-18%2B-16a34a?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node version" />
+<img src="https://img.shields.io/badge/Voice-Groq%20Fallback-7c3aed?style=flat-square" alt="Groq fallback" />
+<img src="https://img.shields.io/badge/Status-Active%20Development-06b6d4?style=flat-square" alt="Status" />
 
 </div>
 
 ---
 
-## 📋 Table of Contents
+## Overview
 
-- [Overview](#-overview)
-- [Project Status](#-project-status)
-- [Key Features](#-key-features)
-- [Implementation Highlights](#-implementation-highlights)
-- [Tech Stack](#-tech-stack)
-- [Quick Start](#-quick-start)
-- [Project Structure](#-project-structure)
-- [System Architecture](#-system-architecture)
-- [AI Workflow Documentation](#printchakra-ai-workflow-documentation)
-- [Configuration](#-configuration)
-- [Usage Guide](#-usage-guide)
-- [Development](#-development)
-- [Deployment](#-deployment)
-- [Contributing](#-contributing)
-- [License & Author](#-license--author)
+PrintChakra is a Windows-first document workflow platform built for scanning, OCR, print configuration, phone-assisted capture, and voice-driven interaction. It combines a Flask backend and a React frontend into a single experience for processing documents from intake to output.
+
+It is designed around practical operations:
+
+- Upload and manage document images and PDFs
+- Clean and enhance scans before OCR or printing
+- Extract text with OCR pipelines
+- Configure print and scan workflows from the browser
+- Capture documents from a phone-oriented flow
+- Use voice sessions for transcription, orchestration, and spoken responses
+- Keep UI state synchronized in real time through Socket.IO
 
 ---
 
-## 🎯 Overview
+## Quick Links
 
-PrintChakra is a comprehensive, full-stack document processing platform that revolutionizes printing and scanning workflows. It seamlessly integrates advanced OCR technology, AI-assisted document understanding, voice-enabled interaction, and intelligent printer management into a unified system.
-
-### Why PrintChakra?
-
-- **🎤 Hands-Free Voice Control** – Speak commands to configure print/scan jobs, manage queues, and control devices
-- **🧠 AI-Powered Intent Detection** – Automatically configures workflows from natural language commands
-- **📸 Advanced OCR Pipeline** – 12-stage image enhancement and text extraction for maximum accuracy
-- **⚡ Real-Time Synchronization** – WebSocket-powered instant updates across all interfaces
-- **🔧 Modular Architecture** – Easy to extend with custom integrations and workflows
-
----
-
-## 📊 Project Status
-
-### Current Version: 2.2.0
-**Release Date:** December 2025 | **Status:** ✅ Active Development
-
-### Project Stages & Completion
-
-| Stage | Component | Status | Details |
-|-------|-----------|--------|---------|
-| **Backend Foundation** | Flask API Framework | ✅ Complete | REST API with Socket.IO, error handling, logging |
-| **Frontend UI** | React + TypeScript Interface | ✅ Complete | Responsive dashboard, modals, real-time updates |
-| **AI Integration** | State Machine + Voice Processing | ✅ Complete | Strict workflow state validation, command parsing, voice bridge |
-| **Orchestration** | Print/Scan Workflow Engine | ✅ Complete | Stateful workflow management, intent detection, configuration |
-| **Document Processing** | OCR Pipeline | ✅ Complete | 12-stage enhancement, PaddleOCR integration, format conversion |
-| **Voice Interface** | Whisper + TTS + Ollama | ✅ Complete | STT, LLM intent detection, Coqui TTS responses |
-| **Printing System** | Hardware Integration | ✅ Complete | pywin32 drivers, multi-printer support, queue management |
-| **Real-Time Communication** | WebSocket Sync | ✅ Complete | Socket.IO integration, live status updates |
-| **AI Workflow Refinements** | Response Optimization | ✅ Complete | Concise responses (15-word limit), human-like interactions |
-| **Comprehensive Documentation** | README + Print Commands | ✅ Complete | Full AI workflow docs, command tables, implementation guide |
-
-### Key Implementations Completed
-
-#### ✅ Backend (Flask + Python)
-- REST API endpoints for document management (`/api/documents`, `/api/print`, `/api/scan`)
-- Socket.IO event handlers for real-time communication
-- Orchestration service with state machine (`WorkflowState`, `IntentType`)
-- Voice processing pipeline (`voice_prompt.py`, `voice_bridge.py`)
-- OCR module with image enhancement (12-stage pipeline)
-- Print/Scan configuration management
-- Error handling & comprehensive logging
-
-#### ✅ Frontend (React + TypeScript)
-- AI Assist hook system (`useAIAssist`, `useVoiceCommandBridge`)
-- State manager for strict workflow control (`stateManager.ts`)
-- Command parser with confidence scoring (`commandParser.ts`)
-- Action handler with callback integration (`actionHandler.ts`)
-- Real-time settings synchronization
-- Document selection with multi-select support
-- Voice command bridge for backend/frontend integration
-
-#### ✅ AI Workflow System
-- **3-State Architecture**: Dashboard → Print/Scan Mode → Step Progression
-- **4-Step Print**: Select → Configure → Review → Execute
-- **5-Step Scan**: Source → Select → Configure → Review → Execute
-- **"Sorry" Protocol**: Safety mechanism for workflow switching
-- **Command Parsing**: Regex-based pattern matching with 50+ command keywords
-- **State Validation**: Contextual command validation per workflow step
-- **Voice/Text Parity**: Identical behavior for voice and text inputs
-- **Response Optimization**: Concise responses (max 15 words, 1 sentence)
-
-#### ✅ Features Implemented
-| Feature | Frontend | Backend | Status |
-|---------|----------|---------|--------|
-| Document Upload | ✅ Modal UI | ✅ File handling | ✅ Complete |
-| Document Selection | ✅ Multi-select | ✅ Indexing | ✅ Complete |
-| Print Settings | ✅ All controls | ✅ Config storage | ✅ Complete |
-| Scan Settings | ✅ All controls | ✅ Config storage | ✅ Complete |
-| Voice Commands | ✅ Whisper STT | ✅ Intent detection | ✅ Complete |
-| AI Responses | ✅ TTS playback | ✅ Response generation | ✅ Complete |
-| Workflow State | ✅ Validation | ✅ Orchestration | ✅ Complete |
-| Real-Time Sync | ✅ Socket.IO | ✅ Event broadcast | ✅ Complete |
-| Settings Review | ✅ Display panel | ✅ Summary generation | ✅ Complete |
-| Error Handling | ✅ Toast messages | ✅ Error responses | ✅ Complete |
+- [Stack](#stack)
+- [Repository Layout](#repository-layout)
+- [Setup](#setup)
+- [Docker](#docker)
+- [Run Locally](#run-locally)
+- [Environment](#environment-configuration)
+- [Features](#feature-highlights)
+- [Architecture](#architecture)
+- [Troubleshooting](#troubleshooting)
 
 ---
 
-## ✨ Key Features
+## Stack
 
-### Document Management
-- **Multi-Format Support** – Process PDFs, images, Word documents, and scanned files
-- **Intelligent OCR Pipeline** – Extract text with 12-stage image enhancement and quality scoring
-- **Batch Processing** – Handle dozens or hundreds of documents with single commands
-- **Format Conversion** – Automatic conversion between PDF, images, and text formats
-- **Real-Time Processing Status** – Monitor document pipeline stages with visual indicators
-
-### Printing & Scanning
-- **Smart Print Configuration** – Paper size, orientation, color mode, quality, copy count, duplex
-- **Advanced Scan Configuration** – DPI, color mode, file format, batch scanning, OCR toggle
-- **Multi-Printer Support** – Manage multiple printers simultaneously from unified interface
-- **Print Queue Management** – Real-time monitoring and control of active print jobs
-- **Printer Feed Tray Support** – Direct document feeding from printer hardware
-
-### Voice & AI
-- **Continuous Voice Listening** – 10-15x faster Whisper transcription with local processing
-- **Natural Language Commands** – Control all functions with voice or text input
-- **Contextual AI Analysis** – Intelligent document understanding and metadata extraction
-- **Customizable Prompts** – Configure AI behavior through simple config files
-- **Concise Spoken Responses** – Max 15 words, human-like interactions with immediate feedback
-
-### Real-Time Monitoring
-- **Live Dashboard** – Real-time document upload and processing status
-- **Device Status** – Printer connectivity, driver availability, system resources
-- **Connectivity Verification** – Backend API health, device connectivity, link establishment
-- **Process Tracking** – Pipeline visualization showing document processing stages
-- **Workflow Progress** – Step-by-step indication of print/scan progress
-
----
-
-## 🚀 Implementation Highlights
-
-### Architecture Innovations
-
-| Innovation | Benefit | Implementation |
-|-----------|---------|-----------------|
-| **Strict State Machine** | Prevents workflow confusion | `AppState` + `WorkflowStep` with validated transitions |
-| **"Sorry" Protocol** | Safety for mode switching | Requires keyword before switching print ↔ scan |
-| **Voice/Text Parity** | Unified experience | Identical command parsing + responses for both inputs |
-| **Real-Time Sync** | Live updates across devices | Socket.IO with event broadcasting |
-| **Intent Detection** | Natural language understanding | Ollama LLM with fallback keyword matching |
-| **Response Optimization** | Natural speech | Max 15 words, 1 sentence, context-aware |
-
-### Core Systems
-
-**Frontend State Management**
-- `stateManager.ts`: Enforces workflow progression with state validation
-- `commandParser.ts`: Parses 50+ command patterns with confidence scoring
-- `actionHandler.ts`: Routes commands to appropriate handlers
-- `useAIAssist.ts`: Main AI interaction hook with callbacks
-- `useVoiceCommandBridge.ts`: Bridges backend voice intents to frontend actions
-
-**Backend Orchestration**
-- `PrintScanOrchestrator`: Manages workflow state and transitions
-- `IntentType` Detection: Print, Scan, Status, Configure, Help, etc.
-- `VoicePromptManager`: Handles LLM queries and response formatting
-- `OCR Pipeline`: 12-stage image enhancement with quality scoring
-- `Configuration Manager`: Persists user settings across sessions
-
----
-
-## 🛠 Tech Stack
+<table>
+<tr>
+<td valign="top" width="50%">
 
 ### Backend
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| Framework | Flask 3.0 | REST API & real-time coordination |
-| Real-Time | Socket.IO 5.3 | WebSocket synchronization |
-| OCR | PaddleOCR 2.7 | Advanced text extraction |
-| Voice | OpenAI Whisper | Speech-to-text transcription |
-| PDF | PyMuPDF, Poppler | Document processing |
-| Image | OpenCV, Pillow | Image enhancement |
-| Printing | pywin32 | Windows printer communication |
-| AI | Ollama Integration | Local LLM for intent detection |
+
+- Python
+- Flask
+- Flask-SocketIO
+- OpenCV
+- PaddleOCR
+- Tesseract
+- PyMuPDF and PDF tooling
+- pywin32 for Windows printer integration
+- Local Whisper, TTS, and LLM support
+- Groq fallback for chat, STT, and TTS
+
+</td>
+<td valign="top" width="50%">
 
 ### Frontend
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| Framework | React 19 | UI framework |
-| Language | TypeScript 4.9 | Type-safe development |
-| UI Library | Chakra UI 2.10 | Accessible components |
-| Styling | Emotion | CSS-in-JS styling |
-| Communication | Socket.IO Client | Real-time updates |
-| HTTP | Axios | API requests |
-| Routing | React Router 7 | Page navigation |
-| Icons | Iconify, React Icons | Icon system |
-| Animations | Framer Motion | Smooth animations |
 
-### DevOps & Deployment
-- **Containerization** – Docker support for consistent deployments
-- **Frontend Deployment** – Vercel configuration included
-- **Environment Management** – Python dotenv for configuration
-- **Automation Scripts** – PowerShell scripts for setup and management
-- **Git Workflow** – Full version control with documented refactoring history
+- React 19
+- TypeScript
+- Chakra UI
+- Framer Motion
+- Axios
+- Socket.IO client
+- React Router
+- Responsive dashboard and landing page
+
+</td>
+</tr>
+</table>
 
 ---
 
-## 🚀 Quick Start
+## Feature Highlights
 
-### Prerequisites
-- **Windows 10/11** (due to printer integration)
-- **Python 3.8+**
-- **Node.js 18+**
-- **npm or yarn**
-- **Git** (for version control)
-- **Ollama** (optional, for enhanced AI features)
+<table>
+<tr>
+<td width="33%" valign="top">
 
-### Installation
+### OCR Pipeline
 
-#### 1. Clone the Repository
-```bash
-git clone https://github.com/chaman2003/printchakra.git
-cd printchakra
+Advanced document cleanup and OCR flow for scanned or photographed pages.
+
+- Image enhancement
+- Text extraction
+- PDF and image handling
+- Notebook-driven pipeline experimentation
+
+</td>
+<td width="33%" valign="top">
+
+### Print Workflow
+
+Browser-based print setup and orchestration for Windows environments.
+
+- Print configuration UI
+- Queue and device awareness
+- Real-time status updates
+- Workflow-driven execution
+
+</td>
+<td width="33%" valign="top">
+
+### Voice Workflow
+
+Voice session startup, transcription, chat, and speech response.
+
+- Local-first voice stack
+- Groq fallback support
+- Frontend voice UI integration
+- Orchestration-ready responses
+
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### Phone Capture
+
+A phone-oriented intake flow for documents captured outside the desktop UI.
+
+- Capture handoff
+- Document intake path
+- Processing-ready uploads
+
+</td>
+<td width="33%" valign="top">
+
+### Real-Time Dashboard
+
+Live file browsing, previews, system info, and document actions.
+
+- Socket updates
+- File previews
+- Device panels
+- Workflow access points
+
+</td>
+<td width="33%" valign="top">
+
+### Windows Integration
+
+Built around Windows printer and local device workflows.
+
+- pywin32 printing
+- Local file paths
+- Windows-friendly setup
+- Optional HTTPS locally
+
+</td>
+</tr>
+</table>
+
+---
+
+## Repository Layout
+
+```text
+printchakra/
+├── README.md
+├── Document_Processing_Pipeline.ipynb
+├── backend/
+│   ├── app.py
+│   ├── requirements.txt
+│   ├── .venv/
+│   ├── app/
+│   │   ├── api/
+│   │   ├── config/
+│   │   ├── core/
+│   │   ├── features/
+│   │   ├── modules/
+│   │   ├── sockets/
+│   │   ├── utils/
+│   │   ├── print_scripts/
+│   │   └── .env
+│   ├── public/
+│   │   └── data/
+│   └── test/
+├── frontend/
+│   ├── package.json
+│   ├── public/
+│   └── src/
+└── phase-2/
 ```
 
-#### 2. Backend Setup
-```bash
+### Important Files
+
+- Backend entry point: [backend/app.py](backend/app.py)
+- Backend dependencies: [backend/requirements.txt](backend/requirements.txt)
+- Frontend dependencies: [frontend/package.json](frontend/package.json)
+- Backend environment file used by settings: [backend/app/.env](backend/app/.env)
+- Notebook pipeline: [Document_Processing_Pipeline.ipynb](Document_Processing_Pipeline.ipynb)
+
+---
+
+## Setup
+
+### Requirements
+
+- Windows 10 or 11
+- Python 3.10 recommended
+- Node.js 18+
+- npm
+
+### Backend Setup
+
+```powershell
 cd backend
-python -m venv venv
-.\venv\Scripts\activate
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
 
-#### 3. Frontend Setup
-```bash
-cd ../frontend
+If [backend/.venv](backend/.venv) already exists and is working, reuse it.
+
+### Frontend Setup
+
+```powershell
+cd frontend
 npm install
-# or
-yarn install
 ```
 
-#### 4. Environment Configuration
-Create `.env` file in `backend/` directory:
+---
+
+## Docker
+
+PrintChakra now includes a production-oriented Docker setup for the full app:
+
+- Backend container on port 5000
+- Frontend container on port 3000
+- Persistent backend data mounted from [backend/public/data](backend/public/data)
+- Linux-native OCR and PDF runtime packages baked into the backend image
+- Optional host Ollama access through `host.docker.internal`
+
+### Start With Compose
+
+```powershell
+docker compose up --build
+```
+
+### Container URLs
+
+- Frontend: http://localhost:3000
+- Backend: http://localhost:5000
+
+### Important Docker Notes
+
+- Browser-to-backend routing is controlled by `REACT_APP_API_URL` at frontend build time.
+- The backend image sets `POPPLER_PATH=/usr/bin` and `TESSERACT_CMD=/usr/bin/tesseract`.
+- Ollama is not bundled; by default Compose points the backend to `http://host.docker.internal:11434`.
+- Windows-native printing is not available inside the default Linux container. Linux printing can work if the host exposes CUPS.
+
+---
+
+## Run Locally
+
+### Backend
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+python app.py
+```
+
+### Frontend
+
+```powershell
+cd frontend
+npm run dev
+```
+
+### Local URLs
+
+- Frontend: http://localhost:3000
+- Backend: http://localhost:5000
+
+If port 3000 is occupied, the frontend may move to another port such as 3001.
+
+---
+
+## Environment Configuration
+
+The backend settings currently load environment variables from [backend/app/.env](backend/app/.env).
+
+When running with Docker Compose, container environment variables override local file-based defaults.
+
+### Example
+
 ```env
 FRONTEND_URL=http://localhost:3000
 BACKEND_PUBLIC_URL=http://localhost:5000
 API_CORS_ORIGINS=http://localhost:3000
 
-# Ollama Configuration (optional)
-OLLAMA_BASE_URL=http://localhost:11434
 VOICE_AI_MODEL=smollm2:135m
 
-# Voice Settings
-VOICE_SYSTEM_PROMPT_FILE=backend/config/prompts/system_prompt.txt
-VOICE_COMMAND_MAPPINGS_FILE=backend/config/prompts/command_mappings.json
+GROQ_API_KEY=your_key_here
+GROQ_LLM_MODEL=llama-3.1-8b-instant
+GROQ_STT_MODEL=whisper-large-v3-turbo
+GROQ_TTS_ENDPOINT=https://api.groq.com/openai/v1/audio/speech
+GROQ_TTS_MODEL=canopylabs/orpheus-v1-english
 ```
 
-### Running the Application
+### Optional HTTPS
 
-#### Option 1: Using PowerShell Scripts (Recommended)
-```powershell
-# Start all services
-.\scripts\run-all.ps1
-
-# Or start individually
-.\scripts\backend.ps1
-.\scripts\frontend.ps1
-```
-
-#### Option 2: Manual Start
-```bash
-# Terminal 1 - Backend
-cd backend
-.\venv\Scripts\activate
-python app.py
-
-# Terminal 2 - Frontend
-cd frontend
-npm start
-```
-
-**Access the Application:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
-- API Docs: http://localhost:5000/docs (if available)
-
----
-
-## 📁 Project Structure
-
-```
-printchakra/
-│
-├── backend/                       # Flask backend application
-│   ├── app.py                     # Main application entry point
-│   ├── requirements.txt           # Python dependencies
-│   ├── REFACTORING_PLAN.md        # Refactoring documentation
-│   ├── app/                       # Core application module
-│   │   ├── __init__.py
-│   │   ├── api/                   # REST API endpoints
-│   │   │   ├── __init__.py
-│   │   │   └── document.py        # Document management endpoints
-│   │   ├── config/                # Configuration module
-│   │   │   ├── __init__.py
-│   │   │   ├── settings.py        # Configuration management
-│   │   │   └── prompts/           # AI system prompts
-│   │   ├── core/                  # Core utilities
-│   │   │   ├── __init__.py
-│   │   │   ├── config.py
-│   │   │   ├── extensions.py      # Flask extensions
-│   │   │   ├── logging_config.py  # Logging configuration
-│   │   │   └── middleware/        # Middleware modules
-│   │   ├── models/                # Data models
-│   │   │   ├── __init__.py
-│   │   │   ├── document.py        # Document model
-│   │   │   ├── file_info.py       # File information model
-│   │   │   ├── print_config.py    # Print configuration model
-│   │   │   └── scan_config.py     # Scan configuration model
-│   │   ├── middleware/            # Middleware handlers
-│   │   │   ├── __init__.py
-│   │   │   ├── cors_config.py     # CORS configuration
-│   │   │   ├── error_handler.py   # Error handling
-│   │   │   └── request_logger.py  # Request logging
-│   │   ├── features/              # Feature modules
-│   │   │   ├── __init__.py
-│   │   │   ├── connection/        # Connection management
-│   │   │   ├── dashboard/         # Dashboard services
-│   │   │   ├── document/          # Document features
-│   │   │   ├── orchestration/     # Workflow orchestration
-│   │   │   ├── phone/             # Phone integration
-│   │   │   ├── print/             # Printing features
-│   │   │   └── voice/             # Voice features
-│   │   ├── modules/               # Processing modules
-│   │   │   ├── __init__.py
-│   │   │   ├── api_endpoints.py   # API endpoint definitions
-│   │   │   ├── utility.py         # Utility functions
-│   │   │   ├── document/          # Document processing
-│   │   │   ├── image/             # Image enhancement
-│   │   │   ├── ocr/               # OCR pipeline
-│   │   │   ├── orchestration/     # Orchestration logic
-│   │   │   ├── pipeline/          # Processing pipeline
-│   │   │   └── voice/             # Voice processing
-│   │   ├── sockets/               # WebSocket handlers
-│   │   │   ├── __init__.py
-│   │   │   └── handlers.py        # Socket.IO event handlers
-│   │   └── utils/                 # Utility functions
-│   │       ├── __init__.py
-│   │       ├── file_utils.py      # File operations
-│   │       ├── image_utils.py     # Image utilities
-│   │       └── logger.py          # Logging utilities
-│   │   ├── print_scripts/             # Printing utility scripts
-│   │   │   ├── print-file.py          # File printing script
-│   │   │   ├── printer_test.py        # Printer testing utility
-│   │   │   └── README.md              # Printing scripts documentation
-│   ├── data/                      # Data storage directories
-│   │   ├── uploads/               # User uploaded files
-│   │   ├── processed/             # Processed files
-│   │   ├── converted/             # Format-converted files
-│   │   ├── pdfs/                  # Generated PDFs
-│   │   ├── processed_text/        # Extracted text files
-│   │   ├── models/                # Model files
-│   │   └── ocr_results/           # OCR output
-│   ├── public/                    # Static files and resources
-│   │   ├── blank.pcl              # Printer control language file
-│   │   ├── test_print.txt         # Test print file
-│   │   ├── data/                  # Data subdirectories
-│   │   │   ├── converted/
-│   │   │   ├── models/
-│   │   │   ├── ocr_results/
-│   │   │   ├── pdfs/
-│   │   │   ├── processed/
-│   │   │   ├── processed_text/
-│   │   │   └── uploads/
-│   │   └── poppler/               # Poppler binary for PDF processing
-│   │       └── poppler-24.08.0/   # Poppler version
-│   ├── logs/                      # Application logs
-│   └── __pycache__/               # Python cache files
-│
-├── frontend/                      # React + TypeScript frontend
-│   ├── package.json               # Node.js dependencies
-│   ├── tsconfig.json              # TypeScript configuration
-│   ├── craco.config.js            # Create React App config
-│   ├── vercel.json                # Vercel deployment config
-│   ├── src/                       # Source code
-│   │   ├── App.tsx                # Main app component
-│   │   ├── App.css                # App styles
-│   │   ├── index.tsx              # React entry point
-│   │   ├── index.css              # Global styles
-│   │   ├── config.ts              # Frontend configuration
-│   │   ├── types.ts               # TypeScript types
-│   │   ├── theme.ts               # Chakra theme configuration
-│   │   ├── apiClient.ts           # HTTP API client
-│   │   ├── ocrApi.ts              # OCR API interface
-│   │   ├── react-app-env.d.ts     # React environment types
-│   │   ├── reportWebVitals.ts     # Performance metrics
-│   │   ├── setupWarnings.js       # Console warnings setup
-│   │   ├── aiassist/              # AI assistance features
-│   │   │   ├── actionHandler.ts   # Action handling
-│   │   │   ├── commandParser.ts   # Command parsing
-│   │   │   └── ...                # Other AI features
-│   │   ├── components/            # React components
-│   │   │   ├── dashboard/         # Dashboard components
-│   │   │   ├── document/          # Document management UI
-│   │   │   ├── layout/            # Layout components
-│   │   │   ├── orchestration/     # Workflow UI
-│   │   │   ├── voice/             # Voice control UI
-│   │   │   └── common/            # Shared components
-│   │   ├── pages/                 # Page components
-│   │   ├── context/               # React context (Socket.IO, etc)
-│   │   ├── hooks/                 # Custom React hooks
-│   │   ├── utils/                 # Frontend utilities
-│   │   ├── styles/                # Global styles
-│   │   └── ui/                    # UI utilities
-│   ├── public/                    # Static assets
-│   │   ├── index.html             # HTML entry point
-│   │   ├── manifest.json          # PWA manifest
-│   │   └── robots.txt             # SEO robots file
-│   ├── build/                     # Production build output
-│   │   ├── index.html
-│   │   ├── asset-manifest.json
-│   │   ├── manifest.json
-│   │   ├── robots.txt
-│   │   └── static/                # Built assets
-│   │       ├── css/
-│   │       ├── js/
-│   │       └── media/
-│   └── node_modules/              # Node dependencies (git-ignored)
-│
-├── scripts/                       # Automation scripts
-│   ├── backend.ps1                # Backend startup script
-│   ├── frontend.ps1               # Frontend startup script
-│   ├── run-all.ps1                # Run all services script
-│   ├── cleanup.ps1                # Cleanup script
-│   ├── ngrok.ps1                  # Ngrok tunneling script
-│   └── install_cuda_pytorch.ps1   # CUDA/PyTorch installation
-│
-├── docs/                          # Documentation
-│   ├── outcome.txt                # Outcome documentation
-│   ├── ENHANCEMENTS/              # Enhancement proposals
-│   └── pics/                      # Documentation images
-│       └── TECHNOLOGY_STACK.txt   # Technology stack details
-│
-├── README.md                      # This file
-├── prompt.txt                     # Project prompt
-└── error.txt                      # Error log
-```
-
----
-
-## 🏗 System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CLIENT LAYER                             │
-├──────────────────┬──────────────────┬───────────────────────┤
-│  Web Dashboard   │  Mobile Capture  │  Voice Control Panel  │
-│  (React + TS)    │  (Responsive)    │  (Real-time)          │
-└────────────┬─────┴────────┬─────────┴──────────┬────────────┘
-             │              │                    │
-             └──────────────┼────────────────────┘
-                   Socket.IO / WebSocket
-                            │
-        ┌───────────────────▼───────────────────┐
-        │    COMMUNICATION LAYER                │
-        │  - Real-time Updates                  │
-        │  - Event Broadcasting                 │
-        │  - Connection Management              │
-        └───────────────────┬───────────────────┘
-                            │
-        ┌───────────────────▼───────────────────┐
-        │    API LAYER (Flask + REST)           │
-        │  - Document endpoints                 │
-        │  - Print/Scan configuration           │
-        │  - File conversion                    │
-        │  - Device management                  │
-        └───────────────────┬───────────────────┘
-                            │
-        ┌───────────────────▼───────────────────┐
-        │    BUSINESS LOGIC LAYER               │
-        ├─────────────────────────────────────┤
-        │ ┌──────────┐ ┌──────────┐            │
-        │ │ Document │ │  Voice   │            │
-        │ │Processing│ │ AI/Whisper            │
-        │ └──────────┘ └──────────┘            │
-        │ ┌──────────┐ ┌──────────┐            │
-        │ │   OCR    │ │ Printing │            │
-        │ │ Pipeline │ │ Scanning │            │
-        │ └──────────┘ └──────────┘            │
-        │ ┌──────────┐ ┌──────────┐            │
-        │ │  Image   │ │Orchestr. │            │
-        │ │Enhancement           │            │
-        │ └──────────┘ └──────────┘            │
-        └───────────────────┬───────────────────┘
-                            │
-        ┌───────────────────▼───────────────────┐
-        │    DATA LAYER                         │
-        ├─────────────────────────────────────┤
-        │ ┌──────────┐ ┌──────────┐            │
-        │ │   File   │ │  Model   │            │
-        │ │ Storage  │ │ Management            │
-        │ └──────────┘ └──────────┘            │
-        │ ┌──────────────────────┐             │
-        │ │   Logging & Metrics  │             │
-        │ └──────────────────────┘             │
-        └───────────────────┬───────────────────┘
-                            │
-        ┌───────────────────▼───────────────────┐
-        │    EXTERNAL INTEGRATIONS              │
-        ├─────────────────────────────────────┤
-        │ ┌──────────┐ ┌──────────┐            │
-        │ │ Printers │ │ Scanners │            │
-        │ │ (Windows)│ │(pywin32) │            │
-        │ └──────────┘ └──────────┘            │
-        │ ┌──────────┐ ┌──────────┐            │
-        │ │  Ollama  │ │ Poppler  │            │
-        │ │  (LLM)   │ │(PDF Util)│            │
-        │ └──────────┘ └──────────┘            │
-        └───────────────────────────────────────┘
-```
-
----
-
-## ⚙️ Configuration
-
-### Environment Variables (`backend/.env`)
+The backend defaults to HTTP. HTTPS is opt-in.
 
 ```env
-# Application
-DEBUG=false
-ENV=production
-
-# Frontend & CORS
-FRONTEND_URL=http://localhost:3000
-BACKEND_PUBLIC_URL=http://localhost:5000
-API_CORS_ORIGINS=http://localhost:3000,https://yourapp.com
-
-# Ollama Configuration (Local LLM)
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_CHAT_ENDPOINT=/api/chat
-OLLAMA_TAGS_ENDPOINT=/api/tags
-OLLAMA_TIMEOUT=60
-OLLAMA_VERIFY_SSL=true
-
-# Voice AI Model
-VOICE_AI_MODEL=smollm2:135m
-VOICE_SYSTEM_PROMPT_FILE=backend/config/prompts/system_prompt.txt
-VOICE_COMMAND_MAPPINGS_FILE=backend/config/prompts/command_mappings.json
-
-# Logging
-LOG_LEVEL=INFO
-LOGS_DIR=backend/logs
-```
-
-### Prompt Configuration (`backend/config/prompts/`)
-
-#### system_prompt.txt
-- Core behavior definition for AI assistant
-- Configured with command patterns and response templates
-- Plain text format for easy editing
-
-#### command_mappings.json
-```json
-{
-  "wake_words": [...],
-  "command_patterns": {...},
-  "responses": {...},
-  "ollama_sampling": {...}
-}
+USE_HTTPS=1
+SSL_CERT=certs/cert.pem
+SSL_KEY=certs/key.pem
 ```
 
 ---
 
-## 📖 Usage Guide
+## Architecture
 
-### Dashboard Features
-
-1. **Document Management**
-   - Upload and monitor document processing
-   - View OCR results in real-time
-   - Browse converted and processed files
-   - Select and batch process multiple documents
-
-2. **Print Configuration**
-   - Choose printer from available devices
-   - Set paper size, orientation, color mode
-   - Configure quality, copies, collation
-   - Preview print layout before sending
-
-3. **Scan Configuration**
-   - Customize scan resolution and quality
-   - Select file format (image/PDF)
-   - Enable automatic document detection
-   - Batch scan multiple pages
-
-4. **Device Management**
-   - View all connected printers
-   - Monitor printer status and health
-   - Access driver downloads
-   - View system resources and performance
-
-5. **Voice Control**
-   - Activate continuous listening
-   - Issue commands in natural language
-   - Configure jobs via voice
-   - Receive voice feedback and confirmations
-
-## PrintChakra AI Workflow Documentation
-
-This document outlines the AI-driven workflow and command structure for PrintChakra. It serves as a reference for both developers and users to understand how the AI assistant interacts with the system across different states and workflows.
-
----
-
-## 🧠 AI Workflow Architecture
-
-PrintChakra uses a strict state-machine-based AI assistant that ensures users follow a logical progression for printing and scanning tasks. The assistant supports both voice and text inputs with identical behavior.
-
-### Workflow States
-
-| State | Description | Valid Entry Commands |
-|-------|-------------|----------------------|
-| **DASHBOARD** | The default state. AI is ready to start a new workflow. | `print`, `scan`, `help`, `status` |
-| **PRINT_WORKFLOW** | Active when a user is preparing a print job. | `sorry, print` (if in Scan mode) |
-| **SCAN_WORKFLOW** | Active when a user is preparing a scan job. | `sorry, scan` (if in Print mode) |
-
----
-
-## 🔄 Mode Switching (The "Sorry" Protocol)
-
-To prevent accidental workflow interruptions, switching between Print and Scan modes while one is active requires the "sorry" keyword.
-
-| Action | Command Example | AI Response |
-|--------|-----------------|-------------|
-| Switch to Scan from Print | `sorry, scan` | `Scan mode.` |
-| Switch to Print from Scan | `sorry, print` | `Print mode.` |
-| Attempt switch without "sorry" | `scan` (while in Print) | `Say "sorry" first to switch to scan.` |
-
----
-
-## 🖨️ Print Workflow Commands
-
-The print workflow follows a 4-step progression: **Select -> Configure -> Review -> Execute**.
-
-### Step 1: Document Selection
-*State: `PRINT_WORKFLOW` | Step: `SELECT_DOCUMENT`*
-
-| Command Type | Patterns | Example | AI Response |
-|--------------|----------|---------|-------------|
-| **Select** | `select`, `choose`, `pick` | `select document 1` | `Got it, document 1.` |
-| **Section** | `converted`, `uploaded`, `originals` | `switch to converted` | `Converted.` |
-| **Navigation** | `next`, `previous`, `back` | `next document` | `Next.` |
-| **Continue** | `confirm`, `proceed`, `next step` | `confirm selection` | `Ready. Confirm?` |
-
-### Step 2: Configuration
-*State: `PRINT_WORKFLOW` | Step: `CONFIGURATION`*
-
-| Setting | Patterns | Example | AI Response |
-|---------|----------|---------|-------------|
-| **Layout** | `portrait`, `landscape` | `set landscape` | `Landscape.` |
-| **Color** | `color`, `grayscale`, `bw` | `color mode` | `Color.` |
-| **Copies** | `copies`, `copy` | `3 copies` | `3 copies.` |
-| **Paper Size** | `A4`, `Letter`, `Legal` | `A4 size` | `A4.` |
-| **Quality** | `draft`, `normal`, `high` | `high quality` | `High quality.` |
-| **Duplex** | `duplex`, `double sided` | `double sided` | `Double-sided.` |
-
-### Step 3: Review & Step 4: Execution
-*State: `PRINT_WORKFLOW` | Step: `REVIEW` / `EXECUTING`*
-
-| Action | Patterns | Example | AI Response |
-|--------|----------|---------|-------------|
-| **Execute** | `confirm`, `start`, `print` | `confirm print` | `Printing now!` |
-| **Cancel** | `cancel`, `stop`, `abort` | `cancel print` | `Cancelled.` |
-| **Status** | `status`, `progress` | `what's the status?` | `Printing...` |
-
----
-
-## 📸 Scan Workflow Commands
-
-The scan workflow follows a 5-step progression: **Source -> Select -> Configure -> Review -> Execute**.
-
-### Step 1: Source Selection
-*State: `SCAN_WORKFLOW` | Step: `SOURCE_SELECTION`*
-
-| Action | Patterns | Example | AI Response |
-|--------|----------|---------|-------------|
-| **Feed Tray** | `feed`, `tray`, `insert` | `use feed tray` | `Feeding documents.` |
-| **Manual Select** | `select`, `manual` | `select from files` | `Opening selection.` |
-
-### Step 2 & 3: Selection & Configuration
-*State: `SCAN_WORKFLOW` | Step: `SELECT_DOCUMENT` / `CONFIGURATION`*
-
-| Setting | Patterns | Example | AI Response |
-|---------|----------|---------|-------------|
-| **OCR** | `ocr`, `text mode`, `recognize` | `enable ocr` | `OCR on.` |
-| **Format** | `pdf`, `jpeg`, `png` | `save as pdf` | `PDF.` |
-| **Resolution** | `dpi`, `resolution` | `300 dpi` | `300 DPI.` |
-| **Mode** | `single`, `multi`, `batch` | `multi page scan` | `Multi page.` |
-
----
-
-## 🌐 Global & UI Commands
-
-These commands are available across most states to control the interface and get information.
-
-| Category | Command | Example | Action |
-|----------|---------|---------|--------|
-| **Help** | `help`, `commands` | `what can you do?` | Shows help dialog |
-| **Status** | `status`, `where are we` | `current status` | Reports current mode/step |
-| **Navigation** | `scroll up`, `scroll down` | `scroll down` | Scrolls the active panel |
-| **UI Control** | `close`, `exit`, `back` | `close panel` | Closes modals or goes back |
-| **System** | `connectivity`, `device info` | `check printer` | Shows device status toast |
-
----
-
-## 🔄 Command Flow Example: Full Print Job
-
-1.  **User**: "print" -> **AI**: "Print mode." (Enters `PRINT_WORKFLOW`)
-2.  **User**: "select document 3" -> **AI**: "Got it, document 3."
-3.  **User**: "landscape, 2 copies" -> **AI**: "Landscape. 2 copies."
-4.  **User**: "confirm" -> **AI**: "Ready. Confirm?" (Moves to `REVIEW`)
-5.  **User**: "yes" -> **AI**: "Printing now!" (Moves to `EXECUTING`)
-
----
-
-## 🛠 Technical Implementation Details
-
-- **Command Parsing**: Handled by `commandParser.ts` using regex and keyword matching.
-- **State Validation**: Enforced by `stateManager.ts` to ensure commands are contextually valid.
-- **Action Execution**: Dispatched via `actionHandler.ts` to the UI and backend.
-- **Voice Bridge**: `useVoiceCommandBridge.ts` synchronizes backend voice intents with frontend state.
-
-
-## 👨‍💻 Development
-
-### Setting Up Development Environment
-
-```bash
-# Clone and setup
-git clone https://github.com/chaman2003/printchakra.git
-cd printchakra
-
-# Backend development
-cd backend
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
-pip install -e .  # For development mode
-
-# Frontend development
-cd ../frontend
-npm install
-npm run dev  # Start with hot reload
+```mermaid
+flowchart TD
+    A[Phone Capture / Dashboard / Voice UI] --> B[React Frontend]
+    B --> C[Axios + Socket.IO]
+    C --> D[Flask Backend]
+    D --> E[Document Processing Modules]
+    D --> F[OCR + Image Enhancement]
+    D --> G[Print and Scan Orchestration]
+    D --> H[Voice Services]
+    H --> I[Local Whisper / Local TTS / Local LLM]
+    H --> J[Groq Fallback]
+    D --> K[Windows Printing + Local File Storage]
 ```
 
-### Running Tests
+---
 
-```bash
-# Backend tests
-cd backend
-python -m pytest tests/
+## Voice Fallback Behavior
 
-# Frontend tests
-cd ../frontend
-npm test
+PrintChakra uses a local-first voice strategy and can fall back to Groq when local services are unavailable.
 
-# Conversion validation
-python backend/app/print_scripts/print-file.py <file_path>
-```
+Configured fallback areas:
 
-### Code Structure Guidelines
+- LLM chat
+- Speech-to-text
+- Text-to-speech
 
-- **Modular Design** – Each feature in its own module
-- **Separation of Concerns** – Routes → Services → Utilities
-- **Error Handling** – Comprehensive logging and user feedback
-- **Type Safety** – Full TypeScript coverage in frontend
+The `/voice/status` endpoint reports current readiness for local and fallback providers.
 
 ---
 
-## 🚢 Deployment
+## Data and Output Locations
 
-### Docker Deployment
+Runtime file storage is served through backend data directories inside the backend tree.
 
-```bash
-# Build containers
-docker build -t printchakra-backend ./backend
-docker build -t printchakra-frontend ./frontend
+Canonical backend test outputs are kept in:
 
-# Run services
-docker-compose up -d
-```
+- [backend/test/test_outputs](backend/test/test_outputs)
 
-### Vercel Deployment (Frontend)
-
-```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Deploy
-cd frontend
-vercel deploy --prod
-```
-
-### Environment-Specific Configuration
-
-- **Development** – Local services, verbose logging
-- **Staging** – Pre-production environment
-- **Production** – Hardened security, performance optimized
+Redundant generated output folders outside that canonical path were intentionally cleaned up.
 
 ---
 
-## 🤝 Contributing
+## Troubleshooting
 
-We welcome contributions! Please follow these guidelines:
+### Backend does not start
 
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** with clear messages (`git commit -m 'Add amazing feature'`)
-4. **Push** to branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request with detailed description
+Check:
 
-### Code Standards
-- Follow PEP 8 (Python)
-- Use ESLint + Prettier (TypeScript/React)
-- Include tests with 80%+ coverage
-- Update documentation for new features
+- Python version is compatible
+- The backend virtual environment is activated
+- Port 5000 is not occupied by another process
+- Dependencies from [backend/requirements.txt](backend/requirements.txt) are installed
+
+### Frontend cannot reach backend
+
+Check:
+
+- Backend is running on port 5000
+- Frontend dev server is running
+- CORS points to the correct frontend origin
+- Backend is not accidentally running under HTTPS while the frontend expects HTTP
+
+### Voice features fail
+
+Check:
+
+- Local voice dependencies installed correctly
+- Groq settings are present in [backend/app/.env](backend/app/.env) if fallback is expected
+- `/voice/status` reports the providers you expect
+
+### OCR is unavailable or slow
+
+Check:
+
+- PaddleOCR and image dependencies are installed
+- PDF tooling is available for conversion paths
+- `TESSERACT_CMD` points to a valid binary when running in a container
+- GPU support is optional and CPU fallback may be slower
+
+### Docker printing does not work
+
+Check:
+
+- The default containers are Linux-based and cannot use Windows `pywin32` printing
+- Linux printing requires host CUPS access and compatible printer visibility
+- For Windows printer integration, run the backend locally on Windows instead of inside Docker
 
 ---
 
-## 📄 License & Author
+## Notebook
 
-**License:** MIT License
+The repository includes a standalone notebook for experimenting with the document pipeline:
 
-**Author:** Chaman S ([GitHub: @chaman2003](https://github.com/chaman2003))
-
-This project is open source and available under the MIT License. See [LICENSE](LICENSE) file for details.
+- [Document_Processing_Pipeline.ipynb](Document_Processing_Pipeline.ipynb)
 
 ---
 
-## 📞 Support & Feedback
+## Summary
 
-- **Issues** – Report bugs on [GitHub Issues](https://github.com/chaman2003/printchakra/issues)
-- **Discussions** – Join conversations on [GitHub Discussions](https://github.com/chaman2003/printchakra/discussions)
-- **Documentation** – Read detailed docs in `docs/` folder
-
----
-
-## 🎓 Learning Resources
-
-- [Flask Documentation](https://flask.palletsprojects.com/)
-- [React Documentation](https://react.dev/)
-- [Socket.IO Guide](https://socket.io/)
-- [PaddleOCR Documentation](https://github.com/PaddlePaddle/PaddleOCR)
-- [Chakra UI Components](https://chakra-ui.com/)
-
----
+PrintChakra is a document workflow app centered on OCR, print and scan control, voice interaction, and phone-assisted capture. For local development, use Python 3.10, run the backend on port 5000, run the frontend with `npm run dev`, and keep backend environment values in [backend/app/.env](backend/app/.env).
 
 <div align="center">
 
-**Made with ❤️ by Chaman S**
-
-If you find this project helpful, please consider giving it a ⭐ on GitHub!
-
-[⬆ Back to top](#-table-of-contents)
+<img src="https://capsule-render.vercel.app/api?type=waving&section=footer&height=140&color=0:0f172a,35:1d4ed8,70:7c3aed,100:06b6d4" alt="Footer banner" />
 
 </div>

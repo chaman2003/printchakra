@@ -12,5 +12,7 @@ document_bp = Blueprint("document", __name__, url_prefix="/document")
 from app.features.document.routes import files
 from app.features.document.routes import thumbnails
 from app.features.document.routes import conversion
+from app.features.document.routes import folders
+from app.features.document.routes import editing
 
 __all__ = ["document_bp"]

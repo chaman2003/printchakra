@@ -14,6 +14,10 @@ import numpy as np
 import pytesseract
 from PIL import Image
 
+_tesseract_cmd = os.environ.get("TESSERACT_CMD")
+if _tesseract_cmd:
+    pytesseract.pytesseract.tesseract_cmd = _tesseract_cmd
+
 from ..image import ImageEnhancer
 
 logger = logging.getLogger(__name__)

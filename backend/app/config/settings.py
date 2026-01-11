@@ -143,6 +143,16 @@ CONNECTION_CONFIG = {
         "timeout": int(env("OLLAMA_TIMEOUT", "15")),
         "verify_ssl": env_bool("OLLAMA_VERIFY_SSL", False),
     },
+    "groq": {
+        "base_url": env("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/"),
+        "api_key": env("GROQ_API_KEY", ""),
+        "llm_model": env("GROQ_LLM_MODEL", "llama-3.1-8b-instant"),
+        "stt_model": env("GROQ_STT_MODEL", "whisper-large-v3-turbo"),
+        "tts_model": env("GROQ_TTS_MODEL", "canopylabs/orpheus-v1-english"),
+        "tts_endpoint": env("GROQ_TTS_ENDPOINT", "https://api.groq.com/openai/v1/audio/speech"),
+        "timeout": int(env("GROQ_TIMEOUT", "30")),
+        "verify_ssl": env_bool("GROQ_VERIFY_SSL", True),
+    },
 }
 
 AI_PROMPT_CONFIG = {

@@ -81,6 +81,8 @@ def get_voice_status():
             "session_active": voice_ai_orchestrator.session_active,
             "whisper_loaded": voice_ai_orchestrator.whisper_service.is_loaded if voice_ai_orchestrator.whisper_service else False,
             "ollama_available": voice_ai_orchestrator.chat_service.check_ollama_available() if voice_ai_orchestrator.chat_service else False,
+            "groq_stt_fallback": voice_ai_orchestrator.whisper_service.can_use_groq_fallback() if voice_ai_orchestrator.whisper_service else False,
+            "groq_llm_fallback": voice_ai_orchestrator.chat_service.can_use_groq_fallback() if voice_ai_orchestrator.chat_service else False,
         })
     
     except ImportError:

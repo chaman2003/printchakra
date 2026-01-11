@@ -17,8 +17,16 @@ const getApiBaseUrl = () => {
     return 'http://localhost:5000';
   }
 
-  // Priority 3: Same host as frontend (deployed on same server/ngrok)
-  // This handles ngrok, Vercel, or any other deployment where backend/frontend share same host
+  // Priority 3: Local network IP (e.g., 192.168.x.x) — backend runs on port 5000
+  const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+  if (ipPattern.test(window.location.hostname)) {
+    const protocol = window.location.protocol;
+    const localUrl = `${protocol}//${window.location.hostname}:5000`;
+    console.log('[Config] Detected local network IP, using backend port 5000:', localUrl);
+    return localUrl;
+  }
+
+  // Priority 4: Same host as frontend (deployed on same server/ngrok)
   const protocol = window.location.protocol;
   const hostname = window.location.hostname;
   const port = window.location.port ? `:${window.location.port}` : '';
@@ -122,9 +130,9 @@ export const API_ENDPOINTS = {
   health: '/health',
   upload: '/upload',
   files: '/files',
-  processed: '/public/processed',
+  processed: '/document/processed',
   uploads: '/public/uploads',
-  delete: '/delete',
+  delete: '/document/files',
   ocr: '/ocr',
   print: '/print',
   printerClearQueue: '/printer/clear-queue',
@@ -142,11 +150,22 @@ export const API_ENDPOINTS = {
   classifyDocument: '/classify/document',
   batchProcess: '/batch/process',
 
-  // File conversion endpoints
-  convert: '/convert',
-  converted: '/public/converted',
-  getConvertedFiles: '/get-converted-files',
-  deleteConverted: '/delete-converted',
+  // File conversion endpoints (prefix with document blueprint)
+  convert: '/document/convert',
+  converted: '/document/converted',
+  getConvertedFiles: '/document/get-converted-files',
+  deleteConverted: '/document/delete-converted',
+
+  // Folder management endpoints
+  folders: '/document/folders',
+  folderFiles: '/document/folders', // append /<name>/files
+  folderMove: '/document/folders',  // append /<name>/move
+
+  // Image editing endpoints
+  editCrop: '/document/edit/crop',
+  editRotate: '/document/edit/rotate',
+  editAdjust: '/document/edit/adjust',
+  editEnhance: '/document/edit/enhance',
 
   // AI Orchestration endpoints
   orchestrateCommand: '/orchestrate/command',

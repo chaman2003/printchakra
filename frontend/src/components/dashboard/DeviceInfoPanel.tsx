@@ -182,8 +182,51 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
     setError(null);
     try {
       const response = await apiClient.get('/system/info');
-      setSystemInfo(response.data);
-      setDefaultPrinter(response.data.printers?.default || '');
+      const raw = response.data || {};
+
+      // Normalize response to prevent runtime crashes when backend omits nested fields.
+      const normalized: SystemInfo = {
+        os: {
+          name: raw.os?.name || 'Unknown',
+          version: raw.os?.version || '',
+          release: raw.os?.release || '',
+          architecture: raw.os?.architecture || '',
+          processor: raw.os?.processor || '',
+        },
+        python: {
+          version: raw.python?.version || '',
+          implementation: raw.python?.implementation || '',
+        },
+        memory: {
+          total_gb: Number(raw.memory?.total_gb || 0),
+          available_gb: Number(raw.memory?.available_gb || 0),
+          used_percent: Number(raw.memory?.used_percent || 0),
+        },
+        cpu: {
+          cores_physical: Number(raw.cpu?.cores_physical || 0),
+          cores_logical: Number(raw.cpu?.cores_logical || 0),
+          usage_percent: Number(raw.cpu?.usage_percent || 0),
+        },
+        gpu: {
+          available: Boolean(raw.gpu?.available),
+          name: raw.gpu?.name,
+          cuda_version: raw.gpu?.cuda_version,
+          device_count: raw.gpu?.device_count,
+          total_memory_gb: raw.gpu?.total_memory_gb,
+          error: raw.gpu?.error,
+        },
+        printers: {
+          available: Boolean(raw.printers?.available),
+          default: raw.printers?.default || '',
+          count: Number(raw.printers?.count || 0),
+          list: Array.isArray(raw.printers?.list) ? raw.printers.list : [],
+          error: raw.printers?.error,
+        },
+        driver_suggestions: Array.isArray(raw.driver_suggestions) ? raw.driver_suggestions : [],
+      };
+
+      setSystemInfo(normalized);
+      setDefaultPrinter(normalized.printers.default || '');
     } catch (err: any) {
       setError(err.message || 'Failed to fetch system info');
     } finally {

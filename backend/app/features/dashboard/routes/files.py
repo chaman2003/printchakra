@@ -13,20 +13,33 @@ from app.core.config import get_data_dirs
 
 @dashboard_bp.route("/files", methods=["GET", "OPTIONS"])
 def list_files():
-    """List all processed files with metadata."""
+    """List all processed files with metadata. Supports ?folder= query param."""
     if request.method == "OPTIONS":
         from app.core.middleware.cors import create_options_response
         return create_options_response()
     
     dirs = get_data_dirs()
     PROCESSED_DIR = dirs['PROCESSED_DIR']
+    folder = request.args.get("folder", "")
     
     try:
+        # Resolve target directory
+        if folder:
+            from werkzeug.utils import secure_filename as sf
+            safe_folder = sf(folder)
+            if not safe_folder:
+                return jsonify({"success": False, "error": "Invalid folder name"}), 400
+            target_dir = os.path.join(PROCESSED_DIR, safe_folder)
+            if not os.path.exists(target_dir):
+                return jsonify({"success": False, "error": "Folder not found"}), 404
+        else:
+            target_dir = PROCESSED_DIR
+        
         files = []
         
-        if os.path.exists(PROCESSED_DIR):
-            for filename in os.listdir(PROCESSED_DIR):
-                file_path = os.path.join(PROCESSED_DIR, filename)
+        if os.path.exists(target_dir):
+            for filename in os.listdir(target_dir):
+                file_path = os.path.join(target_dir, filename)
                 
                 if os.path.isfile(file_path):
                     stat = os.stat(file_path)
@@ -48,7 +61,8 @@ def list_files():
                         "created": datetime.fromtimestamp(stat.st_ctime).isoformat(),
                         "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                         "type": file_type,
-                        "extension": ext
+                        "extension": ext,
+                        "folder": folder or None,
                     })
         
         # Sort by creation date (newest first)
@@ -58,7 +72,8 @@ def list_files():
             "success": True,
             "files": files,
             "count": len(files),
-            "directory": PROCESSED_DIR
+            "directory": target_dir,
+            "folder": folder or None,
         })
     
     except Exception as e:

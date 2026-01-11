@@ -213,6 +213,19 @@ def register_handlers(socketio):
         except Exception as e:
             logger.error(f"Error in delay_settings_updated handler: {e}")
 
+    @socketio.on("set_active_folder")
+    def handle_set_active_folder(data):
+        """
+        Broadcast active folder to all clients so uploads go to the right folder.
+        """
+        from flask_socketio import emit
+        try:
+            folder = data.get("folder", "")
+            logger.info(f"Active folder set to: {folder or '(root)'}")
+            emit("active_folder_changed", {"folder": folder}, broadcast=True, include_self=False)
+        except Exception as e:
+            logger.error(f"Error in set_active_folder handler: {e}")
+
 
 def emit_event(event: str, data: dict, broadcast: bool = True):
     """

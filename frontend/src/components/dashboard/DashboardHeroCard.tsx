@@ -1,7 +1,7 @@
 import React from 'react';
-import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, Button } from '@chakra-ui/react';
+import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, Button, HStack, Icon } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { FiRefreshCw } from 'react-icons/fi';
+import { FiRefreshCw, FiZap } from 'react-icons/fi';
 import SurfaceCard from '../layout/SurfaceCard';
 import { Iconify } from '../common';
 import DeviceAndConnectivityPanel from './DeviceAndConnectivityPanel';
@@ -46,24 +46,51 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   const pulseAnimation = isConnected ? `${pulseGreen} 2s ease-in-out infinite` : `${pulseRed} 1.5s ease-in-out infinite`;
 
   return (
-    <SurfaceCard>
+    <SurfaceCard overflow="hidden" position="relative">
+      {/* Decorative gradient accent bar */}
+      <Box
+        position="absolute"
+        top={0}
+        left={0}
+        right={0}
+        height="3px"
+        bgGradient={isConnected
+          ? 'linear(to-r, brand.400, nebula.400, cyber.400)'
+          : 'linear(to-r, orange.400, red.400)'
+        }
+      />
+
       <Flex 
         direction={{ base: 'column', lg: 'row' }} 
         justify="space-between" 
         align={{ base: 'stretch', lg: 'center' }} 
         gap={{ base: 4, md: 5 }}
         flexWrap="wrap"
+        pt={2}
       >
-        <Stack spacing={1} flex="1" minW="0">
-          <Heading 
-            size={{ base: 'md', md: 'lg' }} 
-            display="flex" 
-            alignItems="center" 
-            gap={2}
-            whiteSpace="nowrap"
-          >
-            📊 Dashboard
-          </Heading>
+        <Stack spacing={2} flex="1" minW="0">
+          <HStack spacing={3}>
+            <Flex
+              w={10}
+              h={10}
+              borderRadius="xl"
+              bgGradient="linear(to-r, brand.400, nebula.400)"
+              align="center"
+              justify="center"
+              boxShadow="0 4px 14px rgba(121,95,238,0.3)"
+              flexShrink={0}
+            >
+              <Text fontSize="lg">📊</Text>
+            </Flex>
+            <Heading 
+              size={{ base: 'md', md: 'lg' }} 
+              display="flex" 
+              alignItems="center" 
+              gap={2}
+            >
+              Dashboard
+            </Heading>
+          </HStack>
           <Text color="text.muted" maxW="xl" fontSize={{ base: 'xs', md: 'sm' }} lineHeight="short">
             {description}
           </Text>

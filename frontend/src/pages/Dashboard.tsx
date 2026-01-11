@@ -36,6 +36,10 @@ import {
   RadioGroup,
   Select,
   SimpleGrid,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
   Spinner,
   Stack,
   Tag,
@@ -53,6 +57,14 @@ import {
   FiTrash2,
   FiZoomIn,
   FiActivity,
+  FiFolder,
+  FiFolderPlus,
+  FiChevronRight,
+  FiArrowLeft,
+  FiCrop,
+  FiRotateCw,
+  FiSun,
+  FiStar,
 } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS, getImageUrl } from '../config';
@@ -64,7 +76,7 @@ import DocumentSelector, {
 } from '../components/document/DocumentSelector';
 import PageShell from '../components/layout/PageShell';
 import { DashboardShell } from '../components/layout/DashboardRegions';
-import { FileInfo, Document, OCRResult } from '../types';
+import { FileInfo, FolderInfo, Document, OCRResult } from '../types';
 import { processFileForPreview } from '../utils/pdfUtils';
 import { parseVoiceDocumentSelection } from '../utils/voiceDocumentSelectionParser';
 import { runOCR, getOCRResult, getBatchOCRStatus } from '../ocrApi';
@@ -467,6 +479,23 @@ const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename,
   );
 };
 
+const PREVIEWABLE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp', '.pdf']);
+
+const isPreviewableFile = (file: any): boolean => {
+  if (file?.type === 'image' || file?.type === 'pdf') {
+    return true;
+  }
+
+  const extFromField = (file?.extension || '').toLowerCase();
+  if (PREVIEWABLE_EXTENSIONS.has(extFromField)) {
+    return true;
+  }
+
+  const filename = String(file?.filename || '').toLowerCase();
+  const extFromName = filename.includes('.') ? filename.slice(filename.lastIndexOf('.')) : '';
+  return PREVIEWABLE_EXTENSIONS.has(extFromName);
+};
+
 const Dashboard: React.FC = () => {
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [refreshToken, setRefreshToken] = useState<number>(0); // Forces thumbnail re-renders
@@ -478,6 +507,18 @@ const Dashboard: React.FC = () => {
   const [selectedImageFile, setSelectedImageFile] = useState<string | null>(null);
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null);
   const [connectionRetries, setConnectionRetries] = useState(0);
+
+  // Folder navigation state
+  const [activeFolder, setActiveFolder] = useState<string>('');
+  const [folders, setFolders] = useState<{ name: string; file_count: number }[]>([]);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [showFolderInput, setShowFolderInput] = useState(false);
+
+  // Image editing state
+  const [editLoading, setEditLoading] = useState(false);
+  const [showAdjustPanel, setShowAdjustPanel] = useState(false);
+  const [adjustBrightness, setAdjustBrightness] = useState(0);
+  const [adjustContrast, setAdjustContrast] = useState(1.0);
 
   // Auto-capture delays from calibration
   const { initialDelay, interCaptureDelay, isCalibrated, setInitialDelay, setInterCaptureDelay } = useCalibration();
@@ -3336,10 +3377,14 @@ const Dashboard: React.FC = () => {
       if (showLoading) {
         setLoading(true);
       }
+      const params: any = {};
+      if (activeFolder) params.folder = activeFolder;
       const response = await apiClient.get(API_ENDPOINTS.files, {
-        timeout: 10000, // 10 second timeout
+        timeout: 10000,
+        params,
       });
-      const filesData = Array.isArray(response.data) ? response.data : response.data.files || [];
+      const filesDataRaw = Array.isArray(response.data) ? response.data : response.data.files || [];
+      const filesData = filesDataRaw.filter(isPreviewableFile);
 
       // Smart cache: check if files actually changed (count OR content/processing status)
       const newCount = filesData.length;
@@ -3391,7 +3436,70 @@ const Dashboard: React.FC = () => {
         setLoading(false);
       }
     }
+  }, [activeFolder]);
+
+  // Folder management
+  const loadFolders = useCallback(async () => {
+    try {
+      const res = await apiClient.get(API_ENDPOINTS.folders);
+      if (res.data?.success) {
+        setFolders(res.data.folders || []);
+      }
+    } catch (e) {
+      console.error('Load folders error:', e);
+    }
   }, []);
+
+  const createFolder = useCallback(async (name: string) => {
+    try {
+      const res = await apiClient.post(API_ENDPOINTS.folders, { name });
+      if (res.data?.success) {
+        setFolders(prev => [...prev, res.data.folder]);
+        setShowFolderInput(false);
+        setNewFolderName('');
+      }
+    } catch (e: any) {
+      toast({ title: 'Failed to create folder', description: e.response?.data?.error || e.message, status: 'error', duration: 3000 });
+    }
+  }, [toast]);
+
+  const deleteFolder = useCallback(async (name: string) => {
+    if (!window.confirm(`Delete folder "${name}" and all its contents?`)) return;
+    try {
+      await apiClient.delete(`${API_ENDPOINTS.folders}/${name}`);
+      setFolders(prev => prev.filter(f => f.name !== name));
+      if (activeFolder === name) {
+        setActiveFolder('');
+      }
+    } catch (e: any) {
+      toast({ title: 'Failed to delete folder', description: e.response?.data?.error || e.message, status: 'error', duration: 3000 });
+    }
+  }, [activeFolder, toast]);
+
+  const navigateToFolder = useCallback((name: string) => {
+    setActiveFolder(name);
+    // Broadcast active folder to phone via socket
+    if (socketRef.current) {
+      socketRef.current.emit('set_active_folder', { folder: name });
+    }
+  }, []);
+
+  const navigateToRoot = useCallback(() => {
+    setActiveFolder('');
+    if (socketRef.current) {
+      socketRef.current.emit('set_active_folder', { folder: '' });
+    }
+  }, []);
+
+  // Load folders on mount
+  useEffect(() => {
+    loadFolders();
+  }, [loadFolders]);
+
+  // Reload files when activeFolder changes
+  useEffect(() => {
+    loadFiles(true);
+  }, [activeFolder, loadFiles]);
 
   const deleteFile = async (filename: string) => {
     if (!window.confirm('Are you sure you want to delete this file?')) {
@@ -4341,9 +4449,114 @@ const Dashboard: React.FC = () => {
             </Flex>
           ) : (
             <Stack spacing={10}>
+              {/* Folder Navigation */}
               <Box>
-                <Flex justify="space-between" align="baseline" mb={4}>
-                  <Heading size="md">Files · {files.length}</Heading>
+                <Flex justify="space-between" align="center" mb={4}>
+                  <HStack spacing={3}>
+                    {activeFolder ? (
+                      <>
+                        <IconButton
+                          aria-label="Back to root"
+                          icon={<Iconify icon={FiArrowLeft} boxSize={4} />}
+                          size="sm"
+                          variant="ghost"
+                          onClick={navigateToRoot}
+                        />
+                        <HStack spacing={1} fontSize="sm" color="text.muted">
+                          <Text cursor="pointer" _hover={{ color: 'brand.400' }} onClick={navigateToRoot}>Documents</Text>
+                          <Iconify icon={FiChevronRight} boxSize={4} />
+                          <Text color="text.primary" fontWeight="600">{activeFolder}</Text>
+                        </HStack>
+                      </>
+                    ) : (
+                      <>
+                        <Iconify icon={FiFolder} boxSize={5} color="brand.400" />
+                        <Heading size="sm">Folders</Heading>
+                      </>
+                    )}
+                  </HStack>
+                  {!activeFolder && (
+                    <HStack spacing={2}>
+                      {showFolderInput ? (
+                        <>
+                          <Input
+                            size="sm"
+                            placeholder="Folder name"
+                            value={newFolderName}
+                            onChange={e => setNewFolderName(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && newFolderName.trim() && createFolder(newFolderName.trim())}
+                            w="180px"
+                            borderRadius="lg"
+                          />
+                          <Button size="sm" colorScheme="brand" onClick={() => newFolderName.trim() && createFolder(newFolderName.trim())}>Create</Button>
+                          <Button size="sm" variant="ghost" onClick={() => { setShowFolderInput(false); setNewFolderName(''); }}>Cancel</Button>
+                        </>
+                      ) : (
+                        <IconButton
+                          aria-label="New folder"
+                          icon={<Iconify icon={FiFolderPlus} boxSize={5} />}
+                          size="sm"
+                          variant="ghost"
+                          colorScheme="brand"
+                          onClick={() => setShowFolderInput(true)}
+                        />
+                      )}
+                    </HStack>
+                  )}
+                </Flex>
+                {!activeFolder && folders.length > 0 && (
+                  <SimpleGrid columns={{ base: 2, md: 3, xl: 4 }} spacing={3} mb={2}>
+                    {folders.map(folder => (
+                      <Card
+                        key={folder.name}
+                        bg={surfaceCard}
+                        border="1px solid rgba(121,95,238,0.12)"
+                        borderRadius="xl"
+                        cursor="pointer"
+                        _hover={{ borderColor: 'brand.400', transform: 'translateY(-1px)', boxShadow: '0 4px 12px rgba(121,95,238,0.15)' }}
+                        transition="all 0.2s"
+                        onClick={() => navigateToFolder(folder.name)}
+                      >
+                        <CardBody py={3} px={4}>
+                          <Flex justify="space-between" align="center">
+                            <HStack spacing={3}>
+                              <Iconify icon={FiFolder} boxSize={5} color="brand.400" />
+                              <Box>
+                                <Text fontWeight="600" fontSize="sm" noOfLines={1}>{folder.name}</Text>
+                                <Text fontSize="xs" color="text.muted">{folder.file_count} file{folder.file_count !== 1 ? 's' : ''}</Text>
+                              </Box>
+                            </HStack>
+                            <IconButton
+                              aria-label="Delete folder"
+                              icon={<Iconify icon={FiTrash2} boxSize={4} />}
+                              size="xs"
+                              variant="ghost"
+                              colorScheme="red"
+                              onClick={e => { e.stopPropagation(); deleteFolder(folder.name); }}
+                            />
+                          </Flex>
+                        </CardBody>
+                      </Card>
+                    ))}
+                  </SimpleGrid>
+                )}
+              </Box>
+
+              <Box>
+                <Flex justify="space-between" align="center" mb={5}>
+                  <HStack spacing={3}>
+                    <Iconify icon={FiFileText} boxSize={5} color="nebula.400" />
+                    <Heading size="md">Files</Heading>
+                    <Badge
+                      colorScheme="brand"
+                      borderRadius="full"
+                      px={3}
+                      py={0.5}
+                      fontSize="sm"
+                    >
+                      {files.length}
+                    </Badge>
+                  </HStack>
                   {selectionMode && (
                     <Tag size="lg" colorScheme="purple" borderRadius="full">
                       {selectedFiles.length} selected
@@ -4402,18 +4615,30 @@ const Dashboard: React.FC = () => {
 
                 {files.length === 0 ? (
                   <Card
-                    border="1px solid rgba(121,95,238,0.2)"
+                    border="1px dashed"
+                    borderColor="rgba(121,95,238,0.25)"
                     bg={surfaceCard}
                     textAlign="center"
-                    py={10}
+                    py={16}
+                    borderRadius="2xl"
                   >
                     <CardBody>
-                      <Stack spacing={3} align="center">
-                        <Iconify icon={FiFileText} boxSize={10} color="brand.300" />
-                        <Heading size="sm">No files yet</Heading>
-                        <Text color="text.muted" maxW="md">
-                          Initiate a capture from the Phone interface or trigger a print job to start
-                          populating this space.
+                      <Stack spacing={4} align="center">
+                        <Box
+                          w={20}
+                          h={20}
+                          borderRadius="2xl"
+                          bgGradient="linear(to-br, brand.400, nebula.400)"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                          boxShadow="0 8px 32px rgba(121,95,238,0.3)"
+                        >
+                          <Iconify icon={FiFileText} boxSize={10} color="white" />
+                        </Box>
+                        <Heading size="md">No documents yet</Heading>
+                        <Text color="text.muted" maxW="md" fontSize="sm">
+                          Capture documents from your phone, upload files, or trigger a print job to get started.
                         </Text>
                       </Stack>
                     </CardBody>
@@ -4428,15 +4653,14 @@ const Dashboard: React.FC = () => {
                           key={file.filename}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.3, delay: index * 0.05 }}
+                          transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.5) }}
                           whileHover={{
-                            y: -8,
-                            scale: 1.02,
+                            y: -6,
                             transition: { duration: 0.2 },
                           }}
                           borderRadius="2xl"
-                          border={`2px solid ${isSelected ? 'rgba(72, 187, 120, 0.6)' : 'rgba(121,95,238,0.18)'}`}
-                          boxShadow={isSelected ? '0 0 20px rgba(72, 187, 120, 0.4)' : 'subtle'}
+                          border={`2px solid ${isSelected ? 'rgba(72, 187, 120, 0.6)' : 'rgba(121,95,238,0.12)'}`}
+                          boxShadow={isSelected ? '0 0 20px rgba(72, 187, 120, 0.4)' : '0 4px 20px rgba(0,0,0,0.08)'}
                           bg={surfaceCard}
                           position="relative"
                           overflow="hidden"
@@ -4446,6 +4670,13 @@ const Dashboard: React.FC = () => {
                               handleFileClick(index, file.filename);
                             }
                           }}
+                          _hover={{
+                            boxShadow: isSelected
+                              ? '0 8px 30px rgba(72, 187, 120, 0.4)'
+                              : '0 12px 40px rgba(121,95,238,0.15)',
+                            borderColor: isSelected ? 'green.400' : 'rgba(121,95,238,0.25)',
+                          }}
+                          sx={{ transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}
                         >
                           {selectionMode && !file.processing && (
                             <Checkbox
@@ -4689,7 +4920,100 @@ const Dashboard: React.FC = () => {
                   />
                 )}
               </ModalBody>
-              <ModalFooter>
+              <ModalFooter flexDir="column" gap={3}>
+                {/* Image editing toolbar */}
+                {selectedImageFile && (
+                  <Flex w="100%" gap={2} wrap="wrap" justify="center" pb={2} borderBottom="1px solid" borderColor="whiteAlpha.100">
+                    <Tooltip label="Rotate 90°" hasArrow>
+                      <IconButton
+                        aria-label="Rotate"
+                        icon={<Iconify icon={FiRotateCw} boxSize={4} />}
+                        size="sm"
+                        variant="outline"
+                        colorScheme="brand"
+                        isLoading={editLoading}
+                        onClick={async () => {
+                          setEditLoading(true);
+                          try {
+                            await apiClient.post(API_ENDPOINTS.editRotate, { filename: selectedImageFile, angle: 90 });
+                            setRefreshToken(Date.now());
+                            toast({ title: 'Rotated', status: 'success', duration: 2000 });
+                          } catch (e: any) { toast({ title: 'Rotate failed', status: 'error', duration: 3000 }); }
+                          setEditLoading(false);
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip label="Enhance (shadow removal + cleanup)" hasArrow>
+                      <IconButton
+                        aria-label="Enhance"
+                        icon={<Iconify icon={FiStar} boxSize={4} />}
+                        size="sm"
+                        variant="outline"
+                        colorScheme="green"
+                        isLoading={editLoading}
+                        onClick={async () => {
+                          setEditLoading(true);
+                          try {
+                            await apiClient.post(API_ENDPOINTS.editEnhance, { filename: selectedImageFile });
+                            setRefreshToken(Date.now());
+                            toast({ title: 'Enhanced', status: 'success', duration: 2000 });
+                          } catch (e: any) { toast({ title: 'Enhance failed', status: 'error', duration: 3000 }); }
+                          setEditLoading(false);
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip label="Adjust brightness/contrast" hasArrow>
+                      <IconButton
+                        aria-label="Adjust"
+                        icon={<Iconify icon={FiSun} boxSize={4} />}
+                        size="sm"
+                        variant={showAdjustPanel ? 'solid' : 'outline'}
+                        colorScheme="orange"
+                        onClick={() => setShowAdjustPanel(!showAdjustPanel)}
+                      />
+                    </Tooltip>
+                  </Flex>
+                )}
+                {showAdjustPanel && selectedImageFile && (
+                  <Box w="100%" p={3} borderRadius="lg" bg="whiteAlpha.50" border="1px solid" borderColor="whiteAlpha.100">
+                    <Stack spacing={3}>
+                      <HStack>
+                        <Text fontSize="xs" w="80px">Brightness</Text>
+                        <Slider min={-100} max={100} value={adjustBrightness} onChange={v => setAdjustBrightness(v)}>
+                          <SliderTrack><SliderFilledTrack bg="orange.400" /></SliderTrack>
+                          <SliderThumb />
+                        </Slider>
+                        <Text fontSize="xs" w="40px" textAlign="right">{adjustBrightness}</Text>
+                      </HStack>
+                      <HStack>
+                        <Text fontSize="xs" w="80px">Contrast</Text>
+                        <Slider min={50} max={300} value={Math.round(adjustContrast * 100)} onChange={v => setAdjustContrast(v / 100)}>
+                          <SliderTrack><SliderFilledTrack bg="orange.400" /></SliderTrack>
+                          <SliderThumb />
+                        </Slider>
+                        <Text fontSize="xs" w="40px" textAlign="right">{adjustContrast.toFixed(1)}</Text>
+                      </HStack>
+                      <Button
+                        size="sm"
+                        colorScheme="orange"
+                        isLoading={editLoading}
+                        onClick={async () => {
+                          setEditLoading(true);
+                          try {
+                            await apiClient.post(API_ENDPOINTS.editAdjust, { filename: selectedImageFile, brightness: adjustBrightness, contrast: adjustContrast });
+                            setRefreshToken(Date.now());
+                            setShowAdjustPanel(false);
+                            toast({ title: 'Adjusted', status: 'success', duration: 2000 });
+                          } catch (e: any) { toast({ title: 'Adjust failed', status: 'error', duration: 3000 }); }
+                          setEditLoading(false);
+                        }}
+                      >
+                        Apply Adjustment
+                      </Button>
+                    </Stack>
+                  </Box>
+                )}
+                <Flex w="100%" justify="flex-end">
                 <Button variant="ghost" mr={3} onClick={closeImageModal}>
                   Close
                 </Button>
@@ -4735,6 +5059,7 @@ const Dashboard: React.FC = () => {
                 >
                   Download
                 </Button>
+                </Flex>
               </ModalFooter>
             </ModalContent>
           </Modal>
