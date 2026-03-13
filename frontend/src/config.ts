@@ -128,7 +128,7 @@ export const SOCKET_CONFIG = {
 export const API_ENDPOINTS = {
   // Core endpoints - Match backend exactly
   health: '/health',
-  upload: '/upload',
+  upload: '/phone/upload',
   files: '/files',
   processed: '/document/processed',
   uploads: '/public/uploads',

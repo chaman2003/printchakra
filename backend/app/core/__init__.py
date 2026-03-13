@@ -54,61 +54,27 @@ def _init_extensions(app: Flask) -> None:
 
 def _register_blueprints(app: Flask) -> None:
     """Register all feature blueprints."""
-    # Dashboard routes
-    try:
-        from app.features.dashboard.routes import dashboard_bp
-        app.register_blueprint(dashboard_bp)
-    except ImportError as e:
-        app.logger.warning(f"Could not load dashboard routes: {e}")
-    
-    # Phone capture routes
-    try:
-        from app.features.phone.routes import phone_bp
-        app.register_blueprint(phone_bp, url_prefix='/phone')
-    except ImportError as e:
-        app.logger.warning(f"Could not load phone routes: {e}")
-    
-    # Document routes
-    try:
-        from app.features.document.routes import document_bp
-        app.register_blueprint(document_bp, url_prefix='/document')
-    except ImportError as e:
-        app.logger.warning(f"Could not load document routes: {e}")
-    
-    # OCR routes
-    try:
-        from app.features.document.ocr.routes import ocr_bp
-        app.register_blueprint(ocr_bp, url_prefix='/ocr')
-    except ImportError as e:
-        app.logger.warning(f"Could not load OCR routes: {e}")
-    
-    # Print routes
-    try:
-        from app.features.print.routes import print_bp
-        app.register_blueprint(print_bp, url_prefix='/print')
-    except ImportError as e:
-        app.logger.warning(f"Could not load print routes: {e}")
-    
-    # Voice routes
-    try:
-        from app.features.voice.routes import voice_bp
-        app.register_blueprint(voice_bp, url_prefix='/voice')
-    except ImportError as e:
-        app.logger.warning(f"Could not load voice routes: {e}")
-    
-    # Orchestration routes
-    try:
-        from app.features.orchestration.routes import orchestration_bp
-        app.register_blueprint(orchestration_bp, url_prefix='/orchestrate')
-    except ImportError as e:
-        app.logger.warning(f"Could not load orchestration routes: {e}")
-    
-    # Connection routes
-    try:
-        from app.features.connection.routes import connection_bp
-        app.register_blueprint(connection_bp, url_prefix='/connection')
-    except ImportError as e:
-        app.logger.warning(f"Could not load connection routes: {e}")
+    blueprint_specs = [
+        ("dashboard", "app.features.dashboard.routes", "dashboard_bp", None),
+        ("phone", "app.features.phone.routes", "phone_bp", "/phone"),
+        ("document", "app.features.document.routes", "document_bp", "/document"),
+        ("OCR", "app.features.document.ocr.routes", "ocr_bp", "/ocr"),
+        ("print", "app.features.print.routes", "print_bp", "/print"),
+        ("voice", "app.features.voice.routes", "voice_bp", "/voice"),
+        ("orchestration", "app.features.orchestration.routes", "orchestration_bp", "/orchestrate"),
+        ("connection", "app.features.connection.routes", "connection_bp", "/connection"),
+    ]
+
+    for feature_name, module_path, blueprint_name, prefix in blueprint_specs:
+        try:
+            module = __import__(module_path, fromlist=[blueprint_name])
+            blueprint = getattr(module, blueprint_name)
+            if prefix:
+                app.register_blueprint(blueprint, url_prefix=prefix)
+            else:
+                app.register_blueprint(blueprint)
+        except ImportError as e:
+            app.logger.warning(f"Could not load {feature_name} routes: {e}")
 
 
 def _register_socket_handlers() -> None:
