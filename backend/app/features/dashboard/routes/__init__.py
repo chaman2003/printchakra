@@ -13,5 +13,7 @@ dashboard_bp = Blueprint('dashboard', __name__)
 from app.features.dashboard.routes import health
 from app.features.dashboard.routes import files
 from app.features.dashboard.routes import system
+from app.features.dashboard.routes import pipeline
+from app.features.dashboard.routes import printer_compat
 
 __all__ = ['dashboard_bp']

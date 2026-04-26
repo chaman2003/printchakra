@@ -2,12 +2,12 @@ import React from 'react';
 import { Box, useColorModeValue } from '@chakra-ui/react';
 
 const AnimatedBackground: React.FC = () => {
-  const particleColor1 = useColorModeValue('rgba(121,95,238,0.06)', 'rgba(121,95,238,0.1)');
-  const particleColor2 = useColorModeValue('rgba(69,202,255,0.06)', 'rgba(69,202,255,0.1)');
-  const particleColor3 = useColorModeValue('rgba(147,51,234,0.05)', 'rgba(147,51,234,0.08)');
+  const particleColor1 = useColorModeValue('rgba(121,95,238,0.02)', 'rgba(121,95,238,0.08)');
+  const particleColor2 = useColorModeValue('rgba(69,202,255,0.02)', 'rgba(69,202,255,0.08)');
+  const particleColor3 = useColorModeValue('rgba(147,51,234,0.01)', 'rgba(147,51,234,0.05)');
   const gradientOverlay = useColorModeValue(
-    'radial(circle at 50% 50%, rgba(245, 247, 255, 0.4) 0%, transparent 70%)',
-    'radial(circle at 50% 50%, brand.50 0%, transparent 70%)'
+    'none',
+    'radial(circle at 50% 50%, rgba(121,95,238,0.03) 0%, transparent 70%)'
   );
 
   const particles = [

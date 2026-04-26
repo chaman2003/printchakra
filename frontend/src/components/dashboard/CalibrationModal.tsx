@@ -3,9 +3,7 @@ import {
   Box,
   Button,
   Flex,
-  Grid,
   HStack,
-  Image,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -28,19 +26,12 @@ import {
   useToast,
   VStack,
 } from '@chakra-ui/react';
-import { FiCamera, FiClock, FiPlay, FiSettings, FiTrash2 } from 'react-icons/fi';
+import { FiClock, FiPlay, FiSettings } from 'react-icons/fi';
 import { Iconify } from '../common';
 import { useCalibration } from '../../context/CalibrationContext';
 import { useSocket } from '../../context/SocketContext';
-import { API_BASE_URL } from '../../config';
 import apiClient from '../../apiClient';
-
-interface TestCapture {
-  filename: string;
-  url: string;
-  size: number;
-  timestamp: string;
-}
+import TestCapturesPreview, { type TestCapture } from './TestCapturesPreview';
 
 interface CalibrationModalProps {
   isOpen: boolean;
@@ -127,6 +118,11 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
     }
   };
 
+  const clearTestCaptures = useCallback(async () => {
+    await apiClient.post('/test-captures/clear');
+    setTestCaptures([]);
+  }, []);
+
   // Cleanup test captures when modal closes
   const handleClose = useCallback(async () => {
     // Stop any running test
@@ -143,7 +139,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
     // Clear test captures from backend
     if (testCaptures.length > 0) {
       try {
-        await apiClient.post('/test-captures/clear');
+        await clearTestCaptures();
         console.log('[Calibration] Test captures cleared on close');
       } catch (error) {
         console.error('[Calibration] Failed to clear test captures:', error);
@@ -152,7 +148,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
 
     setTestCaptures([]);
     onClose();
-  }, [cancelCountdown, isCountingDown, onClose, socket, testCaptures.length]);
+  }, [cancelCountdown, clearTestCaptures, isCountingDown, onClose, socket, testCaptures.length]);
 
   const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
   const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
@@ -163,6 +159,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
   const textMuted = useColorModeValue('gray.600', 'gray.400');
 
   return (
+    <>
     <Modal isOpen={isOpen} onClose={handleClose} size="xl" isCentered scrollBehavior="inside">
       <ModalOverlay bg="blackAlpha.600" />
       <ModalContent
@@ -428,94 +425,24 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
               )}
             </Box>
 
-            {/* Test Captures Preview */}
-            {testCaptures.length > 0 && (
-              <Box
-                bg={useColorModeValue('green.50', 'rgba(34, 197, 94, 0.1)')}
-                px={4}
-                py={4}
-                borderRadius="lg"
-                border="1px solid"
-                borderColor={useColorModeValue('green.200', 'green.700')}
-              >
-                <Flex align="center" justify="space-between" mb={3}>
-                  <HStack spacing={2}>
-                    <Iconify icon={FiCamera} boxSize={4} color="green.500" />
-                    <Text fontSize="sm" fontWeight="600" color="green.600">
-                      Test Captures ({testCaptures.length})
-                    </Text>
-                  </HStack>
-                  <Button
-                    size="xs"
-                    colorScheme="red"
-                    variant="ghost"
-                    leftIcon={<Iconify icon={FiTrash2} boxSize={3} />}
-                    onClick={async () => {
-                      try {
-                        await apiClient.post('/test-captures/clear');
-                        setTestCaptures([]);
-                        toast({
-                          title: 'Cleared',
-                          description: 'Test captures deleted',
-                          status: 'info',
-                          duration: 2000,
-                        });
-                      } catch (error) {
-                        console.error('Failed to clear test captures:', error);
-                      }
-                    }}
-                  >
-                    Clear All
-                  </Button>
-                </Flex>
-                <Text fontSize="xs" color={textMuted} mb={3}>
-                  These images were captured during testing and will be automatically deleted when you close this screen.
-                </Text>
-                <Grid templateColumns="repeat(3, 1fr)" gap={2}>
-                  {testCaptures.slice(0, 9).map((capture) => (
-                    <Box
-                      key={capture.filename}
-                      borderRadius="md"
-                      overflow="hidden"
-                      border="1px solid"
-                      borderColor={borderColor}
-                      position="relative"
-                    >
-                      <Image
-                        src={`${API_BASE_URL}${capture.url}`}
-                        alt={capture.filename}
-                        w="100%"
-                        h="80px"
-                        objectFit="cover"
-                        fallback={
-                          <Flex w="100%" h="80px" bg="gray.200" align="center" justify="center">
-                            <Text fontSize="xs" color="gray.500">Loading...</Text>
-                          </Flex>
-                        }
-                      />
-                      <Box
-                        position="absolute"
-                        bottom={0}
-                        left={0}
-                        right={0}
-                        bg="blackAlpha.600"
-                        px={1}
-                        py={0.5}
-                      >
-                        <Text fontSize="8px" color="white" noOfLines={1}>
-                          {new Date(capture.timestamp).toLocaleTimeString()}
-                        </Text>
-                      </Box>
-                    </Box>
-                  ))}
-                </Grid>
-                {testCaptures.length > 9 && (
-                  <Text fontSize="xs" color={textMuted} mt={2} textAlign="center">
-                    +{testCaptures.length - 9} more capture(s)
-                  </Text>
-                )}
-              </Box>
-            )}
+            <TestCapturesPreview
+              captures={testCaptures}
+              textMuted={textMuted}
+              borderColor={borderColor}
+              onClearAll={async () => {
+                try {
+                  await clearTestCaptures();
+                  toast({
+                    title: 'Cleared',
+                    description: 'Test captures deleted',
+                    status: 'info',
+                    duration: 2000,
+                  });
+                } catch (error) {
+                  console.error('Failed to clear test captures:', error);
+                }
+              }}
+            />
 
             {/* Footer Actions */}
             <HStack spacing={2} justify="space-between" pt={2}>
@@ -544,6 +471,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
         </ModalBody>
       </ModalContent>
     </Modal>
+    </>
   );
 };
 

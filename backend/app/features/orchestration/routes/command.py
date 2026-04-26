@@ -5,11 +5,86 @@ Voice and text command execution endpoints.
 """
 
 import logging
-from flask import jsonify, request
+import os
+from flask import jsonify, request, current_app
 from app.features.orchestration.routes import orchestration_bp
 from app.core.middleware.cors import create_options_response
+from app.modules.orchestration import get_orchestrator
 
 logger = logging.getLogger(__name__)
+
+
+def _get_orchestrator():
+    """Get shared orchestrator instance."""
+    data_dir = os.path.join(current_app.root_path, "data")
+    return get_orchestrator(data_dir)
+
+
+def _normalize_command_text(command: str, parameters: dict) -> str:
+    """Build a basic natural-language command text from command + parameters."""
+    cmd = (command or "").strip().lower()
+    params = parameters or {}
+    if not cmd:
+        return ""
+
+    if cmd in {"print", "scan", "status", "help"}:
+        return cmd
+
+    if cmd == "list_files":
+        return "list documents"
+    if cmd == "list_printers":
+        return "printer status"
+
+    if cmd == "ocr":
+        document = (params.get("document") or "").strip()
+        return f"extract text from {document}".strip()
+
+    if cmd == "convert":
+        document = (params.get("document") or "").strip()
+        target_format = (params.get("target_format") or "pdf").strip()
+        if document:
+            return f"convert {document} to {target_format}"
+        return f"convert to {target_format}"
+
+    return cmd
+
+
+def run_unified_orchestration(text: str, source: str = "api", force_voice_triggered: bool = False) -> dict:
+    """Run orchestration through the shared orchestrator for both voice and text."""
+    command_text = (text or "").strip()
+    if not command_text:
+        return {
+            "success": False,
+            "error": "No command text provided",
+            "orchestration_trigger": False,
+        }
+
+    orchestrator = _get_orchestrator()
+    result = orchestrator.process_command(
+        command_text,
+        force_voice_triggered=force_voice_triggered,
+    )
+
+    intent = (result.get("intent") or "").lower()
+    trigger_mode = intent if intent in {"print", "scan"} else None
+
+    return {
+        "success": bool(result.get("success")),
+        "source": source,
+        "command_text": command_text,
+        "intent": intent,
+        "orchestration_trigger": bool(result.get("success") and trigger_mode),
+        "orchestration_mode": trigger_mode,
+        "awaiting_confirmation": bool(result.get("requires_confirmation", False)),
+        "pending_mode": trigger_mode if result.get("requires_confirmation") else None,
+        "orchestration": {
+            "backend_result": result,
+            "frontend_state": result.get("frontend_state"),
+            "frontend_updates": result.get("frontend_updates"),
+        },
+        "result": result,
+        "message": result.get("message", ""),
+    }
 
 
 @orchestration_bp.route("/command", methods=["POST", "OPTIONS"])
@@ -19,29 +94,25 @@ def execute_command():
         return create_options_response()
     
     try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({"success": False, "error": "No data provided"}), 400
-        
-        command = data.get("command")
-        parameters = data.get("parameters", {})
-        source = data.get("source", "api")  # api, voice, ui
-        
-        if not command:
-            return jsonify({"success": False, "error": "No command provided"}), 400
-        
-        logger.info(f"Executing command: {command} (source: {source})")
-        
-        # Parse and execute command
-        result = execute_orchestration_command(command, parameters)
-        
-        return jsonify({
-            "success": result.get("success", False),
-            "command": command,
-            "result": result
-        })
-    
+        data = request.get_json() or {}
+
+        text = (data.get("text") or "").strip()
+        command = (data.get("command") or "").strip()
+        parameters = data.get("parameters", {}) or {}
+        source = data.get("source", "api")
+        force_voice_triggered = bool(data.get("force_voice_triggered", source == "voice"))
+
+        if not text and command:
+            text = _normalize_command_text(command, parameters)
+
+        if not text:
+            return jsonify({"success": False, "error": "No command or text provided"}), 400
+
+        logger.info(f"Executing unified orchestration: '{text}' (source: {source})")
+        unified = run_unified_orchestration(text, source, force_voice_triggered)
+
+        return jsonify(unified), 200 if unified.get("success") else 400
+
     except Exception as e:
         logger.error(f"Command execution error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -54,22 +125,20 @@ def parse_command():
         return create_options_response()
     
     try:
-        data = request.get_json()
-        
-        if not data or "text" not in data:
+        data = request.get_json() or {}
+        text = (data.get("text") or "").strip()
+
+        if not text:
             return jsonify({"success": False, "error": "No text provided"}), 400
-        
-        text = data.get("text")
-        
-        # Parse natural language command
+
         parsed = parse_natural_language_command(text)
-        
+
         return jsonify({
             "success": True,
             "original": text,
-            "parsed": parsed
+            "parsed": parsed,
         })
-    
+
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -143,178 +212,248 @@ def get_command_history():
         return create_options_response()
     
     try:
-        limit = request.args.get("limit", 50, type=int)
-        
-        # In a full implementation, this would query a database
-        history = []
-        
-        return jsonify({
-            "success": True,
-            "history": history,
-            "total": len(history)
-        })
-    
+        limit = max(1, min(request.args.get("limit", 50, type=int), 200))
+        orchestrator = _get_orchestrator()
+        history = orchestrator.get_history(limit)
+
+        return jsonify({"success": True, "history": history, "total": len(history)})
+
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 def execute_orchestration_command(command: str, parameters: dict) -> dict:
-    """Execute a specific orchestration command."""
-    command = command.lower().strip()
-    
-    if command == "print":
-        return execute_print_command(parameters)
-    elif command == "scan":
-        return execute_scan_command(parameters)
-    elif command == "ocr":
-        return execute_ocr_command(parameters)
-    elif command == "convert":
-        return execute_convert_command(parameters)
-    elif command == "list_files":
-        return execute_list_files_command(parameters)
-    elif command == "list_printers":
-        return execute_list_printers_command(parameters)
-    elif command == "status":
-        return execute_status_command(parameters)
-    else:
-        return {
-            "success": False,
-            "error": f"Unknown command: {command}"
-        }
+    """Compatibility wrapper for legacy callers."""
+    text = _normalize_command_text(command, parameters)
+    return run_unified_orchestration(text, source="api", force_voice_triggered=False)
 
 
 def execute_print_command(params: dict) -> dict:
     """Execute print command."""
-    document = params.get("document")
-    if not document:
-        return {"success": False, "error": "No document specified"}
-    
-    return {
-        "success": True,
-        "action": "print",
-        "document": document,
-        "message": f"Print job queued for {document}"
-    }
+    return execute_orchestration_command("print", params)
 
 
 def execute_scan_command(params: dict) -> dict:
     """Execute scan command."""
-    return {
-        "success": True,
-        "action": "scan",
-        "message": "Ready to scan. Please place document on scanner."
-    }
+    return execute_orchestration_command("scan", params)
 
 
 def execute_ocr_command(params: dict) -> dict:
     """Execute OCR command."""
-    document = params.get("document")
-    if not document:
-        return {"success": False, "error": "No document specified"}
-    
-    return {
-        "success": True,
-        "action": "ocr",
-        "document": document,
-        "message": f"OCR started for {document}"
-    }
+    return execute_orchestration_command("ocr", params)
 
 
 def execute_convert_command(params: dict) -> dict:
     """Execute convert command."""
-    document = params.get("document")
-    target_format = params.get("target_format", "pdf")
-    
-    if not document:
-        return {"success": False, "error": "No document specified"}
-    
-    return {
-        "success": True,
-        "action": "convert",
-        "document": document,
-        "format": target_format,
-        "message": f"Converting {document} to {target_format}"
-    }
+    return execute_orchestration_command("convert", params)
 
 
 def execute_list_files_command(params: dict) -> dict:
     """Execute list files command."""
-    return {
-        "success": True,
-        "action": "list_files",
-        "message": "Listing files..."
-    }
+    return execute_orchestration_command("list_files", params)
 
 
 def execute_list_printers_command(params: dict) -> dict:
     """Execute list printers command."""
-    return {
-        "success": True,
-        "action": "list_printers",
-        "message": "Listing printers..."
-    }
+    return execute_orchestration_command("list_printers", params)
 
 
 def execute_status_command(params: dict) -> dict:
     """Execute status command."""
-    return {
-        "success": True,
-        "action": "status",
-        "message": "System is running"
-    }
+    return execute_orchestration_command("status", params)
 
 
 def parse_natural_language_command(text: str) -> dict:
     """Parse natural language into structured command."""
-    text_lower = text.lower()
-    
-    # Simple keyword-based parsing
-    if any(word in text_lower for word in ["print", "printing"]):
-        return {
-            "command": "print",
-            "confidence": 0.9,
-            "parameters": {}
+    orchestrator = _get_orchestrator()
+    intent, parameters = orchestrator.detect_intent(text)
+
+    command = None
+    if intent.value == "print":
+        command = "print"
+    elif intent.value == "scan":
+        command = "scan"
+    elif intent.value == "list_documents":
+        command = "list_files"
+    elif intent.value == "view_status":
+        command = "status"
+    elif intent.value == "help":
+        command = "help"
+
+    return {
+        "command": command,
+        "confidence": 0.9 if command else 0.0,
+        "parameters": parameters,
+        "intent": intent.value,
+        "message": "Could not parse command" if not command else "",
+    }
+
+
+@orchestration_bp.route("/confirm", methods=["POST", "OPTIONS"])
+def confirm_command():
+    """Confirm pending orchestration action."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        result = _get_orchestrator().confirm_action()
+        return jsonify({"success": bool(result.get("success")), "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/cancel", methods=["POST", "OPTIONS"])
+def cancel_command():
+    """Cancel pending orchestration action."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        result = _get_orchestrator().cancel_action()
+        return jsonify({"success": bool(result.get("success")), "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/status", methods=["GET", "OPTIONS"])
+def get_status():
+    """Get orchestration status."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        result = _get_orchestrator().process_command("status")
+        return jsonify({"success": bool(result.get("success")), "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/documents", methods=["GET", "OPTIONS"])
+def list_documents():
+    """List documents available for orchestration."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        orchestrator = _get_orchestrator()
+        documents = orchestrator._get_available_documents()
+        return jsonify({"success": True, "documents": documents, "total": len(documents)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/select", methods=["POST", "OPTIONS"])
+def select_document():
+    """Select document by filename or 1-based index."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        data = request.get_json() or {}
+        filename = (data.get("filename") or "").strip()
+        index = data.get("index")
+
+        orchestrator = _get_orchestrator()
+
+        if not filename and index is None:
+            return jsonify({"success": False, "error": "Provide filename or index"}), 400
+
+        if index is not None and not filename:
+            try:
+                idx = int(index)
+            except (TypeError, ValueError):
+                return jsonify({"success": False, "error": "Index must be a number"}), 400
+
+            documents = orchestrator._get_available_documents()
+            if idx < 1 or idx > len(documents):
+                return jsonify({"success": False, "error": "Index out of range"}), 400
+            filename = documents[idx - 1]["filename"]
+
+        result = orchestrator.select_document(filename)
+        return jsonify({"success": bool(result.get("success")), "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/configure", methods=["POST", "OPTIONS"])
+def configure_action():
+    """Update print or scan configuration."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        data = request.get_json() or {}
+        mode = (data.get("mode") or "").strip().lower()
+        settings = data.get("settings", {}) or {}
+
+        if mode not in {"print", "scan"}:
+            return jsonify({"success": False, "error": "Mode must be print or scan"}), 400
+
+        result = _get_orchestrator().update_configuration(mode, settings)
+        return jsonify({"success": bool(result.get("success")), "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/reset", methods=["POST", "OPTIONS"])
+def reset_orchestration():
+    """Reset orchestration state."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        result = _get_orchestrator().reset_state()
+        return jsonify({"success": bool(result.get("success")), "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/history", methods=["GET", "OPTIONS"])
+def orchestration_history():
+    """Compatibility endpoint for orchestration history."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        limit = max(1, min(request.args.get("limit", 50, type=int), 200))
+        history = _get_orchestrator().get_history(limit)
+        return jsonify({"success": True, "history": history, "total": len(history)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@orchestration_bp.route("/scan", methods=["POST", "OPTIONS"])
+def start_scan_flow():
+    """Compatibility endpoint used by Dashboard scan execution."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        data = request.get_json() or {}
+        orchestrator = _get_orchestrator()
+
+        # Map Dashboard-style fields to orchestrator config keys.
+        mapped_settings = {
+            "mode": data.get("scanMode"),
+            "text_mode": data.get("scanTextMode"),
+            "page_mode": data.get("scanPageMode"),
+            "custom_range": data.get("scanCustomRange"),
+            "orientation": data.get("layout") or data.get("scanLayout"),
+            "paper_size": data.get("paperSize") or data.get("scanPaperSize"),
+            "resolution": int(data.get("scanResolution")) if str(data.get("scanResolution", "")).isdigit() else data.get("scanResolution"),
+            "color_mode": data.get("scanColorMode"),
+            "format": data.get("scanFormat"),
         }
-    elif any(word in text_lower for word in ["scan", "scanning"]):
-        return {
-            "command": "scan",
-            "confidence": 0.9,
-            "parameters": {}
-        }
-    elif any(word in text_lower for word in ["ocr", "extract", "text"]):
-        return {
-            "command": "ocr",
-            "confidence": 0.8,
-            "parameters": {}
-        }
-    elif any(word in text_lower for word in ["convert", "pdf"]):
-        return {
-            "command": "convert",
-            "confidence": 0.8,
-            "parameters": {"target_format": "pdf"}
-        }
-    elif any(word in text_lower for word in ["list", "files", "documents"]):
-        return {
-            "command": "list_files",
-            "confidence": 0.8,
-            "parameters": {}
-        }
-    elif any(word in text_lower for word in ["printers", "printer list"]):
-        return {
-            "command": "list_printers",
-            "confidence": 0.8,
-            "parameters": {}
-        }
-    elif any(word in text_lower for word in ["status", "health"]):
-        return {
-            "command": "status",
-            "confidence": 0.8,
-            "parameters": {}
-        }
-    else:
-        return {
-            "command": None,
-            "confidence": 0.0,
-            "parameters": {},
-            "message": "Could not parse command"
-        }
+        mapped_settings = {k: v for k, v in mapped_settings.items() if v not in (None, "")}
+
+        if mapped_settings:
+            orchestrator.update_configuration("scan", mapped_settings)
+
+        result = orchestrator.process_command("scan", force_voice_triggered=True)
+        return jsonify({
+            "success": bool(result.get("success")),
+            "message": result.get("message", "Scan workflow started"),
+            "result": result,
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

@@ -25,7 +25,8 @@ def index():
             "print": "/print/*",
             "voice": "/voice/*",
             "connection": "/connection/*",
-            "orchestrate": "/orchestrate/*"
+            "orchestrate": "/orchestrate/*",
+            "pipeline": "/pipeline/*"
         }
     })
 

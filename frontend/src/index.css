@@ -1,4 +1,5 @@
-/* Global responsive CSS configuration */
+/* ===== PrintChakra — Global Professional Styles ===== */
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -16,11 +17,10 @@ body {
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell',
-    'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
+  text-rendering: optimizeLegibility;
 }
 
 #root {
@@ -32,7 +32,7 @@ body {
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-family: 'Space Grotesk Variable', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 /* Responsive images and media */
@@ -48,6 +48,18 @@ input, button, textarea, select {
   max-width: 100%;
 }
 
+/* Remove default tap highlight on mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+  outline: 2px solid rgba(121, 95, 238, 0.6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Smooth scrolling containers */
 .chakra-modal__content-container,
 .chakra-modal__body,
@@ -56,29 +68,58 @@ input, button, textarea, select {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — thin and subtle */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 10px;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(121, 95, 238, 0.4);
+  background: rgba(121, 95, 238, 0.2);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(121, 95, 238, 0.6);
+  background: rgba(121, 95, 238, 0.4);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(121, 95, 238, 0.2) transparent;
+}
+
+/* Selection colors */
+::selection {
+  background: rgba(121, 95, 238, 0.2);
+  color: inherit;
+}
+
+/* Transition for all interactive elements */
+a, button, [role="button"] {
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 /* Print styles */
 @media print {
   body {
     background: white !important;
+  }
+  nav, .no-print {
+    display: none !important;
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -98,6 +98,12 @@ def get_voice_status():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@voice_bp.route("/health", methods=["GET", "OPTIONS"])
+def get_voice_health():
+    """Compatibility alias for voice health checks."""
+    return get_voice_status()
+
+
 # =============================================================================
 # TRANSCRIPTION (SPEECH-TO-TEXT)
 # =============================================================================
@@ -320,7 +326,28 @@ def _process_orchestration_triggers(response: dict, user_message: str) -> dict:
         # Remove trigger from response
         ai_response = ai_response.replace(trigger_text, "").strip()
         response["response"] = ai_response
-        response["orchestration_trigger"] = orchestration_trigger
+
+    # Keep voice/text orchestration behavior unified by routing through shared runner.
+    if orchestration_trigger and orchestration_mode in {"print", "scan"}:
+        try:
+            from app.features.orchestration.routes.command import run_unified_orchestration
+
+            unified = run_unified_orchestration(
+                orchestration_mode,
+                source="voice",
+                force_voice_triggered=True,
+            )
+            response["orchestration_trigger"] = bool(unified.get("orchestration_trigger"))
+            response["orchestration_mode"] = unified.get("orchestration_mode")
+            response["orchestration"] = unified.get("orchestration")
+            response["awaiting_confirmation"] = bool(unified.get("awaiting_confirmation", False))
+            response["pending_mode"] = unified.get("pending_mode")
+        except Exception as exc:
+            logger.warning(f"Unified orchestration route failed in /voice/chat: {exc}")
+            response["orchestration_trigger"] = bool(orchestration_trigger)
+            response["orchestration_mode"] = orchestration_mode
+    else:
+        response["orchestration_trigger"] = bool(orchestration_trigger)
         response["orchestration_mode"] = orchestration_mode
     
     return response

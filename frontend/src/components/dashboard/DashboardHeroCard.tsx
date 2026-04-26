@@ -1,20 +1,19 @@
 import React from 'react';
-import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, Button, HStack, Icon } from '@chakra-ui/react';
+import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, HStack, Badge } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
-import { FiRefreshCw, FiZap } from 'react-icons/fi';
+import { FiRefreshCw } from 'react-icons/fi';
 import SurfaceCard from '../layout/SurfaceCard';
 import { Iconify } from '../common';
 import DeviceAndConnectivityPanel from './DeviceAndConnectivityPanel';
 
-// Pulse animation for live connection indicator
 const pulseGreen = keyframes`
-  0%, 100% { box-shadow: 0 0 8px rgba(72, 187, 120, 0.6); }
-  50% { box-shadow: 0 0 16px rgba(72, 187, 120, 1); }
+  0%, 100% { box-shadow: 0 0 6px rgba(72, 187, 120, 0.5); }
+  50% { box-shadow: 0 0 12px rgba(72, 187, 120, 0.9); }
 `;
 
 const pulseRed = keyframes`
-  0%, 100% { box-shadow: 0 0 8px rgba(245, 101, 101, 0.6); }
-  50% { box-shadow: 0 0 16px rgba(245, 101, 101, 1); }
+  0%, 100% { box-shadow: 0 0 6px rgba(245, 101, 101, 0.5); }
+  50% { box-shadow: 0 0 12px rgba(245, 101, 101, 0.9); }
 `;
 
 interface DashboardHeroCardProps {
@@ -29,7 +28,7 @@ interface DashboardHeroCardProps {
 }
 
 const DEFAULT_DESCRIPTION =
-  'Monitor document ingestion, inspect OCR output, and orchestrate premium conversions in real time.';
+  'Monitor document ingestion, inspect OCR output, and orchestrate conversions in real time.';
 
 export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   statusDotColor,
@@ -41,7 +40,7 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   onCheckConnectivity,
   children,
 }) => {
-  const dividerColor = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(69, 202, 255, 0.1)');
+  const dividerColor = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(69, 202, 255, 0.08)');
   const isConnected = statusDotColor === 'green.400';
   const pulseAnimation = isConnected ? `${pulseGreen} 2s ease-in-out infinite` : `${pulseRed} 1.5s ease-in-out infinite`;
 
@@ -53,7 +52,7 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
         top={0}
         left={0}
         right={0}
-        height="3px"
+        height="2px"
         bgGradient={isConnected
           ? 'linear(to-r, brand.400, nebula.400, cyber.400)'
           : 'linear(to-r, orange.400, red.400)'
@@ -64,32 +63,42 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
         direction={{ base: 'column', lg: 'row' }} 
         justify="space-between" 
         align={{ base: 'stretch', lg: 'center' }} 
-        gap={{ base: 4, md: 5 }}
+        gap={{ base: 3, md: 4 }}
         flexWrap="wrap"
-        pt={2}
+        pt={1}
       >
-        <Stack spacing={2} flex="1" minW="0">
+        <Stack spacing={1.5} flex="1" minW="0">
           <HStack spacing={3}>
             <Flex
-              w={10}
-              h={10}
-              borderRadius="xl"
-              bgGradient="linear(to-r, brand.400, nebula.400)"
+              w={9}
+              h={9}
+              borderRadius="lg"
+              bgGradient="linear(to-br, brand.400, nebula.500)"
               align="center"
               justify="center"
-              boxShadow="0 4px 14px rgba(121,95,238,0.3)"
+              boxShadow="0 2px 8px rgba(121,95,238,0.25)"
               flexShrink={0}
             >
-              <Text fontSize="lg">📊</Text>
+              <Text fontSize="md">📊</Text>
             </Flex>
             <Heading 
-              size={{ base: 'md', md: 'lg' }} 
-              display="flex" 
-              alignItems="center" 
-              gap={2}
+              size={{ base: 'sm', md: 'md' }} 
+              fontWeight="800"
+              letterSpacing="-0.01em"
             >
               Dashboard
             </Heading>
+            <Badge
+              colorScheme={isConnected ? "green" : "red"}
+              variant="subtle"
+              fontSize="9px"
+              borderRadius="md"
+              px={2}
+              py={0.5}
+              fontWeight="700"
+            >
+              {isConnected ? 'Live' : 'Offline'}
+            </Badge>
           </HStack>
           <Text color="text.muted" maxW="xl" fontSize={{ base: 'xs', md: 'sm' }} lineHeight="short">
             {description}
@@ -98,7 +107,7 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
 
         <Flex 
           direction={{ base: 'column', sm: 'row' }}
-          gap={{ base: 2, md: 3 }} 
+          gap={{ base: 2, md: 2 }} 
           align={{ base: 'stretch', sm: 'center' }}
           flexWrap="wrap"
           justify="flex-end"
@@ -107,38 +116,39 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
           <Flex
             align="center"
             gap={2}
-            px={{ base: 3, md: 4 }}
-            py={{ base: 1.5, md: 2 }}
-            borderRadius="full"
+            px={3}
+            py={1.5}
+            borderRadius="lg"
             bg="surface.blur"
             border="1px solid"
-            borderColor={isConnected ? "rgba(72, 187, 120, 0.3)" : "rgba(245, 101, 101, 0.3)"}
+            borderColor={isConnected ? "rgba(72, 187, 120, 0.2)" : "rgba(245, 101, 101, 0.2)"}
             flexShrink={0}
             whiteSpace="nowrap"
             cursor={!isConnected ? "pointer" : "default"}
             onClick={!isConnected ? onCheckConnectivity : undefined}
-            _hover={!isConnected ? { borderColor: "rgba(245, 101, 101, 0.5)" } : undefined}
+            _hover={!isConnected ? { borderColor: "rgba(245, 101, 101, 0.4)" } : undefined}
             title={!isConnected ? "Click to check connectivity" : "Connected to backend"}
           >
             <Box
-              w={{ base: 2, md: 3 }}
-              h={{ base: 2, md: 3 }}
+              w={2}
+              h={2}
               borderRadius="full"
               bg={error ? 'orange.400' : statusDotColor}
               animation={pulseAnimation}
               flexShrink={0}
             />
-            <Text fontWeight="600" color={statusTextColor} fontSize={{ base: 'xs', md: 'sm' }} whiteSpace="nowrap">
+            <Text fontWeight="600" color={statusTextColor} fontSize="xs" whiteSpace="nowrap">
               {statusText}
             </Text>
           </Flex>
           <IconButton
             aria-label="Refresh files"
-            icon={<Iconify icon={FiRefreshCw} boxSize={{ base: 4, md: 5 }} />}
+            icon={<Iconify icon={FiRefreshCw} boxSize={4} />}
             onClick={onRefresh}
             variant="ghost"
             colorScheme="brand"
-            size={{ base: 'sm', md: 'md' }}
+            size="sm"
+            borderRadius="lg"
             _hover={{ transform: 'rotate(180deg)', transition: 'transform 0.3s' }}
             flexShrink={0}
           />

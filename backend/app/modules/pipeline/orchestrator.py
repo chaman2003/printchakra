@@ -118,11 +118,17 @@ class DocumentPipeline:
             if options.get("auto_crop", True):
                 print("  → Detecting document boundaries (improved algorithm)...")
                 try:
-                    doc_contour = self.detector.detect_document_refined(
+                    detection_result = self.detector.detect_document_refined(
                         processed, debug=True, inset=options.get("corner_inset", 12)
                     )
 
-                    if doc_contour is not None:
+                    if detection_result is not None:
+                        if isinstance(detection_result, tuple):
+                            doc_contour, confidence = detection_result
+                            result["detection_confidence"] = float(confidence)
+                        else:
+                            doc_contour = detection_result
+
                         # Apply perspective transform
                         doc_contour_pts = doc_contour.reshape(4, 2).astype(np.float32)
                         processed = four_point_transform(processed, doc_contour_pts)

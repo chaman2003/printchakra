@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "name": "printchakra-phase2",
+  "cleanUrls": true,
+  "framework": null,
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

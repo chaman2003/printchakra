@@ -46,6 +46,7 @@ openai-whisper>=20240930
 torch>=2.0.0
 torchaudio>=2.0.0
 requests>=2.31.0
+chardet<6
 pyttsx3>=2.99
 pypiwin32>=223; platform_system == "Windows"
 comtypes>=1.4.0; platform_system == "Windows"

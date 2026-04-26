@@ -1,7 +1,7 @@
 import React from 'react';
-import { Box, Button, Flex } from '@chakra-ui/react';
+import { Box, Button, Flex, HStack, Tooltip } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
-import { FiLayers, FiMic, FiWifiOff } from 'react-icons/fi';
+import { FiLayers, FiMic, FiWifiOff, FiCheckSquare, FiX, FiRepeat, FiArchive } from 'react-icons/fi';
 import { Iconify } from '../common';
 import { DashboardToolbar } from '../layout/DashboardRegions';
 
@@ -51,124 +51,122 @@ export const DashboardActionPanel: React.FC<DashboardActionPanelProps> = ({
         align: 'stretch',
       };
 
-  const buttonSize = embedded ? 'md' : 'lg';
+  const btnSize = embedded ? 'md' : 'md';
 
   return (
     <Container {...(containerProps as any)}>
       <Flex
         direction={{ base: 'column', md: 'row' }}
         flexWrap="wrap"
-        gap={{ base: 3, md: 4 }}
+        gap={2}
         align="center"
         justify="flex-start"
         w="100%"
       >
-        <MotionBox
+        {/* Primary action */}
+        <Button
+          size={btnSize}
+          colorScheme="brand"
+          variant="solid"
+          onClick={onTriggerPrint}
+          leftIcon={<Iconify icon={FiLayers} boxSize={4} />}
+          borderRadius="lg"
+          fontWeight="700"
+          fontSize="13px"
+          h="38px"
+          px={5}
+          _hover={{ transform: 'translateY(-1px)', boxShadow: '0 6px 20px rgba(121,95,238,0.5)' }}
+          transition="all 0.2s ease"
           w={{ base: '100%', md: 'auto' }}
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button
-            size={buttonSize}
-            colorScheme="brand"
-            variant="solid"
-            onClick={onTriggerPrint}
-            leftIcon={<Iconify icon={FiLayers} boxSize={5} />}
-            boxShadow="0 4px 14px rgba(121,95,238,0.4)"
-            _hover={{ boxShadow: '0 6px 20px rgba(121,95,238,0.6)' }}
-            transition="all 0.3s"
-            w="100%"
-          >
-            Orchestrate Print Capture
-          </Button>
-        </MotionBox>
+          Orchestrate
+        </Button>
 
         {showReopenOrchestrate && orchestrateMode && (
-          <MotionBox
+          <Button
+            size={btnSize}
+            colorScheme="brand"
+            variant="outline"
+            onClick={onReopenOrchestrate}
+            leftIcon={<Iconify icon={FiRepeat} boxSize={4} />}
+            borderRadius="lg"
+            fontWeight="600"
+            fontSize="13px"
+            h="38px"
+            px={4}
             w={{ base: '100%', md: 'auto' }}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.05, y: -3 }}
-            whileTap={{ scale: 0.95 }}
           >
-            <Button
-              size={buttonSize}
-              colorScheme="brand"
-              variant="outline"
-              onClick={onReopenOrchestrate}
-              leftIcon={<Iconify icon="solar:redo-bold-duotone" boxSize={5} />}
-              w={{ base: '100%', md: 'auto' }}
-            >
-              Re-open {orchestrateMode === 'print' ? 'Print' : 'Scan'} Configuration
-            </Button>
-          </MotionBox>
+            Re-open {orchestrateMode === 'print' ? 'Print' : 'Scan'}
+          </Button>
         )}
 
-        <MotionBox
+        {/* AI Chat toggle */}
+        <Button
+          size={btnSize}
+          colorScheme="purple"
+          variant={isChatVisible ? 'solid' : 'outline'}
+          onClick={onToggleChat}
+          leftIcon={<Iconify icon={FiMic} boxSize={4} />}
+          borderRadius="lg"
+          fontWeight="600"
+          fontSize="13px"
+          h="38px"
+          px={4}
+          _hover={{ transform: 'translateY(-1px)' }}
+          transition="all 0.2s ease"
           w={{ base: '100%', md: 'auto' }}
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button
-            size={buttonSize}
-            colorScheme="purple"
-            variant="solid"
-            onClick={onToggleChat}
-            leftIcon={<Iconify icon={FiMic} boxSize={5} />}
-            boxShadow="0 4px 14px rgba(147,51,234,0.4)"
-            _hover={{ boxShadow: '0 6px 20px rgba(147,51,234,0.6)' }}
-            transition="all 0.3s"
-            w="100%"
-          >
-            {isChatVisible ? 'Hide' : 'Show'} AI Chat
-          </Button>
-        </MotionBox>
+          {isChatVisible ? 'Hide' : 'Show'} AI Chat
+        </Button>
 
-        <MotionBox
+        {/* Selection mode */}
+        <Button
+          size={btnSize}
+          variant={selectionMode ? 'solid' : 'ghost'}
+          colorScheme={selectionMode ? 'orange' : 'gray'}
+          onClick={onToggleSelectionMode}
+          leftIcon={<Iconify icon={selectionMode ? FiX : FiCheckSquare} boxSize={4} />}
+          borderRadius="lg"
+          fontWeight="600"
+          fontSize="13px"
+          h="38px"
+          px={4}
           w={{ base: '100%', md: 'auto' }}
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button
-            size={buttonSize}
-            variant={selectionMode ? 'solid' : 'ghost'}
-            colorScheme={selectionMode ? 'orange' : 'brand'}
-            onClick={onToggleSelectionMode}
-            w="100%"
-          >
-            {selectionMode ? 'Cancel Selection' : 'Select Files'}
-          </Button>
-        </MotionBox>
+          {selectionMode ? 'Cancel' : 'Select'}
+        </Button>
 
         {selectionMode && selectedFilesCount > 0 && (
-          <MotionBox
+          <Button
+            size={btnSize}
+            colorScheme="brand"
+            variant="outline"
+            onClick={onOpenConversionModal}
+            borderRadius="lg"
+            fontWeight="600"
+            fontSize="13px"
+            h="38px"
+            px={4}
             w={{ base: '100%', md: 'auto' }}
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            whileHover={{ scale: 1.05, y: -3 }}
-            whileTap={{ scale: 0.95 }}
           >
-            <Button size={buttonSize} colorScheme="brand" variant="outline" onClick={onOpenConversionModal} w="100%">
-              Convert {selectedFilesCount} Selected
-            </Button>
-          </MotionBox>
+            Convert {selectedFilesCount} Selected
+          </Button>
         )}
 
-        <MotionBox
+        <Button
+          size={btnSize}
+          variant="ghost"
+          onClick={onToggleConvertedDrawer}
+          leftIcon={<Iconify icon={FiArchive} boxSize={4} />}
+          borderRadius="lg"
+          fontWeight="600"
+          fontSize="13px"
+          h="38px"
+          px={4}
           w={{ base: '100%', md: 'auto' }}
-          whileHover={{ scale: 1.05, y: -3 }}
-          whileTap={{ scale: 0.95 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 17 }}
         >
-          <Button size={buttonSize} variant="ghost" onClick={onToggleConvertedDrawer} w="100%">
-            {isConvertedDrawerOpen ? 'Hide Converted Files' : 'Show Converted Files'}
-          </Button>
-        </MotionBox>
+          {isConvertedDrawerOpen ? 'Hide' : 'Show'} Converted
+        </Button>
       </Flex>
     </Container>
   );

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrintChakra Phase 2 | AI-Powered Document Workflow</title>
+    <meta name="description" content="Phase 2 of PrintChakra: Advanced OCR, Voice interaction, and Print Automation workflows.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --accent-tertiary: #06b6d4;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Background animated gradient */
+        .bg-gradient {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            background: radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
+                        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.15) 0%, transparent 40%);
+            filter: blur(100px);
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 5rem;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 4rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            background: linear-gradient(to right, #60a5fa, #a78bfa, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        .tagline {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        section {
+            margin-bottom: 4rem;
+            animation: fadeInUp 1s ease-out both;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        h2::before {
+            content: '';
+            display: block;
+            width: 8px;
+            height: 32px;
+            background: var(--accent-primary);
+            border-radius: 4px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .feature-item {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: background 0.3s ease;
+        }
+
+        .feature-item:hover {
+            background: rgba(30, 41, 59, 0.8);
+        }
+
+        .feature-item h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+            color: var(--accent-tertiary);
+        }
+
+        .feature-item p {
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .doc-list {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .doc-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            text-decoration: none;
+            color: var(--text-main);
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .doc-link:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }
+
+        .doc-icon {
+            font-size: 1.5rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 4rem 0;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--glass-border);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            h1 { font-size: 2.5rem; }
+            .container { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-gradient"></div>
+
+    <div class="container">
+        <header>
+            <div class="badge">Phase 2 Accomplished</div>
+            <h1>PrintChakra</h1>
+            <p class="tagline">AI-Powered Document Workflow Platform for Scan, OCR, and Print Automation.</p>
+        </header>
+
+        <section id="about">
+            <div class="card">
+                <h2>Project Overview</h2>
+                <p>PrintChakra is a Windows-first platform designed to streamline document intake and output. By integrating advanced OCR pipelines, voice-driven interaction, and automated print orchestration, it transforms how documents are managed from capture to final output.</p>
+            </div>
+        </section>
+
+        <section id="features">
+            <h2 style="margin-left: 0.5rem;">Core Features</h2>
+            <div class="features-grid">
+                <div class="feature-item">
+                    <h3>OCR Pipeline</h3>
+                    <p>Advanced image enhancement and text extraction using PaddleOCR and Tesseract.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Voice Workflow</h3>
+                    <p>Local-first voice interaction with Groq fallback for transcription and orchestration.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Print Orchestration</h3>
+                    <p>Real-time browser-based print configuration and Windows device integration.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Phone Capture</h3>
+                    <p>Optimized intake flow for documents captured via mobile devices.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Real-Time Dashboard</h3>
+                    <p>Live status updates and file management powered by Socket.IO.</p>
+                </div>
+                <div class="feature-item">
+                    <h3>Windows Native</h3>
+                    <p>Deep integration with Windows printer queues and system workflows.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="documents">
+            <div class="card">
+                <h2>Phase 2 Documentation</h2>
+                <p style="margin-bottom: 2rem; color: var(--text-muted);">Access the detailed reports, diaries, and diagrams for the second phase of development.</p>
+                <div class="doc-list">
+                    <a href="PrintChakra-phase-2-FinalReport.pdf" class="doc-link" target="_blank">
+                        <span class="doc-icon">📄</span>
+                        <span>Final Report</span>
+                    </a>
+                    <a href="PRINTCHAKRA-DIARY.pdf" class="doc-link" target="_blank">
+                        <span class="doc-icon">📓</span>
+                        <span>Project Diary</span>
+                    </a>
+                    <a href="KSCST-SPP-CHAMAN.pdf" class="doc-link" target="_blank">
+                        <span class="doc-icon">💼</span>
+                        <span>KSCST Proposal</span>
+                    </a>
+                    <a href="final-ppt.pptx" class="doc-link" target="_blank">
+                        <span class="doc-icon">📊</span>
+                        <span>Final Presentation</span>
+                    </a>
+                    <a href="pc-diagram.jpg" class="doc-link" target="_blank">
+                        <span class="doc-icon">🖼️</span>
+                        <span>System Diagram</span>
+                    </a>
+                    <a href="pc-phase2.png" class="doc-link" target="_blank">
+                        <span class="doc-icon">📸</span>
+                        <span>Phase 2 Preview</span>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>&copy; 2026 PrintChakra Team. Built for efficiency and automation.</p>
+            <p style="margin-top: 0.5rem; font-size: 0.8rem;">Deployable on Vercel</p>
+        </footer>
+    </div>
+</body>
+</html>

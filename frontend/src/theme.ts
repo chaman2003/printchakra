@@ -79,16 +79,16 @@ const shadows = {
 const semanticTokens = {
   colors: {
     'surface.bg': {
-      default: 'linear-gradient(135deg, #f5f7ff 0%, #eef2ff 100%)',
-      _dark: 'linear-gradient(135deg, #050711 0%, #0a0e1a 100%)',
+      default: '#F8FAFC',
+      _dark: '#0B0F19',
     },
     'surface.card': {
-      default: 'rgba(248, 249, 255, 0.95)',
-      _dark: 'rgba(12, 16, 35, 0.92)',
+      default: '#FFFFFF',
+      _dark: '#111522',
     },
     'surface.blur': {
-      default: 'rgba(245, 247, 255, 0.75)',
-      _dark: 'rgba(15,20,42,0.75)',
+      default: 'rgba(255, 255, 255, 0.85)',
+      _dark: 'rgba(15,20,42,0.85)',
     },
     'surface.glass': {
       default: 'rgba(245, 247, 255, 0.65)',
@@ -355,7 +355,7 @@ const components = {
 const styles = {
   global: (props: StyleFunctionProps) => ({
     'html, body': {
-      bg: mode('#f5f7ff', '#080c18')(props),
+      bg: mode('#F8FAFC', '#080c18')(props),
       color: mode('#1a1f36', '#e6ebff')(props),
       fontFeatureSettings: '"clig" off, "liga" off',
       minHeight: '100dvh',
@@ -370,8 +370,8 @@ const styles = {
     body: {
       // Cleaner, more uniform background
       background: mode(
-        'linear-gradient(180deg, #f5f7ff 0%, #eef2ff 100%)',
-        'linear-gradient(180deg, #080c18 0%, #0a0f1c 100%)'
+        '#F8FAFC',
+        '#080c18'
       )(props),
       backgroundAttachment: 'fixed',
       position: 'relative',

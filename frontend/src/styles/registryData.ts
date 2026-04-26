@@ -7,7 +7,7 @@ export const componentStyleRegistry: Record<string, ComponentStyleConfig> = {
   },
   'Dashboard.Shell': {
     description: 'Dashboard page canvas',
-    commands: ['padded layout', 'contained width'],
+    commands: ['padded layout'],
   },
   'Dashboard.Layout': {
     description: 'Primary two-column layout',

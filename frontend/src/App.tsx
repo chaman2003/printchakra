@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link as RouterLink, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -10,8 +10,27 @@ import {
   Text,
   useColorMode,
   useColorModeValue,
+  Tooltip,
+  Badge,
+  VStack,
+  Divider,
 } from '@chakra-ui/react';
-import { FiHome, FiLayout, FiMoon, FiSmartphone, FiSun, FiPlay } from 'react-icons/fi';
+import {
+  FiHome,
+  FiLayout,
+  FiMoon,
+  FiSmartphone,
+  FiSun,
+  FiPlay,
+  FiMenu,
+  FiX,
+  FiChevronLeft,
+  FiChevronRight,
+  FiCommand,
+  FiBell,
+  FiSearch,
+  FiHelpCircle,
+} from 'react-icons/fi';
 import Dashboard from './pages/Dashboard';
 import Phone from './pages/Phone';
 import Playground from './pages/Playground';
@@ -20,123 +39,209 @@ import { Iconify, AnimatedBackground } from './components/common';
 import { SocketProvider } from './context/SocketContext';
 import { CalibrationProvider } from './context/CalibrationContext';
 
-function NavBar() {
+// Navigation items config
+const navItems = [
+  { path: '/dashboard', icon: FiLayout, label: 'Dashboard', badge: null },
+  { path: '/playground', icon: FiPlay, label: 'Playground', badge: 'Beta' },
+  { path: '/phone', icon: FiSmartphone, label: 'Phone Capture', badge: null },
+];
+
+function TopBar() {
   const { colorMode, toggleColorMode } = useColorMode();
   const location = useLocation();
-  const isLanding = location.pathname === '/';
 
-  const navBg = useColorModeValue(
-    isLanding ? 'rgba(248,249,255,0.8)' : 'rgba(248,249,255,0.85)',
-    isLanding ? 'rgba(8,11,25,0.7)' : 'rgba(8,11,25,0.85)'
+  const bg = useColorModeValue(
+    'rgba(255, 255, 255, 0.72)',
+    'rgba(10, 14, 28, 0.72)'
   );
-  const navBorder = useColorModeValue('rgba(121,95,238,0.12)', 'rgba(69,202,255,0.12)');
-  const navShadow = useColorModeValue(
-    '0 8px 32px rgba(121,95,238,0.08)',
-    '0 8px 32px rgba(0,0,0,0.3)'
+  const borderColor = useColorModeValue(
+    'rgba(121, 95, 238, 0.08)',
+    'rgba(69, 202, 255, 0.08)'
   );
-  const activeBg = useColorModeValue('brand.50', 'whiteAlpha.100');
-  const activeColor = useColorModeValue('brand.600', 'nebula.300');
-
-  const isActive = (path: string) => location.pathname === path;
 
   return (
     <Box
       position="sticky"
       top={0}
       zIndex={999}
-      bg={navBg}
-      backdropFilter="blur(20px)"
-      borderBottom={`1px solid ${navBorder}`}
-      boxShadow={navShadow}
+      bg={bg}
+      backdropFilter="blur(24px) saturate(1.8)"
+      borderBottom={`1px solid`}
+      borderColor={borderColor}
+      px={{ base: 4, md: 6 }}
+      py={0}
     >
-      <Container maxW="7xl" py={3}>
-        <Flex align="center" justify="space-between">
-          <HStack spacing={3} as={RouterLink} to="/" _hover={{ textDecoration: 'none' }}>
-            <Box
-              bgGradient="linear(to-r, brand.400, nebula.400)"
-              borderRadius="xl"
-              px={3}
-              py={2}
-              color="white"
-              fontSize="lg"
-              fontWeight="bold"
-              transition="all 0.3s ease"
-              _hover={{ transform: 'scale(1.05)' }}
-            >
-              📄 PrintChakra
-            </Box>
-          </HStack>
+      <Flex align="center" justify="space-between" h="56px">
+        {/* Left: Logo */}
+        <HStack spacing={3} as={RouterLink} to="/" _hover={{ textDecoration: 'none' }}>
+          <Flex
+            w={8}
+            h={8}
+            borderRadius="lg"
+            bgGradient="linear(to-br, brand.400, nebula.500)"
+            align="center"
+            justify="center"
+            boxShadow="0 2px 8px rgba(121,95,238,0.3)"
+          >
+            <Text fontSize="sm" fontWeight="900" color="white">PC</Text>
+          </Flex>
+          <Text
+            fontWeight="800"
+            fontSize="md"
+            letterSpacing="-0.02em"
+            bgGradient="linear(to-r, brand.400, nebula.400)"
+            bgClip="text"
+          >
+            PrintChakra
+          </Text>
+          <Badge
+            colorScheme="purple"
+            variant="subtle"
+            fontSize="9px"
+            fontWeight="700"
+            borderRadius="md"
+            px={1.5}
+            py={0.5}
+            textTransform="uppercase"
+            letterSpacing="0.05em"
+          >
+            Pro
+          </Badge>
+        </HStack>
 
-          <HStack spacing={1}>
-            <Button
-              as={RouterLink}
-              to="/"
-              variant="ghost"
-              size="sm"
-              leftIcon={<Iconify icon={FiHome} boxSize={4} />}
-              fontWeight="600"
-              bg={isActive('/') ? activeBg : 'transparent'}
-              color={isActive('/') ? activeColor : undefined}
-              _hover={{ bg: activeBg, color: activeColor, transform: 'translateY(-1px)' }}
-              transition="all 0.2s ease"
-            >
-              Home
-            </Button>
-            <Button
-              as={RouterLink}
-              to="/dashboard"
-              variant="ghost"
-              size="sm"
-              leftIcon={<Iconify icon={FiLayout} boxSize={4} />}
-              fontWeight="600"
-              bg={isActive('/dashboard') ? activeBg : 'transparent'}
-              color={isActive('/dashboard') ? activeColor : undefined}
-              _hover={{ bg: activeBg, color: activeColor, transform: 'translateY(-1px)' }}
-              transition="all 0.2s ease"
-            >
-              Dashboard
-            </Button>
-            <Button
-              as={RouterLink}
-              to="/playground"
-              variant="ghost"
-              size="sm"
-              leftIcon={<Iconify icon={FiPlay} boxSize={4} />}
-              fontWeight="600"
-              bg={isActive('/playground') ? activeBg : 'transparent'}
-              color={isActive('/playground') ? activeColor : undefined}
-              _hover={{ bg: activeBg, color: activeColor, transform: 'translateY(-1px)' }}
-              transition="all 0.2s ease"
-            >
-              Playground
-            </Button>
-            <Button
-              as={RouterLink}
-              to="/phone"
-              variant="ghost"
-              size="sm"
-              leftIcon={<Iconify icon={FiSmartphone} boxSize={4} />}
-              fontWeight="600"
-              bg={isActive('/phone') ? activeBg : 'transparent'}
-              color={isActive('/phone') ? activeColor : undefined}
-              _hover={{ bg: activeBg, color: activeColor, transform: 'translateY(-1px)' }}
-              transition="all 0.2s ease"
-            >
-              Phone
-            </Button>
+        {/* Center: Navigation */}
+        <HStack spacing={1} display={{ base: 'none', md: 'flex' }}>
+          {navItems.map(item => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Button
+                key={item.path}
+                as={RouterLink}
+                to={item.path}
+                variant="ghost"
+                size="sm"
+                h="36px"
+                px={4}
+                fontWeight="600"
+                fontSize="13px"
+                borderRadius="lg"
+                bg={isActive ? useColorModeValue('brand.50', 'whiteAlpha.100') : 'transparent'}
+                color={isActive ? useColorModeValue('brand.600', 'nebula.300') : useColorModeValue('gray.600', 'gray.400')}
+                _hover={{
+                  bg: useColorModeValue('gray.100', 'whiteAlpha.100'),
+                  color: useColorModeValue('brand.600', 'nebula.300'),
+                }}
+                leftIcon={<Iconify icon={item.icon} boxSize={4} />}
+                transition="all 0.15s ease"
+                position="relative"
+              >
+                {item.label}
+                {item.badge && (
+                  <Badge
+                    ml={2}
+                    colorScheme="cyan"
+                    variant="subtle"
+                    fontSize="8px"
+                    borderRadius="full"
+                    px={1.5}
+                  >
+                    {item.badge}
+                  </Badge>
+                )}
+                {isActive && (
+                  <Box
+                    position="absolute"
+                    bottom="-10px"
+                    left="50%"
+                    transform="translateX(-50%)"
+                    w="20px"
+                    h="2px"
+                    borderRadius="full"
+                    bgGradient="linear(to-r, brand.400, nebula.400)"
+                  />
+                )}
+              </Button>
+            );
+          })}
+        </HStack>
+
+        {/* Right: Actions */}
+        <HStack spacing={1}>
+          <Tooltip label={`Switch to ${colorMode === 'light' ? 'dark' : 'light'} mode`} placement="bottom" hasArrow>
             <IconButton
               aria-label="Toggle color mode"
               icon={<Iconify icon={colorMode === 'light' ? FiMoon : FiSun} boxSize={4} />}
               onClick={toggleColorMode}
               variant="ghost"
               size="sm"
-              borderRadius="full"
-              transition="all 0.2s ease"
-              _hover={{ transform: 'scale(1.1)' }}
+              borderRadius="lg"
+              color={useColorModeValue('gray.500', 'gray.400')}
+              _hover={{ bg: useColorModeValue('gray.100', 'whiteAlpha.100') }}
             />
-          </HStack>
-        </Flex>
-      </Container>
+          </Tooltip>
+        </HStack>
+      </Flex>
+    </Box>
+  );
+}
+
+// Mobile bottom nav for small screens
+function MobileBottomNav() {
+  const location = useLocation();
+  const bg = useColorModeValue(
+    'rgba(255, 255, 255, 0.9)',
+    'rgba(10, 14, 28, 0.9)'
+  );
+  const borderColor = useColorModeValue(
+    'rgba(121, 95, 238, 0.1)',
+    'rgba(69, 202, 255, 0.1)'
+  );
+
+  return (
+    <Box
+      display={{ base: 'block', md: 'none' }}
+      position="fixed"
+      bottom={0}
+      left={0}
+      right={0}
+      zIndex={999}
+      bg={bg}
+      backdropFilter="blur(24px) saturate(1.8)"
+      borderTop={`1px solid`}
+      borderColor={borderColor}
+      px={2}
+      py={1}
+      pb="env(safe-area-inset-bottom)"
+    >
+      <Flex justify="space-around" align="center">
+        <IconButton
+          as={RouterLink}
+          to="/"
+          aria-label="Home"
+          icon={<Iconify icon={FiHome} boxSize={5} />}
+          variant="ghost"
+          size="lg"
+          color={location.pathname === '/' ? useColorModeValue('brand.500', 'nebula.400') : useColorModeValue('gray.500', 'gray.500')}
+          _hover={{ bg: 'transparent' }}
+        />
+        {navItems.map(item => {
+          const isActive = location.pathname === item.path;
+          return (
+            <IconButton
+              key={item.path}
+              as={RouterLink}
+              to={item.path}
+              aria-label={item.label}
+              icon={<Iconify icon={item.icon} boxSize={5} />}
+              variant="ghost"
+              size="lg"
+              color={isActive ? useColorModeValue('brand.500', 'nebula.400') : useColorModeValue('gray.500', 'gray.500')}
+              _hover={{ bg: 'transparent' }}
+              position="relative"
+            />
+          );
+        })}
+      </Flex>
     </Box>
   );
 }
@@ -148,23 +253,23 @@ function AppContent() {
   return (
     <Box minH="100vh" bg="transparent" position="relative">
       {!isLanding && <AnimatedBackground />}
-      <NavBar />
+      <TopBar />
 
       {isLanding ? (
         <Routes>
           <Route path="/" element={<LandingPage />} />
         </Routes>
       ) : (
-        <Box py={8}>
-          <Container maxW="7xl">
-            <Routes>
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/playground" element={<Playground />} />
-              <Route path="/phone" element={<Phone />} />
-            </Routes>
-          </Container>
+        <Box py={{ base: 4, md: 6 }} pb={{ base: '80px', md: 6 }} px={{ base: 2, md: 4 }}>
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/playground" element={<Playground />} />
+            <Route path="/phone" element={<Phone />} />
+          </Routes>
         </Box>
       )}
+
+      {!isLanding && <MobileBottomNav />}
     </Box>
   );
 }

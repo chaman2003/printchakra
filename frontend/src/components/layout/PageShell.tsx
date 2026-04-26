@@ -27,7 +27,7 @@ const PageShell: React.FC<PageShellProps> = ({ children, commands, ...rest }) =>
       }}
       {...rest}
     >
-      <Box maxW="1600px" mx="auto" w="100%">
+      <Box w="100%">
         {children}
       </Box>
     </StyledSection>

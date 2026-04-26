@@ -6,7 +6,7 @@ Route registration for orchestration feature.
 
 from flask import Blueprint
 
-orchestration_bp = Blueprint("orchestration", __name__, url_prefix="/orchestration")
+orchestration_bp = Blueprint("orchestration", __name__)
 
 # Import route modules to register endpoints
 from app.features.orchestration.routes import command

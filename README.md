@@ -201,7 +201,7 @@ printchakra/
 │   │   └── .env
 │   ├── public/
 │   │   └── data/
-│   └── test/
+│   └── logs/
 ├── frontend/
 │   ├── package.json
 │   ├── public/

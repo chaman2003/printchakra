@@ -81,6 +81,45 @@ class EnhancedDocumentPipeline:
 
         logger.info(f"[STEP {step}/{total_steps}] {stage_name} - {message}")
 
+    def _remove_shadows_keep_color(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        """Notebook-style shadow removal while preserving color output."""
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+
+        max_dim = 800
+        bg_scale = min(max_dim / max(h, w), 1.0)
+        if bg_scale < 1.0:
+            small_gray = cv2.resize(gray, (int(w * bg_scale), int(h * bg_scale)))
+        else:
+            small_gray = gray
+
+        sh, sw = small_gray.shape
+        k = max(sh, sw) // 8
+        k = k if k % 2 == 1 else k + 1
+        k = max(31, min(k, 127))
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+        bg_raw = cv2.morphologyEx(small_gray, cv2.MORPH_CLOSE, kernel)
+        bg_smoothed = cv2.GaussianBlur(bg_raw, (k, k), 0)
+
+        if bg_scale < 1.0:
+            bg = cv2.resize(bg_smoothed, (w, h), interpolation=cv2.INTER_LINEAR)
+            bg = cv2.GaussianBlur(bg, (31, 31), 0)
+        else:
+            bg = bg_smoothed
+
+        bg_safe = bg.astype(np.float32)
+        mask = bg_safe > 10
+
+        result_color = np.zeros_like(image_bgr, dtype=np.float32)
+        for c in range(3):
+            channel = image_bgr[:, :, c].astype(np.float32)
+            result_color[:, :, c][mask] = (channel[mask] / bg_safe[mask]) * 255.0
+
+        enhanced_color = np.clip(result_color, 0, 255).astype(np.uint8)
+        enhanced_gray = cv2.cvtColor(enhanced_color, cv2.COLOR_BGR2GRAY)
+        return enhanced_color, enhanced_gray
+
     def process_complete_pipeline(
         self,
         input_path: str,
@@ -143,23 +182,25 @@ class EnhancedDocumentPipeline:
             self.emit_progress(
                 3, total_steps, "Threshold & Binarization", "Creating binary image..."
             )
-            adaptive_thresh = cv2.adaptiveThreshold(
-                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            )
+            # Keep this as a light prep map for detection path only.
+            adaptive_thresh = cv2.GaussianBlur(gray, (5, 5), 0)
             pipeline_stats["steps"]["step_3"] = {
                 "stage": "Threshold & Binarization",
-                "method": "Adaptive Thresholding",
+                "method": "Detection smoothing (Gaussian 5x5)",
                 "output_shape": adaptive_thresh.shape,
             }
 
             # ========== STEP 4: Noise Removal ==========
             self.emit_progress(4, total_steps, "Noise Removal", "Applying denoising filter...")
-            denoised = cv2.fastNlMeansDenoising(adaptive_thresh, None, 10, 7, 21)
+            denoised = cv2.fastNlMeansDenoising(adaptive_thresh, None, 7, 7, 21)
             pipeline_stats["steps"]["step_4"] = {
                 "stage": "Noise Removal",
                 "method": "Non-Local Means Denoising",
                 "output_shape": denoised.shape,
             }
+
+            # Working copy for final output path (kept in color).
+            working_color = img.copy()
 
             # ========== STEP 5: Edge Detection (Canny - matching notebook) ==========
             self.emit_progress(5, total_steps, "Edge Detection", "Finding document edges with Canny...")
@@ -214,6 +255,7 @@ class EnhancedDocumentPipeline:
                     dst_pts = np.float32([[0, 0], [rect[2], 0], [rect[2], rect[3]], [0, rect[3]]])
                     matrix = cv2.getPerspectiveTransform(pts, dst_pts)
                     denoised = cv2.warpPerspective(denoised, matrix, (rect[2], rect[3]))
+                    working_color = cv2.warpPerspective(working_color, matrix, (rect[2], rect[3]))
 
                     pipeline_stats["steps"]["step_7"] = {
                         "stage": "Perspective Correction",
@@ -235,21 +277,20 @@ class EnhancedDocumentPipeline:
 
             # ========== STEP 8: Contrast Enhancement (BRIGHTNESS BOOST) ==========
             self.emit_progress(8, total_steps, "Contrast Enhancement", "Enhancing image clarity...")
-            enhanced, enhancement_stats = self.enhancer.enhance_brightness_and_contrast(denoised)
+            enhanced_color, enhanced_gray = self._remove_shadows_keep_color(working_color)
             pipeline_stats["steps"]["step_8"] = {
                 "stage": "Contrast Enhancement",
-                "method": "Brightness Boost + Gentle Equalization + CLAHE",
-                "stats": enhancement_stats,
-                "output_shape": enhanced.shape,
+                "method": "Notebook-style shadow removal (color-preserving)",
+                "output_shape": enhanced_gray.shape,
             }
 
             # ========== STEP 9: Dilation & Erosion ==========
             self.emit_progress(9, total_steps, "Dilation & Erosion", "Improving edge definition...")
-            morphed = self.enhancer.apply_morphological_ops(enhanced)
+            # Use mild denoise for OCR input, but do not use this as final saved image.
+            morphed = cv2.medianBlur(enhanced_gray, 3)
             pipeline_stats["steps"]["step_9"] = {
                 "stage": "Dilation & Erosion",
-                "kernel_size": (3, 3),
-                "iterations": 1,
+                "method": "Median denoise (OCR path)",
                 "output_shape": morphed.shape,
             }
 
@@ -300,11 +341,8 @@ class EnhancedDocumentPipeline:
             # ========== STEP 11: Image Optimization ==========
             self.emit_progress(11, total_steps, "Image Optimization", "Compressing image...")
 
-            # Convert back to color for final save if needed
-            if len(morphed.shape) == 2:  # Grayscale
-                final_image = cv2.cvtColor(morphed, cv2.COLOR_GRAY2BGR)
-            else:
-                final_image = morphed
+            # Final image must stay clean and natural-looking for dashboard preview.
+            final_image = enhanced_color
 
             pipeline_stats["steps"]["step_11"] = {
                 "stage": "Image Optimization",

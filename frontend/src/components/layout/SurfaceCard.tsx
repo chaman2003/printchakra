@@ -9,16 +9,16 @@ interface SurfaceCardProps extends BoxProps {
 const SurfaceCard = React.forwardRef<HTMLDivElement, SurfaceCardProps>((props, ref) => {
   const { children, commands, ...rest } = props;
   const background = useColorModeValue(
-    'rgba(255, 255, 255, 0.85)',
-    'linear-gradient(145deg, rgba(15, 20, 35, 0.95) 0%, rgba(12, 16, 30, 0.98) 100%)'
+    'rgba(255, 255, 255, 0.92)',
+    'linear-gradient(145deg, rgba(14, 18, 32, 0.96) 0%, rgba(11, 15, 28, 0.98) 100%)'
   );
   const borderColor = useColorModeValue(
-    'rgba(121, 95, 238, 0.12)',
-    'rgba(69, 202, 255, 0.15)'
+    'rgba(0, 0, 0, 0.06)',
+    'rgba(255, 255, 255, 0.06)'
   );
   const shadow = useColorModeValue(
-    '0 8px 32px rgba(121, 95, 238, 0.12)',
-    '0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03)'
+    '0 1px 3px rgba(0, 0, 0, 0.04), 0 6px 24px rgba(121, 95, 238, 0.06)',
+    '0 1px 3px rgba(0, 0, 0, 0.3), 0 6px 24px rgba(0, 0, 0, 0.2)'
   );
 
   return (
@@ -32,8 +32,9 @@ const SurfaceCard = React.forwardRef<HTMLDivElement, SurfaceCardProps>((props, r
         boxShadow: shadow,
         borderWidth: '1px',
         borderRadius: 'xl',
-        p: { base: 4, md: 5, lg: 6 },
+        p: { base: 4, md: 5 },
         position: 'relative',
+        transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
       }}
       {...rest}
     >
