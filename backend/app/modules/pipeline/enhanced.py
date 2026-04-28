@@ -305,6 +305,257 @@ class EnhancedDocumentPipeline:
 
         return best_quad, float(max(best_score, 0.0))
 
+    def _tight_crop_bright_region(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, bool]:
+        """
+        Final cleanup crop: trims excess background around a bright paper/card region.
+        Returns (image, applied).
+        """
+        quad, score = self._find_brightness_quad(image_bgr)
+        if quad is None or score <= 0:
+            return image_bgr, False
+
+        h, w = image_bgr.shape[:2]
+        img_area = float(h * w)
+        quad_area = float(cv2.contourArea(quad))
+        if img_area <= 0:
+            return image_bgr, False
+        area_ratio = quad_area / img_area
+
+        # Tight crop should only trim margins, never re-crop aggressively.
+        if area_ratio < 0.72 or area_ratio > 0.98:
+            return image_bgr, False
+
+        rect = self._order_points(quad.astype(np.float32))
+        # Small outward padding keeps the edge of the card visible.
+        rect = self._expand_quad(rect, (h, w), expand_ratio=0.01)
+        warped = self._four_point_transform(image_bgr, rect)
+        if warped is None or warped.size == 0:
+            return image_bgr, False
+
+        wh, ww = warped.shape[:2]
+        if wh < 120 or ww < 120:
+            return image_bgr, False
+
+        return warped, True
+
+    @staticmethod
+    def _quad_touches_border(quad: np.ndarray, image_shape: Tuple[int, int], margin_ratio: float = 0.02) -> bool:
+        """Detect likely incomplete detections that hug image borders."""
+        h, w = image_shape[:2]
+        if h <= 0 or w <= 0:
+            return True
+        margin_x = w * margin_ratio
+        margin_y = h * margin_ratio
+        xs = quad[:, 0]
+        ys = quad[:, 1]
+        return (
+            np.min(xs) <= margin_x
+            or np.max(xs) >= (w - margin_x)
+            or np.min(ys) <= margin_y
+            or np.max(ys) >= (h - margin_y)
+        )
+
+    def _tight_crop_edge_region(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, bool]:
+        """
+        Final edge-driven crop for clear card/document borders on textured backgrounds.
+        Returns (image, applied).
+        """
+        if image_bgr is None or image_bgr.size == 0:
+            return image_bgr, False
+
+        h, w = image_bgr.shape[:2]
+        img_area = float(h * w)
+        if img_area <= 0:
+            return image_bgr, False
+
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        edges = cv2.Canny(gray, 50, 160)
+        edges = cv2.morphologyEx(
+            edges,
+            cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+            iterations=2,
+        )
+
+        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return image_bgr, False
+
+        best_quad = None
+        best_score = 0.0
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < img_area * 0.18:
+                continue
+
+            rect = cv2.minAreaRect(contour)
+            rw, rh = rect[1]
+            if rw <= 1 or rh <= 1:
+                continue
+
+            quad = cv2.boxPoints(rect).astype(np.float32)
+            if not self._is_reasonable_document_quad(
+                quad,
+                (h, w),
+                min_area_ratio=0.20,
+                max_area_ratio=0.98,
+            ):
+                continue
+
+            area_ratio = area / img_area
+            aspect = max(rw / max(rh, 1e-6), rh / max(rw, 1e-6))
+            score = (area_ratio * 1.15) - ((aspect - 1.0) * 0.08)
+            if score > best_score:
+                best_score = score
+                best_quad = quad
+
+        if best_quad is None:
+            return image_bgr, False
+
+        rect = self._order_points(best_quad.astype(np.float32))
+        rect = self._expand_quad(rect, (h, w), expand_ratio=0.006)
+        warped = self._four_point_transform(image_bgr, rect)
+        if warped is None or warped.size == 0:
+            return image_bgr, False
+
+        wh, ww = warped.shape[:2]
+        if wh < 120 or ww < 120:
+            return image_bgr, False
+
+        return warped, True
+
+    def _simple_document_crop(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, Dict[str, Any]]:
+        """
+        Simple from-scratch document cropper for handheld captures.
+        Prioritizes reliability over aggressive perspective correction.
+        """
+        h, w = image_bgr.shape[:2]
+        info: Dict[str, Any] = {
+            "document_found": False,
+            "method": "none",
+            "selected_area_ratio": 0.0,
+            "selected_confidence": 0.0,
+            "applied": False,
+            "warp_area_ratio": 0.0,
+            "warp_aspect": 0.0,
+        }
+
+        if h <= 0 or w <= 0:
+            return image_bgr, info
+
+        # Work in a normalized detection resolution.
+        detect_scale = min(1200.0 / float(max(h, w)), 1.0)
+        detect = (
+            cv2.resize(image_bgr, (int(w * detect_scale), int(h * detect_scale)))
+            if detect_scale < 1.0
+            else image_bgr.copy()
+        )
+        dh, dw = detect.shape[:2]
+        gray = cv2.cvtColor(detect, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # Multi-cue edge/mask combination.
+        edges = cv2.Canny(gray, 40, 140)
+        edges2 = cv2.Canny(gray, 80, 220)
+        th = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 6
+        )
+        combined = cv2.bitwise_or(cv2.bitwise_or(edges, edges2), cv2.Canny(th, 20, 80))
+        combined = cv2.morphologyEx(
+            combined,
+            cv2.MORPH_CLOSE,
+            cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)),
+            iterations=2,
+        )
+
+        contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = sorted(contours, key=cv2.contourArea, reverse=True)
+        info["contours_found"] = len(contours)
+
+        best_quad: Optional[np.ndarray] = None
+        best_score = 0.0
+        detect_area = float(dh * dw)
+
+        for contour in contours[:40]:
+            contour_area = float(cv2.contourArea(contour))
+            if contour_area < detect_area * 0.08:
+                continue
+
+            # Try poly quad first.
+            perimeter = cv2.arcLength(contour, True)
+            for eps_ratio in (0.015, 0.02, 0.03, 0.04):
+                approx = cv2.approxPolyDP(contour, eps_ratio * perimeter, True)
+                if len(approx) != 4:
+                    continue
+                quad = approx.reshape(4, 2).astype(np.float32)
+                if not self._is_reasonable_document_quad(
+                    quad, (dh, dw), min_area_ratio=0.12, max_area_ratio=0.98
+                ):
+                    continue
+                if self._quad_touches_border(quad, (dh, dw), margin_ratio=0.02):
+                    continue
+                score = self._quad_confidence(quad, (dh, dw))
+                if score > best_score:
+                    best_score = score
+                    best_quad = quad
+                    info["method"] = "quad_poly"
+
+            # Fallback candidate from min-area rectangle.
+            rect = cv2.minAreaRect(contour)
+            rw, rh = rect[1]
+            if rw > 1 and rh > 1:
+                quad = cv2.boxPoints(rect).astype(np.float32)
+                if self._is_reasonable_document_quad(
+                    quad, (dh, dw), min_area_ratio=0.12, max_area_ratio=0.98
+                ):
+                    if self._quad_touches_border(quad, (dh, dw), margin_ratio=0.02):
+                        continue
+                    score = self._quad_confidence(quad, (dh, dw)) * 0.95
+                    if score > best_score:
+                        best_score = score
+                        best_quad = quad
+                        info["method"] = "min_area_rect"
+
+        # Color fallback for low-contrast backgrounds.
+        if best_quad is None:
+            bright_quad, bright_score = self._find_brightness_quad(image_bgr)
+            if bright_quad is not None:
+                best_quad = bright_quad * detect_scale
+                best_score = min(1.0, max(0.0, bright_score))
+                info["method"] = "brightness_segmentation"
+
+        if best_quad is None or best_score < 0.42:
+            return image_bgr, info
+
+        # Map detection quad to original image.
+        quad_original = best_quad / max(detect_scale, 1e-6)
+        if self._quad_touches_border(quad_original, (h, w), margin_ratio=0.015):
+            return image_bgr, info
+        quad_original = self._expand_quad(quad_original, (h, w), expand_ratio=0.015)
+
+        warped = self._four_point_transform(image_bgr, quad_original)
+        if warped is None or warped.size == 0:
+            return image_bgr, info
+
+        wh, ww = warped.shape[:2]
+        warp_area_ratio = float((wh * ww) / float(h * w))
+        warp_aspect = float(ww / max(wh, 1))
+        selected_area_ratio = float(cv2.contourArea(best_quad)) / detect_area
+
+        info["document_found"] = True
+        info["selected_area_ratio"] = selected_area_ratio
+        info["selected_confidence"] = best_score
+        info["warp_area_ratio"] = warp_area_ratio
+        info["warp_aspect"] = warp_aspect
+
+        # Conservative acceptance guard.
+        if warp_area_ratio < 0.20 or not (0.40 <= warp_aspect <= 2.50):
+            return image_bgr, info
+
+        info["applied"] = True
+        return warped, info
+
     def _init_paddle_ocr(self) -> Tuple[Any, str]:
         """Initialize a shared PaddleOCR engine, falling back when unavailable."""
         with self._ocr_lock:
@@ -520,136 +771,51 @@ class EnhancedDocumentPipeline:
 
             # ========== STEP 6: Find Document Contour ==========
             self.emit_progress(
-                6, total_steps, "Find Document Contour", "Searching for 4-point page boundary..."
+                6, total_steps, "Find Document Contour", "Locating document boundary..."
             )
-            edge_lo = cv2.Canny(blurred, 20, 80)
-            edge_hi = cv2.Canny(blurred, 60, 180)
-            morph_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-            merged_edges = cv2.bitwise_or(edges, cv2.bitwise_or(edge_lo, edge_hi))
-            merged_edges = cv2.morphologyEx(merged_edges, cv2.MORPH_CLOSE, morph_kernel, iterations=2)
-            merged_edges = cv2.dilate(merged_edges, np.ones((2, 2), np.uint8), iterations=1)
-
-            contours, _ = cv2.findContours(merged_edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-            contours = sorted(contours, key=cv2.contourArea, reverse=True)
-            document_contour = None
-            selected_area_ratio = 0.0
-            selected_confidence = 0.0
-            best_candidate = None
-            best_score = 0.0
-            selected_method = "none"
-
-            # Pass 1: True quadrilateral candidates.
-            for contour in contours[:30]:
-                perimeter = cv2.arcLength(contour, True)
-                for epsilon_ratio in (0.015, 0.02, 0.03):
-                    epsilon = epsilon_ratio * perimeter
-                    approx = cv2.approxPolyDP(contour, epsilon, True)
-                    if len(approx) == 4:
-                        candidate = approx.reshape(4, 2)
-                        if self._is_reasonable_document_quad(candidate, gray.shape):
-                            score = self._quad_confidence(candidate, gray.shape)
-                            if score > best_score:
-                                best_score = score
-                                best_candidate = candidate
-
-            # Pass 2 fallback: min-area rectangle from large contours.
-            if best_candidate is None or best_score < 0.55:
-                for contour in contours[:20]:
-                    if cv2.contourArea(contour) < (gray.shape[0] * gray.shape[1] * 0.16):
-                        continue
-                    rect = cv2.minAreaRect(contour)
-                    (w_rect, h_rect) = rect[1]
-                    if w_rect <= 1 or h_rect <= 1:
-                        continue
-                    box = cv2.boxPoints(rect).astype(np.float32)
-                    if self._is_reasonable_document_quad(
-                        box,
-                        gray.shape,
-                        min_area_ratio=0.18,
-                        max_area_ratio=0.98,
-                    ):
-                        score = self._quad_confidence(box, gray.shape)
-                        # Small penalty vs true poly quads to prefer exact detections.
-                        score *= 0.92
-                        if score > best_score:
-                            best_score = score
-                            best_candidate = box
-                            selected_method = "min_area_rect"
-
-            # Apply perspective only when contour confidence is high enough.
-            if best_candidate is not None and best_score >= 0.50:
-                document_contour = best_candidate
-                selected_area_ratio = float(cv2.contourArea(document_contour)) / float(
-                    gray.shape[0] * gray.shape[1]
-                )
-                selected_confidence = best_score
-                if selected_method == "none":
-                    selected_method = "quad_poly"
-
-            # Pass 3 fallback: bright paper/card segmentation on full-size image.
-            if document_contour is None:
-                brightness_quad, brightness_score = self._find_brightness_quad(img)
-                if brightness_quad is not None:
-                    document_contour = brightness_quad * detection_scale
-                    selected_area_ratio = float(cv2.contourArea(document_contour)) / float(
-                        gray.shape[0] * gray.shape[1]
-                    )
-                    selected_confidence = max(selected_confidence, min(1.0, brightness_score))
-                    selected_method = "brightness_segmentation"
-
+            cropped_color, crop_info = self._simple_document_crop(working_color)
             pipeline_stats["steps"]["step_6"] = {
                 "stage": "Find Document Contour",
-                "contours_found": len(contours),
-                "document_found": document_contour is not None,
-                "selected_area_ratio": selected_area_ratio,
-                "selected_confidence": selected_confidence,
-                "best_confidence_seen": best_score,
-                "method": selected_method,
+                "contours_found": crop_info.get("contours_found", 0),
+                "document_found": bool(crop_info.get("document_found")),
+                "selected_area_ratio": float(crop_info.get("selected_area_ratio", 0.0)),
+                "selected_confidence": float(crop_info.get("selected_confidence", 0.0)),
+                "method": crop_info.get("method", "none"),
             }
 
             # ========== STEP 7: Perspective Transform (Crop) ==========
             self.emit_progress(
-                7, total_steps, "Perspective Transform", "Cropping and straightening document..."
+                7, total_steps, "Perspective Transform", "Applying document crop..."
             )
-            if document_contour is not None:
-                expanded_contour = self._expand_quad(document_contour, gray.shape, expand_ratio=0.02)
-                scaled_contour = expanded_contour / detection_scale
-                warped = self._four_point_transform(working_color, scaled_contour)
-                original_area = float(working_color.shape[0] * working_color.shape[1])
-                warped_area = float(warped.shape[0] * warped.shape[1]) if warped is not None else 0.0
-                warp_area_ratio = (warped_area / original_area) if original_area > 0 else 0.0
-                warp_h, warp_w = (warped.shape[:2] if warped is not None else (0, 0))
-                warp_aspect = (float(warp_w) / float(warp_h)) if warp_h > 0 else 0.0
+            working_color = cropped_color
+            pipeline_stats["steps"]["step_7"] = {
+                "stage": "Perspective Transform (Crop)",
+                "applied": bool(crop_info.get("applied", False)),
+                "new_shape": working_color.shape,
+                "warp_area_ratio": float(crop_info.get("warp_area_ratio", 0.0)),
+                "warp_aspect": float(crop_info.get("warp_aspect", 0.0)),
+            }
 
-                # Safety: avoid accidental crop to tiny regions (e.g. logo block).
-                if (
-                    warped is not None
-                    and selected_area_ratio >= 0.24
-                    and warp_area_ratio >= 0.26
-                    and 0.42 <= warp_aspect <= 2.35
-                ):
-                    working_color = warped
-                    applied = True
-                else:
-                    applied = False
-                    logger.warning(
-                        "Perspective transform rejected (warp_area_ratio=%.3f, warp_aspect=%.3f). Keeping original frame.",
-                        warp_area_ratio,
-                        warp_aspect,
-                    )
-                pipeline_stats["steps"]["step_7"] = {
-                    "stage": "Perspective Transform (Crop)",
-                    "applied": applied,
-                    "new_shape": working_color.shape,
-                    "warp_area_ratio": warp_area_ratio,
-                    "warp_aspect": warp_aspect,
-                }
-            else:
-                pipeline_stats["steps"]["step_7"] = {
-                    "stage": "Perspective Transform (Crop)",
-                    "applied": False,
-                    "reason": "No 4-point contour found",
-                }
+            # Final trim to remove residual margins if still present.
+            tightened, tight_applied = self._tight_crop_bright_region(working_color)
+            edge_tightened, edge_tight_applied = self._tight_crop_edge_region(
+                tightened if tight_applied else working_color
+            )
+
+            if edge_tight_applied:
+                working_color = edge_tightened
+            elif tight_applied:
+                working_color = tightened
+
+            pipeline_stats["steps"]["step_7"]["tight_crop_applied"] = bool(
+                tight_applied or edge_tight_applied
+            )
+            pipeline_stats["steps"]["step_7"]["tight_crop_method"] = (
+                "edge_region" if edge_tight_applied else ("bright_region" if tight_applied else "none")
+            )
+            pipeline_stats["steps"]["step_7"]["tight_crop_shape"] = (
+                list(working_color.shape) if (tight_applied or edge_tight_applied) else None
+            )
 
             # ========== STEP 8: Grayscale & Downscale for Processing ==========
             self.emit_progress(8, total_steps, "Processing Prep", "Preparing image for enhancement...")
