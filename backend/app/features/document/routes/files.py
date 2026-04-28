@@ -6,6 +6,8 @@ Document file management endpoints.
 
 import os
 import logging
+import json
+import time
 from flask import jsonify, request, send_file
 from flask import send_from_directory
 from werkzeug.utils import secure_filename
@@ -15,6 +17,7 @@ from app.core.middleware.cors import create_options_response
 
 logger = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "doc", "docx", "txt", "rtf"}
+DEBUG_LOG_PATH = "C:/Users/chama/OneDrive/Desktop/printchakra-new/debug-68db5a.log"
 
 
 def allowed_file(filename):
@@ -38,6 +41,25 @@ def delete_ocr_artifacts(filename):
             os.remove(path)
             deleted.append(path)
     return deleted
+
+
+def _debug_log(run_id, hypothesis_id, location, message, data):
+    # region agent log
+    try:
+        payload = {
+            "sessionId": "68db5a",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+    # endregion
 
 
 def _find_document_file(filename: str, folder: str | None = None):
@@ -89,9 +111,23 @@ def serve_processed_file(filename):
     file_path = os.path.join(processed_dir, filename)
 
     if not os.path.isfile(file_path):
+        _debug_log(
+            "run1",
+            "H1",
+            "backend/app/features/document/routes/files.py:serve_processed_file:not_found",
+            "processed_file_missing",
+            {"filename": filename, "file_path": file_path},
+        )
         logger.warning(f"Processed file not found: {file_path}")
         return jsonify({"error": "File not found"}), 404
 
+    _debug_log(
+        "run1",
+        "H1",
+        "backend/app/features/document/routes/files.py:serve_processed_file:served",
+        "processed_file_served",
+        {"filename": filename, "file_path": file_path, "file_size": os.path.getsize(file_path)},
+    )
     response = send_from_directory(processed_dir, filename)
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Cache-Control"] = "public, max-age=3600"

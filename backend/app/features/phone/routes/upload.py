@@ -9,6 +9,7 @@ import logging
 import shutil
 import threading
 import json
+import time
 from datetime import datetime
 from flask import jsonify, request
 from werkzeug.utils import secure_filename
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "pdf", "doc", "docx", "txt"}
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+DEBUG_LOG_PATH = "C:/Users/chama/OneDrive/Desktop/printchakra-new/debug-68db5a.log"
 
 
 def allowed_file(filename):
@@ -38,6 +40,25 @@ def _emit_progress_with_filename(filename, progress_data):
     socketio.emit("processing_progress", payload)
 
 
+def _debug_log(run_id, hypothesis_id, location, message, data):
+    # region agent log
+    try:
+        payload = {
+            "sessionId": "68db5a",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+    # endregion
+
+
 def _run_pipeline_async(
     filename,
     upload_path,
@@ -47,6 +68,13 @@ def _run_pipeline_async(
 ):
     """Run 12-step processing pipeline + OCR in background and emit live events."""
     try:
+        _debug_log(
+            "run1",
+            "H3",
+            "backend/app/features/phone/routes/upload.py:_run_pipeline_async:start",
+            "pipeline_start",
+            {"filename": filename, "upload_path": upload_path, "processed_path": processed_path},
+        )
         from app.modules.pipeline.enhanced import EnhancedDocumentPipeline
 
         pipeline = EnhancedDocumentPipeline(
@@ -62,6 +90,13 @@ def _run_pipeline_async(
 
         if not success:
             error_msg = extracted_text or "Pipeline failed"
+            _debug_log(
+                "run1",
+                "H3",
+                "backend/app/features/phone/routes/upload.py:_run_pipeline_async:failure",
+                "pipeline_failed",
+                {"filename": filename, "error": error_msg},
+            )
             socketio.emit("processing_error", {"filename": filename, "error": error_msg})
             logger.error(f"Pipeline failed for {filename}: {error_msg}")
             return
@@ -95,6 +130,22 @@ def _run_pipeline_async(
                     "success": stats.get("success", True),
                     "ocr_engine": (ocr_result or {}).get("engine"),
                 },
+            },
+        )
+
+        processed_exists = os.path.isfile(processed_path)
+        processed_size = os.path.getsize(processed_path) if processed_exists else 0
+        step7 = (stats or {}).get("steps", {}).get("step_7", {})
+        _debug_log(
+            "run1",
+            "H3",
+            "backend/app/features/phone/routes/upload.py:_run_pipeline_async:complete",
+            "pipeline_complete_emitted",
+            {
+                "filename": filename,
+                "processed_exists": processed_exists,
+                "processed_size": processed_size,
+                "step7": step7,
             },
         )
 

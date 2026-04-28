@@ -6,6 +6,8 @@ Document thumbnail generation and retrieval endpoints.
 
 import os
 import logging
+import json
+import time
 from flask import jsonify, request, send_file
 from werkzeug.utils import secure_filename
 from app.features.document.routes import document_bp
@@ -13,6 +15,26 @@ from app.core.middleware.cors import create_options_response
 from app.core.config import get_data_dirs
 
 logger = logging.getLogger(__name__)
+DEBUG_LOG_PATH = "C:/Users/chama/OneDrive/Desktop/printchakra-new/debug-68db5a.log"
+
+
+def _debug_log(run_id, hypothesis_id, location, message, data):
+    # region agent log
+    try:
+        payload = {
+            "sessionId": "68db5a",
+            "runId": run_id,
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "message": message,
+            "data": data,
+            "timestamp": int(time.time() * 1000),
+        }
+        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
+    except Exception:
+        pass
+    # endregion
 
 
 @document_bp.route("/thumbnails/<doc_id>", methods=["GET", "OPTIONS"])
@@ -35,6 +57,13 @@ def get_thumbnail(doc_id):
         thumb_path = os.path.join(thumbnail_dir, thumb_filename)
         
         if os.path.exists(thumb_path):
+            _debug_log(
+                "run1",
+                "H2",
+                "backend/app/features/document/routes/thumbnails.py:get_thumbnail:cache_hit",
+                "thumbnail_cache_hit",
+                {"filename": filename, "thumb_path": thumb_path},
+            )
             return send_file(thumb_path, mimetype="image/jpeg")
         
         # Find source document
@@ -53,7 +82,31 @@ def get_thumbnail(doc_id):
         )
         
         if not source_path:
+            _debug_log(
+                "run1",
+                "H2",
+                "backend/app/features/document/routes/thumbnails.py:get_thumbnail:not_found",
+                "thumbnail_source_not_found",
+                {"filename": filename},
+            )
             return jsonify({"success": False, "error": "Document not found"}), 404
+
+        source_bucket = "unknown"
+        if dirs["UPLOAD_DIR"] in source_path:
+            source_bucket = "uploads"
+        elif dirs["PROCESSED_DIR"] in source_path:
+            source_bucket = "processed"
+        elif dirs["PDF_DIR"] in source_path:
+            source_bucket = "pdfs"
+        elif dirs["CONVERTED_DIR"] in source_path:
+            source_bucket = "converted"
+        _debug_log(
+            "run1",
+            "H2",
+            "backend/app/features/document/routes/thumbnails.py:get_thumbnail:source_select",
+            "thumbnail_source_selected",
+            {"filename": filename, "source_bucket": source_bucket, "source_path": source_path},
+        )
         
         # Generate thumbnail
         os.makedirs(thumbnail_dir, exist_ok=True)
