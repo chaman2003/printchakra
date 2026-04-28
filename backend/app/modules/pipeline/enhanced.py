@@ -200,9 +200,9 @@ class EnhancedDocumentPipeline:
             return 0.0
         area_ratio = area / image_area
 
-        # Prefer quads that occupy a substantial part of frame,
-        # but avoid forcing full-frame borders.
-        area_score = max(0.0, 1.0 - abs(area_ratio - 0.65) / 0.65)
+        # Prefer medium-large quads (ID cards/sheets), avoid full-frame borders.
+        area_target = 0.48
+        area_score = max(0.0, 1.0 - abs(area_ratio - area_target) / area_target)
 
         rect = EnhancedDocumentPipeline._order_points(contour.astype("float32"))
         tl, tr, br, bl = rect
@@ -238,7 +238,40 @@ class EnhancedDocumentPipeline:
         )
         angle_score = max(0.0, 1.0 - min(1.0, angle_err * 2.0))
 
-        return float(0.55 * area_score + 0.20 * edge_score + 0.25 * angle_score)
+        # Prefer candidates near frame center (handheld captures usually center target).
+        centroid = np.mean(contour.astype(np.float32), axis=0)
+        cx, cy = float(centroid[0]), float(centroid[1])
+        img_cx, img_cy = img_w / 2.0, img_h / 2.0
+        dist = np.sqrt((cx - img_cx) ** 2 + (cy - img_cy) ** 2)
+        max_dist = np.sqrt((img_w / 2.0) ** 2 + (img_h / 2.0) ** 2)
+        center_score = max(0.0, 1.0 - (dist / max(max_dist, 1e-6)))
+
+        return float(0.45 * area_score + 0.18 * edge_score + 0.22 * angle_score + 0.15 * center_score)
+
+    @staticmethod
+    def _quad_border_touch_count(
+        quad: np.ndarray,
+        image_shape: Tuple[int, int],
+        margin_ratio: float = 0.02,
+    ) -> int:
+        """Count how many image borders a quad touches."""
+        h, w = image_shape[:2]
+        if h <= 0 or w <= 0:
+            return 4
+        margin_x = w * margin_ratio
+        margin_y = h * margin_ratio
+        xs = quad[:, 0]
+        ys = quad[:, 1]
+        touches = 0
+        if np.min(xs) <= margin_x:
+            touches += 1
+        if np.max(xs) >= (w - margin_x):
+            touches += 1
+        if np.min(ys) <= margin_y:
+            touches += 1
+        if np.max(ys) >= (h - margin_y):
+            touches += 1
+        return touches
 
     @staticmethod
     def _expand_quad(contour: np.ndarray, image_shape: Tuple[int, int], expand_ratio: float = 0.03) -> np.ndarray:
@@ -341,22 +374,9 @@ class EnhancedDocumentPipeline:
     @staticmethod
     def _quad_touches_border(quad: np.ndarray, image_shape: Tuple[int, int], margin_ratio: float = 0.02) -> bool:
         """Detect likely incomplete detections that hug image borders."""
-        h, w = image_shape[:2]
-        if h <= 0 or w <= 0:
-            return True
-        margin_x = w * margin_ratio
-        margin_y = h * margin_ratio
-        xs = quad[:, 0]
-        ys = quad[:, 1]
-        touches = 0
-        if np.min(xs) <= margin_x:
-            touches += 1
-        if np.max(xs) >= (w - margin_x):
-            touches += 1
-        if np.min(ys) <= margin_y:
-            touches += 1
-        if np.max(ys) >= (h - margin_y):
-            touches += 1
+        touches = EnhancedDocumentPipeline._quad_border_touch_count(
+            quad, image_shape, margin_ratio=margin_ratio
+        )
         # One/two-side proximity can still be valid for handheld captures.
         return touches >= 3
 
@@ -408,9 +428,21 @@ class EnhancedDocumentPipeline:
             ):
                 continue
 
+            # Reject contours hugging multiple image borders (scene boundary artifacts).
+            if self._quad_border_touch_count(quad, (h, w), margin_ratio=0.015) >= 2:
+                continue
+
             area_ratio = area / img_area
+            if area_ratio > 0.90:
+                # Avoid near full-frame crops from global scene boundaries.
+                continue
             aspect = max(rw / max(rh, 1e-6), rh / max(rw, 1e-6))
-            score = (area_ratio * 1.15) - ((aspect - 1.0) * 0.08)
+            if aspect > 2.6:
+                continue
+
+            # Reuse the same quad scoring used in main detector to favor document-like shapes.
+            conf = self._quad_confidence(quad, (h, w))
+            score = (conf * 0.75) + (area_ratio * 0.25)
             if score > best_score:
                 best_score = score
                 best_quad = quad
@@ -548,7 +580,7 @@ class EnhancedDocumentPipeline:
             iterations=2,
         )
 
-        contours, _ = cv2.findContours(combined, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(combined, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
         contours = sorted(contours, key=cv2.contourArea, reverse=True)
         info["contours_found"] = len(contours)
 
@@ -556,9 +588,9 @@ class EnhancedDocumentPipeline:
         best_score = 0.0
         detect_area = float(dh * dw)
 
-        for contour in contours[:40]:
+        for contour in contours[:120]:
             contour_area = float(cv2.contourArea(contour))
-            if contour_area < detect_area * 0.08:
+            if contour_area < detect_area * 0.02:
                 continue
 
             # Try poly quad first.
@@ -567,12 +599,15 @@ class EnhancedDocumentPipeline:
                 approx = cv2.approxPolyDP(contour, eps_ratio * perimeter, True)
                 if len(approx) != 4:
                     continue
+                if not cv2.isContourConvex(approx):
+                    continue
                 quad = approx.reshape(4, 2).astype(np.float32)
                 if not self._is_reasonable_document_quad(
                     quad, (dh, dw), min_area_ratio=0.12, max_area_ratio=0.98
                 ):
                     continue
-                if self._quad_touches_border(quad, (dh, dw), margin_ratio=0.02):
+                # Reject candidates stuck to multiple borders (typical false positives).
+                if self._quad_border_touch_count(quad, (dh, dw), margin_ratio=0.018) >= 2:
                     continue
                 score = self._quad_confidence(quad, (dh, dw))
                 if score > best_score:
@@ -588,7 +623,7 @@ class EnhancedDocumentPipeline:
                 if self._is_reasonable_document_quad(
                     quad, (dh, dw), min_area_ratio=0.12, max_area_ratio=0.98
                 ):
-                    if self._quad_touches_border(quad, (dh, dw), margin_ratio=0.02):
+                    if self._quad_border_touch_count(quad, (dh, dw), margin_ratio=0.018) >= 2:
                         continue
                     score = self._quad_confidence(quad, (dh, dw)) * 0.95
                     if score > best_score:
@@ -637,7 +672,7 @@ class EnhancedDocumentPipeline:
         info["warp_aspect"] = warp_aspect
 
         # Conservative acceptance guard.
-        if warp_area_ratio < 0.20 or not (0.40 <= warp_aspect <= 2.50):
+        if warp_area_ratio < 0.12 or not (0.40 <= warp_aspect <= 2.50):
             return image_bgr, info
 
         info["applied"] = True
