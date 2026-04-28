@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Button, Flex, HStack, Tooltip } from '@chakra-ui/react';
 import { motion } from 'framer-motion';
-import { FiLayers, FiMic, FiWifiOff, FiCheckSquare, FiX, FiRepeat, FiArchive } from 'react-icons/fi';
+import { FiLayers, FiMic, FiWifiOff, FiCheckSquare, FiX, FiRepeat, FiArchive, FiTrash2 } from 'react-icons/fi';
 import { Iconify } from '../common';
 import { DashboardToolbar } from '../layout/DashboardRegions';
 
@@ -17,6 +17,7 @@ interface DashboardActionPanelProps {
   onToggleChat: () => void;
   onToggleSelectionMode: () => void;
   onOpenConversionModal: () => void;
+  onDeleteSelected: () => void;
   onCheckConnectivity: () => void;
   onToggleConvertedDrawer: () => void;
   onSelectAll: () => void;
@@ -36,6 +37,7 @@ export const DashboardActionPanel: React.FC<DashboardActionPanelProps> = ({
   onToggleChat,
   onToggleSelectionMode,
   onOpenConversionModal,
+  onDeleteSelected,
   onCheckConnectivity,
   onToggleConvertedDrawer,
   onSelectAll,
@@ -174,21 +176,38 @@ export const DashboardActionPanel: React.FC<DashboardActionPanelProps> = ({
         </HStack>
 
         {selectionMode && selectedFilesCount > 0 && (
-          <Button
-            size={btnSize}
-            colorScheme="brand"
-            variant="solid"
-            onClick={onOpenConversionModal}
-            borderRadius="lg"
-            fontWeight="600"
-            fontSize="13px"
-            h="38px"
-            px={4}
-            w={{ base: '100%', md: 'auto' }}
-            boxShadow="0 4px 12px rgba(121,95,238,0.3)"
-          >
-            Convert {selectedFilesCount} Selected
-          </Button>
+          <HStack spacing={2}>
+            <Button
+              size={btnSize}
+              colorScheme="red"
+              variant="solid"
+              onClick={onDeleteSelected}
+              leftIcon={<Iconify icon={FiTrash2} boxSize={4} />}
+              borderRadius="lg"
+              fontWeight="600"
+              fontSize="13px"
+              h="38px"
+              px={4}
+              w={{ base: '100%', md: 'auto' }}
+            >
+              Delete {selectedFilesCount} Selected
+            </Button>
+            <Button
+              size={btnSize}
+              colorScheme="brand"
+              variant="solid"
+              onClick={onOpenConversionModal}
+              borderRadius="lg"
+              fontWeight="600"
+              fontSize="13px"
+              h="38px"
+              px={4}
+              w={{ base: '100%', md: 'auto' }}
+              boxShadow="0 4px 12px rgba(121,95,238,0.3)"
+            >
+              Convert {selectedFilesCount} Selected
+            </Button>
+          </HStack>
         )}
 
         <Button

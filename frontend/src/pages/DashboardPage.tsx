@@ -4314,6 +4314,60 @@ const Dashboard: React.FC = () => {
     conversionModal.onOpen();
   };
 
+  const deleteSelectedFiles = async () => {
+    if (selectedFiles.length === 0) {
+      toast({
+        title: 'No files selected',
+        description: 'Select at least one file to delete.',
+        status: 'info',
+      });
+      return;
+    }
+
+    if (!window.confirm(`Delete ${selectedFiles.length} selected file(s)?`)) {
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      selectedFiles.map(filename =>
+        apiClient.delete(`${API_ENDPOINTS.delete}/${encodeURIComponent(filename)}`, {
+          params: activeFolder ? { folder: activeFolder } : undefined,
+        })
+      )
+    );
+
+    const deletedFiles = selectedFiles.filter((_, idx) => results[idx].status === 'fulfilled');
+    const failedCount = selectedFiles.length - deletedFiles.length;
+
+    if (deletedFiles.length > 0) {
+      setFiles(prevFiles => prevFiles.filter((f: FileInfo) => !deletedFiles.includes(f.filename)));
+      setOcrResults(prev => {
+        const updated = { ...prev };
+        deletedFiles.forEach(name => {
+          delete updated[name];
+        });
+        return updated;
+      });
+
+      if (selectedFile && deletedFiles.includes(selectedFile)) {
+        setSelectedFile(null);
+        setOcrText('');
+      }
+    }
+
+    setSelectedFiles(failedCount > 0 ? selectedFiles.filter(name => !deletedFiles.includes(name)) : []);
+
+    toast({
+      title: failedCount === 0 ? 'Selected files deleted' : 'Partial delete complete',
+      description:
+        failedCount === 0
+          ? `${deletedFiles.length} file(s) deleted.`
+          : `${deletedFiles.length} deleted, ${failedCount} failed.`,
+      status: failedCount === 0 ? 'success' : 'warning',
+      duration: 3000,
+    });
+  };
+
   const closeConversionModal = () => {
     setTargetFormat('pdf');
     setConversionProgress('');
@@ -4479,6 +4533,7 @@ const Dashboard: React.FC = () => {
                 onToggleChat={handleChatVisibilityToggle}
                 onToggleSelectionMode={toggleSelectionMode}
                 onOpenConversionModal={openConversionModal}
+                onDeleteSelected={deleteSelectedFiles}
                 onCheckConnectivity={connectivityModal.onOpen}
                 onToggleConvertedDrawer={handleConvertedDrawerToggle}
                 onSelectAll={selectAll}

@@ -67,9 +67,9 @@ def _find_document_file(filename: str, folder: str | None = None):
     dirs = get_data_dirs()
     processed_dir = dirs["PROCESSED_DIR"]
     candidate_paths = [
+        os.path.join(processed_dir, filename),
         os.path.join(dirs["UPLOAD_DIR"], filename),
         os.path.join(dirs["PDF_DIR"], filename),
-        os.path.join(processed_dir, filename),
         os.path.join(dirs["CONVERTED_DIR"], filename),
     ]
 
@@ -94,6 +94,46 @@ def _find_document_file(filename: str, folder: str | None = None):
                 return nested
 
     return None
+
+
+def _find_all_document_files(filename: str, folder: str | None = None) -> list[str]:
+    """Find all copies of a document across known data directories."""
+    dirs = get_data_dirs()
+    processed_dir = dirs["PROCESSED_DIR"]
+
+    candidate_paths = [
+        os.path.join(processed_dir, filename),
+        os.path.join(dirs["UPLOAD_DIR"], filename),
+        os.path.join(dirs["PDF_DIR"], filename),
+        os.path.join(dirs["CONVERTED_DIR"], filename),
+    ]
+
+    if folder:
+        safe_folder = secure_filename(folder)
+        if safe_folder:
+            candidate_paths.insert(0, os.path.join(processed_dir, safe_folder, filename))
+
+    existing: list[str] = []
+    seen: set[str] = set()
+    for path in candidate_paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        if os.path.isfile(path):
+            existing.append(path)
+
+    # Include one-level nested files in processed subfolders.
+    if os.path.isdir(processed_dir):
+        for entry in os.listdir(processed_dir):
+            subdir = os.path.join(processed_dir, entry)
+            if not os.path.isdir(subdir):
+                continue
+            nested = os.path.join(subdir, filename)
+            if nested not in seen and os.path.isfile(nested):
+                existing.append(nested)
+                seen.add(nested)
+
+    return existing
 
 
 @document_bp.route("/processed/<path:filename>", methods=["GET", "OPTIONS"])
@@ -292,15 +332,18 @@ def delete_document(doc_id):
         filename = secure_filename(doc_id)
 
         folder = request.args.get("folder", "").strip() or None
-        filepath = _find_document_file(filename, folder=folder)
-        if filepath:
-            os.remove(filepath)
+        matching_paths = _find_all_document_files(filename, folder=folder)
+        if matching_paths:
+            for path in matching_paths:
+                os.remove(path)
             deleted_ocr_artifacts = delete_ocr_artifacts(filename)
-            logger.info(f"[OK] Document deleted: {filename}")
+            logger.info(f"[OK] Document deleted: {filename} ({len(matching_paths)} file(s))")
             return jsonify(
                 {
                     "success": True,
                     "message": "Document deleted",
+                    "deleted_files": len(matching_paths),
+                    "deleted_paths": matching_paths,
                     "deleted_ocr_artifacts": len(deleted_ocr_artifacts),
                 }
             )
