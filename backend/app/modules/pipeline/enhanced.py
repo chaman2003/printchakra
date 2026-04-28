@@ -161,8 +161,8 @@ class EnhancedDocumentPipeline:
     def _is_reasonable_document_quad(
         contour: np.ndarray,
         image_shape: Tuple[int, int],
-        min_area_ratio: float = 0.18,
-        max_area_ratio: float = 0.98,
+        min_area_ratio: float = 0.22,
+        max_area_ratio: float = 0.97,
     ) -> bool:
         """Validate that a 4-point contour looks like a full-page document."""
         img_h, img_w = image_shape[:2]
@@ -182,7 +182,7 @@ class EnhancedDocumentPipeline:
         if w <= 0 or h <= 0:
             return False
         aspect = max(w / max(h, 1e-6), h / max(w, 1e-6))
-        if aspect > 3.2:
+        if aspect > 3.0:
             return False
 
         return True
@@ -468,30 +468,69 @@ class EnhancedDocumentPipeline:
             self.emit_progress(
                 6, total_steps, "Find Document Contour", "Searching for 4-point page boundary..."
             )
-            contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            edge_lo = cv2.Canny(blurred, 20, 80)
+            edge_hi = cv2.Canny(blurred, 60, 180)
+            morph_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+            merged_edges = cv2.bitwise_or(edges, cv2.bitwise_or(edge_lo, edge_hi))
+            merged_edges = cv2.morphologyEx(merged_edges, cv2.MORPH_CLOSE, morph_kernel, iterations=2)
+            merged_edges = cv2.dilate(merged_edges, np.ones((2, 2), np.uint8), iterations=1)
+
+            contours, _ = cv2.findContours(merged_edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
             contours = sorted(contours, key=cv2.contourArea, reverse=True)
             document_contour = None
             selected_area_ratio = 0.0
             selected_confidence = 0.0
             best_candidate = None
             best_score = 0.0
-            for contour in contours[:10]:
-                epsilon = 0.02 * cv2.arcLength(contour, True)
-                approx = cv2.approxPolyDP(contour, epsilon, True)
-                if len(approx) == 4:
-                    candidate = approx.reshape(4, 2)
-                    if self._is_reasonable_document_quad(candidate, gray.shape):
-                        score = self._quad_confidence(candidate, gray.shape)
+            selected_method = "none"
+
+            # Pass 1: True quadrilateral candidates.
+            for contour in contours[:30]:
+                perimeter = cv2.arcLength(contour, True)
+                for epsilon_ratio in (0.015, 0.02, 0.03):
+                    epsilon = epsilon_ratio * perimeter
+                    approx = cv2.approxPolyDP(contour, epsilon, True)
+                    if len(approx) == 4:
+                        candidate = approx.reshape(4, 2)
+                        if self._is_reasonable_document_quad(candidate, gray.shape):
+                            score = self._quad_confidence(candidate, gray.shape)
+                            if score > best_score:
+                                best_score = score
+                                best_candidate = candidate
+
+            # Pass 2 fallback: min-area rectangle from large contours.
+            if best_candidate is None or best_score < 0.55:
+                for contour in contours[:20]:
+                    if cv2.contourArea(contour) < (gray.shape[0] * gray.shape[1] * 0.16):
+                        continue
+                    rect = cv2.minAreaRect(contour)
+                    (w_rect, h_rect) = rect[1]
+                    if w_rect <= 1 or h_rect <= 1:
+                        continue
+                    box = cv2.boxPoints(rect).astype(np.float32)
+                    if self._is_reasonable_document_quad(
+                        box,
+                        gray.shape,
+                        min_area_ratio=0.18,
+                        max_area_ratio=0.98,
+                    ):
+                        score = self._quad_confidence(box, gray.shape)
+                        # Small penalty vs true poly quads to prefer exact detections.
+                        score *= 0.92
                         if score > best_score:
                             best_score = score
-                            best_candidate = candidate
+                            best_candidate = box
+                            selected_method = "min_area_rect"
+
             # Apply perspective only when contour confidence is high enough.
-            if best_candidate is not None and best_score >= 0.58:
+            if best_candidate is not None and best_score >= 0.50:
                 document_contour = best_candidate
                 selected_area_ratio = float(cv2.contourArea(document_contour)) / float(
                     gray.shape[0] * gray.shape[1]
                 )
                 selected_confidence = best_score
+                if selected_method == "none":
+                    selected_method = "quad_poly"
             pipeline_stats["steps"]["step_6"] = {
                 "stage": "Find Document Contour",
                 "contours_found": len(contours),
@@ -499,6 +538,7 @@ class EnhancedDocumentPipeline:
                 "selected_area_ratio": selected_area_ratio,
                 "selected_confidence": selected_confidence,
                 "best_confidence_seen": best_score,
+                "method": selected_method,
             }
 
             # ========== STEP 7: Perspective Transform (Crop) ==========
@@ -506,7 +546,7 @@ class EnhancedDocumentPipeline:
                 7, total_steps, "Perspective Transform", "Cropping and straightening document..."
             )
             if document_contour is not None:
-                expanded_contour = self._expand_quad(document_contour, gray.shape, expand_ratio=0.035)
+                expanded_contour = self._expand_quad(document_contour, gray.shape, expand_ratio=0.02)
                 scaled_contour = expanded_contour / detection_scale
                 warped = self._four_point_transform(working_color, scaled_contour)
                 original_area = float(working_color.shape[0] * working_color.shape[1])
@@ -518,8 +558,9 @@ class EnhancedDocumentPipeline:
                 # Safety: avoid accidental crop to tiny regions (e.g. logo block).
                 if (
                     warped is not None
-                    and warp_area_ratio >= 0.30
-                    and 0.45 <= warp_aspect <= 2.4
+                    and selected_area_ratio >= 0.24
+                    and warp_area_ratio >= 0.26
+                    and 0.42 <= warp_aspect <= 2.35
                 ):
                     working_color = warped
                     applied = True

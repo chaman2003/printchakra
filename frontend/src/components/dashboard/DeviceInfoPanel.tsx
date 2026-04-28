@@ -520,9 +520,23 @@ export const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({
                               cursor="pointer"
                               transition="all 0.2s"
                               _hover={{ borderColor: 'brand.400', boxShadow: `0 0 0 2px rgba(121, 95, 238, 0.1)` }}
+                              onClick={() => {
+                                if (!settingDefault && defaultPrinter !== printer.name) {
+                                  handleSetDefaultPrinter(printer.name);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if ((e.key === 'Enter' || e.key === ' ') && !settingDefault && defaultPrinter !== printer.name) {
+                                  e.preventDefault();
+                                  handleSetDefaultPrinter(printer.name);
+                                }
+                              }}
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`Select ${printer.name} as default printer`}
                             >
                               <Flex align="center" justify="space-between" gap={3}>
-                                <Radio value={printer.name} isDisabled={settingDefault} />
+                                <Radio value={printer.name} isDisabled={settingDefault} pointerEvents="none" />
                                 <VStack align="start" spacing={0.5} flex={1}>
                                   <Text fontSize="sm" fontWeight="600">
                                     {printer.name}
