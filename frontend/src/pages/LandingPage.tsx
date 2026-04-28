@@ -141,7 +141,11 @@ const projectSpecs = [
   { label: 'Privacy', value: 'Local', sub: 'No Cloud required' },
 ];
 
-const logoSrc = `${process.env.PUBLIC_URL}/logo.png`;
+const logoSrc = (() => {
+  const publicUrl = (process.env.PUBLIC_URL || '').trim();
+  const base = !publicUrl || publicUrl === '.' ? '' : publicUrl.replace(/\/$/, '');
+  return `${base}/logo.png`;
+})();
 
 // ===== MAIN PAGE =====
 

@@ -30,7 +30,11 @@ interface DashboardHeroCardProps {
 const DEFAULT_DESCRIPTION =
   'Monitor document ingestion, inspect OCR output, and orchestrate conversions in real time.';
 
-const logoSrc = `${process.env.PUBLIC_URL}/logo.png`;
+const logoSrc = (() => {
+  const publicUrl = (process.env.PUBLIC_URL || '').trim();
+  const base = !publicUrl || publicUrl === '.' ? '' : publicUrl.replace(/\/$/, '');
+  return `${base}/logo.png`;
+})();
 
 export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   statusDotColor,

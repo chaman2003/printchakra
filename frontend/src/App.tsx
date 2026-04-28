@@ -51,7 +51,11 @@ const navItems = [
   { path: '/phone', icon: FiSmartphone, label: 'Phone Capture', badge: null },
 ];
 
-const logoSrc = `${process.env.PUBLIC_URL}/logo.png`;
+const logoSrc = (() => {
+  const publicUrl = (process.env.PUBLIC_URL || '').trim();
+  const base = !publicUrl || publicUrl === '.' ? '' : publicUrl.replace(/\/$/, '');
+  return `${base}/logo.png`;
+})();
 
 function TopBar() {
   const { colorMode, toggleColorMode } = useColorMode();
