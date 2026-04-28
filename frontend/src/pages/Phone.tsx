@@ -708,7 +708,7 @@ const Phone: React.FC = () => {
   }, [stream]);
 
   return (
-    <VStack align="stretch" spacing={10} pb={16}>
+    <VStack align="stretch" spacing={{ base: 8, md: 10 }} pb={16}>
       <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" gap={6}>
         <Stack spacing={2}>
           <Heading size="lg" display="flex" alignItems="center" gap={3}>

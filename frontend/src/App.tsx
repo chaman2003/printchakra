@@ -347,7 +347,7 @@ function AppContent() {
           </Routes>
         ) : (
           <Box
-            py={{ base: 4, md: 6 }}
+            py={{ base: 2, md: 4 }}
             pb={{ base: '80px', md: 6 }}
             px={{ base: 2, md: 4 }}
             mr={isPanelOpen ? { base: 0, lg: `${panelWidth + 16}px` } : 0}
