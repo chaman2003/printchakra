@@ -55,6 +55,7 @@ const Phone: React.FC = () => {
   const [showConnectionValidator, setShowConnectionValidator] = useState(false);
   const [frameChangeStatus, setFrameChangeStatus] = useState<'waiting' | 'detecting' | 'ready' | 'captured'>('waiting');
   const [cameraOrientation, setCameraOrientation] = useState<'portrait' | 'landscape'>('portrait');
+  const [autoCaptureMode, setAutoCaptureMode] = useState<'stability' | 'motion'>('motion');
 
   // Countdown state for auto-capture from dashboard
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -96,6 +97,8 @@ const Phone: React.FC = () => {
   const lastFrameImageDataRef = useRef<ImageData | null>(null);
   const isCapturingRef = useRef<boolean>(false);
   const stableFrameCountRef = useRef<number>(0);
+  const motionSeenRef = useRef<boolean>(false);
+  const motionStillCountRef = useRef<number>(0);
   const comparisonCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureCooldownRef = useRef<boolean>(false);
 
@@ -196,12 +199,17 @@ const Phone: React.FC = () => {
     }
 
     stableFrameCountRef.current = 0;
+    motionSeenRef.current = false;
+    motionStillCountRef.current = 0;
     lastFrameImageDataRef.current = null;
     captureCooldownRef.current = false;
 
     const STABLE_THRESHOLD = 6;
     const CHANGE_THRESHOLD = 15;
     const STABILITY_THRESHOLD = 4;
+    const MOTION_START_THRESHOLD = 12;
+    const MOTION_SETTLE_THRESHOLD = 4;
+    const MOTION_SETTLE_FRAMES = 3;
 
     autoCaptureIntervalRef.current = setInterval(async () => {
       if (isCapturingRef.current || captureCooldownRef.current) return;
@@ -231,16 +239,24 @@ const Phone: React.FC = () => {
       if (lastFrameImageDataRef.current) {
         const frameDiff = compareFrames(currentFrame, lastFrameImageDataRef.current);
 
-        if (frameDiff < STABLE_THRESHOLD) {
-          stableFrameCountRef.current++;
-          setFrameChangeStatus('detecting');
+        if (autoCaptureMode === 'motion') {
+          if (frameDiff >= MOTION_START_THRESHOLD) {
+            motionSeenRef.current = true;
+            motionStillCountRef.current = 0;
+            setFrameChangeStatus('detecting');
+          } else if (motionSeenRef.current && frameDiff < MOTION_SETTLE_THRESHOLD) {
+            motionStillCountRef.current++;
+            setFrameChangeStatus('detecting');
+          } else {
+            motionStillCountRef.current = 0;
+            setFrameChangeStatus(motionSeenRef.current ? 'detecting' : 'waiting');
+          }
 
-          if (stableFrameCountRef.current >= STABILITY_THRESHOLD) {
+          if (motionSeenRef.current && motionStillCountRef.current >= MOTION_SETTLE_FRAMES) {
             setFrameChangeStatus('ready');
             captureCooldownRef.current = true;
             lastCaptureTimeRef.current = Date.now();
 
-            // Apply initial delay on first capture
             if (!hasAppliedInitialDelayRef.current && initialDelay > 0) {
               hasAppliedInitialDelayRef.current = true;
               setIsWaitingForInitialDelay(true);
@@ -249,18 +265,20 @@ const Phone: React.FC = () => {
               } catch {
                 captureCooldownRef.current = false;
                 setIsWaitingForInitialDelay(false);
-                stableFrameCountRef.current = 0;
+                motionSeenRef.current = false;
+                motionStillCountRef.current = 0;
                 setFrameChangeStatus('waiting');
                 return;
               }
               setIsWaitingForInitialDelay(false);
             }
 
-            // Trigger capture
             if (captureInBackgroundRef.current) {
               await captureInBackgroundRef.current();
             }
 
+            motionSeenRef.current = false;
+            motionStillCountRef.current = 0;
             stableFrameCountRef.current = 0;
             lastFrameImageDataRef.current = null;
 
@@ -269,14 +287,53 @@ const Phone: React.FC = () => {
             }, 1000);
           }
         } else {
-          stableFrameCountRef.current = 0;
-          setFrameChangeStatus('detecting');
+          if (frameDiff < STABLE_THRESHOLD) {
+            stableFrameCountRef.current++;
+            setFrameChangeStatus('detecting');
+
+            if (stableFrameCountRef.current >= STABILITY_THRESHOLD) {
+              setFrameChangeStatus('ready');
+              captureCooldownRef.current = true;
+              lastCaptureTimeRef.current = Date.now();
+
+              // Apply initial delay on first capture
+              if (!hasAppliedInitialDelayRef.current && initialDelay > 0) {
+                hasAppliedInitialDelayRef.current = true;
+                setIsWaitingForInitialDelay(true);
+                try {
+                  await startDelayCountdown();
+                } catch {
+                  captureCooldownRef.current = false;
+                  setIsWaitingForInitialDelay(false);
+                  stableFrameCountRef.current = 0;
+                  setFrameChangeStatus('waiting');
+                  return;
+                }
+                setIsWaitingForInitialDelay(false);
+              }
+
+              // Trigger capture
+              if (captureInBackgroundRef.current) {
+                await captureInBackgroundRef.current();
+              }
+
+              stableFrameCountRef.current = 0;
+              lastFrameImageDataRef.current = null;
+
+              setTimeout(() => {
+                captureCooldownRef.current = false;
+              }, 1000);
+            }
+          } else {
+            stableFrameCountRef.current = 0;
+            setFrameChangeStatus('detecting');
+          }
         }
       }
 
       lastFrameImageDataRef.current = currentFrame;
     }, 500);
-  }, [compareFrames, getCurrentFrameData, initialDelay, startDelayCountdown]);
+  }, [compareFrames, getCurrentFrameData, initialDelay, startDelayCountdown, autoCaptureMode]);
 
   // Start continuous auto-capture
   const startAutoCapture = useCallback(async (source: 'local' | 'dashboard' = 'local', documentCount?: number) => {
@@ -287,6 +344,8 @@ const Phone: React.FC = () => {
     lastCapturedImageDataRef.current = null;
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
+    motionSeenRef.current = false;
+    motionStillCountRef.current = 0;
     setFrameChangeStatus('waiting');
     setAutoCaptureSource(source);
     if (documentCount) setPendingDocumentCount(documentCount);
@@ -294,7 +353,7 @@ const Phone: React.FC = () => {
     startFrameComparisonLoop();
 
     if (source === 'local' && socket) {
-      socket.emit('auto_capture_state_changed', { enabled: true, source: 'phone' });
+      socket.emit('auto_capture_state_changed', { enabled: true, source: 'phone', mode: autoCaptureMode });
     }
 
     toast({
@@ -305,7 +364,7 @@ const Phone: React.FC = () => {
       status: 'success',
       duration: 3000,
     });
-  }, [socket, toast, startFrameComparisonLoop]);
+  }, [socket, toast, startFrameComparisonLoop, autoCaptureMode]);
 
   // Stop auto-capture
   const stopAutoCapture = useCallback(() => {
@@ -326,9 +385,16 @@ const Phone: React.FC = () => {
     lastCapturedImageDataRef.current = null;
     lastFrameImageDataRef.current = null;
     stableFrameCountRef.current = 0;
+    motionSeenRef.current = false;
+    motionStillCountRef.current = 0;
 
     if (socket) {
-      socket.emit('auto_capture_state_changed', { enabled: false, source: 'phone', capturedCount: autoCaptureCountRef.current });
+      socket.emit('auto_capture_state_changed', {
+        enabled: false,
+        source: 'phone',
+        capturedCount: autoCaptureCountRef.current,
+        mode: autoCaptureMode,
+      });
     }
 
     const wasRemote = autoCaptureSource === 'dashboard';
@@ -343,7 +409,7 @@ const Phone: React.FC = () => {
         duration: 3000,
       });
     }
-  }, [toast, socket, autoCaptureSource, cancelCountdown]);
+  }, [toast, socket, autoCaptureSource, cancelCountdown, autoCaptureMode]);
 
   // Process upload queue
   useEffect(() => {
@@ -603,7 +669,12 @@ const Phone: React.FC = () => {
       console.log('Received auto-capture command from Dashboard:', data);
       const documentCount = data?.documentCount || 1;
       const delaySeconds = data?.delaySeconds ?? initialDelay ?? 10;
+      const requestedMode =
+        data?.mode === 'stability' ? 'stability' : data?.mode === 'motion' ? 'motion' : null;
       const delayMs = delaySeconds * 1000;
+      if (requestedMode) {
+        setAutoCaptureMode(requestedMode);
+      }
 
       if (captureMode !== 'camera' || !stream) {
         showMessage('💡 Switching to Camera mode...');
@@ -765,6 +836,41 @@ const Phone: React.FC = () => {
               </Flex>
             </Flex>
 
+            {captureMode === 'camera' && (
+              <Flex
+                bg={useColorModeValue('rgba(16, 185, 129, 0.08)', 'rgba(16, 185, 129, 0.12)')}
+                borderRadius="lg"
+                px={4}
+                py={3}
+                border="1px solid"
+                borderColor={useColorModeValue('rgba(16, 185, 129, 0.2)', 'rgba(16, 185, 129, 0.3)')}
+                alignItems="center"
+                justifyContent="space-between"
+                flexWrap="wrap"
+                gap={3}
+              >
+                <Text fontSize="sm" fontWeight="600">Capture Trigger Mode</Text>
+                <ButtonGroup isAttached size="sm" variant="outline">
+                  <Button
+                    colorScheme={autoCaptureMode === 'motion' ? 'green' : undefined}
+                    variant={autoCaptureMode === 'motion' ? 'solid' : 'outline'}
+                    onClick={() => setAutoCaptureMode('motion')}
+                    isDisabled={autoCapture}
+                  >
+                    Motion-based
+                  </Button>
+                  <Button
+                    colorScheme={autoCaptureMode === 'stability' ? 'purple' : undefined}
+                    variant={autoCaptureMode === 'stability' ? 'solid' : 'outline'}
+                    onClick={() => setAutoCaptureMode('stability')}
+                    isDisabled={autoCapture}
+                  >
+                    Stability-based
+                  </Button>
+                </ButtonGroup>
+              </Flex>
+            )}
+
             {/* Mode Selector */}
             <ButtonGroup isAttached variant="ghost" alignSelf="center">
               <Button leftIcon={<Iconify icon={FiUpload} boxSize={5} />} colorScheme={captureMode === 'file' ? 'brand' : undefined} onClick={() => handleCaptureMode('file')}>
@@ -816,7 +922,10 @@ const Phone: React.FC = () => {
                         <Box>
                           <Text fontSize="sm" fontWeight="bold">🎯 AUTO-CAPTURE ACTIVE</Text>
                           <Text fontSize="xs" opacity={0.9}>
-                            {autoCaptureSource === 'dashboard' ? '📡 From Dashboard • ' : ''}Place documents - auto-captures when stable
+                            {autoCaptureSource === 'dashboard' ? '📡 From Dashboard • ' : ''}
+                            {autoCaptureMode === 'motion'
+                              ? 'Move next document into frame, capture happens when motion settles'
+                              : 'Place documents one by one - captures when frame is stable'}
                           </Text>
                         </Box>
                       </Flex>
@@ -915,11 +1024,17 @@ const Phone: React.FC = () => {
                     <Stack spacing={0}>
                       <Text fontWeight="600" fontSize="sm">
                         {frameChangeStatus === 'ready' ? '📸 New document detected - capturing...' :
-                          frameChangeStatus === 'detecting' ? '👀 Waiting for stable document...' :
+                          frameChangeStatus === 'detecting'
+                            ? (autoCaptureMode === 'motion' ? '👀 Motion detected, waiting to settle...' : '👀 Waiting for stable document...')
+                            :
                             frameChangeStatus === 'captured' ? '✓ Captured! Place next document.' :
                               `📷 Captured ${autoCaptureCount} documents`}
                       </Text>
-                      <Text fontSize="xs" color={muted}>Place each document in view • Auto-captures when stable</Text>
+                      <Text fontSize="xs" color={muted}>
+                        {autoCaptureMode === 'motion'
+                          ? 'Move a new document into view • Captures after movement settles'
+                          : 'Place each document in view • Auto-captures when stable'}
+                      </Text>
                     </Stack>
                   </Flex>
                 )}

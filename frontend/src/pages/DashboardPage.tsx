@@ -63,6 +63,7 @@ import {
   FiFolderPlus,
   FiChevronRight,
   FiArrowLeft,
+  FiEdit2,
   FiCrop,
   FiRotateCw,
   FiSun,
@@ -303,7 +304,7 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
 
   // Build thumbnail URL with headers bypass for ngrok
   const thumbnailUrl = useMemo(() => {
-    const base = `${API_BASE_URL}/thumbnail/${filename}`;
+    const base = `${API_BASE_URL}/document/thumbnails/${filename}`;
     const params = new URLSearchParams();
     params.set('_t', Date.now().toString());
     if (refreshToken) params.set('_r', refreshToken.toString());
@@ -3449,13 +3450,29 @@ const Dashboard: React.FC = () => {
   const deleteFolder = useCallback(async (name: string) => {
     if (!window.confirm(`Delete folder "${name}" and all its contents?`)) return;
     try {
-      await apiClient.delete(`${API_ENDPOINTS.folders}/${name}`);
+      await apiClient.delete(`${API_ENDPOINTS.folders}/${encodeURIComponent(name)}`);
       setFolders(prev => prev.filter(f => f.name !== name));
       if (activeFolder === name) {
         setActiveFolder('');
       }
     } catch (e: any) {
       toast({ title: 'Failed to delete folder', description: e.response?.data?.error || e.message, status: 'error', duration: 3000 });
+    }
+  }, [activeFolder, toast]);
+
+  const renameFolder = useCallback(async (currentName: string) => {
+    const nextName = window.prompt('Enter new folder name', currentName)?.trim();
+    if (!nextName || nextName === currentName) return;
+    try {
+      const res = await apiClient.put(`${API_ENDPOINTS.folders}/${encodeURIComponent(currentName)}`, { name: nextName });
+      const finalName = res.data?.folder?.name || nextName;
+      setFolders(prev => prev.map(f => (f.name === currentName ? { ...f, name: finalName } : f)));
+      if (activeFolder === currentName) {
+        setActiveFolder(finalName);
+      }
+      toast({ title: 'Folder renamed', description: `${currentName} → ${finalName}`, status: 'success', duration: 2500 });
+    } catch (e: any) {
+      toast({ title: 'Failed to rename folder', description: e.response?.data?.error || e.message, status: 'error', duration: 3000 });
     }
   }, [activeFolder, toast]);
 
@@ -3490,8 +3507,10 @@ const Dashboard: React.FC = () => {
     }
 
     try {
-      await apiClient.delete(`${API_ENDPOINTS.delete}/${filename}`);
-      setFiles(files.filter((f: FileInfo) => f.filename !== filename));
+      await apiClient.delete(`${API_ENDPOINTS.delete}/${encodeURIComponent(filename)}`, {
+        params: activeFolder ? { folder: activeFolder } : undefined,
+      });
+      setFiles(prevFiles => prevFiles.filter((f: FileInfo) => f.filename !== filename));
       // Also remove OCR results for deleted file
       setOcrResults(prev => {
         const updated = { ...prev };
@@ -3506,6 +3525,45 @@ const Dashboard: React.FC = () => {
       toast({
         title: 'Delete failed',
         description: err.message,
+        status: 'error',
+      });
+    }
+  };
+
+  const renameFile = async (filename: string) => {
+    const newName = window.prompt('Enter new file name', filename)?.trim();
+    if (!newName || newName === filename) return;
+
+    try {
+      const res = await apiClient.put(
+        `${API_ENDPOINTS.delete}/${encodeURIComponent(filename)}`,
+        {
+          name: newName,
+          folder: activeFolder || undefined,
+        },
+      );
+
+      const renamed = res.data?.filename || newName;
+      setFiles(prevFiles =>
+        prevFiles.map((f: FileInfo) =>
+          f.filename === filename ? { ...f, filename: renamed } : f,
+        ),
+      );
+      setOcrResults(prev => {
+        if (!prev[filename]) return prev;
+        const updated = { ...prev };
+        updated[renamed] = updated[filename];
+        delete updated[filename];
+        return updated;
+      });
+      if (selectedFile === filename) {
+        setSelectedFile(renamed);
+      }
+      toast({ title: 'File renamed', description: `${filename} → ${renamed}`, status: 'success', duration: 2500 });
+    } catch (err: any) {
+      toast({
+        title: 'Rename failed',
+        description: err.response?.data?.error || err.message,
         status: 'error',
       });
     }
@@ -3631,6 +3689,19 @@ const Dashboard: React.FC = () => {
       if (response.success && response.ocr_result) {
         setOcrResults(prev => ({ ...prev, [filename]: response.ocr_result! }));
         setActiveOCRView(filename);
+      } else if (response.error === 'Document not found') {
+        setOcrResults(prev => {
+          const updated = { ...prev };
+          delete updated[filename];
+          return updated;
+        });
+        setFiles(prev => prev.filter(f => f.filename !== filename));
+        toast({
+          title: 'Document no longer exists',
+          description: 'Refreshing the file list to remove the stale entry.',
+          status: 'warning',
+        });
+        loadFiles(true);
       } else {
         toast({
           title: 'No OCR Result',
@@ -3651,6 +3722,11 @@ const Dashboard: React.FC = () => {
     setActiveOCRView(null);
   };
 
+  const ocrResultsRef = useRef(ocrResults);
+  useEffect(() => {
+    ocrResultsRef.current = ocrResults;
+  }, [ocrResults]);
+
   // Load OCR statuses for all files on mount and when files change
   const loadOCRStatuses = useCallback(async (filenames: string[]) => {
     if (filenames.length === 0) return;
@@ -3661,15 +3737,23 @@ const Dashboard: React.FC = () => {
         // For files with OCR ready, fetch their full results
         const ocrReadyFiles = Object.entries(response.statuses)
           .filter(([_, status]) => status.has_ocr)
-          .map(([filename]) => filename);
+          .map(([filename]) => filename)
+          .filter(filename => filenames.includes(filename));
 
         // Batch load OCR results for files that have them
         for (const filename of ocrReadyFiles) {
-          if (!ocrResults[filename]) {
+          if (!ocrResultsRef.current[filename]) {
             try {
               const ocrResponse = await getOCRResult(filename);
               if (ocrResponse.success && ocrResponse.ocr_result) {
                 setOcrResults(prev => ({ ...prev, [filename]: ocrResponse.ocr_result! }));
+              } else if (ocrResponse.error === 'Document not found') {
+                setOcrResults(prev => {
+                  const updated = { ...prev };
+                  delete updated[filename];
+                  return updated;
+                });
+                setFiles(prev => prev.filter(f => f.filename !== filename));
               }
             } catch (err) {
               console.warn(`Failed to load OCR for ${filename}:`, err);
@@ -3680,7 +3764,7 @@ const Dashboard: React.FC = () => {
     } catch (err) {
       console.warn('Failed to load OCR statuses:', err);
     }
-  }, [ocrResults]);
+  }, []);
 
   // Load OCR statuses when files change
   useEffect(() => {
@@ -4514,14 +4598,23 @@ const Dashboard: React.FC = () => {
                                 <Text fontSize="xs" color="text.muted">{folder.file_count} file{folder.file_count !== 1 ? 's' : ''}</Text>
                               </Box>
                             </HStack>
-                            <IconButton
-                              aria-label="Delete folder"
-                              icon={<Iconify icon={FiTrash2} boxSize={4} />}
-                              size="xs"
-                              variant="ghost"
-                              colorScheme="red"
-                              onClick={e => { e.stopPropagation(); deleteFolder(folder.name); }}
-                            />
+                            <HStack spacing={1}>
+                              <IconButton
+                                aria-label="Rename folder"
+                                icon={<Iconify icon={FiEdit2} boxSize={4} />}
+                                size="xs"
+                                variant="ghost"
+                                onClick={e => { e.stopPropagation(); renameFolder(folder.name); }}
+                              />
+                              <IconButton
+                                aria-label="Delete folder"
+                                icon={<Iconify icon={FiTrash2} boxSize={4} />}
+                                size="xs"
+                                variant="ghost"
+                                colorScheme="red"
+                                onClick={e => { e.stopPropagation(); deleteFolder(folder.name); }}
+                              />
+                            </HStack>
                           </Flex>
                         </CardBody>
                       </Card>
@@ -4828,6 +4921,14 @@ const Dashboard: React.FC = () => {
                                     aria-label="Delete"
                                     icon={<Iconify icon={FiTrash2} boxSize={5} />}
                                     onClick={() => deleteFile(file.filename)}
+                                    isDisabled={file.processing}
+                                  />
+                                </Tooltip>
+                                <Tooltip label="Rename" hasArrow>
+                                  <IconButton
+                                    aria-label="Rename"
+                                    icon={<Iconify icon={FiEdit2} boxSize={5} />}
+                                    onClick={() => renameFile(file.filename)}
                                     isDisabled={file.processing}
                                   />
                                 </Tooltip>

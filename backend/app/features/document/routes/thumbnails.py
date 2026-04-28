@@ -10,11 +10,9 @@ from flask import jsonify, request, send_file
 from werkzeug.utils import secure_filename
 from app.features.document.routes import document_bp
 from app.core.middleware.cors import create_options_response
+from app.core.config import get_data_dirs
 
 logger = logging.getLogger(__name__)
-
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data")
-THUMBNAIL_DIR = os.path.join(DATA_DIR, "thumbnails")
 
 
 @document_bp.route("/thumbnails/<doc_id>", methods=["GET", "OPTIONS"])
@@ -25,6 +23,8 @@ def get_thumbnail(doc_id):
     
     try:
         filename = secure_filename(doc_id)
+        dirs = get_data_dirs()
+        thumbnail_dir = os.path.join(dirs["DATA_DIR"], "thumbnails")
         
         # Get thumbnail size from query params
         size = request.args.get("size", 200, type=int)
@@ -32,24 +32,31 @@ def get_thumbnail(doc_id):
         
         # Check if thumbnail exists
         thumb_filename = f"{os.path.splitext(filename)[0]}_{size}.jpg"
-        thumb_path = os.path.join(THUMBNAIL_DIR, thumb_filename)
+        thumb_path = os.path.join(thumbnail_dir, thumb_filename)
         
         if os.path.exists(thumb_path):
             return send_file(thumb_path, mimetype="image/jpeg")
         
         # Find source document
-        source_path = None
-        for folder in ["uploads", "pdfs", "processed"]:
-            filepath = os.path.join(DATA_DIR, folder, filename)
-            if os.path.exists(filepath):
-                source_path = filepath
-                break
+        source_path = next(
+            (
+                path
+                for path in [
+                    os.path.join(dirs["UPLOAD_DIR"], filename),
+                    os.path.join(dirs["PDF_DIR"], filename),
+                    os.path.join(dirs["PROCESSED_DIR"], filename),
+                    os.path.join(dirs["CONVERTED_DIR"], filename),
+                ]
+                if os.path.exists(path)
+            ),
+            None,
+        )
         
         if not source_path:
             return jsonify({"success": False, "error": "Document not found"}), 404
         
         # Generate thumbnail
-        os.makedirs(THUMBNAIL_DIR, exist_ok=True)
+        os.makedirs(thumbnail_dir, exist_ok=True)
         
         ext = os.path.splitext(filename)[1].lower()
         
@@ -91,6 +98,8 @@ def generate_batch_thumbnails():
     
     try:
         data = request.get_json()
+        dirs = get_data_dirs()
+        thumbnail_dir = os.path.join(dirs["DATA_DIR"], "thumbnails")
         
         if not data or "documents" not in data:
             return jsonify({"success": False, "error": "No documents provided"}), 400
@@ -103,7 +112,7 @@ def generate_batch_thumbnails():
         for doc_id in documents:
             filename = secure_filename(doc_id)
             thumb_filename = f"{os.path.splitext(filename)[0]}_{size}.jpg"
-            thumb_path = os.path.join(THUMBNAIL_DIR, thumb_filename)
+            thumb_path = os.path.join(thumbnail_dir, thumb_filename)
             
             if os.path.exists(thumb_path):
                 results.append({
@@ -113,12 +122,19 @@ def generate_batch_thumbnails():
                 })
             else:
                 # Find and generate thumbnail
-                source_path = None
-                for folder in ["uploads", "pdfs", "processed"]:
-                    filepath = os.path.join(DATA_DIR, folder, filename)
-                    if os.path.exists(filepath):
-                        source_path = filepath
-                        break
+                source_path = next(
+                    (
+                        path
+                        for path in [
+                            os.path.join(dirs["UPLOAD_DIR"], filename),
+                            os.path.join(dirs["PDF_DIR"], filename),
+                            os.path.join(dirs["PROCESSED_DIR"], filename),
+                            os.path.join(dirs["CONVERTED_DIR"], filename),
+                        ]
+                        if os.path.exists(path)
+                    ),
+                    None,
+                )
                 
                 if source_path:
                     try:
@@ -131,7 +147,7 @@ def generate_batch_thumbnails():
                         else:
                             thumb_data = generate_placeholder_thumbnail(ext, size)
                         
-                        os.makedirs(THUMBNAIL_DIR, exist_ok=True)
+                        os.makedirs(thumbnail_dir, exist_ok=True)
                         with open(thumb_path, "wb") as f:
                             f.write(thumb_data)
                         

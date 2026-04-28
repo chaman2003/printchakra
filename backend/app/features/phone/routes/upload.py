@@ -8,6 +8,7 @@ import os
 import logging
 import shutil
 import threading
+import json
 from datetime import datetime
 from flask import jsonify, request
 from werkzeug.utils import secure_filename
@@ -71,6 +72,17 @@ def _run_pipeline_async(
             with open(text_path, "w", encoding="utf-8") as f:
                 f.write(extracted_text)
 
+        ocr_result = stats.get("ocr_result")
+        if isinstance(ocr_result, dict):
+            dirs = get_data_dirs()
+            os.makedirs(dirs["OCR_DATA_DIR"], exist_ok=True)
+            ocr_json_path = os.path.join(
+                dirs["OCR_DATA_DIR"],
+                f"{os.path.splitext(filename)[0]}_ocr.json",
+            )
+            with open(ocr_json_path, "w", encoding="utf-8") as f:
+                json.dump(ocr_result, f, ensure_ascii=True, indent=2)
+
         socketio.emit(
             "processing_complete",
             {
@@ -81,6 +93,7 @@ def _run_pipeline_async(
                 "stats": {
                     "total_steps": stats.get("total_steps", 12),
                     "success": stats.get("success", True),
+                    "ocr_engine": (ocr_result or {}).get("engine"),
                 },
             },
         )
@@ -251,6 +264,7 @@ def upload_multiple_files():
             
             try:
                 filename = secure_filename(file.filename)
+                ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
                 unique_filename = f"{uuid.uuid4().hex}_{filename}"
                 filepath = os.path.join(upload_folder, unique_filename)
                 
@@ -258,24 +272,49 @@ def upload_multiple_files():
                 file_size = os.path.getsize(filepath)
 
                 processed_path = os.path.join(processed_folder, unique_filename)
-                shutil.copy2(filepath, processed_path)
+                text_path = os.path.join(dirs["TEXT_DIR"], f"{os.path.splitext(unique_filename)[0]}.txt")
 
                 socketio.emit("new_file", {
                     "filename": unique_filename,
-                    "processing": False,
+                    "processing": ext in IMAGE_EXTENSIONS,
                     "source": "phone"
                 })
 
-                socketio.emit("processing_complete", {
-                    "filename": unique_filename,
-                    "has_text": False,
-                    "source": "phone"
-                })
+                if ext in IMAGE_EXTENSIONS:
+                    _emit_progress_with_filename(
+                        unique_filename,
+                        {
+                            "step": 0,
+                            "total_steps": 12,
+                            "stage_name": "Queued",
+                            "message": "Starting 12-step processing",
+                        },
+                    )
+                    thread = threading.Thread(
+                        target=_run_pipeline_async,
+                        args=(
+                            unique_filename,
+                            filepath,
+                            processed_path,
+                            text_path,
+                            {},
+                        ),
+                        daemon=True,
+                    )
+                    thread.start()
+                else:
+                    shutil.copy2(filepath, processed_path)
+                    socketio.emit("processing_complete", {
+                        "filename": unique_filename,
+                        "has_text": False,
+                        "source": "phone"
+                    })
                 
                 uploaded.append({
                     "filename": unique_filename,
                     "original_name": filename,
-                    "size": file_size
+                    "size": file_size,
+                    "processing": ext in IMAGE_EXTENSIONS,
                 })
             
             except Exception as e:

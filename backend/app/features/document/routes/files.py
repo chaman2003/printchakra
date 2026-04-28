@@ -14,14 +14,64 @@ from app.core.config import get_data_dirs
 from app.core.middleware.cors import create_options_response
 
 logger = logging.getLogger(__name__)
-
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "data")
 ALLOWED_EXTENSIONS = {"pdf", "png", "jpg", "jpeg", "gif", "doc", "docx", "txt", "rtf"}
 
 
 def allowed_file(filename):
     """Check if file extension is allowed."""
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def delete_ocr_artifacts(filename):
+    """Delete OCR sidecar files that belong to a document."""
+    dirs = get_data_dirs()
+    stem = os.path.splitext(filename)[0]
+    candidate_paths = [
+        os.path.join(dirs["TEXT_DIR"], f"{stem}.txt"),
+        os.path.join(dirs["TEXT_DIR"], f"processed_{stem}.txt"),
+        os.path.join(dirs["OCR_DATA_DIR"], f"{stem}_ocr.json"),
+    ]
+
+    deleted = []
+    for path in candidate_paths:
+        if os.path.isfile(path):
+            os.remove(path)
+            deleted.append(path)
+    return deleted
+
+
+def _find_document_file(filename: str, folder: str | None = None):
+    """Find a document in root directories or processed subfolders."""
+    dirs = get_data_dirs()
+    processed_dir = dirs["PROCESSED_DIR"]
+    candidate_paths = [
+        os.path.join(dirs["UPLOAD_DIR"], filename),
+        os.path.join(dirs["PDF_DIR"], filename),
+        os.path.join(processed_dir, filename),
+        os.path.join(dirs["CONVERTED_DIR"], filename),
+    ]
+
+    # Explicit folder hint (used by dashboard folder view).
+    if folder:
+        safe_folder = secure_filename(folder)
+        if safe_folder:
+            candidate_paths.insert(0, os.path.join(processed_dir, safe_folder, filename))
+
+    for path in candidate_paths:
+        if os.path.isfile(path):
+            return path
+
+    # Fallback: search one-level processed subfolders.
+    if os.path.isdir(processed_dir):
+        for entry in os.listdir(processed_dir):
+            subdir = os.path.join(processed_dir, entry)
+            if not os.path.isdir(subdir):
+                continue
+            nested = os.path.join(subdir, filename)
+            if os.path.isfile(nested):
+                return nested
+
+    return None
 
 
 @document_bp.route("/processed/<path:filename>", methods=["GET", "OPTIONS"])
@@ -56,9 +106,10 @@ def list_documents():
     
     try:
         documents = []
+        dirs = get_data_dirs()
         
         # Scan uploads folder
-        uploads_folder = os.path.join(DATA_DIR, "uploads")
+        uploads_folder = dirs["UPLOAD_DIR"]
         if os.path.exists(uploads_folder):
             for filename in os.listdir(uploads_folder):
                 filepath = os.path.join(uploads_folder, filename)
@@ -96,10 +147,16 @@ def get_document(doc_id):
     
     try:
         filename = secure_filename(doc_id)
+        dirs = get_data_dirs()
         
         # Search for document
-        for folder in ["uploads", "pdfs", "processed"]:
-            filepath = os.path.join(DATA_DIR, folder, filename)
+        folder_paths = {
+            "uploads": dirs["UPLOAD_DIR"],
+            "pdfs": dirs["PDF_DIR"],
+            "processed": dirs["PROCESSED_DIR"],
+        }
+        for folder, base_path in folder_paths.items():
+            filepath = os.path.join(base_path, filename)
             if os.path.exists(filepath):
                 ext = os.path.splitext(filename)[1].lower()
                 return jsonify({
@@ -165,10 +222,17 @@ def download_document(doc_id):
     
     try:
         filename = secure_filename(doc_id)
+        dirs = get_data_dirs()
         
         # Search for document
-        for folder in ["uploads", "pdfs", "processed", "converted"]:
-            filepath = os.path.join(DATA_DIR, folder, filename)
+        folder_paths = {
+            "uploads": dirs["UPLOAD_DIR"],
+            "pdfs": dirs["PDF_DIR"],
+            "processed": dirs["PROCESSED_DIR"],
+            "converted": dirs["CONVERTED_DIR"],
+        }
+        for _, base_path in folder_paths.items():
+            filepath = os.path.join(base_path, filename)
             if os.path.exists(filepath):
                 return send_file(
                     filepath,
@@ -191,24 +255,80 @@ def delete_document(doc_id):
     try:
         filename = secure_filename(doc_id)
 
-        # Use active configured directories (backend/public/data/*)
-        dirs = get_data_dirs()
-        candidate_paths = [
-            os.path.join(dirs['UPLOAD_DIR'], filename),
-            os.path.join(dirs['PDF_DIR'], filename),
-            os.path.join(dirs['PROCESSED_DIR'], filename),
-            os.path.join(dirs['CONVERTED_DIR'], filename),
-        ]
-
-        for filepath in candidate_paths:
-            if os.path.isfile(filepath):
-                os.remove(filepath)
-                logger.info(f"[OK] Document deleted: {filename}")
-                return jsonify({"success": True, "message": "Document deleted"})
+        folder = request.args.get("folder", "").strip() or None
+        filepath = _find_document_file(filename, folder=folder)
+        if filepath:
+            os.remove(filepath)
+            deleted_ocr_artifacts = delete_ocr_artifacts(filename)
+            logger.info(f"[OK] Document deleted: {filename}")
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Document deleted",
+                    "deleted_ocr_artifacts": len(deleted_ocr_artifacts),
+                }
+            )
         
         return jsonify({"success": False, "error": "Document not found"}), 404
     
     except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@document_bp.route("/files/<doc_id>", methods=["PUT", "OPTIONS"])
+def rename_document(doc_id):
+    """Rename a document file, preserving extension when omitted."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        filename = secure_filename(doc_id)
+        if not filename:
+            return jsonify({"success": False, "error": "Invalid filename"}), 400
+
+        data = request.get_json(silent=True) or {}
+        requested_name = (data.get("name") or "").strip()
+        folder = (data.get("folder") or request.args.get("folder") or "").strip() or None
+
+        if not requested_name:
+            return jsonify({"success": False, "error": "New name is required"}), 400
+
+        safe_requested = secure_filename(requested_name)
+        if not safe_requested:
+            return jsonify({"success": False, "error": "Invalid new filename"}), 400
+
+        old_path = _find_document_file(filename, folder=folder)
+        if not old_path:
+            return jsonify({"success": False, "error": "Document not found"}), 404
+
+        _, old_ext = os.path.splitext(filename)
+        _, new_ext = os.path.splitext(safe_requested)
+        if not new_ext:
+            safe_requested = f"{safe_requested}{old_ext}"
+        elif old_ext and new_ext.lower() != old_ext.lower():
+            return jsonify({"success": False, "error": "File extension cannot be changed"}), 400
+
+        if safe_requested == filename:
+            return jsonify({"success": True, "filename": filename, "message": "No changes made"})
+
+        new_path = os.path.join(os.path.dirname(old_path), safe_requested)
+        if os.path.exists(new_path):
+            return jsonify({"success": False, "error": "A file with that name already exists"}), 409
+
+        os.rename(old_path, new_path)
+        logger.info(f"[OK] Document renamed: {filename} -> {safe_requested}")
+
+        return jsonify(
+            {
+                "success": True,
+                "old_filename": filename,
+                "filename": safe_requested,
+                "folder": folder,
+                "message": "Document renamed",
+            }
+        )
+    except Exception as e:
+        logger.error(f"Rename document error: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -239,7 +359,7 @@ def upload_document():
         import uuid
         unique_filename = f"{uuid.uuid4().hex}_{filename}"
         
-        uploads_folder = os.path.join(DATA_DIR, "uploads")
+        uploads_folder = get_data_dirs()["UPLOAD_DIR"]
         os.makedirs(uploads_folder, exist_ok=True)
         
         filepath = os.path.join(uploads_folder, unique_filename)

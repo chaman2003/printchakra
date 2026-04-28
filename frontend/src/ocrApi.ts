@@ -45,13 +45,19 @@ export async function getOCRResult(filename: string): Promise<OCRResponse> {
     const response = await apiClient.get<OCRResponse>(`/ocr/extract/${filename}`);
     return response.data;
   } catch (error: any) {
-    console.error('[OCR API] Error fetching OCR result:', error);
+    const status = error?.response?.status;
+    if (status !== 404) {
+      console.error('[OCR API] Error fetching OCR result:', error);
+    }
     return {
       success: false,
       filename,
       ocr_result: null,
       ocr_ready: false,
-      error: error.message || 'Failed to fetch OCR result',
+      error:
+        status === 404
+          ? 'Document not found'
+          : error.message || 'Failed to fetch OCR result',
     };
   }
 }
@@ -127,10 +133,15 @@ export interface BatchOCRStatusResponse {
 
 export async function getBatchOCRStatus(filenames: string[]): Promise<BatchOCRStatusResponse> {
   try {
-    const response = await apiClient.post<BatchOCRStatusResponse>('/ocr-batch-status', { filenames });
+    const results = await Promise.all(
+      filenames.map(async filename => {
+        const status = await getOCRStatus(filename);
+        return [filename, { has_ocr: status.ocr_ready }] as const;
+      })
+    );
     return {
       success: true,
-      statuses: response.data.statuses || {},
+      statuses: Object.fromEntries(results),
     };
   } catch (error: any) {
     console.error('[OCR API] Error fetching batch OCR status:', error);
