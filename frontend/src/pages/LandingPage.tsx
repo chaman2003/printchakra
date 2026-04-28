@@ -141,6 +141,8 @@ const projectSpecs = [
   { label: 'Privacy', value: 'Local', sub: 'No Cloud required' },
 ];
 
+const logoSrc = `${process.env.PUBLIC_URL}/logo.png`;
+
 // ===== MAIN PAGE =====
 
 const LandingPage: React.FC = () => {
@@ -358,7 +360,7 @@ const LandingPage: React.FC = () => {
                       bgGradient="linear(to-br, brand.400, nebula.500)"
                       boxShadow="0 20px 50px rgba(121, 95, 238, 0.4)"
                     >
-                      <Image src="/logo.png" h={40} w={40} objectFit="contain" filter="brightness(1.1) drop-shadow(0 10px 20px rgba(0,0,0,0.3))" />
+                      <Image src={logoSrc} h={40} w={40} objectFit="contain" filter="brightness(1.1) drop-shadow(0 10px 20px rgba(0,0,0,0.3))" />
                     </Box>
                   </MotionBox>
                 </Box>
@@ -654,7 +656,7 @@ const LandingPage: React.FC = () => {
                 bgGradient="linear(to-br, brand.400, nebula.500)"
                 boxShadow="0 4px 15px rgba(121, 95, 238, 0.3)"
               >
-                <Image src="/logo.png" h={8} w={8} objectFit="contain" filter="brightness(1.1)" />
+                <Image src={logoSrc} h={8} w={8} objectFit="contain" filter="brightness(1.1)" />
               </Box>
               <VStack align="start" spacing={0}>
                 <Text fontWeight="900" fontSize="lg" letterSpacing="-0.02em" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">

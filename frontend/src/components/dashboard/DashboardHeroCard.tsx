@@ -30,6 +30,8 @@ interface DashboardHeroCardProps {
 const DEFAULT_DESCRIPTION =
   'Monitor document ingestion, inspect OCR output, and orchestrate conversions in real time.';
 
+const logoSrc = `${process.env.PUBLIC_URL}/logo.png`;
+
 export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
   statusDotColor,
   statusTextColor,
@@ -80,7 +82,7 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
               flexShrink={0}
             >
               <Image 
-                src="/logo.png" 
+                src={logoSrc} 
                 alt="Logo" 
                 h={9} 
                 w={9} 

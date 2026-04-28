@@ -51,6 +51,8 @@ const navItems = [
   { path: '/phone', icon: FiSmartphone, label: 'Phone Capture', badge: null },
 ];
 
+const logoSrc = `${process.env.PUBLIC_URL}/logo.png`;
+
 function TopBar() {
   const { colorMode, toggleColorMode } = useColorMode();
   const location = useLocation();
@@ -90,7 +92,7 @@ function TopBar() {
               justifyContent="center"
             >
               <Image 
-                src="/logo.png" 
+                src={logoSrc} 
                 alt="PrintChakra Logo" 
                 h={8} 
                 w={8} 
