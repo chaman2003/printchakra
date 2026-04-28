@@ -295,33 +295,18 @@ const useImageWithHeaders = (imageUrl: string, refreshToken?: number) => {
 interface SecureImageProps {
   filename: string;
   alt: string;
+  folder?: string;
   className?: string;
   onClick?: () => void;
   style?: React.CSSProperties;
   refreshToken?: number;
 }
 
-const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onClick, style, refreshToken }) => {
-  // Try /processed first, fallback to /thumbnail
-  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
+const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, folder, className, onClick, style, refreshToken }) => {
+  // Strict pipeline-only preview: processed output or unavailable.
+  const folderQuery = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}${folderQuery}`;
   const { blobUrl, loading, error } = useImageWithHeaders(imageUrl, refreshToken);
-  const [thumbnailError, setThumbnailError] = useState(false);
-  const [thumbnailLoaded, setThumbnailLoaded] = useState(false);
-
-  // Build thumbnail URL with headers bypass for ngrok
-  const thumbnailUrl = useMemo(() => {
-    const base = `${API_BASE_URL}/document/thumbnails/${filename}`;
-    const params = new URLSearchParams();
-    params.set('_t', Date.now().toString());
-    if (refreshToken) params.set('_r', refreshToken.toString());
-    return `${base}?${params.toString()}`;
-  }, [filename, refreshToken]);
-
-  // Reset thumbnail states when filename or refreshToken changes
-  useEffect(() => {
-    setThumbnailError(false);
-    setThumbnailLoaded(false);
-  }, [filename, refreshToken]);
 
   if (loading) {
     return (
@@ -343,7 +328,7 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
     );
   }
 
-  // If primary image loaded successfully, show it
+  // If processed image loaded successfully, show it
   if (blobUrl && !error) {
     return (
       <Box
@@ -362,65 +347,25 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
     );
   }
 
-  // Fallback: try thumbnail endpoint
-  if (thumbnailError) {
-    // Both failed - show placeholder
-    return (
-      <Flex
-        direction="column"
-        align="center"
-        justify="center"
-        className={className}
-        style={style}
-        minH="160px"
-        bg="rgba(0,0,0,0.2)"
-        borderRadius="lg"
-        onClick={onClick}
-        cursor={onClick ? 'pointer' : 'default'}
-      >
-        <Iconify icon={FiFileText} boxSize={8} color="text.muted" />
-        <Text mt={2} fontSize="xs" color="text.muted">
-          Preview unavailable
-        </Text>
-      </Flex>
-    );
-  }
-
-  // Try loading thumbnail
+  // No fallback: show unavailable when processed artifact is missing.
   return (
-    <Box position="relative" w="100%" h="100%">
-      {!thumbnailLoaded && (
-        <Flex
-          position="absolute"
-          inset={0}
-          direction="column"
-          align="center"
-          justify="center"
-          bg="surface.blur"
-          borderRadius="lg"
-          zIndex={1}
-        >
-          <Spinner size="md" color="brand.400" />
-        </Flex>
-      )}
-      <Box
-        as="img"
-        src={thumbnailUrl}
-        alt={alt}
-        className={className}
-        onClick={onClick}
-        style={style}
-        cursor={onClick ? 'pointer' : 'default'}
-        objectFit="cover"
-        w="100%"
-        h="100%"
-        borderRadius="lg"
-        opacity={thumbnailLoaded ? 1 : 0}
-        transition="opacity 0.2s"
-        onLoad={() => setThumbnailLoaded(true)}
-        onError={() => setThumbnailError(true)}
-      />
-    </Box>
+    <Flex
+      direction="column"
+      align="center"
+      justify="center"
+      className={className}
+      style={style}
+      minH="160px"
+      bg="rgba(0,0,0,0.2)"
+      borderRadius="lg"
+      onClick={onClick}
+      cursor={onClick ? 'pointer' : 'default'}
+    >
+      <Iconify icon={FiFileText} boxSize={8} color="text.muted" />
+      <Text mt={2} fontSize="xs" color="text.muted">
+        Processed preview unavailable
+      </Text>
+    </Flex>
   );
 };
 
@@ -428,11 +373,13 @@ const SecureImage: React.FC<SecureImageProps> = ({ filename, alt, className, onC
 interface ModalImageWithHeadersProps {
   filename: string;
   alt: string;
+  folder?: string;
   refreshToken?: number;
 }
 
-const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename, alt, refreshToken }) => {
-  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}`;
+const ModalImageWithHeaders: React.FC<ModalImageWithHeadersProps> = ({ filename, alt, folder, refreshToken }) => {
+  const folderQuery = folder ? `?folder=${encodeURIComponent(folder)}` : '';
+  const imageUrl = `${API_BASE_URL}${API_ENDPOINTS.processed}/${filename}${folderQuery}`;
   const { blobUrl, loading, error } = useImageWithHeaders(imageUrl, refreshToken);
 
   if (loading) {
@@ -4873,6 +4820,7 @@ const Dashboard: React.FC = () => {
                                 <SecureImage
                                   filename={file.filename}
                                   alt={file.filename}
+                                  folder={activeFolder || undefined}
                                   onClick={() => !file.processing && openImageModal(file.filename)}
                                   refreshToken={refreshToken}
                                 />
@@ -5074,6 +5022,7 @@ const Dashboard: React.FC = () => {
                   <ModalImageWithHeaders
                     filename={selectedImageFile}
                     alt={selectedImageFile}
+                    folder={activeFolder || undefined}
                     refreshToken={refreshToken}
                   />
                 )}

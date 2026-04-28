@@ -47,6 +47,7 @@ def get_thumbnail(doc_id):
         filename = secure_filename(doc_id)
         dirs = get_data_dirs()
         thumbnail_dir = os.path.join(dirs["DATA_DIR"], "thumbnails")
+        folder = request.args.get("folder", "").strip() or None
         
         # Get thumbnail size from query params
         size = request.args.get("size", 200, type=int)
@@ -55,31 +56,29 @@ def get_thumbnail(doc_id):
         # Check if thumbnail exists
         thumb_filename = f"{os.path.splitext(filename)[0]}_{size}.jpg"
         thumb_path = os.path.join(thumbnail_dir, thumb_filename)
-        
-        if os.path.exists(thumb_path):
-            _debug_log(
-                "run1",
-                "H2",
-                "backend/app/features/document/routes/thumbnails.py:get_thumbnail:cache_hit",
-                "thumbnail_cache_hit",
-                {"filename": filename, "thumb_path": thumb_path},
-            )
-            return send_file(thumb_path, mimetype="image/jpeg")
-        
-        # Find source document
-        source_path = next(
-            (
-                path
-                for path in [
-                    os.path.join(dirs["UPLOAD_DIR"], filename),
-                    os.path.join(dirs["PDF_DIR"], filename),
-                    os.path.join(dirs["PROCESSED_DIR"], filename),
-                    os.path.join(dirs["CONVERTED_DIR"], filename),
-                ]
-                if os.path.exists(path)
-            ),
-            None,
+
+        # Strict pipeline-only source: processed outputs only.
+        source_candidates = []
+        if folder:
+            safe_folder = secure_filename(folder)
+            if safe_folder:
+                source_candidates.append(os.path.join(dirs["PROCESSED_DIR"], safe_folder, filename))
+        source_candidates.extend(
+            [
+                os.path.join(dirs["PROCESSED_DIR"], filename),
+            ]
         )
+
+        source_path = next((path for path in source_candidates if os.path.exists(path)), None)
+        if not source_path and os.path.isdir(dirs["PROCESSED_DIR"]):
+            for entry in os.listdir(dirs["PROCESSED_DIR"]):
+                subdir = os.path.join(dirs["PROCESSED_DIR"], entry)
+                if not os.path.isdir(subdir):
+                    continue
+                nested = os.path.join(subdir, filename)
+                if os.path.exists(nested):
+                    source_path = nested
+                    break
         
         if not source_path:
             _debug_log(
@@ -91,15 +90,18 @@ def get_thumbnail(doc_id):
             )
             return jsonify({"success": False, "error": "Document not found"}), 404
 
-        source_bucket = "unknown"
-        if dirs["UPLOAD_DIR"] in source_path:
-            source_bucket = "uploads"
-        elif dirs["PROCESSED_DIR"] in source_path:
-            source_bucket = "processed"
-        elif dirs["PDF_DIR"] in source_path:
-            source_bucket = "pdfs"
-        elif dirs["CONVERTED_DIR"] in source_path:
-            source_bucket = "converted"
+        # Return cached thumbnail only if it is at least as new as source.
+        if os.path.exists(thumb_path) and os.path.getmtime(thumb_path) >= os.path.getmtime(source_path):
+            _debug_log(
+                "run1",
+                "H2",
+                "backend/app/features/document/routes/thumbnails.py:get_thumbnail:cache_hit",
+                "thumbnail_cache_hit",
+                {"filename": filename, "thumb_path": thumb_path, "source_path": source_path},
+            )
+            return send_file(thumb_path, mimetype="image/jpeg")
+
+        source_bucket = "processed"
         _debug_log(
             "run1",
             "H2",
@@ -174,15 +176,12 @@ def generate_batch_thumbnails():
                     "thumbnail": thumb_filename
                 })
             else:
-                # Find and generate thumbnail
+                # Strict pipeline-only source for batch thumbnails.
                 source_path = next(
                     (
                         path
                         for path in [
-                            os.path.join(dirs["UPLOAD_DIR"], filename),
-                            os.path.join(dirs["PDF_DIR"], filename),
                             os.path.join(dirs["PROCESSED_DIR"], filename),
-                            os.path.join(dirs["CONVERTED_DIR"], filename),
                         ]
                         if os.path.exists(path)
                     ),

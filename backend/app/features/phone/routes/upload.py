@@ -1,159 +1,23 @@
-"""
-PrintChakra Backend - Phone Upload Routes
+"""Phone upload routes wired to standalone phone->dashboard flow."""
 
-File upload endpoints from phone.
-"""
-
-import os
 import logging
-import shutil
-import threading
-import json
-import time
-from datetime import datetime
+import os
+
 from flask import jsonify, request
 from werkzeug.utils import secure_filename
-from app.features.phone.routes import phone_bp
-from app.core.middleware.cors import create_options_response
+
 from app.core.config import get_data_dirs
-from app.core import socketio
+from app.core.middleware.cors import create_options_response
+from app.features.phone.routes import phone_bp
+from app.features.phone.upload.phone_to_dashboard_flow import (
+    ALLOWED_EXTENSIONS,
+    MAX_FILE_SIZE,
+    PhoneToDashboardFlow,
+    allowed_file,
+    parse_enhancement_params,
+)
 
 logger = logging.getLogger(__name__)
-
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "pdf", "doc", "docx", "txt"}
-IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "bmp", "tiff", "webp"}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-DEBUG_LOG_PATH = "C:/Users/chama/OneDrive/Desktop/printchakra-new/debug-68db5a.log"
-
-
-def allowed_file(filename):
-    """Check if file extension is allowed."""
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-
-def _emit_progress_with_filename(filename, progress_data):
-    """Emit processing progress and always include filename."""
-    payload = {
-        "filename": filename,
-        **progress_data,
-    }
-    socketio.emit("processing_progress", payload)
-
-
-def _debug_log(run_id, hypothesis_id, location, message, data):
-    # region agent log
-    try:
-        payload = {
-            "sessionId": "68db5a",
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(time.time() * 1000),
-        }
-        with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=True) + "\n")
-    except Exception:
-        pass
-    # endregion
-
-
-def _run_pipeline_async(
-    filename,
-    upload_path,
-    processed_path,
-    text_path,
-    enhancement_params,
-):
-    """Run 12-step processing pipeline + OCR in background and emit live events."""
-    try:
-        _debug_log(
-            "run1",
-            "H3",
-            "backend/app/features/phone/routes/upload.py:_run_pipeline_async:start",
-            "pipeline_start",
-            {"filename": filename, "upload_path": upload_path, "processed_path": processed_path},
-        )
-        from app.modules.pipeline.enhanced import EnhancedDocumentPipeline
-
-        pipeline = EnhancedDocumentPipeline(
-            storage_dir=os.path.dirname(processed_path),
-            emit_callback=lambda data: _emit_progress_with_filename(filename, data),
-        )
-
-        success, extracted_text, stats = pipeline.process_complete_pipeline(
-            input_path=upload_path,
-            output_path=processed_path,
-            enhancement_params=enhancement_params,
-        )
-
-        if not success:
-            error_msg = extracted_text or "Pipeline failed"
-            _debug_log(
-                "run1",
-                "H3",
-                "backend/app/features/phone/routes/upload.py:_run_pipeline_async:failure",
-                "pipeline_failed",
-                {"filename": filename, "error": error_msg},
-            )
-            socketio.emit("processing_error", {"filename": filename, "error": error_msg})
-            logger.error(f"Pipeline failed for {filename}: {error_msg}")
-            return
-
-        has_text = bool(extracted_text and extracted_text.strip())
-        if has_text:
-            os.makedirs(os.path.dirname(text_path), exist_ok=True)
-            with open(text_path, "w", encoding="utf-8") as f:
-                f.write(extracted_text)
-
-        ocr_result = stats.get("ocr_result")
-        if isinstance(ocr_result, dict):
-            dirs = get_data_dirs()
-            os.makedirs(dirs["OCR_DATA_DIR"], exist_ok=True)
-            ocr_json_path = os.path.join(
-                dirs["OCR_DATA_DIR"],
-                f"{os.path.splitext(filename)[0]}_ocr.json",
-            )
-            with open(ocr_json_path, "w", encoding="utf-8") as f:
-                json.dump(ocr_result, f, ensure_ascii=True, indent=2)
-
-        socketio.emit(
-            "processing_complete",
-            {
-                "filename": filename,
-                "has_text": has_text,
-                "source": "phone",
-                "pipeline": "enhanced_12_step",
-                "stats": {
-                    "total_steps": stats.get("total_steps", 12),
-                    "success": stats.get("success", True),
-                    "ocr_engine": (ocr_result or {}).get("engine"),
-                },
-            },
-        )
-
-        processed_exists = os.path.isfile(processed_path)
-        processed_size = os.path.getsize(processed_path) if processed_exists else 0
-        step7 = (stats or {}).get("steps", {}).get("step_7", {})
-        _debug_log(
-            "run1",
-            "H3",
-            "backend/app/features/phone/routes/upload.py:_run_pipeline_async:complete",
-            "pipeline_complete_emitted",
-            {
-                "filename": filename,
-                "processed_exists": processed_exists,
-                "processed_size": processed_size,
-                "step7": step7,
-            },
-        )
-
-        logger.info(f"[OK] 12-step processing complete for {filename} (has_text={has_text})")
-
-    except Exception as e:
-        logger.error(f"Background pipeline error for {filename}: {e}")
-        socketio.emit("processing_error", {"filename": filename, "error": str(e)})
 
 
 @phone_bp.route("/upload", methods=["POST", "OPTIONS"])
@@ -181,94 +45,24 @@ def upload_file():
         if content_length > MAX_FILE_SIZE:
             return jsonify({"success": False, "error": "File too large (max 50MB)"}), 413
         
-        # Secure the filename
-        filename = secure_filename(file.filename)
-        ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
-        
-        dirs = get_data_dirs()
-        upload_folder = dirs["UPLOAD_DIR"]
-        processed_folder = dirs["PROCESSED_DIR"]
+        flow = PhoneToDashboardFlow(source="phone")
+        artifact = flow.store_upload(file)
+        flow.emit_new_file(artifact, processing=True)
+        processing_mode = flow.start_processing(artifact, parse_enhancement_params(request.form))
 
-        # Ensure folders exist
-        os.makedirs(upload_folder, exist_ok=True)
-        os.makedirs(processed_folder, exist_ok=True)
-        
-        # Generate unique filename
-        import uuid
-        unique_filename = f"{uuid.uuid4().hex}_{filename}"
-        filepath = os.path.join(upload_folder, unique_filename)
-        processed_path = os.path.join(processed_folder, unique_filename)
-        text_path = os.path.join(dirs["TEXT_DIR"], f"{os.path.splitext(unique_filename)[0]}.txt")
-        
-        # Save file
-        file.save(filepath)
-        file_size = os.path.getsize(filepath)
-
-        # Notify dashboard immediately that a new file started processing.
-        socketio.emit("new_file", {
-            "filename": unique_filename,
-            "timestamp": datetime.now().isoformat(),
-            "processing": True,
-            "source": "phone"
-        })
-
-        if ext in IMAGE_EXTENSIONS:
-            _emit_progress_with_filename(
-                unique_filename,
-                {
-                    "step": 0,
-                    "total_steps": 12,
-                    "stage_name": "Queued",
-                    "message": "Starting 12-step processing",
-                },
-            )
-
-            enhancement_params = {
-                "brightness_boost": int(request.form.get("brightness_boost", 25)),
-                "equalization_strength": float(request.form.get("equalization_strength", 0.4)),
-                "clahe_clip_limit": float(request.form.get("clahe_clip_limit", 2.0)),
-                "clahe_tile_size": int(request.form.get("clahe_tile_size", 8)),
+        logger.info("[OK] File uploaded: %s (%s bytes)", artifact.filename, artifact.size)
+        return jsonify(
+            {
+                "success": True,
+                "filename": artifact.filename,
+                "original_name": artifact.original_name,
+                "size": artifact.size,
+                "path": artifact.upload_path,
+                "processed_path": artifact.processed_path,
+                "processing": True,
+                "pipeline": processing_mode,
             }
-
-            thread = threading.Thread(
-                target=_run_pipeline_async,
-                args=(
-                    unique_filename,
-                    filepath,
-                    processed_path,
-                    text_path,
-                    enhancement_params,
-                ),
-                daemon=True,
-            )
-            thread.start()
-            processing_mode = "enhanced_12_step"
-        else:
-            # Non-image files are copied directly so they still appear in dashboard.
-            shutil.copy2(filepath, processed_path)
-            socketio.emit(
-                "processing_complete",
-                {
-                    "filename": unique_filename,
-                    "has_text": False,
-                    "source": "phone",
-                    "pipeline": "direct_copy",
-                },
-            )
-            processing_mode = "direct_copy"
-        
-        logger.info(f"[OK] File uploaded: {unique_filename} ({file_size} bytes)")
-        
-        return jsonify({
-            "success": True,
-            "filename": unique_filename,
-            "original_name": filename,
-            "size": file_size,
-            "path": filepath,
-            "processed_path": processed_path,
-            "processing": True,
-            "pipeline": processing_mode
-        })
+        )
     
     except Exception as e:
         logger.error(f"Upload error: {e}")
@@ -292,15 +86,7 @@ def upload_multiple_files():
         
         uploaded = []
         errors = []
-        
-        dirs = get_data_dirs()
-        upload_folder = dirs["UPLOAD_DIR"]
-        processed_folder = dirs["PROCESSED_DIR"]
-
-        os.makedirs(upload_folder, exist_ok=True)
-        os.makedirs(processed_folder, exist_ok=True)
-        
-        import uuid
+        flow = PhoneToDashboardFlow(source="phone")
         
         for file in files:
             if file.filename == "":
@@ -314,59 +100,17 @@ def upload_multiple_files():
                 continue
             
             try:
-                filename = secure_filename(file.filename)
-                ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
-                unique_filename = f"{uuid.uuid4().hex}_{filename}"
-                filepath = os.path.join(upload_folder, unique_filename)
-                
-                file.save(filepath)
-                file_size = os.path.getsize(filepath)
-
-                processed_path = os.path.join(processed_folder, unique_filename)
-                text_path = os.path.join(dirs["TEXT_DIR"], f"{os.path.splitext(unique_filename)[0]}.txt")
-
-                socketio.emit("new_file", {
-                    "filename": unique_filename,
-                    "processing": ext in IMAGE_EXTENSIONS,
-                    "source": "phone"
-                })
-
-                if ext in IMAGE_EXTENSIONS:
-                    _emit_progress_with_filename(
-                        unique_filename,
-                        {
-                            "step": 0,
-                            "total_steps": 12,
-                            "stage_name": "Queued",
-                            "message": "Starting 12-step processing",
-                        },
-                    )
-                    thread = threading.Thread(
-                        target=_run_pipeline_async,
-                        args=(
-                            unique_filename,
-                            filepath,
-                            processed_path,
-                            text_path,
-                            {},
-                        ),
-                        daemon=True,
-                    )
-                    thread.start()
-                else:
-                    shutil.copy2(filepath, processed_path)
-                    socketio.emit("processing_complete", {
-                        "filename": unique_filename,
-                        "has_text": False,
-                        "source": "phone"
-                    })
-                
-                uploaded.append({
-                    "filename": unique_filename,
-                    "original_name": filename,
-                    "size": file_size,
-                    "processing": ext in IMAGE_EXTENSIONS,
-                })
+                artifact = flow.store_upload(file)
+                flow.emit_new_file(artifact, processing=True)
+                flow.start_processing(artifact, {})
+                uploaded.append(
+                    {
+                        "filename": artifact.filename,
+                        "original_name": artifact.original_name,
+                        "size": artifact.size,
+                        "processing": artifact.is_image,
+                    }
+                )
             
             except Exception as e:
                 errors.append({

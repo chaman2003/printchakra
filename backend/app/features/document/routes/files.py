@@ -147,28 +147,54 @@ def serve_processed_file(filename):
         return jsonify({"error": "Invalid filename"}), 400
 
     dirs = get_data_dirs()
-    processed_dir = dirs['PROCESSED_DIR']
-    file_path = os.path.join(processed_dir, filename)
+    processed_dir = dirs["PROCESSED_DIR"]
+    folder = request.args.get("folder", "").strip() or None
 
-    if not os.path.isfile(file_path):
+    # Prefer explicit folder when provided, then root, then one-level subfolders.
+    candidate_paths = []
+    if folder:
+        safe_folder = secure_filename(folder)
+        if safe_folder:
+            candidate_paths.append(os.path.join(processed_dir, safe_folder, filename))
+    candidate_paths.append(os.path.join(processed_dir, filename))
+
+    selected_path = next((path for path in candidate_paths if os.path.isfile(path)), None)
+    if not selected_path and os.path.isdir(processed_dir):
+        for entry in os.listdir(processed_dir):
+            subdir = os.path.join(processed_dir, entry)
+            if not os.path.isdir(subdir):
+                continue
+            nested = os.path.join(subdir, filename)
+            if os.path.isfile(nested):
+                selected_path = nested
+                break
+
+    if not selected_path:
         _debug_log(
             "run1",
             "H1",
             "backend/app/features/document/routes/files.py:serve_processed_file:not_found",
             "processed_file_missing",
-            {"filename": filename, "file_path": file_path},
+            {"filename": filename, "folder": folder, "searched_paths": candidate_paths},
         )
-        logger.warning(f"Processed file not found: {file_path}")
+        logger.warning(f"Processed file not found: {filename} (folder={folder})")
         return jsonify({"error": "File not found"}), 404
 
+    selected_dir = os.path.dirname(selected_path)
+    selected_name = os.path.basename(selected_path)
     _debug_log(
         "run1",
         "H1",
         "backend/app/features/document/routes/files.py:serve_processed_file:served",
         "processed_file_served",
-        {"filename": filename, "file_path": file_path, "file_size": os.path.getsize(file_path)},
+        {
+            "filename": filename,
+            "folder": folder,
+            "file_path": selected_path,
+            "file_size": os.path.getsize(selected_path),
+        },
     )
-    response = send_from_directory(processed_dir, filename)
+    response = send_from_directory(selected_dir, selected_name)
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Cache-Control"] = "public, max-age=3600"
     return response
