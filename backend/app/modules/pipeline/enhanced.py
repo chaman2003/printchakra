@@ -348,12 +348,17 @@ class EnhancedDocumentPipeline:
         margin_y = h * margin_ratio
         xs = quad[:, 0]
         ys = quad[:, 1]
-        return (
-            np.min(xs) <= margin_x
-            or np.max(xs) >= (w - margin_x)
-            or np.min(ys) <= margin_y
-            or np.max(ys) >= (h - margin_y)
-        )
+        touches = 0
+        if np.min(xs) <= margin_x:
+            touches += 1
+        if np.max(xs) >= (w - margin_x):
+            touches += 1
+        if np.min(ys) <= margin_y:
+            touches += 1
+        if np.max(ys) >= (h - margin_y):
+            touches += 1
+        # One/two-side proximity can still be valid for handheld captures.
+        return touches >= 3
 
     def _tight_crop_edge_region(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, bool]:
         """
@@ -386,7 +391,7 @@ class EnhancedDocumentPipeline:
         best_score = 0.0
         for contour in contours:
             area = float(cv2.contourArea(contour))
-            if area < img_area * 0.18:
+            if area < img_area * 0.12:
                 continue
 
             rect = cv2.minAreaRect(contour)
@@ -398,7 +403,7 @@ class EnhancedDocumentPipeline:
             if not self._is_reasonable_document_quad(
                 quad,
                 (h, w),
-                min_area_ratio=0.20,
+                min_area_ratio=0.12,
                 max_area_ratio=0.98,
             ):
                 continue
@@ -424,6 +429,80 @@ class EnhancedDocumentPipeline:
             return image_bgr, False
 
         return warped, True
+
+    def _find_foreground_quad_from_border_bg(self, image_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], float]:
+        """
+        Fallback: estimate background color from image border and segment foreground object.
+        Useful for desk/table captures where document differs from border region.
+        """
+        if image_bgr is None or image_bgr.size == 0:
+            return None, 0.0
+
+        h, w = image_bgr.shape[:2]
+        if h < 40 or w < 40:
+            return None, 0.0
+
+        border = max(8, int(min(h, w) * 0.06))
+        top = image_bgr[:border, :, :]
+        bottom = image_bgr[h - border :, :, :]
+        left = image_bgr[:, :border, :]
+        right = image_bgr[:, w - border :, :]
+        border_pixels = np.concatenate(
+            [
+                top.reshape(-1, 3),
+                bottom.reshape(-1, 3),
+                left.reshape(-1, 3),
+                right.reshape(-1, 3),
+            ],
+            axis=0,
+        )
+        bg_color = np.median(border_pixels, axis=0).astype(np.float32)
+
+        diff = np.linalg.norm(image_bgr.astype(np.float32) - bg_color, axis=2)
+        diff_u8 = np.clip(diff, 0, 255).astype(np.uint8)
+        _, mask = cv2.threshold(diff_u8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Make mask robust and fill small gaps.
+        k = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, k, iterations=1)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k, iterations=2)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None, 0.0
+
+        img_area = float(h * w)
+        best_quad = None
+        best_score = 0.0
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < img_area * 0.07:
+                continue
+
+            rect = cv2.minAreaRect(contour)
+            rw, rh = rect[1]
+            if rw <= 1 or rh <= 1:
+                continue
+
+            quad = cv2.boxPoints(rect).astype(np.float32)
+            if self._quad_touches_border(quad, (h, w), margin_ratio=0.015):
+                continue
+            if not self._is_reasonable_document_quad(
+                quad,
+                (h, w),
+                min_area_ratio=0.08,
+                max_area_ratio=0.95,
+            ):
+                continue
+
+            area_ratio = area / img_area
+            aspect = max(rw / max(rh, 1e-6), rh / max(rw, 1e-6))
+            score = (area_ratio * 1.15) - ((aspect - 1.0) * 0.10)
+            if score > best_score:
+                best_score = score
+                best_quad = quad
+
+        return best_quad, float(max(best_score, 0.0))
 
     def _simple_document_crop(self, image_bgr: np.ndarray) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
@@ -524,6 +603,14 @@ class EnhancedDocumentPipeline:
                 best_quad = bright_quad * detect_scale
                 best_score = min(1.0, max(0.0, bright_score))
                 info["method"] = "brightness_segmentation"
+
+        # Background-subtraction fallback for desk/table style scenes.
+        if best_quad is None:
+            bg_quad, bg_score = self._find_foreground_quad_from_border_bg(image_bgr)
+            if bg_quad is not None:
+                best_quad = bg_quad * detect_scale
+                best_score = min(1.0, max(0.0, bg_score))
+                info["method"] = "border_bg_subtraction"
 
         if best_quad is None or best_score < 0.42:
             return image_bgr, info
