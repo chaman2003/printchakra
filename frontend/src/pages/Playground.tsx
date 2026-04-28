@@ -11,7 +11,7 @@ import { FiFileText, FiImage, FiRefreshCw, FiDownload, FiTrash2, FiZoomIn, FiLay
 import apiClient from '../apiClient';
 import { API_BASE_URL, API_ENDPOINTS, getImageUrl } from '../config';
 import { FileInfo, OCRResult } from '../types';
-import { runOCR, getOCRResult } from '../ocrApi';
+import { runOCR } from '../ocrApi';
 import PageShell from '../components/layout/PageShell';
 import { Iconify } from '../components/common';
 
@@ -104,22 +104,59 @@ const Playground: React.FC = () => {
     if (selectedFiles.length === 0) return;
     setConverting(true);
     try {
-      const payload: any = {
-        files: selectedFiles,
-        format: targetFormat,
-      };
-      if (targetFormat === 'pdf' && mergePdf) {
-        payload.merge_pdf = true;
-        if (customFilename.trim()) payload.filename = customFilename.trim();
-      }
-      const res = await apiClient.post(API_ENDPOINTS.convert, payload);
-      if (res.data?.success) {
-        toast({ title: 'Conversion complete', status: 'success', duration: 3000 });
-        loadConvertedFiles();
-        setSelectedFiles([]);
+      let successCount = 0;
+      let failCount = 0;
+
+      if (targetFormat === 'pdf' && mergePdf && selectedFiles.length > 1) {
+        const outputName = customFilename.trim() || 'combined.pdf';
+        const res = await apiClient.post('/document/convert/images-to-pdf', {
+          images: selectedFiles,
+          output_name: outputName,
+        });
+        if (res.data?.success) {
+          successCount = selectedFiles.length;
+        } else {
+          failCount = selectedFiles.length;
+        }
       } else {
-        toast({ title: 'Conversion failed', description: res.data?.error, status: 'error', duration: 4000 });
+        for (const file of selectedFiles) {
+          try {
+            const res = await apiClient.post(API_ENDPOINTS.convert, {
+              document_id: file,
+              format: targetFormat,
+            });
+            if (res.data?.success) {
+              successCount += 1;
+            } else {
+              failCount += 1;
+            }
+          } catch {
+            failCount += 1;
+          }
+        }
       }
+
+      if (successCount > 0) {
+        toast({
+          title: 'Conversion complete',
+          description:
+            failCount > 0
+              ? `${successCount} converted, ${failCount} failed`
+              : `${successCount} converted successfully`,
+          status: failCount > 0 ? 'warning' : 'success',
+          duration: 3500,
+        });
+      } else {
+        toast({
+          title: 'Conversion failed',
+          description: 'Could not convert selected files',
+          status: 'error',
+          duration: 4000,
+        });
+      }
+
+      loadConvertedFiles();
+      setSelectedFiles([]);
     } catch (e: any) {
       toast({ title: 'Conversion error', description: e.message, status: 'error', duration: 4000 });
     } finally {
@@ -169,6 +206,8 @@ const Playground: React.FC = () => {
     const ext = f.filename.split('.').pop()?.toLowerCase();
     return ['jpg', 'jpeg', 'png', 'bmp', 'gif', 'webp', 'tiff'].includes(ext || '');
   });
+  const pdfFiles = files.filter(f => f.filename.toLowerCase().endsWith('.pdf'));
+  const conversionCandidates = targetFormat === 'pdf' ? imageFiles : pdfFiles;
 
   return (
     <PageShell>
@@ -188,7 +227,7 @@ const Playground: React.FC = () => {
           </HStack>
         </HStack>
 
-        <Tabs variant="enclosed" colorScheme="purple">
+        <Tabs variant="enclosed" colorScheme="brand">
           <TabList>
             <Tab><HStack><Iconify icon={FiLayers} boxSize={4} /><Text>Convert</Text></HStack></Tab>
             <Tab><HStack><Iconify icon={FiFileText} boxSize={4} /><Text>OCR</Text></HStack></Tab>
@@ -226,19 +265,19 @@ const Playground: React.FC = () => {
                       </HStack>
                       <HStack>
                         <Button
-                          size="sm" colorScheme="purple" onClick={handleConvert}
+                          size="sm" colorScheme="brand" onClick={handleConvert}
                           isLoading={converting} isDisabled={selectedFiles.length === 0}
                         >
                           Convert {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ''}
                         </Button>
-                        {selectedFiles.length > 0 && (
-                          <Button size="sm" variant="ghost" onClick={() => setSelectedFiles([])}>
-                            Clear Selection
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" onClick={() => setSelectedFiles(imageFiles.map(f => f.filename))}>
+                        <Button size="sm" variant="outline" onClick={() => setSelectedFiles(conversionCandidates.map(f => f.filename))}>
                           Select All
                         </Button>
+                        {selectedFiles.length > 0 && (
+                          <Button size="sm" variant="ghost" onClick={() => setSelectedFiles([])}>
+                            Deselect
+                          </Button>
+                        )}
                       </HStack>
                     </VStack>
                   </CardBody>
@@ -247,7 +286,7 @@ const Playground: React.FC = () => {
                 {/* File selection grid */}
                 <Text fontWeight="600" fontSize="sm">Select files to convert:</Text>
                 <SimpleGrid columns={{ base: 2, md: 3, lg: 4, xl: 5 }} spacing={3}>
-                  {imageFiles.map(file => {
+                  {conversionCandidates.map(file => {
                     const isSelected = selectedFiles.includes(file.filename);
                     return (
                       <MotionCard
@@ -276,7 +315,7 @@ const Playground: React.FC = () => {
                           <Text fontSize="xs" noOfLines={1} title={file.filename}>
                             {file.filename}
                           </Text>
-                          {isSelected && <Badge colorScheme="purple" size="sm" mt={1}>Selected</Badge>}
+                          {isSelected && <Badge colorScheme="brand" size="sm" mt={1}>Selected</Badge>}
                         </CardBody>
                       </MotionCard>
                     );
@@ -301,7 +340,7 @@ const Playground: React.FC = () => {
                                 <Tooltip label="Download">
                                   <IconButton
                                     aria-label="Download" icon={<Iconify icon={FiDownload} boxSize={3} />} size="xs" variant="ghost"
-                                    onClick={() => window.open(`${API_BASE_URL}${API_ENDPOINTS.converted}/${filename}`, '_blank')}
+                                    onClick={() => window.open(`${API_BASE_URL}/document/files/${filename}/download`, '_blank')}
                                   />
                                 </Tooltip>
                                 <Tooltip label="Delete">
@@ -328,7 +367,7 @@ const Playground: React.FC = () => {
                   <CardBody>
                     <HStack>
                       <Button
-                        size="sm" colorScheme="purple" onClick={handleBatchOCR}
+                        size="sm" colorScheme="brand" onClick={handleBatchOCR}
                         isDisabled={selectedFiles.length === 0}
                       >
                         Run OCR on Selected ({selectedFiles.length})
@@ -413,7 +452,7 @@ const Playground: React.FC = () => {
                       </Text>
                       <HStack>
                         <Button
-                          size="sm" colorScheme="purple"
+                          size="sm" colorScheme="brand"
                           isDisabled={selectedFiles.length === 0}
                           onClick={async () => {
                             toast({ title: `Processing ${selectedFiles.length} files...`, status: 'info', duration: 2000 });
@@ -462,7 +501,7 @@ const Playground: React.FC = () => {
                             />
                           </Box>
                           <Text fontSize="xs" noOfLines={1}>{file.filename}</Text>
-                          {isSelected && <Badge colorScheme="purple" size="sm" mt={1}>✓</Badge>}
+                          {isSelected && <Badge colorScheme="brand" size="sm" mt={1}>✓</Badge>}
                         </CardBody>
                       </Card>
                     );

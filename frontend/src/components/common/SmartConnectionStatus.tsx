@@ -80,8 +80,11 @@ const SmartConnectionStatus = forwardRef<SmartConnectionStatusHandle, SmartConne
   const [checkProgress, setCheckProgress] = useState(0);
   const [alreadyCheckedThisSession, setAlreadyCheckedThisSession] = useState(false);
 
-  const bgCard = useColorModeValue('rgba(255, 248, 240, 0.95)', 'rgba(12, 16, 35, 0.92)');
-  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.08)');
+  const bgCard = useColorModeValue(
+    'rgba(255, 255, 255, 0.7)',
+    'rgba(15, 20, 35, 0.7)'
+  );
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.15)', 'rgba(69, 202, 255, 0.15)');
   const isMinimal = variant === 'minimal';
 
   // Load saved session result on mount
@@ -457,12 +460,35 @@ const ConnectionCheckItem: React.FC<{
 }> = ({ label, icon, status, details }) => {
   const statusColor = status === 'connected' ? 'green.400' : status === 'failed' ? 'red.400' : 'yellow.400';
   const statusBg = status === 'connected' ? 'green' : status === 'failed' ? 'red' : status === 'checking' ? 'yellow' : 'gray';
+  
+  const itemBg = useColorModeValue('rgba(121, 95, 238, 0.04)', 'rgba(255, 255, 255, 0.03)');
+  const itemBorder = useColorModeValue('rgba(121, 95, 238, 0.08)', 'rgba(255, 255, 255, 0.05)');
 
   return (
-    <HStack spacing={2} p={1.5} borderRadius="md" bg="rgba(0,0,0,0.1)" w="full">
-      <Box position="relative" w="6" h="6" display="flex" alignItems="center" justifyContent="center">
+    <HStack 
+      spacing={3} 
+      p={2} 
+      borderRadius="xl" 
+      bg={itemBg} 
+      border="1px solid"
+      borderColor={itemBorder}
+      w="full"
+      transition="all 0.2s ease"
+      _hover={{ transform: 'translateX(2px)', bg: useColorModeValue('rgba(121, 95, 238, 0.06)', 'rgba(255, 255, 255, 0.05)') }}
+    >
+      <Box 
+        position="relative" 
+        w="8" 
+        h="8" 
+        display="flex" 
+        alignItems="center" 
+        justifyContent="center"
+        bg={useColorModeValue('white', 'whiteAlpha.100')}
+        borderRadius="lg"
+        boxShadow="sm"
+      >
         {status === 'checking' ? (
-          <Spinner size="sm" color={statusColor} />
+          <Spinner size="xs" color="brand.400" />
         ) : status === 'connected' ? (
           <Iconify icon={FiCheckCircle} boxSize={5} color="green.400" />
         ) : status === 'failed' ? (
@@ -472,15 +498,24 @@ const ConnectionCheckItem: React.FC<{
         )}
       </Box>
       <VStack align="flex-start" spacing={0} flex={1} minW={0}>
-        <Text fontSize="xs" fontWeight="500">
+        <Text fontSize="xs" fontWeight="700" letterSpacing="-0.01em">
           {label}
         </Text>
-        <Text fontSize="xs" color="text.muted" noOfLines={1}>
+        <Text fontSize="10px" color="text.muted" noOfLines={1} fontWeight="500">
           {details}
         </Text>
       </VStack>
-      <Badge colorScheme={statusBg} variant="subtle" fontSize="xs" py={0} px={1}>
-        {status === 'checking' ? 'Validating' : status === 'connected' ? 'OK' : status === 'failed' ? 'Failed' : 'Idle'}
+      <Badge 
+        colorScheme={statusBg} 
+        variant="subtle" 
+        fontSize="9px" 
+        fontWeight="800"
+        py={0.5} 
+        px={2}
+        borderRadius="full"
+        textTransform="uppercase"
+      >
+        {status === 'checking' ? 'Validating' : status === 'connected' ? 'Ready' : status === 'failed' ? 'Failed' : 'Idle'}
       </Badge>
     </HStack>
   );

@@ -2,6 +2,7 @@ import React from 'react';
 import {
   Badge,
   Box,
+  Button,
   Checkbox,
   Flex,
   HStack,
@@ -38,6 +39,8 @@ interface DocumentSelectorTabsProps {
   uploadProgress: string;
   handleFileUpload: (files: FileList | null) => void;
   handleDocumentClick: (filename: string, index: number, shiftKey: boolean, docs: Document[]) => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
 }
 
 export default function DocumentSelectorTabs({
@@ -58,6 +61,8 @@ export default function DocumentSelectorTabs({
   uploadProgress,
   handleFileUpload,
   handleDocumentClick,
+  onSelectAll,
+  onDeselectAll,
 }: DocumentSelectorTabsProps) {
   const renderDocumentCard = (doc: Document, index: number, allDocs: Document[]) => {
     const isSelected = selectedDocs.has(doc.filename);
@@ -216,6 +221,19 @@ export default function DocumentSelectorTabs({
 
       <TabPanels>
         <TabPanel>
+          <Flex justify="space-between" align="center" mt={2} mb={4}>
+            <Text fontSize="sm" color="text.muted">
+              {currentDocuments.length} total documents
+            </Text>
+            <HStack>
+              <Button size="xs" variant="outline" onClick={onSelectAll} leftIcon={<Iconify icon="solar:check-square-bold" />}>
+                Select All
+              </Button>
+              <Button size="xs" variant="ghost" onClick={onDeselectAll} leftIcon={<Iconify icon="solar:close-square-bold" />}>
+                Deselect
+              </Button>
+            </HStack>
+          </Flex>
           {currentDocuments.length === 0 ? (
             <Flex direction="column" align="center" justify="center" minH="300px" color="text.muted">
               <Iconify icon="solar:document-bold" width={48} height={48} />
@@ -224,7 +242,7 @@ export default function DocumentSelectorTabs({
               </Text>
             </Flex>
           ) : (
-            <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4} mt={4}>
+            <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={4} mt={4}>
               {currentDocuments.map((doc, index) =>
                 renderDocumentCard(doc, index, currentDocuments)
               )}
@@ -233,6 +251,19 @@ export default function DocumentSelectorTabs({
         </TabPanel>
 
         <TabPanel>
+          <Flex justify="space-between" align="center" mt={2} mb={4}>
+            <Text fontSize="sm" color="text.muted">
+              {convertedDocuments.length} total converted
+            </Text>
+            <HStack>
+              <Button size="xs" variant="outline" onClick={onSelectAll} leftIcon={<Iconify icon="solar:check-square-bold" />}>
+                Select All
+              </Button>
+              <Button size="xs" variant="ghost" onClick={onDeselectAll} leftIcon={<Iconify icon="solar:close-square-bold" />}>
+                Deselect
+              </Button>
+            </HStack>
+          </Flex>
           {convertedDocuments.length === 0 ? (
             <Flex direction="column" align="center" justify="center" minH="300px" color="text.muted">
               <Iconify icon="solar:file-check-bold" width={48} height={48} />
@@ -241,7 +272,7 @@ export default function DocumentSelectorTabs({
               </Text>
             </Flex>
           ) : (
-            <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4} mt={4}>
+            <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={4} mt={4}>
               {convertedDocuments.map((doc, index) =>
                 renderDocumentCard(doc, index, convertedDocuments)
               )}
@@ -326,7 +357,7 @@ export default function DocumentSelectorTabs({
             )}
 
             {uploadedFiles.length > 0 && (
-              <SimpleGrid columns={{ base: 2, md: 3, lg: 4 }} spacing={4} w="100%">
+              <SimpleGrid columns={{ base: 2, sm: 3, md: 4 }} spacing={4} w="100%">
                 {uploadedFiles.map((doc, index) =>
                   renderDocumentCard(doc, index, uploadedFiles)
                 )}

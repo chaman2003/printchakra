@@ -358,7 +358,7 @@ const Phone: React.FC = () => {
         formData.append('file', item.blob, item.filename);
 
         if (item.isTestCapture) {
-          await apiClient.post('/test-capture', formData, {
+          await apiClient.post('/phone/test-capture', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
           toast({ title: '🧪 Test Capture Uploaded', status: 'info', duration: 2000, position: 'top-right' });

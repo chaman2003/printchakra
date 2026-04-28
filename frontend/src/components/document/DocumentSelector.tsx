@@ -56,6 +56,8 @@ export interface DocumentSelectorHandle {
   getSelectionCount: () => number;
   getActiveSection: () => 'current' | 'converted' | 'upload';
   getSelectedDocuments: () => Document[];
+  selectAll: () => void;
+  deselectAll: () => void;
 }
 
 
@@ -336,10 +338,36 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
           const allDocs = [...currentDocuments, ...convertedDocuments, ...uploadedFiles];
           return allDocs.filter(doc => selectedDocs.has(doc.filename));
         },
+        selectAll: () => {
+          saveToHistory();
+          const section = TAB_INDEX_TO_SECTION[activeTab];
+          const docs = section === 'current' ? currentDocuments : section === 'converted' ? convertedDocuments : uploadedFiles;
+          setSelectedDocs(prev => {
+            const newSet = new Set(prev);
+            docs.forEach(d => newSet.add(d.filename));
+            return newSet;
+          });
+        },
+        deselectAll: () => {
+          saveToHistory();
+          const section = TAB_INDEX_TO_SECTION[activeTab];
+          const docs = section === 'current' ? currentDocuments : section === 'converted' ? convertedDocuments : uploadedFiles;
+          setSelectedDocs(prev => {
+            const newSet = new Set(prev);
+            docs.forEach(d => newSet.delete(d.filename));
+            return newSet;
+          });
+        },
       }),
 
       [currentDocuments, convertedDocuments, uploadedFiles, selectedDocs, historyStack, saveToHistory, activeTab]
     );
+
+    const TAB_INDEX_TO_SECTION: Record<number, 'current' | 'converted' | 'upload'> = {
+      0: 'current',
+      1: 'converted',
+      2: 'upload',
+    };
 
 
 
@@ -414,6 +442,8 @@ const DocumentSelector = forwardRef<DocumentSelectorHandle, DocumentSelectorProp
               uploadProgress={uploadProgress}
               handleFileUpload={handleFileUpload}
               handleDocumentClick={handleDocumentClick}
+              onSelectAll={() => ref && 'current' in ref && (ref as any).current?.selectAll()}
+              onDeselectAll={() => ref && 'current' in ref && (ref as any).current?.deselectAll()}
             />
           </ModalBody>
 

@@ -1,6 +1,9 @@
 import React from 'react';
 import { Box, BoxProps, useColorModeValue } from '@chakra-ui/react';
+import { motion } from 'framer-motion';
 import { StyledSection } from '../../ui/primitives';
+
+const MotionBox = motion.create(Box);
 
 interface PageShellProps extends BoxProps {
   commands?: string | string[];
@@ -27,9 +30,14 @@ const PageShell: React.FC<PageShellProps> = ({ children, commands, ...rest }) =>
       }}
       {...rest}
     >
-      <Box w="100%">
+      <MotionBox
+        w="100%"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
         {children}
-      </Box>
+      </MotionBox>
     </StyledSection>
   );
 };

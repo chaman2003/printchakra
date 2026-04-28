@@ -295,14 +295,37 @@ cd frontend
 npm run dev
 ```
 
+### Pipecat Web Voice (3rd terminal)
+
+Pipecat runs as a separate FastAPI WebSocket server used by the docked AI panel.
+
+```powershell
+cd pipecat-web-voice
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python app.py
+```
+
 ### Local URLs
 
-- Frontend: http://localhost:3000
+- Frontend: usually http://localhost:5173 (Vite), sometimes http://localhost:3000 depending on your setup
 - Backend: http://localhost:5000
+- Pipecat WS: ws://localhost:8765/ws
+- Pipecat health: http://localhost:8765/health
+- Backend Pipecat proxy health: http://localhost:5000/pipecat/health
 
 If port 3000 is occupied, the frontend may move to another port such as 3001.
 
 ---
+
+## Voice + Pipecat Smoke Checklist
+
+- **Backend**: `GET /pipecat/status` returns `available: true`
+- **Backend**: `GET /pipecat/health` returns a non-empty `websocket_url`
+- **Pipecat**: `GET http://localhost:8765/health` returns healthy
+- **Dashboard**: docked AI panel connects and can play back TTS audio
+- **Navigation**: backend Socket.IO `voice_command_detected` events can navigate routes while keeping the AI panel open
 
 ## Environment Configuration
 

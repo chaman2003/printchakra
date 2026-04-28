@@ -19,6 +19,8 @@ interface DashboardActionPanelProps {
   onOpenConversionModal: () => void;
   onCheckConnectivity: () => void;
   onToggleConvertedDrawer: () => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
   isConvertedDrawerOpen: boolean;
   onReopenOrchestrate: () => void;
   embedded?: boolean;
@@ -36,6 +38,8 @@ export const DashboardActionPanel: React.FC<DashboardActionPanelProps> = ({
   onOpenConversionModal,
   onCheckConnectivity,
   onToggleConvertedDrawer,
+  onSelectAll,
+  onDeselectAll,
   isConvertedDrawerOpen,
   onReopenOrchestrate,
   embedded = false,
@@ -120,27 +124,60 @@ export const DashboardActionPanel: React.FC<DashboardActionPanelProps> = ({
         </Button>
 
         {/* Selection mode */}
-        <Button
-          size={btnSize}
-          variant={selectionMode ? 'solid' : 'ghost'}
-          colorScheme={selectionMode ? 'orange' : 'gray'}
-          onClick={onToggleSelectionMode}
-          leftIcon={<Iconify icon={selectionMode ? FiX : FiCheckSquare} boxSize={4} />}
-          borderRadius="lg"
-          fontWeight="600"
-          fontSize="13px"
-          h="38px"
-          px={4}
-          w={{ base: '100%', md: 'auto' }}
-        >
-          {selectionMode ? 'Cancel' : 'Select'}
-        </Button>
+        <HStack spacing={2}>
+          <Button
+            size={btnSize}
+            variant={selectionMode ? 'solid' : 'ghost'}
+            colorScheme={selectionMode ? 'orange' : 'gray'}
+            onClick={onToggleSelectionMode}
+            leftIcon={<Iconify icon={selectionMode ? FiX : FiCheckSquare} boxSize={4} />}
+            borderRadius="lg"
+            fontWeight="600"
+            fontSize="13px"
+            h="38px"
+            px={4}
+            w={{ base: '100%', md: 'auto' }}
+          >
+            {selectionMode ? 'Cancel' : 'Select'}
+          </Button>
+
+          {selectionMode && (
+            <>
+              <Button
+                size={btnSize}
+                variant="outline"
+                colorScheme="brand"
+                onClick={onSelectAll}
+                borderRadius="lg"
+                fontWeight="600"
+                fontSize="13px"
+                h="38px"
+                px={4}
+              >
+                Select All
+              </Button>
+              <Button
+                size={btnSize}
+                variant="ghost"
+                colorScheme="gray"
+                onClick={onDeselectAll}
+                borderRadius="lg"
+                fontWeight="600"
+                fontSize="13px"
+                h="38px"
+                px={4}
+              >
+                Deselect
+              </Button>
+            </>
+          )}
+        </HStack>
 
         {selectionMode && selectedFilesCount > 0 && (
           <Button
             size={btnSize}
             colorScheme="brand"
-            variant="outline"
+            variant="solid"
             onClick={onOpenConversionModal}
             borderRadius="lg"
             fontWeight="600"
@@ -148,6 +185,7 @@ export const DashboardActionPanel: React.FC<DashboardActionPanelProps> = ({
             h="38px"
             px={4}
             w={{ base: '100%', md: 'auto' }}
+            boxShadow="0 4px 12px rgba(121,95,238,0.3)"
           >
             Convert {selectedFilesCount} Selected
           </Button>

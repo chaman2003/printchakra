@@ -246,7 +246,7 @@ export const DeviceAndConnectivityPanel: React.FC<DeviceAndConnectivityPanelProp
     setSettingDefault(true);
     setError(null);
     try {
-      await apiClient.post('/system/set-default-printer', { printer_name: printerName });
+      await apiClient.post('/print/printers/default', { printer: printerName });
       setDefaultPrinter(printerName);
       if (systemInfo) {
         setSystemInfo({

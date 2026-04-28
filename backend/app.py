@@ -46,7 +46,10 @@ if __name__ == '__main__':
         logger.info(f"SSL Key: {ssl_key}")
         logger.info(f"Backend URL: https://{local_ip}:{port}")
     else:
-        logger.warning("HTTPS Mode: Disabled (certificates not found)")
+        if _https_enabled:
+            logger.warning("HTTPS requested but certificates not found; falling back to HTTP")
+        else:
+            logger.info("HTTPS Mode: Disabled (set USE_HTTPS=1 to enable)")
         logger.info(f"Backend URL: http://{local_ip}:{port}")
     
     logger.info("")

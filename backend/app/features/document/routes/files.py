@@ -121,6 +121,42 @@ def get_document(doc_id):
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@document_bp.route("/info/<path:doc_id>", methods=["GET", "OPTIONS"])
+def get_document_info(doc_id):
+    """Get lightweight document info for preview/orchestration UIs."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        filename = secure_filename(doc_id)
+        if not filename:
+            return jsonify({"success": False, "error": "Invalid filename"}), 400
+
+        dirs = get_data_dirs()
+        candidate_paths = [
+            os.path.join(dirs["PROCESSED_DIR"], filename),
+            os.path.join(dirs["UPLOAD_DIR"], filename),
+            os.path.join(dirs["PDF_DIR"], filename),
+            os.path.join(dirs["CONVERTED_DIR"], filename),
+        ]
+        file_path = next((path for path in candidate_paths if os.path.isfile(path)), None)
+        if not file_path:
+            return jsonify({"success": False, "error": "Document not found"}), 404
+
+        ext = os.path.splitext(filename)[1].lower()
+        return jsonify(
+            {
+                "success": True,
+                "filename": filename,
+                "file_type": ext[1:] if ext else "unknown",
+                "size": os.path.getsize(file_path),
+                "pages": [{"pageNumber": 1, "thumbnailUrl": f"/document/thumbnails/{filename}"}],
+            }
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @document_bp.route("/files/<doc_id>/download", methods=["GET", "OPTIONS"])
 def download_document(doc_id):
     """Download a document."""

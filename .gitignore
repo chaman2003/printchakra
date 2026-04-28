@@ -198,6 +198,7 @@ ngrok.exe
 .vercel
 
 # Build outputs
+/plivo-chatbot - Copy/
 build/
 dist/
 
@@ -215,3 +216,6 @@ prompt.txt
 logs.txt
 references.txt
 
+
+# gstack (global install)
+.amazonq/rules/gstack.md

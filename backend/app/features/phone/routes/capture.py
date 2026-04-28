@@ -8,7 +8,9 @@ import os
 import logging
 import base64
 from flask import jsonify, request
+from werkzeug.utils import secure_filename
 from app.features.phone.routes import phone_bp
+from app.core import socketio
 from app.core.middleware.cors import create_options_response
 
 logger = logging.getLogger(__name__)
@@ -181,5 +183,78 @@ def delete_capture(filename):
         
         return jsonify({"success": True, "message": "File deleted"})
     
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@phone_bp.route("/test-capture", methods=["POST", "OPTIONS"])
+def upload_test_capture():
+    """Upload calibration test capture from phone stream."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        file = request.files.get("file")
+        if not file:
+            return jsonify({"success": False, "error": "No file provided"}), 400
+
+        safe_name = secure_filename(file.filename or "")
+        if not safe_name:
+            safe_name = "test_capture.jpg"
+
+        os.makedirs(CAPTURE_FOLDER, exist_ok=True)
+        target_path = os.path.join(CAPTURE_FOLDER, safe_name)
+        file.save(target_path)
+        payload = {
+            "filename": safe_name,
+            "size": os.path.getsize(target_path),
+            "modified": os.path.getmtime(target_path),
+        }
+        socketio.emit("test_capture_received", payload)
+        return jsonify({"success": True, "capture": payload})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@phone_bp.route("/test-captures", methods=["GET", "OPTIONS"])
+def list_test_captures():
+    """List uploaded calibration test captures."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        captures = []
+        if os.path.isdir(CAPTURE_FOLDER):
+            for filename in os.listdir(CAPTURE_FOLDER):
+                full_path = os.path.join(CAPTURE_FOLDER, filename)
+                if os.path.isfile(full_path):
+                    captures.append(
+                        {
+                            "filename": filename,
+                            "size": os.path.getsize(full_path),
+                            "modified": os.path.getmtime(full_path),
+                        }
+                    )
+        captures.sort(key=lambda x: x["modified"], reverse=True)
+        return jsonify({"success": True, "captures": captures})
+    except Exception as e:
+        return jsonify({"success": False, "captures": [], "error": str(e)}), 500
+
+
+@phone_bp.route("/test-captures/clear", methods=["POST", "OPTIONS"])
+def clear_test_captures():
+    """Clear calibration test captures."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+    try:
+        removed = 0
+        if os.path.isdir(CAPTURE_FOLDER):
+            for filename in os.listdir(CAPTURE_FOLDER):
+                full_path = os.path.join(CAPTURE_FOLDER, filename)
+                if os.path.isfile(full_path):
+                    os.remove(full_path)
+                    removed += 1
+        socketio.emit("test_captures_cleared")
+        return jsonify({"success": True, "removed": removed})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

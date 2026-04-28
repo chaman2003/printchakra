@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, HStack, Badge } from '@chakra-ui/react';
+import { Box, Flex, Heading, IconButton, Stack, Text, Divider, useColorModeValue, HStack, Badge, Image } from '@chakra-ui/react';
 import { keyframes } from '@emotion/react';
 import { FiRefreshCw } from 'react-icons/fi';
 import SurfaceCard from '../layout/SurfaceCard';
@@ -70,16 +70,23 @@ export const DashboardHeroCard: React.FC<DashboardHeroCardProps> = ({
         <Stack spacing={1.5} flex="1" minW="0">
           <HStack spacing={3}>
             <Flex
-              w={9}
-              h={9}
-              borderRadius="lg"
+              w={12}
+              h={12}
+              borderRadius="xl"
               bgGradient="linear(to-br, brand.400, nebula.500)"
+              boxShadow="0 4px 12px rgba(121,95,238,0.3)"
               align="center"
               justify="center"
-              boxShadow="0 2px 8px rgba(121,95,238,0.25)"
               flexShrink={0}
             >
-              <Text fontSize="md">📊</Text>
+              <Image 
+                src="/logo.png" 
+                alt="Logo" 
+                h={9} 
+                w={9} 
+                objectFit="contain" 
+                filter="brightness(1.1) drop-shadow(0 2px 4px rgba(0,0,0,0.2))"
+              />
             </Flex>
             <Heading 
               size={{ base: 'sm', md: 'md' }} 

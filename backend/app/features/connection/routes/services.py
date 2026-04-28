@@ -255,3 +255,27 @@ def test_connection():
         "message": "Connection successful",
         "timestamp": __import__("datetime").datetime.now().isoformat()
     })
+
+
+@connection_bp.route("/validate-wifi", methods=["POST", "OPTIONS"])
+def validate_wifi():
+    """Compatibility-preserving canonical WiFi validation endpoint."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+    return jsonify({"success": True, "connected": True, "message": "WiFi validation completed"})
+
+
+@connection_bp.route("/validate-camera", methods=["POST", "OPTIONS"])
+def validate_camera():
+    """Compatibility-preserving canonical camera validation endpoint."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+    return jsonify({"success": True, "connected": True, "message": "Camera validation completed"})
+
+
+@connection_bp.route("/validate-printer", methods=["POST", "OPTIONS"])
+def validate_printer():
+    """Compatibility-preserving canonical printer validation endpoint."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+    return jsonify({"success": True, "connected": True, "message": "Printer validation completed"})

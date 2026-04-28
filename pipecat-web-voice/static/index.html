@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipecat Web Voice Bot</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background: rgba(76, 175, 80, 0.3);
+            border: 1px solid #4CAF50;
+        }
+        
+        .status.disconnected {
+            background: rgba(244, 67, 54, 0.3);
+            border: 1px solid #f44336;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        button {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        button.recording {
+            background: rgba(244, 67, 54, 0.5);
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(244, 67, 54, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+        }
+        
+        .info {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }
+        
+        .language-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .language-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .language-card.current {
+            background: rgba(76, 175, 80, 0.3);
+            border: 1px solid #4CAF50;
+        }
+        
+        .messages {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .message.user {
+            background: rgba(33, 150, 243, 0.3);
+            text-align: right;
+        }
+        
+        .message.assistant {
+            background: rgba(156, 39, 176, 0.3);
+        }
+        
+        .error {
+            background: rgba(244, 67, 54, 0.3);
+            color: #ffcdd2;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Pipecat Web Voice Bot</h1>
+        
+        <div id="status" class="status disconnected">
+            Disconnected
+        </div>
+        
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="recordBtn" onclick="toggleRecording()" disabled>
+                🎤 Start Recording
+            </button>
+            <button id="resetBtn" onclick="resetLanguage()" disabled>
+                🔄 Reset Language
+            </button>
+        </div>
+        
+        <div class="info">
+            <h3>🌐 Language Support</h3>
+            <div id="languageInfo" class="language-info">
+                Loading language info...
+            </div>
+        </div>
+        
+        <div class="messages" id="messages">
+            <div class="message assistant">
+                Welcome! Click "Connect" to start talking with the voice bot.
+            </div>
+        </div>
+        
+        <div id="errorContainer"></div>
+    </div>
+
+    <script>
+        class VoiceBotClient {
+            constructor() {
+                this.ws = null;
+                this.mediaRecorder = null;
+                this.audioContext = null;
+                this.microphone = null;
+                this.processor = null;
+                this.isRecording = false;
+                this.isConnected = false;
+            }
+            
+            async connect() {
+                try {
+                    this.updateStatus('Connecting...', 'disconnected');
+                    
+                    // Connect WebSocket
+                    this.ws = new WebSocket(`ws://${window.location.host}/ws`);
+                    
+                    this.ws.onopen = () => {
+                        this.isConnected = true;
+                        this.updateStatus('Connected', 'connected');
+                        this.updateButtons();
+                        this.loadLanguageInfo();
+                        this.addMessage('Connected to voice bot! Say "Hello" to start.', 'assistant');
+                    };
+                    
+                    this.ws.onclose = () => {
+                        this.isConnected = false;
+                        this.updateStatus('Disconnected', 'disconnected');
+                        this.updateButtons();
+                        this.addMessage('Disconnected from voice bot.', 'assistant');
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.showError('Connection error. Please try again.');
+                    };
+                    
+                    this.ws.onmessage = async (event) => {
+                        // Handle incoming audio data
+                        if (event.data instanceof Blob) {
+                            await this.playAudio(event.data);
+                        }
+                    };
+                    
+                } catch (error) {
+                    console.error('Connection error:', error);
+                    this.showError('Failed to connect: ' + error.message);
+                }
+            }
+            
+            async toggleRecording() {
+                if (this.isRecording) {
+                    this.stopRecording();
+                } else {
+                    await this.startRecording();
+                }
+            }
+            
+            async startRecording() {
+                try {
+                    if (!this.audioContext) {
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        audio: {
+                            sampleRate: 16000,
+                            channelCount: 1,
+                            echoCancellation: true,
+                            noiseSuppression: true
+                        } 
+                    });
+                    
+                    this.microphone = this.audioContext.createMediaStreamSource(stream);
+                    this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+                    
+                    this.processor.onaudioprocess = (event) => {
+                        if (this.isRecording && this.isConnected) {
+                            const inputData = event.inputBuffer.getChannelData(0);
+                            const pcmData = new Int16Array(inputData.length);
+                            
+                            // Convert float32 to int16
+                            for (let i = 0; i < inputData.length; i++) {
+                                pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                            }
+                            
+                            // Send to WebSocket
+                            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                                this.ws.send(pcmData.buffer);
+                            }
+                        }
+                    };
+                    
+                    this.microphone.connect(this.processor);
+                    this.processor.connect(this.audioContext.destination);
+                    
+                    this.isRecording = true;
+                    this.updateButtons();
+                    this.addMessage('Listening... Speak now!', 'assistant');
+                    
+                } catch (error) {
+                    console.error('Recording error:', error);
+                    this.showError('Failed to start recording: ' + error.message);
+                }
+            }
+            
+            stopRecording() {
+                if (this.processor) {
+                    this.processor.disconnect();
+                    this.processor = null;
+                }
+                
+                if (this.microphone) {
+                    this.microphone.disconnect();
+                    this.microphone = null;
+                }
+                
+                this.isRecording = false;
+                this.updateButtons();
+                this.addMessage('Stopped listening.', 'assistant');
+            }
+            
+            async playAudio(blob) {
+                try {
+                    if (!this.audioContext) {
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    const arrayBuffer = await blob.arrayBuffer();
+                    const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                    
+                    const source = this.audioContext.createBufferSource();
+                    source.buffer = audioBuffer;
+                    source.connect(this.audioContext.destination);
+                    source.start();
+                    
+                } catch (error) {
+                    console.error('Audio playback error:', error);
+                }
+            }
+            
+            async loadLanguageInfo() {
+                try {
+                    const response = await fetch('/languages');
+                    const data = await response.json();
+                    this.displayLanguageInfo(data);
+                } catch (error) {
+                    console.error('Failed to load language info:', error);
+                }
+            }
+            
+            displayLanguageInfo(data) {
+                const container = document.getElementById('languageInfo');
+                const languages = {
+                    'en': 'English',
+                    'hi': 'हिंदी (Hindi)',
+                    'te': 'తెలుగు (Telugu)',
+                    'kn': 'ಕನ್ನಡ (Kannada)'
+                };
+                
+                container.innerHTML = data.supported.map(lang => `
+                    <div class="language-card ${lang === data.current ? 'current' : ''}">
+                        <strong>${languages[lang] || lang}</strong>
+                        ${lang === data.current ? '<br><small>Current</small>' : ''}
+                    </div>
+                `).join('');
+            }
+            
+            async resetLanguage() {
+                try {
+                    const response = await fetch('/reset-language', { method: 'POST' });
+                    const data = await response.json();
+                    this.addMessage(data.message, 'assistant');
+                    this.loadLanguageInfo();
+                } catch (error) {
+                    console.error('Failed to reset language:', error);
+                }
+            }
+            
+            updateStatus(text, className) {
+                const status = document.getElementById('status');
+                status.textContent = text;
+                status.className = `status ${className}`;
+            }
+            
+            updateButtons() {
+                document.getElementById('connectBtn').disabled = this.isConnected;
+                document.getElementById('recordBtn').disabled = !this.isConnected;
+                document.getElementById('resetBtn').disabled = !this.isConnected;
+                
+                const recordBtn = document.getElementById('recordBtn');
+                if (this.isRecording) {
+                    recordBtn.textContent = '⏹️ Stop Recording';
+                    recordBtn.className = 'recording';
+                } else {
+                    recordBtn.textContent = '🎤 Start Recording';
+                    recordBtn.className = '';
+                }
+            }
+            
+            addMessage(text, type) {
+                const container = document.getElementById('messages');
+                const message = document.createElement('div');
+                message.className = `message ${type}`;
+                message.textContent = text;
+                container.appendChild(message);
+                container.scrollTop = container.scrollHeight;
+            }
+            
+            showError(message) {
+                const container = document.getElementById('errorContainer');
+                const error = document.createElement('div');
+                error.className = 'error';
+                error.textContent = message;
+                container.appendChild(error);
+                setTimeout(() => error.remove(), 5000);
+            }
+            
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                }
+                this.stopRecording();
+            }
+        }
+        
+        // Initialize client
+        const client = new VoiceBotClient();
+        
+        // Global functions
+        function connect() {
+            client.connect();
+        }
+        
+        function toggleRecording() {
+            client.toggleRecording();
+        }
+        
+        function resetLanguage() {
+            client.resetLanguage();
+        }
+        
+        // Load initial status
+        window.addEventListener('load', () => {
+            client.loadLanguageInfo();
+        });
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            client.disconnect();
+        });
+    </script>
+</body>
+</html>

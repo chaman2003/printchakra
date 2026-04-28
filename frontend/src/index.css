@@ -100,8 +100,80 @@ input, button, textarea, select {
 }
 
 /* Transition for all interactive elements */
-a, button, [role="button"] {
-  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+a, button, [role="button"], .chakra-button, .chakra-link {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+a:active, button:active, [role="button"]:active {
+  transform: scale(0.96);
+}
+
+/* Custom Animations */
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Apply animations to common elements */
+.chakra-modal__content {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.chakra-drawer__content {
+  animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chakra-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.chakra-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 20px -10px rgba(121, 95, 238, 0.3) !important;
+}
+
+/* Utility classes for "enabling" stuffs */
+.animate-in {
+  animation: slideUpFade 0.4s ease-out forwards;
+}
+
+.animate-pop {
+  animation: scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Smooth transitions for common UI states */
+.chakra-collapse {
+  transition: all 0.3s ease-in-out !important;
+}
+
+.chakra-fade {
+  transition: opacity 0.2s ease-in-out !important;
 }
 
 /* Print styles */
@@ -112,6 +184,22 @@ a, button, [role="button"] {
   nav, .no-print {
     display: none !important;
   }
+}
+
+/* View Transition API — Circular Theme Spread */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* Ensure the new view is on top during the transition */
+::view-transition-new(root) {
+  z-index: 1;
+}
+
+::view-transition-old(root) {
+  z-index: 0;
 }
 
 /* Reduce motion for accessibility */

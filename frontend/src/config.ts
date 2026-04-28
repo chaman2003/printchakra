@@ -153,8 +153,8 @@ export const API_ENDPOINTS = {
   // File conversion endpoints (prefix with document blueprint)
   convert: '/document/convert',
   converted: '/document/converted',
-  getConvertedFiles: '/document/get-converted-files',
-  deleteConverted: '/document/delete-converted',
+  getConvertedFiles: '/document/converted',
+  deleteConverted: '/document/converted',
 
   // Folder management endpoints
   folders: '/document/folders',

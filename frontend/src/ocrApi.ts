@@ -14,7 +14,7 @@ import { OCRResponse, OCRResult } from './types';
 export async function runOCR(filename: string): Promise<OCRResponse> {
   try {
     // Create a request config with extended timeout for OCR operations (120 seconds)
-    const response = await apiClient.post<OCRResponse>(`/ocr/${filename}`, {}, {
+    const response = await apiClient.get<OCRResponse>(`/ocr/extract/${filename}`, {
       timeout: 120000, // 120 seconds for OCR processing
     });
     return response.data;
@@ -42,7 +42,7 @@ export async function runOCR(filename: string): Promise<OCRResponse> {
  */
 export async function getOCRResult(filename: string): Promise<OCRResponse> {
   try {
-    const response = await apiClient.get<OCRResponse>(`/ocr/${filename}`);
+    const response = await apiClient.get<OCRResponse>(`/ocr/extract/${filename}`);
     return response.data;
   } catch (error: any) {
     console.error('[OCR API] Error fetching OCR result:', error);
@@ -63,7 +63,7 @@ export async function getOCRResult(filename: string): Promise<OCRResponse> {
  */
 export async function getOCRStatus(filename: string): Promise<{ filename: string; ocr_ready: boolean }> {
   try {
-    const response = await apiClient.get<{ filename: string; ocr_ready: boolean }>(`/ocr-status/${filename}`);
+    const response = await apiClient.get<{ filename: string; ocr_ready: boolean }>(`/ocr/status/${filename}`);
     return response.data;
   } catch (error) {
     return { filename, ocr_ready: false };

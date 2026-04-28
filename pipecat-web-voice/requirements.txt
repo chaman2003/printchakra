@@ -1,0 +1,28 @@
+# Pipecat Web Voice Bot Requirements
+# Core Pipecat framework with WebSocket, Silero VAD, and Ollama support
+pipecat-ai[websocket,silero,runner,ollama]>=0.0.105
+
+# Speech-to-Text
+openai-whisper>=20240927
+
+# Text-to-Speech - Facebook MMS
+transformers>=4.36.0
+torch>=2.0.0
+torchaudio>=2.0.0
+
+# Web framework
+fastapi>=0.95.0
+uvicorn>=0.20.0
+websockets>=12.0
+
+# Environment and utilities
+python-dotenv>=1.0.0
+loguru>=0.6.0
+
+# Audio processing
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Optional: GPU acceleration
+# torch-audio  # Already included with torch
+# accelerate  # For better GPU utilization

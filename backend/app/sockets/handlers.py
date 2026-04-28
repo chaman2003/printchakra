@@ -28,6 +28,13 @@ def register_handlers(socketio):
     global _socketio
     _socketio = socketio
     
+    # Register Pipecat voice bot handlers
+    try:
+        from app.features.voice.pipecat_routes import register_socketio_handlers
+        register_socketio_handlers(socketio)
+    except ImportError as e:
+        logger.warning(f"Could not register Pipecat socket handlers: {e}")
+    
     @socketio.on("connect")
     def handle_connect():
         """Handle client connection."""

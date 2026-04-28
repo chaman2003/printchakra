@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Box,
@@ -16,8 +16,11 @@ import {
   VStack,
   Badge,
   Divider,
+  Image,
+  chakra,
+  shouldForwardProp,
 } from '@chakra-ui/react';
-import { motion, useScroll, useTransform } from 'framer-motion';
+import { motion, useScroll, useTransform, useInView, AnimatePresence } from 'framer-motion';
 import {
   FiArrowRight,
   FiCamera,
@@ -33,493 +36,656 @@ import {
   FiSmartphone,
   FiWifi,
   FiLock,
-  FiTrendingUp,
-  FiUsers,
-  FiAward,
-  FiGitBranch,
+  FiActivity,
+  FiBox,
+  FiCloudLightning,
+  FiLayers,
+  FiCommand,
+  FiMinimize2,
 } from 'react-icons/fi';
 
 const asIcon = (icon: any) => icon as React.ElementType;
+
 const MotionBox = motion.create(Box as any);
 const MotionHeading = motion.create(Heading as any);
 const MotionText = motion.create(Text as any);
 
-// Floating orb background decoration
-const FloatingOrb = ({ size, color, x, y, delay }: { size: number; color: string; x: string; y: string; delay: number }) => (
-  <MotionBox
-    position="absolute"
-    pointerEvents="none"
-    zIndex={0}
-    width={`${size}px`}
-    height={`${size}px`}
-    borderRadius="full"
-    bg={color}
-    filter="blur(80px)"
-    left={x}
-    top={y}
-    animate={{ y: [0, -30, 0], scale: [1, 1.1, 1], opacity: [0.5, 0.8, 0.5] }}
-    transition={{ duration: 8, repeat: Infinity, delay, ease: 'easeInOut' }}
+// ===== DECORATIVE COMPONENTS =====
+
+const FloatingOrb = ({ size, color, x, y, delay, duration = 8 }: { size: number; color: string; x: string; y: string; delay: number; duration?: number }) => (
+  <motion.div
+    style={{
+      position: "absolute",
+      pointerEvents: "none",
+      zIndex: 0,
+      width: `${size}px`,
+      height: `${size}px`,
+      borderRadius: "full",
+      backgroundColor: color,
+      filter: "blur(100px)",
+      left: x,
+      top: y,
+    }}
+    animate={{
+      y: [0, -40, 0],
+      x: [0, 20, 0],
+      scale: [1, 1.2, 1],
+      opacity: [0.3, 0.6, 0.3]
+    }}
+    transition={{ duration, repeat: Infinity, delay, ease: 'easeInOut' } as any}
   />
 );
 
-// Feature card
-const FeatureCard = ({ icon, title, description, gradient, delay }: any) => {
-  const cardBg = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(12,16,35,0.85)');
-  const borderColor = useColorModeValue('rgba(121,95,238,0.12)', 'rgba(69,202,255,0.15)');
+const GlassCard = ({ children, delay = 0, ...props }: any) => {
+  const bg = useColorModeValue('rgba(255, 255, 255, 0.4)', 'rgba(10, 15, 30, 0.4)');
+  const borderColor = useColorModeValue('rgba(121, 95, 238, 0.2)', 'rgba(69, 202, 255, 0.1)');
+
   return (
     <MotionBox
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 30 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: '-50px' }}
-      transition={{ duration: 0.6, delay }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.8, delay, ease: [0.16, 1, 0.3, 1] }}
+      bg={bg}
+      backdropFilter="blur(20px) saturate(180%)"
+      borderRadius="3xl"
+      border="1px solid"
+      borderColor={borderColor}
+      boxShadow="0 8px 32px 0 rgba(0, 0, 0, 0.08)"
+      p={8}
+      position="relative"
+      overflow="hidden"
+      {...props}
     >
-      <Box
-        bg={cardBg}
-        border="1px solid"
-        borderColor={borderColor}
-        borderRadius="2xl"
-        p={{ base: 6, md: 8 }}
-        position="relative"
-        overflow="hidden"
-        _hover={{ transform: 'translateY(-6px)', boxShadow: '0 20px 60px rgba(69,202,255,0.15)' }}
-        transition="all 0.4s cubic-bezier(0.4, 0, 0.2, 1)"
-        cursor="default"
-        h="100%"
-      >
-        <Box position="absolute" top={0} left={0} right={0} height="3px" bgGradient={gradient} />
-        <Flex w={12} h={12} borderRadius="xl" bgGradient={gradient} align="center" justify="center" mb={4} boxShadow="0 8px 24px rgba(0,0,0,0.15)">
-          <Icon as={asIcon(icon)} boxSize={5} color="white" />
-        </Flex>
-        <Heading size="md" mb={2} fontWeight="700">{title}</Heading>
-        <Text color="text.muted" fontSize="sm" lineHeight="tall">{description}</Text>
-      </Box>
+      {children}
     </MotionBox>
   );
 };
 
-// Stat card
-const StatCard = ({ value, label, icon, delay }: { value: string; label: string; icon: any; delay: number }) => (
-  <MotionBox
-    initial={{ opacity: 0, y: 20 }}
-    whileInView={{ opacity: 1, y: 0 }}
-    viewport={{ once: true }}
-    transition={{ duration: 0.5, delay }}
-  >
-    <VStack
-      spacing={2}
-      p={6}
-      borderRadius="xl"
-      bg={useColorModeValue('rgba(255,255,255,0.7)', 'rgba(15,20,40,0.6)')}
-      border="1px solid"
-      borderColor={useColorModeValue('rgba(121,95,238,0.08)', 'rgba(69,202,255,0.1)')}
-    >
-      <Icon as={asIcon(icon)} boxSize={5} color={useColorModeValue('brand.500', 'nebula.400')} />
-      <Text fontSize={{ base: '2xl', md: '3xl' }} fontWeight="800" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">
-        {value}
-      </Text>
-      <Text color="text.muted" fontSize="xs" fontWeight="600" textTransform="uppercase" letterSpacing="0.05em">{label}</Text>
-    </VStack>
-  </MotionBox>
-);
+// ===== DATA =====
 
-const features = [
-  { icon: FiSmartphone, title: 'Phone Capture', description: 'Scan documents with your phone camera. AI-powered edge detection automatically finds and crops your documents.', gradient: 'linear(to-r, brand.400, nebula.400)' },
-  { icon: FiFileText, title: 'Smart OCR', description: 'Extract text from any document with industry-leading accuracy. Supports multiple languages and complex layouts.', gradient: 'linear(to-r, nebula.400, cyber.400)' },
-  { icon: FiMic, title: 'Voice AI', description: 'Control everything with your voice. Natural language commands for printing, scanning, and document management.', gradient: 'linear(to-r, cyber.400, neon.400)' },
-  { icon: FiPrinter, title: 'Print Management', description: 'Configure and send print jobs with precision controls. Paper size, quality, color mode, duplex — all in one place.', gradient: 'linear(to-r, neon.400, brand.400)' },
-  { icon: FiCpu, title: 'GPU Accelerated', description: 'Powered by NVIDIA CUDA for blazing-fast document processing. Real-time AI enhancement and noise reduction.', gradient: 'linear(to-r, brand.500, cyber.400)' },
-  { icon: FiWifi, title: 'Real-time Sync', description: 'Instant WebSocket-powered synchronization between your phone and desktop. No delays, no refreshing.', gradient: 'linear(to-r, nebula.400, neon.400)' },
+const techStack = [
+  { name: 'PyTorch', icon: FiActivity, color: '#EE4C2C' },
+  { name: 'NVIDIA CUDA', icon: FiCpu, color: '#76B900' },
+  { name: 'PaddleOCR', icon: FiLayers, color: '#2932E1' },
+  { name: 'FastAPI', icon: FiZap, color: '#05998B' },
+  { name: 'WebSockets', icon: FiWifi, color: '#F1662A' },
+  { name: 'React 19', icon: FiBox, color: '#61DAFB' },
 ];
 
-const workflowSteps = [
-  { step: '01', icon: FiSmartphone, title: 'Capture', description: 'Point your phone at any document. AI detects edges and captures automatically.', gradient: 'linear(to-br, brand.400, nebula.400)' },
-  { step: '02', icon: FiCpu, title: 'Process', description: 'GPU-accelerated OCR extracts text. AI enhances image quality and corrects perspective.', gradient: 'linear(to-br, nebula.400, cyber.400)' },
-  { step: '03', icon: FiPrinter, title: 'Output', description: 'Print, export, or convert to any format. Voice-controlled workflow automation.', gradient: 'linear(to-br, cyber.400, neon.400)' },
+const featureHighlights = [
+  {
+    title: 'Zero-Latency Sync',
+    desc: 'Bypass the cloud. Direct WebSocket tunnels connect your mobile camera to your desktop printer in under 50ms.',
+    icon: FiCloudLightning,
+    color: 'brand.400',
+  },
+  {
+    title: 'Edge-AI Extraction',
+    desc: 'Local OCR processing using state-of-the-art neural networks. Your sensitive documents never leave your network.',
+    icon: FiShield,
+    color: 'nebula.400',
+  },
+  {
+    title: 'Voice Orchestration',
+    desc: 'A dedicated Whisper AI pipeline translates your voice commands into precise hardware instructions.',
+    icon: FiMic,
+    color: 'cyber.400',
+  },
 ];
+
+const projectSpecs = [
+  { label: 'Latency', value: '< 100ms', sub: 'End-to-end sync' },
+  { label: 'Accuracy', value: '99.8%', sub: 'Character recognition' },
+  { label: 'Power', value: 'GPU', sub: 'CUDA Accelerated' },
+  { label: 'Privacy', value: 'Local', sub: 'No Cloud required' },
+];
+
+// ===== MAIN PAGE =====
 
 const LandingPage: React.FC = () => {
   const { scrollYProgress } = useScroll();
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.15], [1, 0]);
-  const heroScale = useTransform(scrollYProgress, [0, 0.15], [1, 0.95]);
 
-  const [displayText, setDisplayText] = useState('');
-  const fullText = 'Document Intelligence';
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.2], [1, 0.9]);
+  const heroY = useTransform(scrollYProgress, [0, 0.2], [0, -50]);
+
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
-    let i = 0;
-    const interval = setInterval(() => {
-      setDisplayText(fullText.slice(0, i + 1));
-      i++;
-      if (i >= fullText.length) clearInterval(interval);
-    }, 60);
-    return () => clearInterval(interval);
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({
+        x: (e.clientX / window.innerWidth - 0.5) * 20,
+        y: (e.clientY / window.innerHeight - 0.5) * 20,
+      });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  const heroBg = useColorModeValue(
-    'linear-gradient(180deg, #f5f7ff 0%, #eef2ff 50%, #e8ecff 100%)',
-    'linear-gradient(180deg, #080c18 0%, #0d1229 50%, #080c18 100%)'
-  );
-  const sectionBg = useColorModeValue('white', 'rgba(12,16,35,0.6)');
-  const orbColor1 = useColorModeValue('rgba(121,95,238,0.15)', 'rgba(121,95,238,0.2)');
-  const orbColor2 = useColorModeValue('rgba(69,202,255,0.12)', 'rgba(69,202,255,0.15)');
-  const orbColor3 = useColorModeValue('rgba(147,51,234,0.12)', 'rgba(255,77,175,0.12)');
-  const trustedTextColor = useColorModeValue('gray.400', 'gray.600');
-  const footerBorderColor = useColorModeValue('rgba(121,95,238,0.1)', 'rgba(69,202,255,0.1)');
+  const orbColor1 = useColorModeValue('rgba(121, 95, 238, 0.15)', 'rgba(121, 95, 238, 0.25)');
+  const orbColor2 = useColorModeValue('rgba(69, 202, 255, 0.12)', 'rgba(69, 202, 255, 0.2)');
+  const orbColor3 = useColorModeValue('rgba(255, 77, 175, 0.1)', 'rgba(255, 77, 175, 0.15)');
 
   return (
-    <Box overflow="hidden" position="relative">
-      {/* ===== HERO SECTION ===== */}
-      <MotionBox
-        style={{ opacity: heroOpacity, scale: heroScale }}
-        position="relative"
-        minH={{ base: 'calc(100vh - 56px)', md: 'calc(100vh - 56px)' }}
-        display="flex"
-        alignItems="center"
-        justifyContent="center"
-        bg={heroBg}
-        overflow="hidden"
-        px={{ base: 4, md: 0 }}
-      >
-        <FloatingOrb size={420} color={orbColor1} x="5%" y="10%" delay={0} />
-        <FloatingOrb size={320} color={orbColor2} x="65%" y="55%" delay={2} />
-        <FloatingOrb size={280} color={orbColor3} x="35%" y="75%" delay={4} />
-        <FloatingOrb size={240} color={orbColor1} x="80%" y="15%" delay={1} />
+    <Box bg={useColorModeValue('#f8f9ff', '#05070a')} overflow="hidden">
+      {/* ===== HERO ===== */}
+      <Box position="relative" minH="100vh" display="flex" alignItems="center" pt={0}>
+        <FloatingOrb size={500} color={orbColor1} x="-10%" y="10%" delay={0} />
+        <FloatingOrb size={400} color={orbColor2} x="70%" y="40%" delay={2} />
+        <FloatingOrb size={300} color={orbColor3} x="30%" y="70%" delay={4} />
 
-        {/* Grid pattern overlay */}
+        {/* Animated Grid */}
         <Box
           position="absolute"
           inset={0}
-          backgroundImage="radial-gradient(circle at 1px 1px, rgba(121,95,238,0.04) 1px, transparent 0)"
-          backgroundSize="48px 48px"
+          zIndex={0}
+          backgroundImage={useColorModeValue(
+            'radial-gradient(circle at 2px 2px, rgba(0,0,0,0.03) 1px, transparent 0)',
+            'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.03) 1px, transparent 0)'
+          )}
+          backgroundSize="40px 40px"
+          sx={{
+            maskImage: "radial-gradient(circle at center, black, transparent 80%)"
+          }}
         />
 
-        <Container maxW="6xl" position="relative" zIndex={1} py={{ base: 12, md: 16 }}>
-          <VStack spacing={{ base: 6, md: 8 }} textAlign="center">
-            {/* Badge */}
-            <MotionBox initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-              <HStack
-                bg={useColorModeValue('rgba(121,95,238,0.06)', 'rgba(69,202,255,0.06)')}
-                border="1px solid"
-                borderColor={useColorModeValue('rgba(121,95,238,0.15)', 'rgba(69,202,255,0.15)')}
-                borderRadius="full"
-                px={4}
-                py={1.5}
-                spacing={2}
+        <Container maxW="7xl" position="relative" zIndex={1}>
+          <Stack direction={{ base: 'column', lg: 'row' }} spacing={12} align="center">
+            {/* Left Column: Text Content */}
+            <VStack align={{ base: 'center', lg: 'start' }} spacing={8} flex={1} textAlign={{ base: 'center', lg: 'left' }}>
+              <MotionBox
+                initial={{ opacity: 0, x: -30 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
               >
-                <Icon as={asIcon(FiZap)} color="nebula.400" boxSize={3.5} />
-                <Text fontSize="xs" fontWeight="600" color={useColorModeValue('brand.600', 'nebula.300')}>
-                  Powered by AI & GPU Acceleration
-                </Text>
-              </HStack>
-            </MotionBox>
+                <HStack
+                  px={4}
+                  py={2}
+                  bg={useColorModeValue('white', 'whiteAlpha.100')}
+                  borderRadius="full"
+                  border="1px solid"
+                  borderColor={useColorModeValue('brand.100', 'whiteAlpha.200')}
+                  boxShadow="sm"
+                >
+                  <Icon as={asIcon(FiZap)} color="brand.400" />
+                  <Text fontSize="xs" fontWeight="700" letterSpacing="0.05em" textTransform="uppercase">
+                    V2.0 is now live with GPU Support
+                  </Text>
+                </HStack>
+              </MotionBox>
 
-            {/* Main heading */}
-            <MotionBox initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8, delay: 0.2 }}>
-              <Heading
-                maxW="4xl"
-                mx="auto"
-                fontSize={{ base: '3xl', sm: '4xl', md: '5xl', lg: '6xl' }}
+              <MotionHeading
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                fontSize={{ base: '4xl', md: '6xl', xl: '7xl' }}
                 fontWeight="900"
-                lineHeight="1.05"
-                letterSpacing="-0.03em"
+                lineHeight="1.1"
+                letterSpacing="-0.04em"
               >
-                <Text as="span" display="block">The Future of</Text>
-                <Text as="span" bgGradient="linear(to-r, brand.400, nebula.400, cyber.400)" bgClip="text" display="block">
-                  {displayText}
-                  <Box
-                    as="span"
-                    display="inline-block"
-                    w="3px"
-                    h={{ base: '2rem', md: '3.5rem' }}
-                    bg="nebula.400"
-                    ml={1}
-                    verticalAlign="middle"
-                    animation="blink 1s step-end infinite"
-                    sx={{ '@keyframes blink': { '50%': { opacity: 0 } } }}
-                  />
-                </Text>
-              </Heading>
-            </MotionBox>
+                The OS for <br />
+                <chakra.span bgGradient="linear(to-r, brand.400, nebula.500, cyber.400)" bgClip="text">
+                  Hardware Intelligence
+                </chakra.span>
+              </MotionHeading>
 
-            {/* Subtitle */}
-            <MotionText
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
-              fontSize={{ base: 'md', md: 'lg' }}
-              color="text.muted"
-              maxW="2xl"
-              lineHeight="tall"
+              <MotionText
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.4 }}
+                fontSize={{ base: 'lg', md: 'xl' }}
+                color={useColorModeValue('gray.600', 'gray.400')}
+                maxW="xl"
+                lineHeight="tall"
+              >
+                Bridge the gap between physical documents and digital workflows.
+                Scan, OCR, and Orchestrate with zero latency and absolute privacy.
+              </MotionText>
+
+              <MotionBox
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.6 }}
+              >
+                <Stack direction={{ base: 'column', sm: 'row' }} spacing={4}>
+                  <Button
+                    as={RouterLink}
+                    to="/dashboard"
+                    size="xl"
+                    h="64px"
+                    px={10}
+                    fontSize="md"
+                    fontWeight="800"
+                    bgGradient="linear(to-r, brand.500, nebula.600)"
+                    color="white"
+                    borderRadius="2xl"
+                    boxShadow="0 20px 40px rgba(121, 95, 238, 0.3)"
+                    _hover={{
+                      transform: 'translateY(-4px)',
+                      boxShadow: '0 25px 50px rgba(121, 95, 238, 0.4)',
+                      filter: 'brightness(1.1)'
+                    }}
+                    transition="all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+                    rightIcon={<Icon as={asIcon(FiArrowRight)} />}
+                  >
+                    Launch Dashboard
+                  </Button>
+                  <Button
+                    as={RouterLink}
+                    to="/phone"
+                    size="xl"
+                    variant="outline"
+                    h="64px"
+                    px={10}
+                    fontSize="md"
+                    fontWeight="800"
+                    borderRadius="2xl"
+                    borderWidth="2px"
+                    borderColor={useColorModeValue('gray.200', 'whiteAlpha.300')}
+                    _hover={{
+                      bg: useColorModeValue('gray.50', 'whiteAlpha.100'),
+                      transform: 'translateY(-4px)'
+                    }}
+                    transition="all 0.3s"
+                    leftIcon={<Icon as={asIcon(FiSmartphone)} />}
+                  >
+                    Quick Capture
+                  </Button>
+                </Stack>
+              </MotionBox>
+            </VStack>
+
+            {/* Right Column: Hero Graphic */}
+            <MotionBox
+              flex={1}
+              position="relative"
+              initial={{ opacity: 0, scale: 0.8, rotateY: 20 }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                rotateY: 0,
+                x: mousePos.x,
+                y: mousePos.y
+              }}
+              transition={{
+                opacity: { duration: 1.2 },
+                scale: { duration: 1.2, ease: "easeOut" },
+                rotateY: { duration: 1.2 },
+                x: { duration: 0.2 },
+                y: { duration: 0.2 }
+              }}
+              perspective="1000px"
+              display={{ base: 'none', lg: 'block' }}
             >
-              Scan, process, and print documents with AI-powered precision.
-              Voice control, real-time sync, and GPU-accelerated OCR — all from your browser.
-            </MotionText>
-
-            {/* CTA buttons */}
-            <MotionBox initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.6 }} w="full">
-              <Stack direction={{ base: 'column', sm: 'row' }} spacing={3} justify="center" align="center">
-                <Button
-                  as={RouterLink}
-                  to="/dashboard"
-                  size="lg"
-                  w={{ base: 'full', sm: 'auto' }}
-                  px={8}
-                  h="52px"
-                  fontSize="sm"
-                  fontWeight="700"
-                  bgGradient="linear(to-r, brand.500, nebula.500)"
-                  color="white"
-                  borderRadius="xl"
-                  rightIcon={<Icon as={asIcon(FiArrowRight)} />}
-                  _hover={{ bgGradient: 'linear(to-r, brand.600, nebula.600)', transform: 'translateY(-2px)', boxShadow: '0 12px 40px rgba(69,202,255,0.35)' }}
-                  transition="all 0.3s ease"
+              {/* Product Frame Mockup */}
+              <Box
+                position="relative"
+                p={4}
+                bgGradient="linear(to-br, whiteAlpha.400, transparent)"
+                borderRadius="4xl"
+                border="1px solid"
+                borderColor="whiteAlpha.300"
+                boxShadow="2xl"
+                backdropFilter="blur(20px)"
+              >
+                <Box
+                  bgGradient="linear(to-br, #0f172a, #1e293b, #0f172a)"
+                  p={12}
+                  borderRadius="3xl"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  minH="450px"
+                  position="relative"
+                  overflow="hidden"
+                  boxShadow="inner"
                 >
-                  Open Dashboard
-                </Button>
-                <Button
-                  as={RouterLink}
-                  to="/phone"
-                  size="lg"
-                  w={{ base: 'full', sm: 'auto' }}
-                  px={8}
-                  h="52px"
-                  fontSize="sm"
-                  fontWeight="700"
-                  variant="outline"
-                  borderColor={useColorModeValue('brand.300', 'nebula.500')}
-                  color={useColorModeValue('brand.600', 'nebula.300')}
-                  borderRadius="xl"
-                  borderWidth="1.5px"
-                  leftIcon={<Icon as={asIcon(FiCamera)} />}
-                  _hover={{ bg: useColorModeValue('brand.50', 'whiteAlpha.100'), transform: 'translateY(-2px)' }}
-                  transition="all 0.3s ease"
-                >
-                  Phone Capture
-                </Button>
-              </Stack>
-            </MotionBox>
+                  {/* Subtle Background Glow inside the box */}
+                  <Box position="absolute" top="-20%" right="-10%" w="60%" h="60%" bg="brand.500" borderRadius="full" filter="blur(80px)" opacity="0.15" />
+                  <Box position="absolute" bottom="-20%" left="-10%" w="50%" h="50%" bg="nebula.500" borderRadius="full" filter="blur(80px)" opacity="0.15" />
 
-            {/* Trusted by */}
-            <MotionBox initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.8, delay: 0.8 }} pt={8}>
-              <Text fontSize="xs" fontWeight="600" color={trustedTextColor} textTransform="uppercase" letterSpacing="0.1em" mb={4}>
-                Built with industry-leading technology
-              </Text>
-              <HStack spacing={{ base: 4, md: 8 }} justify="center" flexWrap="wrap" opacity={0.5}>
-                {['PaddleOCR', 'PyTorch', 'CUDA', 'WebSocket', 'Whisper AI'].map(tech => (
-                  <Text key={tech} fontSize="sm" fontWeight="700" color={trustedTextColor} letterSpacing="0.02em">{tech}</Text>
-                ))}
-              </HStack>
+                  <MotionBox
+                    animate={{ 
+                      y: [0, -15, 0],
+                    }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" } as any}
+                    zIndex={2}
+                  >
+                    <Box
+                      p={8}
+                      borderRadius="3xl"
+                      bgGradient="linear(to-br, brand.400, nebula.500)"
+                      boxShadow="0 20px 50px rgba(121, 95, 238, 0.4)"
+                    >
+                      <Image src="/logo.png" h={40} w={40} objectFit="contain" filter="brightness(1.1) drop-shadow(0 10px 20px rgba(0,0,0,0.3))" />
+                    </Box>
+                  </MotionBox>
+                </Box>
+
+                {/* Floating UI Elements */}
+                <MotionBox
+                  position="absolute"
+                  top="15%"
+                  right="-30px"
+                  bg={useColorModeValue('white', 'gray.800')}
+                  p={4}
+                  borderRadius="2xl"
+                  boxShadow="0 15px 35px rgba(0,0,0,0.2)"
+                  initial={{ x: 30, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 0.8 } as any}
+                  border="1px solid"
+                  borderColor={useColorModeValue('gray.100', 'whiteAlpha.200')}
+                  zIndex={10}
+                >
+                  <HStack spacing={3}>
+                    <Flex w={8} h={8} borderRadius="full" bg="green.400" align="center" justify="center">
+                      <Icon as={asIcon(FiCheck)} color="white" boxSize={4} />
+                    </Flex>
+                    <VStack align="start" spacing={0}>
+                      <Text fontSize="xs" fontWeight="800">OCR Complete</Text>
+                      <Text fontSize="10px" color="gray.500">Confidence Score: 99.8%</Text>
+                    </VStack>
+                  </HStack>
+                </MotionBox>
+
+                <MotionBox
+                  position="absolute"
+                  bottom="20%"
+                  left="-30px"
+                  bg={useColorModeValue('white', 'gray.800')}
+                  p={4}
+                  borderRadius="2xl"
+                  boxShadow="0 15px 35px rgba(0,0,0,0.2)"
+                  initial={{ x: -30, opacity: 0 }}
+                  animate={{ x: 0, opacity: 1 }}
+                  transition={{ delay: 1 } as any}
+                  border="1px solid"
+                  borderColor={useColorModeValue('gray.100', 'whiteAlpha.200')}
+                  zIndex={10}
+                >
+                  <HStack spacing={3}>
+                    <Flex w={8} h={8} borderRadius="full" bg="brand.400" align="center" justify="center">
+                      <Icon as={asIcon(FiActivity)} color="white" boxSize={4} />
+                    </Flex>
+                    <VStack align="start" spacing={0}>
+                      <Text fontSize="xs" fontWeight="800">Local Processing</Text>
+                      <Box w="100px" h="4px" bg={useColorModeValue('gray.100', 'gray.700')} borderRadius="full" mt={1.5} overflow="hidden">
+                        <MotionBox 
+                          w="100%" 
+                          h="100%" 
+                          bgGradient="linear(to-r, brand.400, nebula.400)" 
+                          animate={{ x: ['-100%', '0%'] }}
+                          transition={{ duration: 1.5, repeat: Infinity, ease: "linear" } as any}
+                        />
+                      </Box>
+                    </VStack>
+                  </HStack>
+                </MotionBox>
+
+                <MotionBox
+                  position="absolute"
+                  top="-20px"
+                  left="10%"
+                  bg="brand.500"
+                  px={3}
+                  py={1}
+                  borderRadius="full"
+                  boxShadow="lg"
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 1.2 } as any}
+                >
+                  <Text color="white" fontSize="10px" fontWeight="800">RTX GPU DETECTED</Text>
+                </MotionBox>
+              </Box>
             </MotionBox>
-          </VStack>
+          </Stack>
         </Container>
-      </MotionBox>
+      </Box>
 
-      {/* ===== STATS BAR ===== */}
-      <Box py={{ base: 10, md: 14 }} bg={sectionBg} position="relative">
-        <Container maxW="5xl">
-          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={{ base: 4, md: 6 }}>
-            <StatCard value="<1s" label="OCR Processing" icon={FiZap} delay={0} />
-            <StatCard value="99.2%" label="Text Accuracy" icon={FiAward} delay={0.1} />
-            <StatCard value="GPU" label="Accelerated" icon={FiCpu} delay={0.2} />
-            <StatCard value="Real-time" label="WebSocket Sync" icon={FiWifi} delay={0.3} />
+      {/* ===== PROJECT STATS ===== */}
+      <Box py={20} position="relative" zIndex={1}>
+        <Container maxW="7xl">
+          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={8}>
+            {projectSpecs.map((spec, i) => (
+              <GlassCard key={spec.label} delay={i * 0.1} textAlign="center">
+                <Text fontSize="4xl" fontWeight="900" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">
+                  {spec.value}
+                </Text>
+                <Text fontSize="sm" fontWeight="800" mt={1}>{spec.label}</Text>
+                <Text fontSize="xs" color="gray.500">{spec.sub}</Text>
+              </GlassCard>
+            ))}
           </SimpleGrid>
         </Container>
       </Box>
 
-      {/* ===== FEATURES SECTION ===== */}
-      <Box py={{ base: 14, md: 20 }} position="relative" overflow="hidden">
-        <FloatingOrb size={300} color={orbColor2} x="85%" y="20%" delay={2} />
-        <FloatingOrb size={250} color={orbColor3} x="5%" y="70%" delay={4} />
-
-        <Container maxW="6xl" position="relative" zIndex={1}>
-          <VStack spacing={{ base: 10, md: 14 }}>
-            <VStack spacing={3} textAlign="center">
-              <Badge colorScheme="purple" variant="subtle" px={3} py={1} borderRadius="full" fontSize="xs" fontWeight="700">
-                Features
+      {/* ===== TECHNICAL CORE ===== */}
+      <Box py={24} bg={useColorModeValue('white', 'gray.900')} position="relative">
+        <Container maxW="7xl">
+          <VStack spacing={20}>
+            <VStack spacing={4} textAlign="center">
+              <Badge colorScheme="brand" px={4} py={1} borderRadius="full" textTransform="uppercase" letterSpacing="0.1em">
+                Inside the Engine
               </Badge>
-              <MotionHeading
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                fontSize={{ base: '2xl', md: '4xl' }}
-                fontWeight="800"
-                letterSpacing="-0.02em"
-              >
-                Everything You Need,{' '}
-                <Text as="span" bgGradient="linear(to-r, nebula.400, cyber.400)" bgClip="text">All in One Place</Text>
-              </MotionHeading>
-              <MotionText
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                color="text.muted"
-                fontSize="md"
-                maxW="lg"
-              >
-                From scanning to printing, powered by cutting-edge AI and real-time connections.
-              </MotionText>
-            </VStack>
-
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={{ base: 5, md: 6 }} w="full">
-              {features.map((feature, idx) => (
-                <FeatureCard key={feature.title} icon={feature.icon} title={feature.title} description={feature.description} gradient={feature.gradient} delay={idx * 0.08} />
-              ))}
-            </SimpleGrid>
-          </VStack>
-        </Container>
-      </Box>
-
-      {/* ===== WORKFLOW SECTION ===== */}
-      <Box py={{ base: 14, md: 20 }} bg={sectionBg} position="relative" overflow="hidden">
-        <Container maxW="6xl" position="relative" zIndex={1}>
-          <VStack spacing={{ base: 10, md: 14 }}>
-            <VStack spacing={3} textAlign="center">
-              <Badge colorScheme="cyan" variant="subtle" px={3} py={1} borderRadius="full" fontSize="xs" fontWeight="700">
-                How It Works
-              </Badge>
-              <MotionHeading
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.6 }}
-                fontSize={{ base: '2xl', md: '4xl' }}
-                fontWeight="800"
-                letterSpacing="-0.02em"
-              >
-                Three Steps to{' '}
-                <Text as="span" bgGradient="linear(to-r, brand.400, neon.400)" bgClip="text">Automation</Text>
-              </MotionHeading>
-            </VStack>
-
-            <Grid templateColumns={{ base: '1fr', md: 'repeat(3, 1fr)' }} gap={{ base: 6, md: 8 }} w="full">
-              {workflowSteps.map((item, idx) => (
-                <MotionBox
-                  key={item.step}
-                  initial={{ opacity: 0, y: 40 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, margin: '-50px' }}
-                  transition={{ duration: 0.6, delay: idx * 0.15 }}
-                >
-                  <VStack
-                    spacing={4}
-                    p={{ base: 8, md: 10 }}
-                    borderRadius="2xl"
-                    border="1px solid"
-                    borderColor={useColorModeValue('rgba(121,95,238,0.1)', 'rgba(69,202,255,0.12)')}
-                    bg={useColorModeValue('rgba(255,255,255,0.7)', 'rgba(12,16,35,0.5)')}
-                    _hover={{ borderColor: useColorModeValue('rgba(121,95,238,0.3)', 'rgba(69,202,255,0.3)'), transform: 'translateY(-4px)' }}
-                    transition="all 0.3s ease"
-                    textAlign="center"
-                    h="100%"
-                  >
-                    <Text fontSize="4xl" fontWeight="900" bgGradient={item.gradient} bgClip="text" lineHeight="1">{item.step}</Text>
-                    <Flex w={14} h={14} borderRadius="2xl" bgGradient={item.gradient} align="center" justify="center" boxShadow="0 8px 32px rgba(0,0,0,0.2)">
-                      <Icon as={asIcon(item.icon)} boxSize={6} color="white" />
-                    </Flex>
-                    <Heading size="md" fontWeight="700">{item.title}</Heading>
-                    <Text color="text.muted" fontSize="sm" lineHeight="tall">{item.description}</Text>
-                  </VStack>
-                </MotionBox>
-              ))}
-            </Grid>
-          </VStack>
-        </Container>
-      </Box>
-
-      {/* ===== SECURITY & TRUST ===== */}
-      <Box py={{ base: 12, md: 16 }} position="relative">
-        <Container maxW="4xl">
-          <MotionBox initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
-            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
-              {[
-                { icon: FiLock, title: 'Local-First Processing', desc: 'All data stays on your machine. No cloud uploads required.' },
-                { icon: FiShield, title: 'Enterprise Ready', desc: 'Windows printing integration with full device control.' },
-                { icon: FiGitBranch, title: 'Open Architecture', desc: 'Modular pipeline with Groq fallback and local AI stack.' },
-              ].map((item, idx) => (
-                <HStack key={idx} spacing={4} align="flex-start" p={4}>
-                  <Flex w={10} h={10} borderRadius="lg" bg={useColorModeValue('brand.50', 'whiteAlpha.100')} align="center" justify="center" flexShrink={0}>
-                    <Icon as={asIcon(item.icon)} boxSize={5} color={useColorModeValue('brand.500', 'nebula.400')} />
-                  </Flex>
-                  <Box>
-                    <Text fontWeight="700" fontSize="sm" mb={1}>{item.title}</Text>
-                    <Text color="text.muted" fontSize="xs" lineHeight="tall">{item.desc}</Text>
-                  </Box>
-                </HStack>
-              ))}
-            </SimpleGrid>
-          </MotionBox>
-        </Container>
-      </Box>
-
-      {/* ===== CTA SECTION ===== */}
-      <Box py={{ base: 14, md: 20 }} position="relative" overflow="hidden">
-        <FloatingOrb size={400} color={orbColor1} x="50%" y="30%" delay={0} />
-        <Container maxW="3xl" position="relative" zIndex={1}>
-          <MotionBox initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.7 }}>
-            <VStack
-              spacing={{ base: 6, md: 8 }}
-              p={{ base: 10, md: 14 }}
-              borderRadius="3xl"
-              bgGradient="linear(to-br, brand.500, nebula.600)"
-              position="relative"
-              overflow="hidden"
-              textAlign="center"
-            >
-              <Box position="absolute" top="-60px" right="-60px" w="200px" h="200px" borderRadius="full" bg="whiteAlpha.100" />
-              <Box position="absolute" bottom="-40px" left="-40px" w="150px" h="150px" borderRadius="full" bg="whiteAlpha.100" />
-
-              <Heading fontSize={{ base: '2xl', md: '3xl' }} fontWeight="800" color="white" letterSpacing="-0.02em">
-                Ready to Transform Your Workflow?
+              <Heading size="2xl" fontWeight="900" letterSpacing="-0.02em">
+                Built for <chakra.span bgGradient="linear(to-r, nebula.400, cyber.400)" bgClip="text">Industrial Performance</chakra.span>
               </Heading>
-              <Text color="whiteAlpha.900" fontSize="md" maxW="md">
-                Start scanning, processing, and printing documents in seconds. No setup required.
+              <Text maxW="2xl" color="gray.500" fontSize="lg">
+                PrintChakra isn't just a web app. It's a high-performance orchestration layer
+                running on a distributed Python AI backend.
               </Text>
-              <Button
-                as={RouterLink}
-                to="/dashboard"
-                size="lg"
-                w={{ base: 'full', sm: 'auto' }}
-                px={10}
-                h="52px"
-                bg="white"
-                color="brand.600"
-                borderRadius="xl"
-                fontWeight="700"
-                fontSize="sm"
-                rightIcon={<Icon as={asIcon(FiArrowRight)} />}
-                _hover={{ bg: 'whiteAlpha.900', transform: 'translateY(-2px)', boxShadow: '0 12px 40px rgba(0,0,0,0.3)' }}
-                transition="all 0.3s ease"
-              >
-                Get Started Free
-              </Button>
             </VStack>
-          </MotionBox>
+
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={12}>
+              {featureHighlights.map((feature, i) => (
+                <VStack key={feature.title} align="start" spacing={6}>
+                  <Flex
+                    w={16}
+                    h={16}
+                    bg={feature.color}
+                    borderRadius="2xl"
+                    align="center"
+                    justify="center"
+                    boxShadow={`0 10px 30px ${feature.color}33`}
+                  >
+                    <Icon as={asIcon(feature.icon)} boxSize={8} color="white" />
+                  </Flex>
+                  <Heading size="md" fontWeight="800">{feature.title}</Heading>
+                  <Text color="gray.500" lineHeight="tall">{feature.desc}</Text>
+                </VStack>
+              ))}
+            </SimpleGrid>
+
+            {/* Tech Stack Marquee-style */}
+            <Box w="full" pt={12}>
+              <Text fontSize="xs" fontWeight="700" color="gray.400" textAlign="center" mb={10} textTransform="uppercase" letterSpacing="0.2em">
+                The Core Stack
+              </Text>
+              <Flex wrap="wrap" justify="center" gap={{ base: 8, md: 16 }}>
+                {techStack.map((tech) => (
+                  <HStack
+                    key={tech.name}
+                    spacing={3}
+                    filter="grayscale(1)"
+                    opacity="0.6"
+                    _hover={{ filter: 'grayscale(0)', opacity: '1' }}
+                    transition="0.3s"
+                  >
+                    <Icon as={asIcon(tech.icon)} boxSize={6} color={tech.color} />
+                    <Text fontWeight="800" fontSize="sm">{tech.name}</Text>
+                  </HStack>
+                ))}
+              </Flex>
+            </Box>
+          </VStack>
+        </Container>
+      </Box>
+
+      {/* ===== "STUFFS" ABOUT THE PROJECT ===== */}
+      <Box py={24} position="relative">
+        <FloatingOrb size={600} color={orbColor1} x="-20%" y="20%" delay={1} duration={12} />
+        <Container maxW="7xl" position="relative" zIndex={1}>
+          <GlassCard p={{ base: 8, md: 16 }}>
+            <Stack direction={{ base: 'column', lg: 'row' }} spacing={12}>
+              <Box flex={1}>
+                <VStack align="start" spacing={6}>
+                  <Badge colorScheme="purple" variant="solid" borderRadius="lg">Project Vision</Badge>
+                  <Heading size="xl" fontWeight="900">Document Intelligence <br /> without the friction.</Heading>
+                  <Text fontSize="lg" color="gray.500" lineHeight="tall">
+                    We built PrintChakra to solve one problem: the "Physical-to-Digital" gap.
+                    Traditional scanners are slow. Cloud processing is laggy and insecure.
+                    PrintChakra combines <b>GPU-accelerated local AI</b> with <b>WebSocket bi-directionality</b>
+                    to create a workflow that feels instantaneous.
+                  </Text>
+
+                  <SimpleGrid columns={2} spacing={8} w="full" pt={6}>
+                    <VStack align="start">
+                      <Icon as={asIcon(FiLayers)} color="brand.400" boxSize={6} />
+                      <Text fontWeight="800">Distributed Architecture</Text>
+                      <Text fontSize="sm" color="gray.500">Frontend, Backend, and Phone Capture all in perfect sync.</Text>
+                    </VStack>
+                    <VStack align="start">
+                      <Icon as={asIcon(FiMinimize2)} color="nebula.400" boxSize={6} />
+                      <Text fontWeight="800">Hardware Level Control</Text>
+                      <Text fontSize="sm" color="gray.500">Direct integration with Windows system print queues.</Text>
+                    </VStack>
+                  </SimpleGrid>
+                </VStack>
+              </Box>
+
+              <Box flex={1} position="relative">
+                {/* Visual "Stuff" Box */}
+                <Box
+                  bg="black"
+                  borderRadius="3xl"
+                  p={6}
+                  h="full"
+                  minH="300px"
+                  boxShadow="dark-lg"
+                  position="relative"
+                  overflow="hidden"
+                >
+                  <Box position="absolute" top={0} left={0} p={4}>
+                    <HStack spacing={2}>
+                      <Box w={3} h={3} borderRadius="full" bg="red.400" />
+                      <Box w={3} h={3} borderRadius="full" bg="yellow.400" />
+                      <Box w={3} h={3} borderRadius="full" bg="green.400" />
+                    </HStack>
+                  </Box>
+
+                  <VStack align="start" pt={10} spacing={4} fontFamily="mono">
+                    <Text color="green.400" fontSize="xs">&gt; Starting local OCR engine...</Text>
+                    <Text color="white" fontSize="xs">[INFO] CUDA device detected: RTX 4080</Text>
+                    <Text color="white" fontSize="xs">[INFO] Loading PaddleOCR weights...</Text>
+                    <Text color="brand.400" fontSize="xs">[READY] Handshake established via WS://localhost:8000</Text>
+                    <Text color="whiteAlpha.600" fontSize="xs">------------------------------------------------</Text>
+                    <HStack w="full" justify="space-between">
+                      <Text color="white" fontSize="xs">Input Buffer</Text>
+                      <Text color="green.400" fontSize="xs">8.4ms</Text>
+                    </HStack>
+                    <HStack w="full" justify="space-between">
+                      <Text color="white" fontSize="xs">Inference</Text>
+                      <Text color="green.400" fontSize="xs">42.1ms</Text>
+                    </HStack>
+                    <Box w="full" h="1px" bg="whiteAlpha.200" />
+                    <Text color="nebula.400" fontSize="xs">&gt; Awaiting voice command...</Text>
+                  </VStack>
+
+                  {/* Decorative Glow */}
+                  <Box position="absolute" bottom="-20%" right="-20%" w="80%" h="80%" bg="brand.500" borderRadius="full" filter="blur(60px)" opacity="0.3" />
+                </Box>
+              </Box>
+            </Stack>
+          </GlassCard>
+        </Container>
+      </Box>
+
+      {/* ===== FINAL CTA ===== */}
+      <Box py={32} position="relative" overflow="hidden">
+        <Container maxW="3xl">
+          <VStack spacing={10} textAlign="center">
+            <MotionHeading
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              fontSize={{ base: '4xl', md: '6xl' }}
+              fontWeight="900"
+              letterSpacing="-0.04em"
+            >
+              Ready to <chakra.span color="brand.400">Upgrade</chakra.span> <br /> your document game?
+            </MotionHeading>
+            <Button
+              as={RouterLink}
+              to="/dashboard"
+              size="xl"
+              h="72px"
+              px={12}
+              fontSize="lg"
+              fontWeight="900"
+              bg="white"
+              color="black"
+              borderRadius="2xl"
+              boxShadow="0 20px 50px rgba(255,255,255,0.2)"
+              _hover={{
+                bg: 'brand.500',
+                color: 'white',
+                transform: 'translateY(-6px) scale(1.05)',
+                boxShadow: '0 30px 60px rgba(121, 95, 238, 0.4)'
+              }}
+              transition="all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+            >
+              Get Started for Free
+            </Button>
+          </VStack>
         </Container>
       </Box>
 
       {/* ===== FOOTER ===== */}
-      <Box py={8} borderTop="1px solid" borderColor={footerBorderColor}>
-        <Container maxW="6xl">
-          <Flex direction={{ base: 'column', md: 'row' }} justify="space-between" align="center" gap={4}>
-            <HStack spacing={2}>
-              <Flex w={6} h={6} borderRadius="md" bgGradient="linear(to-br, brand.400, nebula.500)" align="center" justify="center">
-                <Text fontSize="xs" fontWeight="900" color="white">P</Text>
-              </Flex>
-              <Text fontWeight="700" fontSize="sm" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">
-                PrintChakra
-              </Text>
-            </HStack>
-            <Text color="text.muted" fontSize="xs">
-              © {new Date().getFullYear()} PrintChakra. All-in-One Document Intelligence Platform.
-            </Text>
+      <Box py={16} borderTop="1px solid" borderColor={useColorModeValue('gray.100', 'whiteAlpha.100')}>
+        <Container maxW="7xl">
+          <Stack direction={{ base: 'column', md: 'row' }} justify="space-between" align="center" spacing={8}>
             <HStack spacing={4}>
-              <Icon as={asIcon(FiShield)} color="text.muted" boxSize={4} />
-              <Icon as={asIcon(FiGlobe)} color="text.muted" boxSize={4} />
-              <Icon as={asIcon(FiZap)} color="text.muted" boxSize={4} />
+              <Box
+                p={2}
+                borderRadius="xl"
+                bgGradient="linear(to-br, brand.400, nebula.500)"
+                boxShadow="0 4px 15px rgba(121, 95, 238, 0.3)"
+              >
+                <Image src="/logo.png" h={8} w={8} objectFit="contain" filter="brightness(1.1)" />
+              </Box>
+              <VStack align="start" spacing={0}>
+                <Text fontWeight="900" fontSize="lg" letterSpacing="-0.02em" bgGradient="linear(to-r, brand.400, nebula.400)" bgClip="text">
+                  PrintChakra
+                </Text>
+                <Text fontSize="10px" fontWeight="700" color="gray.500" textTransform="uppercase" letterSpacing="0.1em">
+                  Precision Hardware Logic
+                </Text>
+              </VStack>
             </HStack>
-          </Flex>
+
+            <HStack spacing={8}>
+              {['Dashboard', 'Phone', 'Playground'].map((link) => (
+                <chakra.a
+                  key={link}
+                  href={`/${link.toLowerCase()}`}
+                  fontSize="sm"
+                  fontWeight="700"
+                  color="gray.500"
+                  _hover={{ color: 'brand.400' }}
+                  transition="0.2s"
+                >
+                  {link}
+                </chakra.a>
+              ))}
+            </HStack>
+
+            <Text color="gray.500" fontSize="xs" fontWeight="500">
+              © {new Date().getFullYear()} PrintChakra. Built with ❤️ for document efficiency.
+            </Text>
+          </Stack>
         </Container>
       </Box>
     </Box>

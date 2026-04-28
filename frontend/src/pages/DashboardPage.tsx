@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../apiClient';
 import { useSocket } from '../context/SocketContext';
 import { useCalibration } from '../context/CalibrationContext';
+import { useAIWorkspace } from '../context/AIWorkspaceContext';
 import {
   Badge,
   Box,
@@ -70,7 +72,7 @@ import { motion } from 'framer-motion';
 import { API_BASE_URL, API_ENDPOINTS, getImageUrl } from '../config';
 import { Iconify, FancySelect, ConnectionValidator } from '../components/common';
 import { SmartConnectionStatusHandle } from '../components/common/SmartConnectionStatus';
-import { VoiceAIChat, DocumentPreview, DashboardHeroCard, DashboardActionPanel, DeviceInfoPanel } from '../components';
+import { VoiceAIChat, PipecatVoiceBot, DocumentPreview, DashboardHeroCard, DashboardActionPanel, DeviceInfoPanel } from '../components';
 import DocumentSelector, {
   DocumentSelectorHandle,
 } from '../components/document/DocumentSelector';
@@ -79,6 +81,7 @@ import { DashboardShell } from '../components/layout/DashboardRegions';
 import { FileInfo, FolderInfo, Document, OCRResult } from '../types';
 import { processFileForPreview } from '../utils/pdfUtils';
 import { parseVoiceDocumentSelection } from '../utils/voiceDocumentSelectionParser';
+import { onVoiceCommand } from '../aiassist/commandBus';
 import { runOCR, getOCRResult, getBatchOCRStatus } from '../ocrApi';
 import { OCRReadyBadge } from '../components/document/OCROverlay';
 import OCRStructuredView from '../components/document/OCRStructuredView';
@@ -497,6 +500,7 @@ const isPreviewableFile = (file: any): boolean => {
 };
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [refreshToken, setRefreshToken] = useState<number>(0); // Forces thumbnail re-renders
   const [loading, setLoading] = useState(true);
@@ -737,14 +741,12 @@ const Dashboard: React.FC = () => {
   const executePrintJobRef = React.useRef<(() => Promise<void>) | null>(null);
   const executeScanJobRef = React.useRef<(() => Promise<void>) | null>(null);
 
-  const [isChatVisible, setIsChatVisible] = useState(false); // Chat hidden by default
-  const [chatWidth, setChatWidth] = useState<number>(() => {
-    // Load saved width from localStorage or default to 380px
-    const saved = localStorage.getItem('printchakra_chat_width');
-    return saved ? Math.min(Math.max(parseInt(saved, 10), 280), 600) : 380;
-  });
-  const [isResizingChat, setIsResizingChat] = useState(false);
-  const chatResizeRef = React.useRef<{ startX: number; startWidth: number } | null>(null);
+  const {
+    isPanelOpen: isChatVisible,
+    setPanelOpen: setIsChatVisible,
+    panelWidth: chatWidth,
+    isResizing: isResizingChat,
+  } = useAIWorkspace();
   const [orchestrationContext, setOrchestrationContext] = useState<'manual' | 'voice'>('manual');
   const isVoiceOrchestration = orchestrationContext === 'voice';
 
@@ -1493,7 +1495,6 @@ const Dashboard: React.FC = () => {
   );
 
   const forceCloseChat = useCallback(() => {
-    setIsChatVisible(false);
     setOrchestrationContext('manual');
   }, []);
 
@@ -1503,12 +1504,11 @@ const Dashboard: React.FC = () => {
 
     if (orchestrationContext === 'voice') {
       if (force) {
-        // Force-stop orchestration and close chat
+        // Force-stop orchestration (do not close global AI panel)
         setOrchestrationContext('manual');
-        setIsChatVisible(false);
         toast({
           title: 'Voice assistant stopped',
-          description: 'Voice assistant stopped and chat closed.',
+          description: 'Voice assistant stopped.',
           status: 'info',
           duration: 3000,
           isClosable: true,
@@ -1528,58 +1528,15 @@ const Dashboard: React.FC = () => {
       return;
     }
 
-    setIsChatVisible(false);
+    // Do not auto-close the global AI panel from inside the Dashboard page.
+    setIsChatVisible(true);
   }, [orchestrationContext, toast]);
 
   const handleChatVisibilityToggle = useCallback(() => {
-    if (isChatVisible) {
-      handleDockedChatClose();
-    } else {
-      setIsChatVisible(true);
-    }
-  }, [handleDockedChatClose, isChatVisible]);
+    setIsChatVisible(!isChatVisible);
+  }, [isChatVisible, setIsChatVisible]);
 
-  // Chat resize handlers
-  const handleChatResizeStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsResizingChat(true);
-    chatResizeRef.current = { startX: e.clientX, startWidth: chatWidth };
-  }, [chatWidth]);
-
-  const handleChatResizeMove = useCallback((e: MouseEvent) => {
-    if (!isResizingChat || !chatResizeRef.current) return;
-
-    // Calculate new width (resize from left edge, so subtract delta)
-    const delta = chatResizeRef.current.startX - e.clientX;
-    const newWidth = Math.min(Math.max(chatResizeRef.current.startWidth + delta, 280), 600);
-    setChatWidth(newWidth);
-  }, [isResizingChat]);
-
-  const handleChatResizeEnd = useCallback(() => {
-    if (isResizingChat) {
-      setIsResizingChat(false);
-      chatResizeRef.current = null;
-      // Save to localStorage
-      localStorage.setItem('printchakra_chat_width', chatWidth.toString());
-    }
-  }, [isResizingChat, chatWidth]);
-
-  // Effect to add/remove mouse listeners for resize
-  useEffect(() => {
-    if (isResizingChat) {
-      document.addEventListener('mousemove', handleChatResizeMove);
-      document.addEventListener('mouseup', handleChatResizeEnd);
-      document.body.style.cursor = 'ew-resize';
-      document.body.style.userSelect = 'none';
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleChatResizeMove);
-      document.removeEventListener('mouseup', handleChatResizeEnd);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizingChat, handleChatResizeMove, handleChatResizeEnd]);
+  // Note: AI panel resizing + width persistence are handled globally in App-level AIWorkspaceProvider.
 
   const handleVoiceCommand = useCallback(
     async (data: any) => {
@@ -1592,6 +1549,24 @@ const Dashboard: React.FC = () => {
         : undefined;
 
       switch (command) {
+        case 'navigate': {
+          const target = (params?.target || params?.page || '').toLowerCase();
+          if (target.includes('dashboard')) {
+            navigate('/dashboard');
+            toast({ title: 'Navigating to Dashboard', status: 'info', duration: 2000 });
+          } else if (target.includes('playground')) {
+            navigate('/playground');
+            toast({ title: 'Navigating to Playground', status: 'info', duration: 2000 });
+          } else if (target.includes('phone') || target.includes('capture') || target.includes('camera')) {
+            navigate('/phone');
+            toast({ title: 'Navigating to Phone Capture', status: 'info', duration: 2000 });
+          } else if (target.includes('home') || target.includes('landing')) {
+            navigate('/');
+            toast({ title: 'Navigating Home', status: 'info', duration: 2000 });
+          }
+          break;
+        }
+
         // ==================== New Commands ====================
         case 'clear_print_queue': {
           try {
@@ -2937,6 +2912,14 @@ const Dashboard: React.FC = () => {
     ]
   );
 
+  useEffect(() => {
+    const unsubscribe = onVoiceCommand((event) => {
+      if (event.type !== 'dashboard_command' || !event.payload) return;
+      handleVoiceCommand(event.payload);
+    });
+    return unsubscribe;
+  }, [handleVoiceCommand]);
+
   const handleOrchestrationUpdateRef = React.useRef(handleOrchestrationUpdate);
   useEffect(() => {
     handleOrchestrationUpdateRef.current = handleOrchestrationUpdate;
@@ -3991,8 +3974,8 @@ const Dashboard: React.FC = () => {
       // Loop through the number of documents to feed - NO DELAYS
       for (let i = 0; i < documentsToFeed; i++) {
         try {
-          // Use the /print endpoint with type: "blank" - this triggers the printer to feed paper
-          const response = await apiClient.post('/print', { type: 'blank' });
+          // Use canonical feed endpoint to trigger paper feed.
+          const response = await apiClient.post('/print/feed', { type: 'blank' });
 
 
           if (response.data.status === 'success') {
@@ -4254,7 +4237,7 @@ const Dashboard: React.FC = () => {
         filename: customFilename.trim() || undefined,
       };
       console.log('Sending convert request', payload);
-      const response = await apiClient.post('/convert', payload);
+      const response = await apiClient.post(API_ENDPOINTS.convert, payload);
 
       if (response.data.success) {
         const { success_count, fail_count, results, merged } = response.data;
@@ -4325,7 +4308,7 @@ const Dashboard: React.FC = () => {
     }
     (loadConvertedFiles as any)._isRunning = true;
     try {
-      const response = await apiClient.get('/get-converted-files');
+      const response = await apiClient.get(API_ENDPOINTS.getConvertedFiles);
       if (response.data.files) {
         // Smart cache: only update if file count changed
         const newCount = response.data.files.length;
@@ -4371,13 +4354,13 @@ const Dashboard: React.FC = () => {
         <DashboardShell
           styleOverrides={{
             ml: 0,
-            mr: isChatVisible ? { base: 0, lg: `${chatWidth + 16}px` } : 0,
-            transition: isResizingChat ? 'none' : 'margin-right 0.3s ease-out',
+            mr: 0,
+            transition: 'none',
             minH: '100vh',
             pt: { base: 0, md: 2 },
             pb: 4,
             px: { base: 0, md: 2 },
-            pr: isChatVisible ? { base: 0, lg: 0 } : { base: 0, md: 2 },
+            pr: { base: 0, md: 2 },
           }}
         >
           {/* Main Content Area */}
@@ -4402,6 +4385,8 @@ const Dashboard: React.FC = () => {
                 onOpenConversionModal={openConversionModal}
                 onCheckConnectivity={connectivityModal.onOpen}
                 onToggleConvertedDrawer={handleConvertedDrawerToggle}
+                onSelectAll={selectAll}
+                onDeselectAll={clearSelection}
                 isConvertedDrawerOpen={convertedDrawer.isOpen}
                 onReopenOrchestrate={reopenOrchestrateModal}
                 embedded={true}
@@ -4648,7 +4633,7 @@ const Dashboard: React.FC = () => {
                     </CardBody>
                   </Card>
                 ) : (
-                  <SimpleGrid columns={{ base: 1, md: 2, xl: 3 }} spacing={6}>
+                  <SimpleGrid columns={{ base: 1, sm: 2, md: 3, lg: 4 }} spacing={6}>
                     {files.map((file: FileInfo, index: number) => {
                       const isSelected = selectedFiles.includes(file.filename);
                       const documentIndex = index + 1;
@@ -5375,7 +5360,7 @@ const Dashboard: React.FC = () => {
                                     if (!window.confirm(`Delete ${file.filename}?`)) return;
 
                                     try {
-                                      await apiClient.delete(`/delete-converted/${file.filename}`);
+                                      await apiClient.delete(`${API_ENDPOINTS.deleteConverted}/${file.filename}`);
                                       setConvertedFiles(
                                         convertedFiles.filter((f: any) => f.filename !== file.filename)
                                       );
@@ -7005,10 +6990,10 @@ const Dashboard: React.FC = () => {
                                   </Text>
                                 </HStack>
                                 <HStack spacing={2}>
-                                  <Badge colorScheme="blue" fontSize="xs">
+                                  <Badge colorScheme="nebula" fontSize="xs">
                                     {orchestrateOptions.printPaperSize}
                                   </Badge>
-                                  <Badge colorScheme="purple" fontSize="xs" textTransform="uppercase">
+                                  <Badge colorScheme="brand" fontSize="xs" textTransform="uppercase">
                                     {orchestrateOptions.printLayout}
                                   </Badge>
                                 </HStack>
@@ -7408,7 +7393,7 @@ const Dashboard: React.FC = () => {
                             Back
                           </Button>
                           <Button
-                            colorScheme={orchestrateMode === 'scan' ? 'brand' : 'blue'}
+                            colorScheme={orchestrateMode === 'scan' ? 'brand' : 'nebula'}
                             onClick={async () => {
                               if (orchestrateMode === 'scan') {
                                 await executeScanJob();
@@ -7556,50 +7541,7 @@ const Dashboard: React.FC = () => {
         showButton={false}
       />
 
-      {/* AI Chat Sidebar - Independent Fixed Position */}
-      {isChatVisible && (
-        <Box
-          position="fixed"
-          top="0"
-          bottom="0"
-          right="0"
-          w={{ base: '100%', lg: `${chatWidth}px` }}
-          bg={chatSidebarBg}
-          boxShadow="-4px 0 16px rgba(0,0,0,0.3)"
-          display="flex"
-          flexDirection="column"
-          borderLeft="1px solid"
-          borderColor={chatSidebarBorderColor}
-          overflowY="auto"
-          zIndex={orchestrateModal.isOpen ? 2003 : 2000}
-          transition={isResizingChat ? 'none' : 'transform 0.3s ease-out, z-index 0.1s'}
-        >
-          {/* Resize Handle */}
-          <Box
-            position="absolute"
-            left="0"
-            top="0"
-            bottom="0"
-            w="6px"
-            cursor="ew-resize"
-            bg="transparent"
-            _hover={{ bg: 'blue.400', opacity: 0.5 }}
-            _active={{ bg: 'blue.500', opacity: 0.7 }}
-            onMouseDown={handleChatResizeStart}
-            zIndex={2004}
-            display={{ base: 'none', lg: 'block' }}
-          />
-          <VoiceAIChat
-            isOpen={isChatVisible}
-            onClose={handleDockedChatClose}
-            onOrchestrationTrigger={handleVoiceOrchestrationTrigger}
-            isMinimized={false}
-            onToggleMinimize={handleDockedChatClose}
-            onVoiceCommand={handleVoiceCommand}
-            autoStartRecording={isChatVisible}
-          />
-        </Box>
-      )}
+      {/* Global AI Panel is rendered at App level */}
     </Box>
   );
 };

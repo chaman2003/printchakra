@@ -6,8 +6,9 @@ Document format conversion endpoints.
 
 import os
 import logging
-from flask import jsonify, request, send_file
+from flask import jsonify, request
 from werkzeug.utils import secure_filename
+from app.core.config import get_data_dirs
 from app.features.document.routes import document_bp
 from app.core.middleware.cors import create_options_response
 
@@ -286,3 +287,49 @@ def combine_images_to_pdf(image_paths, pdf_path):
     
     except ImportError:
         raise Exception("PIL/Pillow not available")
+
+
+@document_bp.route("/converted", methods=["GET", "OPTIONS"])
+def list_converted_files():
+    """List converted output files."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        dirs = get_data_dirs()
+        converted_dir = dirs["CONVERTED_DIR"]
+        files = []
+        if os.path.isdir(converted_dir):
+            for filename in os.listdir(converted_dir):
+                full_path = os.path.join(converted_dir, filename)
+                if os.path.isfile(full_path):
+                    files.append(
+                        {
+                            "filename": filename,
+                            "size": os.path.getsize(full_path),
+                            "modified": os.path.getmtime(full_path),
+                        }
+                    )
+        files.sort(key=lambda x: x["modified"], reverse=True)
+        return jsonify({"success": True, "files": files})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "files": []}), 500
+
+
+@document_bp.route("/converted/<path:filename>", methods=["DELETE", "OPTIONS"])
+def delete_converted_file(filename):
+    """Delete a converted output file."""
+    if request.method == "OPTIONS":
+        return create_options_response()
+
+    try:
+        safe_name = secure_filename(filename)
+        if not safe_name:
+            return jsonify({"success": False, "error": "Invalid filename"}), 400
+        converted_path = os.path.join(get_data_dirs()["CONVERTED_DIR"], safe_name)
+        if not os.path.isfile(converted_path):
+            return jsonify({"success": False, "error": "File not found"}), 404
+        os.remove(converted_path)
+        return jsonify({"success": True, "message": "Converted file deleted", "filename": safe_name})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500

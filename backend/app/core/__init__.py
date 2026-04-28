@@ -61,6 +61,7 @@ def _register_blueprints(app: Flask) -> None:
         ("OCR", "app.features.document.ocr.routes", "ocr_bp", "/ocr"),
         ("print", "app.features.print.routes", "print_bp", "/print"),
         ("voice", "app.features.voice.routes", "voice_bp", "/voice"),
+        ("pipecat", "app.features.voice.pipecat_routes", "pipecat_bp", "/pipecat"),
         ("orchestration", "app.features.orchestration.routes", "orchestration_bp", "/orchestrate"),
         ("connection", "app.features.connection.routes", "connection_bp", "/connection"),
     ]

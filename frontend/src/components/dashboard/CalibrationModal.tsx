@@ -109,7 +109,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
 
   const loadTestCaptures = async () => {
     try {
-      const response = await apiClient.get('/test-captures');
+      const response = await apiClient.get('/phone/test-captures');
       if (response.data.success) {
         setTestCaptures(response.data.captures || []);
       }
@@ -119,7 +119,7 @@ export const CalibrationModal: React.FC<CalibrationModalProps> = ({ isOpen, onCl
   };
 
   const clearTestCaptures = useCallback(async () => {
-    await apiClient.post('/test-captures/clear');
+    await apiClient.post('/phone/test-captures/clear');
     setTestCaptures([]);
   }, []);
 
