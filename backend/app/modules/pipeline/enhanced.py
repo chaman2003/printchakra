@@ -251,6 +251,60 @@ class EnhancedDocumentPipeline:
         expanded[:, 1] = np.clip(expanded[:, 1], 0, max(img_h - 1, 0))
         return expanded
 
+    def _find_brightness_quad(self, image_bgr: np.ndarray) -> Tuple[Optional[np.ndarray], float]:
+        """
+        Fallback detector: find paper/card-like bright region in HSV space.
+        Returns (quad, score) in image coordinates.
+        """
+        if image_bgr is None or image_bgr.size == 0:
+            return None, 0.0
+
+        hsv = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2HSV)
+        # White/light paper mask: low saturation + high value.
+        mask = cv2.inRange(hsv, (0, 0, 120), (180, 95, 255))
+        mask = cv2.medianBlur(mask, 5)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None, 0.0
+
+        img_h, img_w = image_bgr.shape[:2]
+        img_area = float(img_h * img_w)
+        best_quad = None
+        best_score = 0.0
+
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if area < img_area * 0.08:
+                continue
+
+            rect = cv2.minAreaRect(contour)
+            (rw, rh) = rect[1]
+            if rw <= 1 or rh <= 1:
+                continue
+
+            quad = cv2.boxPoints(rect).astype(np.float32)
+            if not self._is_reasonable_document_quad(
+                quad,
+                (img_h, img_w),
+                min_area_ratio=0.10,
+                max_area_ratio=0.95,
+            ):
+                continue
+
+            area_ratio = area / img_area
+            aspect = max(rw / max(rh, 1e-6), rh / max(rw, 1e-6))
+            # Prefer larger, less-elongated candidates.
+            score = (area_ratio * 1.2) - ((aspect - 1.0) * 0.10)
+            if score > best_score:
+                best_score = score
+                best_quad = quad
+
+        return best_quad, float(max(best_score, 0.0))
+
     def _init_paddle_ocr(self) -> Tuple[Any, str]:
         """Initialize a shared PaddleOCR engine, falling back when unavailable."""
         with self._ocr_lock:
@@ -531,6 +585,18 @@ class EnhancedDocumentPipeline:
                 selected_confidence = best_score
                 if selected_method == "none":
                     selected_method = "quad_poly"
+
+            # Pass 3 fallback: bright paper/card segmentation on full-size image.
+            if document_contour is None:
+                brightness_quad, brightness_score = self._find_brightness_quad(img)
+                if brightness_quad is not None:
+                    document_contour = brightness_quad * detection_scale
+                    selected_area_ratio = float(cv2.contourArea(document_contour)) / float(
+                        gray.shape[0] * gray.shape[1]
+                    )
+                    selected_confidence = max(selected_confidence, min(1.0, brightness_score))
+                    selected_method = "brightness_segmentation"
+
             pipeline_stats["steps"]["step_6"] = {
                 "stage": "Find Document Contour",
                 "contours_found": len(contours),
