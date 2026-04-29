@@ -703,14 +703,12 @@ class EnhancedDocumentPipeline:
                     det_db_box_thresh=0.5,
                     rec_batch_num=6,
                     device=device,
-                    show_log=False,
                 )
             except TypeError:
                 engine = PaddleOCR(
                     use_angle_cls=True,
                     lang="en",
-                    use_gpu=device == "gpu",
-                    show_log=False,
+                    device=device,
                 )
 
             self.__class__._ocr_engine = engine

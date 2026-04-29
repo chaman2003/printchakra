@@ -22,6 +22,9 @@ loguru>=0.6.0
 # Audio processing
 numpy>=1.24.0
 scipy>=1.10.0
+opencv-python>=4.10.0.84
+Pillow>=11.0.0
+img2pdf>=0.5.1
 
 # Optional: GPU acceleration
 # torch-audio  # Already included with torch

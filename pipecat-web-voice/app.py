@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from config import config
+from services.document_scan import DocumentScanWebSocketService
 from voice_bot import voice_bot
 
 # Configure logging
@@ -24,6 +25,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+document_scan_service = DocumentScanWebSocketService()
 
 
 @asynccontextmanager
@@ -98,6 +100,25 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         await websocket.close(code=1000)
+
+
+@app.websocket("/ws/document-scan")
+async def document_scan_websocket(websocket: WebSocket):
+    """WebSocket endpoint for phone JPEG frames and desktop scan preview."""
+    await document_scan_service.websocket_handler(websocket)
+
+
+@app.get("/document-scan/config")
+async def get_document_scan_config():
+    """Expose active document scan settings."""
+    return {"config": document_scan_service.get_config()}
+
+
+@app.post("/export-pdf")
+async def export_scanned_session_pdf(session_id: str):
+    """Export all processed session images as a single A4 PDF."""
+    output_path = document_scan_service.export_pdf(session_id=session_id)
+    return {"session_id": session_id, "pdf_path": output_path}
 
 
 @app.get("/languages")

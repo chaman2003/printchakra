@@ -1,0 +1,36 @@
+Build a document scanning pipeline with these components chained together:
+
+1. MOTION DETECTION in phone camera feed of phone capture page
+   - Compare consecutive camera frames using cv2.absdiff
+   - Trigger capture when changed pixels > 50000 (configurable)
+   - Wait 1.5s settle time after motion stops before capturing
+   - Return the settled frame via callback
+
+2. DOCUMENT EDGE DETECTION + CROP
+   - Grayscale → GaussianBlur(21x21) → Canny(50,150) → Dilate
+   - Find largest 4-point contour (quadrilateral)
+   - Order points TL,TR,BR,BL → getPerspectiveTransform → warpPerspective
+   - If no quad found, return original frame with found=False flag
+
+3. IMAGE ENHANCEMENT
+   - Mode "bw": adaptive threshold (GAUSSIAN_C, block=11, C=2)
+   - Mode "color": CLAHE (clipLimit=2.0) 
+   - Denoise: fastNlMeansDenoising(h=10)
+   - Sharpen: unsharp mask (5x5, weight=1.5)
+   - Return JPEG bytes at configurable quality (default 85)
+
+4. WEBSOCKET TRANSPORT (FastAPI)
+   - Accept JPEG bytes from phone client over WebSocket
+   - Run steps 2+3 in threadpool executor (non-blocking)
+   - Save to session folder named by timestamp
+   - Broadcast processed image to all desktop clients
+
+5. PDF EXPORT
+   - POST /export-pdf?session_id=...
+   - Collect session images sorted by timestamp
+   - Resize each to A4, white-pad to maintain aspect ratio
+   - Assemble with img2pdf, save to output dir, return file path
+
+Make threshold, settle_time, enhancement mode, and JPEG quality 
+configurable via a single config dict at the top of the file.
+Chain all steps: motion trigger → crop → enhance → websocket send → session save.

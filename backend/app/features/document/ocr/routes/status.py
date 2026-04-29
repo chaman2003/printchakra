@@ -178,7 +178,7 @@ def test_ocr():
                 temp_path = tmp.name
             
             # Test OCR
-            ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=False, show_log=False)
+            ocr = PaddleOCR(use_angle_cls=True, lang="en", device="cpu")
             result = ocr.ocr(temp_path, cls=True)
             
             # Cleanup

@@ -5,19 +5,20 @@ $BackendDir = Join-Path $Root "backend"
 $FrontendDir = Join-Path $Root "frontend"
 $PipecatDir = Join-Path $Root "pipecat-web-voice"
 $NgrokDomain = "freezingly-nonsignificative-edison.ngrok-free.dev"
+$MlBasePython = "C:/Python/envs/ml-base/Scripts/python.exe"
 
 Write-Host "Starting PrintChakra stack..." -ForegroundColor Cyan
 
 Start-Process powershell -ArgumentList @(
   "-NoExit",
   "-Command",
-  "Set-Location '$BackendDir'; python app.py"
+  "Set-Location '$BackendDir'; if (Test-Path '$MlBasePython') { & '$MlBasePython' app.py } else { python app.py }"
 )
 
 Start-Process powershell -ArgumentList @(
   "-NoExit",
   "-Command",
-  "Set-Location '$PipecatDir'; if (Get-Command aiml -ErrorAction SilentlyContinue) { aiml }; python run_backend.py"
+  "Set-Location '$PipecatDir'; if (Test-Path '$MlBasePython') { & '$MlBasePython' run_backend.py } else { python run_backend.py }"
 )
 
 Start-Process powershell -ArgumentList @(

@@ -108,7 +108,6 @@ def _resolved_voice_status() -> dict:
         status["components"] = components
     return status
 
-
 def _check_ollama_connected(base_url: str | None) -> bool:
     """Best-effort connectivity check for Ollama API."""
     if not base_url:
@@ -120,7 +119,6 @@ def _check_ollama_connected(base_url: str | None) -> bool:
             return 200 <= getattr(resp, "status", 0) < 300
     except Exception:
         return False
-
 
 @pipecat_bp.route('/status', methods=['GET'])
 def get_pipecat_status():

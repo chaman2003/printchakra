@@ -29,12 +29,10 @@ from .document import (
 
 # Import pipeline with error handling (optional dependency)
 try:
-    from .pipeline import DocumentPipeline, create_default_pipeline, EnhancedDocumentPipeline
+    from .pipeline import EnhancedDocumentPipeline
 except ImportError as e:
     import logging
     logging.warning(f"Pipeline module not fully available: {e}")
-    DocumentPipeline = None
-    create_default_pipeline = None
     EnhancedDocumentPipeline = None
 
 from .utility import *
@@ -59,8 +57,6 @@ __all__ = [
     "StorageModule",
     "ExportModule",
     # Pipeline
-    "DocumentPipeline",
-    "create_default_pipeline",
     "EnhancedDocumentPipeline",
     "create_enhanced_endpoints",
 ]

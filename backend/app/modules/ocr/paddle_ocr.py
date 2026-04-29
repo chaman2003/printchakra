@@ -7,6 +7,7 @@ Advanced OCR with bounding boxes, confidence scores, and Ollama post-processing
 import os
 # Disable all connectivity checks for faster startup
 os.environ['DISABLE_MODEL_SOURCE_CHECK'] = 'True'  # Skip slow connectivity check
+os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'  # PaddleOCR runtime check suppression
 os.environ['PADDLEX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'  # PaddleX specific
 os.environ['HUB_HOME'] = os.path.expanduser('~/.paddlex')  # Use local cache
 os.environ['FLAGS_check_nan_inf'] = '0'  # Disable NaN checking for speed
@@ -29,7 +30,7 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 # Lazy load PaddleOCR to avoid import overhead
-_paddle_ocr_instance = None
+_paddle_ocr_instances: Dict[str, Any] = {}
 
 
 def _detect_paddle_device() -> str:
@@ -51,10 +52,12 @@ def _detect_paddle_device() -> str:
         return 'cpu'
 
 
-def get_paddle_ocr():
-    """Lazy load PaddleOCR instance with proper device configuration for v3.3+"""
-    global _paddle_ocr_instance
-    if _paddle_ocr_instance is None:
+def get_paddle_ocr(lang: str = "en"):
+    """Lazy load a language-specific PaddleOCR instance with proper device configuration for v3.3+."""
+    global _paddle_ocr_instances
+
+    cache_key = lang or "en"
+    if cache_key not in _paddle_ocr_instances:
         try:
             import sys
             from io import StringIO
@@ -73,11 +76,12 @@ def get_paddle_ocr():
                 
                 # Initialize PaddleOCR v3.3+ API
                 # NOTE: use_angle_cls is now part of the pipeline, not a separate parameter
-                _paddle_ocr_instance = PaddleOCR(
-                    lang='en',  # Primary language
+                _paddle_ocr_instances[cache_key] = PaddleOCR(
+                    lang=cache_key,
                     det_db_thresh=0.3,  # Text detection threshold
                     det_db_box_thresh=0.5,  # Box threshold
                     rec_batch_num=6,  # Recognition batch size
+                    enable_mkldnn=False,  # Avoid oneDNN/PIR CPU runtime failures
                     device=device,  # 'gpu' or 'cpu' (NOT 'cuda')
                 )
             finally:
@@ -92,15 +96,16 @@ def get_paddle_ocr():
             try:
                 logger.info("[INFO] Attempting CPU-only PaddleOCR initialization...")
                 from paddleocr import PaddleOCR
-                _paddle_ocr_instance = PaddleOCR(
-                    lang='en',
+                _paddle_ocr_instances[cache_key] = PaddleOCR(
+                    lang=cache_key,
+                    enable_mkldnn=False,  # Avoid oneDNN/PIR CPU runtime failures
                     device='cpu',
                 )
                 logger.info("[OK] PaddleOCR initialized on CPU (fallback)")
             except Exception as fallback_error:
                 logger.error(f"[ERROR] PaddleOCR CPU fallback also failed: {fallback_error}")
                 raise
-    return _paddle_ocr_instance
+    return _paddle_ocr_instances[cache_key]
 
 
 class OCRResult:
@@ -150,12 +155,14 @@ class PaddleOCRProcessor:
         os.makedirs(ocr_data_dir, exist_ok=True)
         logger.info(f"[OK] PaddleOCRProcessor initialized, data dir: {ocr_data_dir}")
     
-    def process_image(self, image_path: str) -> OCRResult:
+    def process_image(self, image_path: str, lang: str = "en", use_ollama: bool = True) -> OCRResult:
         """
         Run PaddleOCR on an image and return structured results
         
         Args:
             image_path: Path to the image file
+            lang: PaddleOCR language code
+            use_ollama: Whether to use Ollama for structuring and title derivation
             
         Returns:
             OCRResult with all extracted data
@@ -186,7 +193,7 @@ class PaddleOCRProcessor:
             import sys
             from io import StringIO
             
-            ocr = get_paddle_ocr()
+            ocr = get_paddle_ocr(lang)
             
             # Suppress output from ocr.ocr() call to prevent connectivity check messages
             old_stdout = sys.stdout
@@ -299,11 +306,15 @@ class PaddleOCRProcessor:
             # Sort results by reading order (top-to-bottom, left-to-right)
             result.raw_results = self._sort_by_reading_order(result.raw_results)
             
-            # Post-process with Ollama to structure text
-            result.structured_units = self._structure_with_ollama(result.raw_results)
-            
-            # Derive document title
-            result.derived_title = self._derive_title_with_ollama(result.full_text, result.raw_results)
+            if use_ollama:
+                # Post-process with Ollama to structure text
+                result.structured_units = self._structure_with_ollama(result.raw_results)
+                
+                # Derive document title
+                result.derived_title = self._derive_title_with_ollama(result.full_text, result.raw_results)
+            else:
+                result.structured_units = self._fallback_structure(result.raw_results)
+                result.derived_title = self._fallback_title(result.raw_results)
             
             result.processing_time_ms = (time.time() - start_time) * 1000
             logger.info(f"[OCR] Processing complete in {result.processing_time_ms:.0f}ms")

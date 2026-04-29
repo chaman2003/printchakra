@@ -385,13 +385,40 @@ def _fallback_structured_units(raw_lines: list[str]) -> list[dict]:
 def perform_ocr(image_path: str, language: str = "en", use_ollama: bool = True) -> dict:
     """Perform OCR and always post-process into structured JSON."""
     try:
-        from paddleocr import PaddleOCR
-
-        # Initialize PaddleOCR
-        ocr = PaddleOCR(use_angle_cls=True, lang=language, use_gpu=False, show_log=False)
+        from app.modules.ocr.paddle_ocr import get_ocr_processor
 
         started = time.time()
+        processor = get_ocr_processor(get_data_dirs()["OCR_DATA_DIR"])
         raw_results = []
+        page_texts = []
+        image_dimensions = [0, 0]
+
+        def _normalize_processed_result(processed: object) -> dict:
+            if hasattr(processed, "to_dict"):
+                return processed.to_dict()
+            if isinstance(processed, dict):
+                return processed
+            return {}
+
+        def _merge_page_result(page_result: dict) -> None:
+            if not page_result:
+                return
+
+            for entry in page_result.get("raw_results", []) or []:
+                if isinstance(entry, dict):
+                    raw_results.append(entry)
+
+            full_text = (page_result.get("full_text", "") or "").strip()
+            if full_text:
+                page_texts.append(full_text)
+
+            dims = page_result.get("image_dimensions") or [0, 0]
+            if isinstance(dims, (list, tuple)) and len(dims) >= 2:
+                try:
+                    image_dimensions[0] = max(image_dimensions[0], int(dims[0]))
+                    image_dimensions[1] = max(image_dimensions[1], int(dims[1]))
+                except (TypeError, ValueError):
+                    pass
 
         # Check if PDF - convert to images first
         ext = os.path.splitext(image_path)[1].lower()
@@ -401,44 +428,33 @@ def perform_ocr(image_path: str, language: str = "en", use_ollama: bool = True) 
             try:
                 import fitz
                 from PIL import Image
+                import tempfile
 
                 doc = fitz.open(image_path)
-                all_text = []
-                image_dimensions = [0, 0]
+                try:
+                    for page_num in range(len(doc)):
+                        page = doc.load_page(page_num)
+                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better OCR
+                        image_dimensions[0] = max(image_dimensions[0], pix.width)
+                        image_dimensions[1] = max(image_dimensions[1], pix.height)
 
-                for page_num in range(len(doc)):
-                    page = doc.load_page(page_num)
-                    pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better OCR
-                    image_dimensions = [pix.width, pix.height]
+                        # Convert to PIL Image
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-                    # Convert to PIL Image
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        # Save to temp file for OCR
+                        temp_path = None
+                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                            img.save(tmp.name)
+                            temp_path = tmp.name
 
-                    # Save to temp file for OCR
-                    import tempfile
-
-                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                        img.save(tmp.name)
-                        result = ocr.ocr(tmp.name, cls=True)
-                        os.unlink(tmp.name)
-
-                    # Extract text
-                    if result and result[0]:
-                        for line in result[0]:
-                            text = line[1][0]
-                            confidence = float(line[1][1])
-                            points = line[0] if isinstance(line[0], list) else []
-                            raw_results.append(
-                                {
-                                    "text": text,
-                                    "confidence": confidence,
-                                    "bbox": _make_bbox(points),
-                                }
-                            )
-                            all_text.append(text)
-
-                doc.close()
-                raw_text = "\n".join(all_text)
+                        try:
+                            processed = processor.process_image(temp_path, lang=language, use_ollama=False)
+                            _merge_page_result(_normalize_processed_result(processed))
+                        finally:
+                            if temp_path and os.path.exists(temp_path):
+                                os.unlink(temp_path)
+                finally:
+                    doc.close()
 
             except ImportError:
                 return {
@@ -448,49 +464,16 @@ def perform_ocr(image_path: str, language: str = "en", use_ollama: bool = True) 
 
         else:
             # Process image directly
-            result = ocr.ocr(image_path, cls=True)
+            processed = processor.process_image(image_path, lang=language, use_ollama=False)
+            _merge_page_result(_normalize_processed_result(processed))
 
-            if not result or not result[0]:
-                return {
-                    "success": True,
-                    "text": "",
-                    "message": "No text detected in image",
-                    "ocr_result": {
-                        "raw_results": [],
-                        "structured_units": [],
-                        "full_text": "",
-                        "derived_title": "",
-                        "confidence_avg": 0.0,
-                        "word_count": 0,
-                        "timestamp": "",
-                        "processing_time_ms": (time.time() - started) * 1000,
-                        "image_dimensions": [0, 0],
-                    },
-                }
-
-            # Extract text
-            all_text = []
-            image_dimensions = [0, 0]
-            for line in result[0]:
-                text = line[1][0]
-                confidence = float(line[1][1])
-                points = line[0] if isinstance(line[0], list) else []
-                bbox = _make_bbox(points)
-                raw_results.append(
-                    {
-                        "text": text,
-                        "confidence": confidence,
-                        "bbox": bbox,
-                    }
-                )
-                if bbox["width"] > 0 and bbox["height"] > 0:
-                    image_dimensions = [
-                        int(max(image_dimensions[0], bbox["x"] + bbox["width"])),
-                        int(max(image_dimensions[1], bbox["y"] + bbox["height"])),
-                    ]
-                all_text.append(text)
-
-            raw_text = "\n".join(all_text)
+        raw_text = "\n".join(page_texts).strip()
+        if not raw_text and raw_results:
+            raw_text = "\n".join(
+                str(item.get("text", "")).strip()
+                for item in raw_results
+                if str(item.get("text", "")).strip()
+            )
 
         raw_lines = [line.strip() for line in raw_text.split("\n") if line.strip()]
         llm_meta = {"used": False, "success": False, "error": None, "model": None}

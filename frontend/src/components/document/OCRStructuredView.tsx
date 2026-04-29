@@ -158,9 +158,20 @@ export const OCRStructuredView: React.FC<OCRStructuredViewProps> = ({
 
   // Support both prop names
   const ocrResult = ocrResultProp || result;
+  const fullText = ocrResult?.full_text ?? '';
+  const hasFullText = Boolean(fullText.trim());
+  const hasRawResults = (ocrResult?.raw_results?.length ?? 0) > 0;
+  const hasStructuredUnits = (ocrResult?.structured_units?.length ?? 0) > 0;
+  const displayWordCount =
+    ocrResult && ocrResult.word_count > 0
+      ? ocrResult.word_count
+      : hasFullText
+        ? fullText.trim().split(/\s+/).filter(Boolean).length
+        : 0;
+  const hasWordCount = displayWordCount > 0;
   
-  // Check if OCR failed (no results)
-  const isOCRFailed = ocrResult && (ocrResult.word_count === 0 || ocrResult.raw_results.length === 0);
+  // Treat text-only OCR payloads as valid results.
+  const isOCRFailed = ocrResult && !hasWordCount && !hasFullText && !hasRawResults && !hasStructuredUnits;
   
   if (!ocrResult) {
     return (
@@ -253,7 +264,7 @@ export const OCRStructuredView: React.FC<OCRStructuredViewProps> = ({
           <Box>
             <Heading size="sm">{ocrResult.derived_title || 'OCR Results'}</Heading>
             <Text fontSize="xs" color="text.muted">
-              {ocrResult.word_count} words • {ocrResult.raw_results.length} text regions
+              {displayWordCount} words • {ocrResult.raw_results.length} text regions
             </Text>
           </Box>
         </HStack>
